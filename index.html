@@ -1956,7 +1956,7 @@ async function sendMessage() {
     const calibration = buildCalibrationContext(userProfile);
     const response = await fetch(ANTHROPIC_PROXY_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1024,
@@ -2527,7 +2527,7 @@ async function closeSession() {
   try {
     const response = await fetch(ANTHROPIC_PROXY_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1024,
@@ -2587,7 +2587,7 @@ async function checkResonanceWithPool(newNode) {
     try {
       const response = await fetch(ANTHROPIC_PROXY_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY },
         body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 200, system: LINK_PROMPT, messages: [{ role: 'user', content: nodeA + '\n\n' + nodeB }] })
       });
       const data = await response.json();
@@ -2722,7 +2722,7 @@ Orientación: ${existing.orientation}`;
     try {
       const response = await fetch(ANTHROPIC_PROXY_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY },
         body: JSON.stringify({
           model: 'claude-sonnet-4-6',
           max_tokens: 200,
