@@ -1,0 +1,2818 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArquiGenesis AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #07090F;
+  --surface: #0E1219;
+  --surface2: #121820;
+  --border: #171E2B;
+  --border2: #1E2840;
+  --text: #D8E4F0;
+  --muted: #3D4F66;
+  --muted2: #5A6F8A;
+  --accent: #5B8FD4;
+  --green: #4A9470;
+  --gold: #B8832A;
+  --violet: #8A6BC4;
+  --font-display: 'DM Sans', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── HEADER ── */
+header {
+  padding: 0 24px;
+  height: 50px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+  background: var(--bg);
+}
+
+.logo {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--text);
+  margin-right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.logo-arqui { color: var(--text); }
+
+.logo-sep {
+  display: inline-block;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin: 0 3px;
+  animation: toroid-pulse 3s ease-in-out infinite;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+.logo-sep.processing {
+  animation: toroid-pulse-fast 0.6s ease-in-out infinite;
+  background: var(--green);
+}
+
+@keyframes toroid-pulse {
+  0%,100% { opacity: 0.35; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+@keyframes toroid-pulse-fast {
+  0%,100% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.4); }
+}
+
+.logo-genesis { color: var(--accent); }
+
+.version {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted2);
+  background: transparent;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 1px;
+  margin-right: auto;
+  border: 1px solid var(--border2);
+}
+
+/* Tab switcher */
+.tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--border);
+  border-radius: 7px;
+  padding: 3px;
+  margin-right: 14px;
+}
+
+.tab {
+  padding: 4px 14px;
+  font-size: 11px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 500;
+  color: var(--muted2);
+  background: transparent;
+  transition: all 0.18s;
+  letter-spacing: 0.5px;
+}
+
+.tab.active {
+  background: var(--surface2);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.tab:hover:not(.active) { color: var(--text); }
+
+.graph-badge {
+  background: var(--accent);
+  color: white;
+  font-size: 9px;
+  border-radius: 10px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  display: none;
+}
+
+.graph-badge.visible { display: inline; }
+
+/* New session btn */
+.btn-new {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.18s;
+}
+
+.btn-new:hover { border-color: var(--accent); color: var(--accent); }
+
+.btn-new svg { width: 13px; height: 13px; fill: currentColor; }
+
+.dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse 2s infinite;
+  margin-left: 8px;
+}
+
+@keyframes pulse {
+  0%,100% { opacity:1; }
+  50% { opacity:0.3; }
+}
+
+/* ── VIEWS ── */
+.view { flex: 1; display: none; overflow: hidden; }
+.view.active { display: flex; }
+
+/* ── MOTOR VIEW ── */
+#motorView { flex-direction: column; }
+
+#messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.message { max-width: 680px; }
+.message.motor { align-self: flex-start; max-width: 78%; }
+.message.user { align-self: flex-end; max-width: 78%; }
+.message.sysnote { align-self: center; max-width: 90%; }
+
+.msg-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.motor .msg-label { color: var(--accent); }
+.user .msg-label { color: var(--muted); text-align: right; }
+
+.msg-bubble {
+  padding: 14px 18px;
+  border-radius: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  font-size: 14.5px;
+  font-family: var(--font-body);
+  font-weight: 400;
+}
+
+.motor .msg-bubble {
+  background: transparent;
+  border: 1px solid var(--border2);
+  border-top-left-radius: 3px;
+  color: var(--text);
+}
+
+.user .msg-bubble {
+  background: rgba(91,143,212,0.07);
+  border: 1px solid rgba(91,143,212,0.15);
+  border-top-right-radius: 3px;
+  color: var(--text);
+}
+
+.sysnote .msg-bubble {
+  background: rgba(45,158,107,0.08);
+  border: 1px solid rgba(45,158,107,0.2);
+  color: var(--green);
+  font-size: 12px;
+  text-align: center;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.sysnote .msg-bubble:hover { background: rgba(45,158,107,0.14); }
+
+.crystallized {
+  margin-top: 8px;
+  padding: 9px 13px;
+  background: rgba(45,158,107,0.08);
+  border-left: 2px solid var(--green);
+  border-radius: 0 7px 7px 0;
+  font-size: 13px;
+  color: #6BAE6B;
+}
+
+.correspondence {
+  margin-top: 8px;
+  padding: 9px 13px;
+  background: rgba(74,144,217,0.07);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 7px 7px 0;
+  font-size: 13px;
+  color: #8BB8D4;
+  font-style: italic;
+}
+
+.typing {
+  display: flex;
+  gap: 5px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  border-top-left-radius: 4px;
+  width: fit-content;
+}
+
+.typing span {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: bounce 1.2s infinite;
+}
+.typing span:nth-child(2) { animation-delay: 0.2s; }
+.typing span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes bounce {
+  0%,100% { transform:translateY(0); opacity:0.35; }
+  50% { transform:translateY(-5px); opacity:1; }
+}
+
+/* Footer input */
+.motor-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+.input-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+textarea {
+  flex: 1;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid #2A3A52;
+  border-radius: 10px;
+  padding: 12px 16px;
+  color: var(--text);
+  font-size: 14.5px;
+  font-family: var(--font-body);
+  font-weight: 400;
+  resize: none;
+  min-height: 46px;
+  max-height: 120px;
+  line-height: 1.6;
+  transition: border-color 0.2s;
+  -webkit-appearance: none;
+}
+
+textarea:focus { outline: none; border-color: var(--accent); }
+textarea::placeholder { color: #5A7090; font-style: italic; }
+
+.send-btn {
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  width: 42px; height: 42px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.send-btn:hover { opacity: 1; background: #4A7EC4; }
+.send-btn:disabled { background: var(--border); opacity: 0.5; cursor: not-allowed; }
+.send-btn svg { width: 17px; height: 17px; fill: white; }
+
+/* ── GRAPH VIEW ── */
+#graphView { position: relative; }
+
+#graphCanvas {
+  flex: 1;
+  display: block;
+  cursor: grab;
+  width: 100%;
+  height: 100%;
+}
+
+#graphCanvas:active { cursor: grabbing; }
+
+.graph-controls {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  z-index: 5;
+}
+
+.ctrl-btn {
+  width: 34px; height: 34px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s;
+}
+
+.ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.graph-legend {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  z-index: 5;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.legend-line { width: 16px; height: 2px; border-radius: 1px; flex-shrink: 0; }
+
+/* Graph detail panel */
+.graph-panel {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 300px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  z-index: 10;
+}
+
+.graph-panel.open { transform: translateX(0); }
+
+.gp-header {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.gp-back {
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 6px 12px;
+  font-family: inherit;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.gp-back:hover { color: var(--accent); border-color: var(--accent); }
+
+.gp-title-wrap { flex: 1; min-width: 0; }
+.gp-title { font-size: 14px; font-weight: 600; line-height: 1.4; }
+.gp-orient { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; margin-top: 3px; }
+
+.gp-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 18px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.gp-section { margin-bottom: 20px; }
+
+.gp-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.gp-item {
+  padding: 9px 12px;
+  border-radius: 7px;
+  margin-bottom: 5px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.gp-item.idea { background: rgba(74,144,217,0.07); border-left: 2px solid var(--accent); }
+.gp-item.corr { background: rgba(155,109,214,0.07); border-left: 2px solid var(--violet); color: #C4A8E8; font-style: italic; }
+.gp-item.open { background: rgba(201,146,42,0.07); border-left: 2px solid var(--gold); color: #D4A95A; }
+
+.gp-connections { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.conn-tag {
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.conn-tag:hover { border-color: var(--accent); color: var(--accent); }
+
+.gp-footer {
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.btn-continue {
+  width: 100%;
+  background: var(--accent);
+  border: none;
+  color: white;
+  padding: 11px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.18s;
+}
+
+.btn-continue:hover { background: #3A7BC8; }
+
+.graph-tooltip {
+  position: absolute;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 11px;
+  font-size: 12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 20;
+  max-width: 180px;
+  line-height: 1.5;
+}
+
+.graph-tooltip.visible { opacity: 1; }
+
+/* ── WELCOME SCREEN ── */
+.welcome {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px;
+  transition: opacity 0.5s ease;
+}
+
+.welcome.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.welcome-logo {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: var(--text);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.welcome-tagline {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--muted2);
+  letter-spacing: 1px;
+  margin-bottom: 72px;
+  text-align: center;
+  font-weight: 300;
+}
+
+.welcome-question {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted2);
+  margin-bottom: 32px;
+  text-align: center;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.welcome-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+}
+
+.welcome-opt {
+  background: transparent;
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 22px 28px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--text);
+  text-align: left;
+  line-height: 1.4;
+  transition: all 0.22s;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.welcome-opt:hover {
+  border-color: var(--accent);
+  background: rgba(91,143,212,0.04);
+  padding-left: 34px;
+}
+
+.welcome-opt .opt-icon { display: none; }
+
+.welcome-opt .opt-text { flex: 1; }
+
+.welcome-opt .opt-arrow {
+  color: var(--muted);
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: all 0.22s;
+  opacity: 0;
+}
+
+.welcome-opt:hover .opt-arrow {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.welcome-skip {
+  margin-top: 36px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-decoration: none;
+  letter-spacing: 0.5px;
+  transition: color 0.18s;
+}
+
+.welcome-skip:hover { color: var(--muted2); }
+
+/* Close session */
+.btn-close-session {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.18s;
+  margin-right: 8px;
+}
+
+.btn-close-session.visible { display: flex; }
+.btn-close-session:hover { border-color: var(--green); color: var(--green); }
+
+/* Inactivity confirm */
+.inactivity-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  z-index: 90;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+}
+
+.inactivity-bar.show { transform: translateY(0); }
+
+.inactivity-text {
+  font-size: 13px;
+  color: var(--muted);
+  flex: 1;
+}
+
+.inactivity-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.inactivity-yes {
+  background: var(--green);
+  border: none;
+  color: white;
+  padding: 7px 14px;
+  border-radius: 7px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.inactivity-no {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 7px 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.inactivity-yes:hover { background: #259058; }
+.inactivity-no:hover { color: var(--text); }
+
+.btn-share-node {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-share-node:hover { border-color: var(--green); color: var(--green); }
+.btn-share-node.shared { border-color: var(--green); color: var(--green); background: rgba(45,158,107,0.07); }
+
+.resonance-card {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  max-width: 300px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 16px 18px;
+  z-index: 200;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  transform: translateY(120%);
+  transition: transform 0.35s ease;
+}
+
+.resonance-card.show { transform: translateY(0); }
+
+.resonance-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.resonance-text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+
+.resonance-node {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  background: rgba(74,144,217,0.07);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+}
+
+.resonance-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.resonance-yes {
+  flex: 1;
+  background: var(--accent);
+  border: none;
+  color: white;
+  padding: 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.resonance-no {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.resonance-yes:hover { background: #3A7BC8; }
+.resonance-no:hover { border-color: var(--muted); color: var(--text); }
+
+/* External node panel */
+.ext-node-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 150;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.ext-node-overlay.open { display: flex; }
+
+.ext-node-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.ext-node-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.ext-node-title { font-size: 16px; font-weight: 600; line-height: 1.4; }
+.ext-node-domain { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+.ext-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 20px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ext-reason {
+  padding: 10px 14px;
+  background: rgba(74,144,217,0.07);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  color: #8BB8D4;
+  font-style: italic;
+  margin-bottom: 20px;
+}
+
+.btn-continue-ext {
+  width: 100%;
+  background: var(--accent);
+  border: none;
+  color: white;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  margin-top: 16px;
+}
+
+.btn-continue-ext:hover { background: #3A7BC8; }
+
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--green);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  opacity: 0;
+  transition: all 0.3s;
+  z-index: 100;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+@media (max-width: 600px) {
+  .graph-panel { width: 100%; }
+  .graph-legend { display: none; }
+  .btn-new span { display: none; }
+}
+
+/* ── ABOUT PANEL ── */
+.about-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 200;
+  display: none;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.about-overlay.open { display: flex; }
+
+.about-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 1;
+}
+
+.about-header-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted2);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.about-close {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted2);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 5px 12px;
+  font-family: inherit;
+  transition: all 0.18s;
+}
+
+.about-close:hover { color: var(--text); border-color: var(--muted2); }
+
+.about-body {
+  padding: 48px 24px 64px;
+  max-width: 540px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.about-tagline {
+  font-family: var(--font-display);
+  font-size: clamp(22px, 5vw, 32px);
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+  margin-bottom: 36px;
+}
+
+.about-tagline em { font-style: normal; color: var(--accent); }
+
+.about-block { margin-bottom: 32px; }
+
+.about-block-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.about-block-text {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--muted2);
+}
+
+.about-comparison {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 36px;
+}
+
+.about-row {
+  background: var(--surface);
+  padding: 14px 18px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.about-row.hl { background: rgba(91,143,212,0.07); }
+
+.about-row-who {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  width: 90px;
+  flex-shrink: 0;
+  padding-top: 3px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.about-row.hl .about-row-who { color: var(--accent); }
+
+.about-row-what {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted2);
+  flex: 1;
+}
+
+.about-row.hl .about-row-what { color: var(--text); }
+
+.about-sep {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 32px 0;
+}
+
+.about-footer-text {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+  line-height: 1.6;
+}
+
+.btn-about {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.18s;
+  margin-right: 4px;
+}
+
+.btn-about:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="logo-arqui">ARQUI</span><span class="logo-sep" id="logoDot"></span><span class="logo-genesis">GENESIS AI</span></div>
+  <div class="version">v15</div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchView('motor')">Motor</button>
+    <button class="tab" onclick="switchView('graph')" id="graphTab">
+      Grafo <span class="graph-badge" id="graphBadge">0</span>
+    </button>
+  </div>
+
+  <button class="btn-about" onclick="openAbout()">Acerca de</button>
+
+  <button class="btn-close-session" id="btnCloseSession" onclick="closeSession()">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4M16 17l5-5-5-5M21 12H9"/></svg>
+    Guardar sesión
+  </button>
+
+  <div id="profileIndicator" style="font-size:11px;color:var(--muted);display:none;margin-right:8px;"></div>
+
+  <button class="btn-new" onclick="newSession()">
+    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    <span>Nueva sesión</span>
+  </button>
+
+  <div class="dot"></div>
+</header>
+
+<!-- WELCOME SCREEN -->
+<div class="welcome" id="welcome">
+  <div class="welcome-logo">
+    <span class="logo-arqui">ARQUI</span><span class="logo-sep"></span><span class="logo-genesis">GENESIS AI</span>
+  </div>
+  <div class="welcome-tagline">El origen de la comprensión.</div>
+
+  <div class="welcome-question">¿Con cuál de estas estás ahora mismo?</div>
+
+  <div class="welcome-options">
+    <button class="welcome-opt" onclick="enterMotor('postponed')">
+      <span class="opt-text">Hay algo que estoy postergando pensar</span>
+      <span class="opt-arrow">→</span>
+    </button>
+    <button class="welcome-opt" onclick="enterMotor('loop')">
+      <span class="opt-text">Hay algo que se repite en mi cabeza sin resolverse</span>
+      <span class="opt-arrow">→</span>
+    </button>
+    <button class="welcome-opt" onclick="enterMotor('half')">
+      <span class="opt-text">Hay algo que entiendo a medias y me incomoda no terminar de ver</span>
+      <span class="opt-arrow">→</span>
+    </button>
+    <button class="welcome-opt" onclick="enterMotor('open')">
+      <span class="opt-text">Tengo algo concreto para traer</span>
+      <span class="opt-arrow">→</span>
+    </button>
+  </div>
+
+  <button class="welcome-skip" onclick="openAbout()" style="margin-top:28px;">¿Qué es Arquigenesis? →</button>
+</div>
+
+<!-- MOTOR VIEW -->
+<div class="view active" id="motorView">
+  <div id="messages"></div>
+  <div class="motor-footer">
+    <div class="input-row">
+      <textarea id="input" placeholder="Escribí lo que traés..." rows="1"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+        <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- GRAPH VIEW -->
+<div class="view" id="graphView">
+  <canvas id="graphCanvas"></canvas>
+
+  <div class="graph-controls">
+    <button class="ctrl-btn" onclick="zoomGraph(1.2)">+</button>
+    <button class="ctrl-btn" onclick="zoomGraph(0.8)">−</button>
+    <button class="ctrl-btn" onclick="resetGraph()">⊙</button>
+  </div>
+
+  <div class="graph-legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#4A90D9"></div>Espacio</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#2D9E6B"></div>Energía</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#9B6DD6"></div>Transformación</div>
+    <div class="legend-item"><div class="legend-line" style="background:rgba(74,144,217,0.6)"></div>Correspondencia</div>
+    <div class="legend-item"><div class="legend-line" style="background:rgba(201,146,42,0.6); border-top: 2px dashed rgba(201,146,42,0.6); height:0"></div>Abierto</div>
+  </div>
+
+  <div class="graph-panel" id="graphPanel">
+    <div class="gp-header">
+      <button class="gp-back" onclick="closeGraphPanel()">← Grafo</button>
+      <div class="gp-title-wrap">
+        <div class="gp-title" id="gpTitle">—</div>
+        <div class="gp-orient" id="gpOrient"></div>
+      </div>
+    </div>
+    <div class="gp-body" id="gpBody"></div>
+    <div class="gp-footer">
+      <button class="btn-continue" onclick="continueFromNode()">Continuar desde aquí →</button>
+    </div>
+  </div>
+
+  <div class="graph-tooltip" id="graphTooltip"></div>
+</div>
+
+<!-- ABOUT OVERLAY -->
+<div class="about-overlay" id="aboutOverlay">
+  <div class="about-header">
+    <div class="about-header-title">Acerca de Arquigenesis</div>
+    <button class="about-close" onclick="closeAbout()">← Volver</button>
+  </div>
+  <div class="about-body">
+
+    <div class="about-tagline">No busca información.<br><em>Expande comprensión.</em></div>
+
+    <div class="about-block">
+      <div class="about-block-title">El problema</div>
+      <div class="about-block-text">La IA masificó las respuestas. Ahora cualquier persona puede encontrar cualquier dato en segundos. Lo que ningún sistema devuelve son las relaciones: cómo algo se conecta con todo lo demás, qué estructura invisible está generando lo que percibís como un problema concreto.</div>
+    </div>
+
+    <div class="about-comparison">
+      <div class="about-row">
+        <div class="about-row-who">Google</div>
+        <div class="about-row-what">Optimiza el acceso. Devuelve documentos. Necesitás saber qué buscar.</div>
+      </div>
+      <div class="about-row">
+        <div class="about-row-who">ChatGPT</div>
+        <div class="about-row-what">Optimiza la respuesta. Devuelve contenido. Opera desde lo que ya sabés.</div>
+      </div>
+      <div class="about-row hl">
+        <div class="about-row-who">Arquigenesis</div>
+        <div class="about-row-what">Optimiza la comprensión. Detecta desde dónde observás y activa lo que no estás viendo. Devuelve relaciones.</div>
+      </div>
+    </div>
+
+    <div class="about-block">
+      <div class="about-block-title">Cómo funciona</div>
+      <div class="about-block-text">Cuando llegás traés algo percibido desde un solo ángulo. El motor detecta desde qué orientación estás observando y activa las que están invisibles. No agrega información. Completa el campo de observación. Lo que emerge no es una respuesta sino una comprensión más amplia de lo que ya traías.</div>
+    </div>
+
+    <div class="about-block">
+      <div class="about-block-title">El principio central</div>
+      <div class="about-block-text">La unidad mínima no es un dato. Es una relación. Una ciudad que pierde identidad al crecer, una empresa que pierde propósito al escalar, y una investigación que pierde su pregunta al complejizarse son el mismo fenómeno. El motor lo detecta y muestra la correspondencia.</div>
+    </div>
+
+    <hr class="about-sep">
+
+    <div class="about-footer-text">
+      Arquigenesis © Javier Darío Fresnadillo 2008<br>
+      Geometría Urbana © 2015<br>
+      Khemergia · EscArq · Biodimension<br>
+      Máster en Desarrollo Sustentable<br>
+      Magíster en Conservación y Restauración del Bien Cultural<br>
+      Versión IA 2026
+    </div>
+
+  </div>
+</div>
+
+<div class="inactivity-bar" id="inactivityBar">
+  <div class="inactivity-text">¿Terminamos por hoy?</div>
+  <div class="inactivity-actions">
+    <button class="inactivity-yes" onclick="closeSession()">Sí, guardar en grafo</button>
+    <button class="inactivity-no" onclick="dismissInactivity()">Seguir</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- RESONANCE NOTIFICATION -->
+<div class="resonance-card" id="resonanceCard">
+  <div class="resonance-label">↔ Resonancia detectada</div>
+  <div class="resonance-text">Hay alguien explorando algo similar desde otro dominio.</div>
+  <div class="resonance-node" id="resonanceNodeText">—</div>
+  <div class="resonance-actions">
+    <button class="resonance-yes" onclick="showExternalNode()">Ver resonancia</button>
+    <button class="resonance-no" onclick="dismissResonance()">Ahora no</button>
+  </div>
+</div>
+
+<!-- EXTERNAL NODE OVERLAY -->
+<div class="ext-node-overlay" id="extNodeOverlay">
+  <div class="ext-node-card">
+    <div class="ext-node-header">
+      <div>
+        <div class="ext-node-title" id="extNodeTitle">—</div>
+        <div class="ext-node-domain" id="extNodeDomain">—</div>
+      </div>
+      <button class="ext-close" onclick="closeExternalNode()">×</button>
+    </div>
+    <div class="ext-reason" id="extNodeReason">—</div>
+    <div id="extNodeBody"></div>
+    <button class="btn-continue-ext" onclick="continueFromExternal()">Explorar desde esta resonancia →</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// PROMPT
+// ═══════════════════════════════════════════════
+
+const SYSTEM_PROMPT = `Sos el motor de Arquigenesis, un sistema de expansión de comprensión basado en Geometría Urbana de Javier Fresnadillo. Tu función es expandir el campo de comprensión del usuario, no acumular información sobre lo que trae.
+
+LA GRAMÁTICA DEL SISTEMA:
+Operás desde tres orientaciones simultáneas que nunca nombrás: Espacio (cómo algo se organiza), Energía (cómo algo interactúa), Transformación (cómo algo cambia). Cada orientación opera en tres modos. Los nueve modos juntos son la gramática completa con la que leés cualquier fenómeno.
+
+ESPACIO — los tres modos:
+Eterno Infinito: el usuario habla desde lo que siempre estuvo ahí. Principios, orígenes, lo que no cambia. Palabras como "siempre", "en esencia", "desde el principio", "lo fundamental". Campo amplio sin límite temporal.
+Equilibrio: el usuario habla desde la tensión entre partes. Desequilibrios, lo que falta, lo que sobra, lo que no cierra. Palabras como "desbalance", "no encaja", "algo no funciona", "falta algo". Busca el punto de estabilidad que no encuentra.
+Codificada: el usuario habla desde estructuras visibles y legibles. Formas, límites, organizaciones concretas. Palabras como "estructura", "forma", "cómo está organizado", "qué contiene qué". Ve el fenómeno con geometría identificable.
+
+ENERGÍA — los tres modos:
+Instinto Conjunto: el usuario habla desde lo colectivo que opera sin ser elegido. Dinámicas grupales, tendencias, lo que todos hacen sin saber por qué. Palabras como "todos", "siempre pasa", "la gente tiende", "es como una corriente". Percibe fuerzas que actúan desde abajo.
+Fuerza de Cohesión: el usuario habla desde lo que mantiene unido un sistema. Vínculos, lealtades, lo que hace que algo permanezca. Palabras como "lo que nos une", "lo que sostiene", "el núcleo", "la razón por la que seguimos". Percibe tensión entre unidad y dispersión.
+Diferenciado: el usuario habla desde las distinciones que hacen visible la interacción. Diferencias, contrastes, lo que distingue una parte de otra. Palabras como "a diferencia de", "por un lado por otro", "lo que los separa", "lo particular de cada uno".
+
+TRANSFORMACIÓN — los tres modos:
+Conducción: el usuario habla desde la dirección del cambio. Hacia dónde va algo, qué lo impulsa, qué lo frena. Palabras como "dirección", "hacia dónde", "qué lo mueve", "qué lo detiene". Ve el cambio como vector con orientación.
+Actividades: el usuario habla desde el cambio en acción concreta. Lo que está ocurriendo ahora, hechos específicos, movimientos visibles. Palabras como "lo que está pasando", "lo que hacemos", "las acciones concretas". Ve el cambio como manifestación presente.
+Distancias: el usuario habla desde la relación entre el cambio y su origen. Lo que se aleja, lo que se acerca, lo que se perdió, lo que emergió. Palabras como "antes era", "se alejó de", "ya no es lo que era", "está volviendo a". Ve el cambio en perspectiva temporal.
+
+CÓMO USÁS LA GRAMÁTICA:
+Cuando el usuario despliega lo que trae, detectás la orientación Y el modo. No son categorías para clasificar: son señales que te dicen desde dónde está observando. Con eso sabés qué pregunta exacta abre el campo y qué orientaciones invisibles activar, también en el modo más relevante.
+
+Una correspondencia poderosa no es entre temas del mismo dominio. Es entre fenómenos que comparten el mismo modo de observación aunque pertenezcan a dominios completamente distintos. Alguien hablando de su ciudad desde Fuerza de Cohesión y alguien hablando de su empresa desde Fuerza de Cohesión están viendo el mismo principio.
+
+CÓMO OPERÁS:
+Primero: escuchás sin imponer estructura. No pedís información que te falta.
+Segundo: llegás rápido a la pregunta que importa.
+Tercero: simplificás siempre. El principio que contiene lo complejo, no la explicación larga.
+Cuarto: cuando el usuario pide explicación, das contexto antes que contenido.
+Quinto: cuando necesitás contexto externo, buscás correspondencias entre modos de observación, no entre temas. Lo que devolvés son correspondencias, no datos.
+Sexto: cuando algo importante está tomando forma pero no está dicho, lo señalás con CRISTALIZA: seguido de una línea.
+Séptimo: cuando el modo del usuario es ambiguo, hacés una sola pregunta que lo revele antes de expandir.
+
+SOBRE LAS PREGUNTAS — crítico:
+Cada pregunta es una sola. Nunca dos opciones dentro de una pregunta. Cuando tenés dos posibles, elegís la más profunda y descartás la otra. La pregunta exacta abre un campo. La pregunta compuesta lo divide. Si no sabés cuál es la más profunda, preguntás la que el usuario no podría responder sin detenerse a pensar de verdad.
+
+NUNCA: pedís información, categorizás, explicás el sistema ni los nueve modos, hacés más de una pregunta por respuesta, das respuestas largas, hacés preguntas con dos opciones.
+
+AL FINAL: cuando el usuario se despide o guarda la sesión, generás exactamente esto:
+
+DESTILADO:
+IDEAS: [una por línea comenzando con —]
+CORRESPONDENCIAS: [una por línea comenzando con ↔]
+ABIERTO: [una por línea comenzando con ...]
+ORIENTACION: [espacio | energia | trans]
+MODO: [eterno_infinito | equilibrio | codificada | instinto_conjunto | fuerza_cohesion | diferenciado | conduccion | actividades | distancias]
+
+Cuando encontrás una correspondencia poderosa: Correspondencia: al final.
+Respondé en español. Sé breve. Una pregunta precisa vale más que tres párrafos.`;
+
+// ═══════════════════════════════════════════════
+// SUPABASE BACKEND
+// ═══════════════════════════════════════════════
+
+const SUPABASE_URL = 'https://spavobqrigvbjabwyvbl.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwYXZvYnFyaWd2YmphYnd5dmJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4MzAxNjYsImV4cCI6MjA5ODQwNjE2Nn0.f6ke1OMNCPWiWL6L59PnaedZLohUYEd-fUdkYsPkQJo';
+const ANTHROPIC_PROXY_URL = 'https://spavobqrigvbjabwyvbl.supabase.co/functions/v1/anthropic-proxy';
+
+const SB_HEADERS = {
+  'Content-Type': 'application/json',
+  'apikey': SUPABASE_KEY,
+  'Authorization': `Bearer ${SUPABASE_KEY}`
+};
+
+function getUserKey() {
+  // Check if arriving from free version with key parameter
+  const urlParams = new URLSearchParams(window.location.search);
+  const keyFromUrl = urlParams.get('key');
+  if (keyFromUrl) {
+    localStorage.setItem('arquigenesis_user_key', keyFromUrl);
+    // Clean URL without reloading
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+
+  let key = localStorage.getItem('arquigenesis_user_key');
+  if (!key) {
+    key = 'user_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem('arquigenesis_user_key', key);
+  }
+  return key;
+}
+
+const USER_KEY = getUserKey();
+
+async function sbGet(table, filter) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}&limit=1`, { headers: SB_HEADERS });
+    const data = await res.json();
+    return Array.isArray(data) && data.length > 0 ? data[0] : null;
+  } catch(e) { return null; }
+}
+
+async function sbGetAll(table, filter) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, { headers: SB_HEADERS });
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch(e) { return []; }
+}
+
+async function sbUpsert(table, data) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: { ...SB_HEADERS, 'Prefer': 'return=representation,resolution=merge-duplicates' },
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  } catch(e) { return null; }
+}
+
+async function sbInsert(table, data) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: { ...SB_HEADERS, 'Prefer': 'return=representation' },
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  } catch(e) { return null; }
+}
+
+// ═══════════════════════════════════════════════
+// PERSISTENCE & USER PROFILE (Supabase)
+// ═══════════════════════════════════════════════
+
+async function saveProfile(profile) {
+  await sbUpsert('arquigenesis_profiles', {
+    user_key: USER_KEY,
+    sessions: profile.sessions,
+    orientations: profile.orientations,
+    modes: profile.modes,
+    correspondence_types: profile.correspondenceTypes,
+    dominant_orientation: profile.dominantOrientation,
+    dominant_mode: profile.dominantMode,
+    resonant_type: profile.resonantType,
+    updated_at: new Date().toISOString()
+  });
+}
+
+async function loadProfile() {
+  const row = await sbGet('arquigenesis_profiles', `user_key=eq.${USER_KEY}`);
+  if (!row) return null;
+  return {
+    sessions: row.sessions || 0,
+    orientations: row.orientations || { espacio: 0, energia: 0, trans: 0 },
+    modes: row.modes || {
+      eterno_infinito: 0, equilibrio: 0, codificada: 0,
+      instinto_conjunto: 0, fuerza_cohesion: 0, diferenciado: 0,
+      conduccion: 0, actividades: 0, distancias: 0
+    },
+    correspondenceTypes: row.correspondence_types || { concrete: 0, philosophical: 0, historical: 0 },
+    dominantOrientation: row.dominant_orientation,
+    dominantMode: row.dominant_mode,
+    resonantType: row.resonant_type
+  };
+}
+
+async function saveNodes(nodes) {
+  const userNodes = nodes.filter(n => n.id.startsWith('session_'));
+  for (const n of userNodes) {
+    await sbUpsert('arquigenesis_nodes', {
+      user_key: USER_KEY,
+      node_id: n.id,
+      label: n.label,
+      orientation: n.orientation,
+      mode: n.mode || null,
+      size: n.size,
+      sessions: n.sessions,
+      persona: n.persona,
+      session_date: n.date,
+      ideas: n.ideas,
+      correspondences: n.correspondences,
+      open_questions: n.open,
+      shared: n.shared || false
+    });
+  }
+}
+
+async function loadNodes() {
+  const rows = await sbGetAll('arquigenesis_nodes', `user_key=eq.${USER_KEY}`);
+  return rows.map(r => ({
+    id: r.node_id,
+    label: r.label,
+    orientation: r.orientation,
+    mode: r.mode,
+    size: r.size || 20,
+    sessions: r.sessions || 1,
+    persona: r.persona || 'Sesión',
+    date: r.session_date || '',
+    ideas: r.ideas || [],
+    correspondences: r.correspondences || [],
+    open: r.open_questions || [],
+    shared: r.shared || false,
+    vx: 0, vy: 0
+  }));
+}
+
+async function saveLink(link) {
+  await sbInsert('arquigenesis_links', {
+    user_key: USER_KEY,
+    source_id: link.source,
+    target_id: link.target,
+    link_type: link.type,
+    reason: link.reason || null,
+    auto: link.auto || false
+  });
+}
+
+async function loadLinks() {
+  const rows = await sbGetAll('arquigenesis_links', `user_key=eq.${USER_KEY}`);
+  return rows.map(r => ({
+    source: r.source_id,
+    target: r.target_id,
+    type: r.link_type,
+    reason: r.reason,
+    auto: r.auto || false
+  }));
+}
+
+function updateUserProfile(destilado) {
+  const d = parseDestilado(destilado);
+  const existing = loadProfile() || {
+    sessions: 0,
+    orientations: { espacio: 0, energia: 0, trans: 0 },
+    modes: {
+      eterno_infinito: 0, equilibrio: 0, codificada: 0,
+      instinto_conjunto: 0, fuerza_cohesion: 0, diferenciado: 0,
+      conduccion: 0, actividades: 0, distancias: 0
+    },
+    correspondenceTypes: { concrete: 0, philosophical: 0, historical: 0 },
+    dominantOrientation: null,
+    dominantMode: null,
+    resonantType: null
+  };
+
+  existing.sessions += 1;
+
+  if (d.orientation && existing.orientations[d.orientation] !== undefined) {
+    existing.orientations[d.orientation] += 1;
+  }
+
+  if (d.mode && existing.modes[d.mode] !== undefined) {
+    existing.modes[d.mode] += 1;
+  }
+
+  const allCorr = d.correspondences.join(' ').toLowerCase();
+  if (/histori|siglo|guerra|antigua|época/.test(allCorr)) existing.correspondenceTypes.historical += 1;
+  else if (/principio|ley|universo|conciencia|realidad/.test(allCorr)) existing.correspondenceTypes.philosophical += 1;
+  else existing.correspondenceTypes.concrete += 1;
+
+  const orients = existing.orientations;
+  existing.dominantOrientation = Object.keys(orients).reduce((a,b) => orients[a] > orients[b] ? a : b);
+
+  const modes = existing.modes;
+  existing.dominantMode = Object.keys(modes).reduce((a,b) => modes[a] > modes[b] ? a : b);
+
+  const corrTypes = existing.correspondenceTypes;
+  existing.resonantType = Object.keys(corrTypes).reduce((a,b) => corrTypes[a] > corrTypes[b] ? a : b);
+
+  saveProfile(existing);
+  return existing;
+}
+
+function buildCalibrationContext(profile) {
+  if (!profile || profile.sessions < 2) return '';
+
+  const orientLabels = {
+    espacio: 'estructura y organización',
+    energia: 'interacciones y movimiento',
+    trans: 'cambio y transformación'
+  };
+
+  const modeLabels = {
+    eterno_infinito: 'principios atemporales y orígenes',
+    equilibrio: 'tensiones y desequilibrios',
+    codificada: 'estructuras visibles y geometrías concretas',
+    instinto_conjunto: 'dinámicas colectivas instintivas',
+    fuerza_cohesion: 'vínculos y lo que mantiene unido',
+    diferenciado: 'distinciones y contrastes entre partes',
+    conduccion: 'dirección e impulso del cambio',
+    actividades: 'manifestaciones concretas del presente',
+    distancias: 'perspectiva temporal y lo que se aleja o acerca'
+  };
+
+  const corrLabels = {
+    concrete: 'concretas y cotidianas',
+    philosophical: 'filosóficas y abstractas',
+    historical: 'históricas y culturales'
+  };
+
+  let context = `\n\nCONTEXTO DEL USUARIO (${profile.sessions} sesiones previas):
+- Tiende a observar desde: ${orientLabels[profile.dominantOrientation] || 'orientación variable'}`;
+
+  if (profile.dominantMode && profile.sessions >= 3) {
+    context += `\n- Su modo de observación más frecuente: ${modeLabels[profile.dominantMode] || 'variable'}`;
+  }
+
+  context += `\n- Las correspondencias que más le resonaron fueron: ${corrLabels[profile.resonantType] || 'variadas'}
+- Usá este contexto invisiblemente para calibrar tu aproximación. No lo menciones.`;
+
+  return context;
+}
+
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+
+let history = [];
+let isLoading = false;
+let sessionMemory = { ideas: [], correspondences: [], open: [] };
+let msgCount = 0;
+let currentNodeContext = null;
+let selectedGraphNode = null;
+let userProfile = null;
+
+// Graph nodes — sample data + loaded from Supabase
+const sampleNodes = [
+  {
+    id: 'n0', label: 'Crecimiento sin centro', orientation: 'espacio', size: 32, sessions: 3,
+    persona: 'Transversal', date: 'Ejemplo',
+    ideas: ['El crecimiento sin centro visible es el mismo fenómeno en organizaciones, ciudades e identidades.'],
+    correspondences: ['El toroide: cuando la expansión pierde contacto con el centro, la periferia se fragmenta.'],
+    open: ['¿Cuál es el tamaño máximo que un sistema puede alcanzar antes de necesitar un nuevo centro?']
+  },
+  {
+    id: 'n1', label: 'Propósito invisible', orientation: 'espacio', size: 24, sessions: 2,
+    persona: 'Martina', date: 'Sesión 1',
+    ideas: ['El propósito no desapareció. Dejó de ser visible desde cualquier punto de la organización.'],
+    correspondences: ['Una ciudad que crece sin plaza central.'],
+    open: ['¿Cuándo fue la última vez que todos vieron el propósito al mismo tiempo?']
+  },
+  {
+    id: 'n2', label: 'Memoria del lugar', orientation: 'trans', size: 28, sessions: 3,
+    persona: 'Carlos', date: 'Sesión 1',
+    ideas: ['Lo que cambió no es la ciudad. Es el lugar que los vecinos de siempre ocupaban dentro de ella.'],
+    correspondences: ['Un idioma que se habla menos — los hablantes originales no pierden el idioma, pierden el territorio.'],
+    open: ['¿Cómo se devuelve una función sin detener el crecimiento?']
+  },
+  {
+    id: 'n3', label: 'Sujeto de la investigación', orientation: 'trans', size: 22, sessions: 2,
+    persona: 'Sofía', date: 'Sesión 1',
+    ideas: ['La pregunta asumía que las redes hacen algo a la identidad. El sujeto real es la persona usando la red para hacerse visible.'],
+    correspondences: ['Un espejo no construye la cara que refleja — pero sin espejo esa cara no puede verses.'],
+    open: ['¿Dónde ocurre la construcción de identidad cuando las redes no están?']
+  }
+];
+
+let graphNodes = [...sampleNodes];
+
+let graphLinks = [
+  { source: 'n1', target: 'n0', type: 'corr' },
+  { source: 'n2', target: 'n0', type: 'corr' },
+  { source: 'n3', target: 'n0', type: 'corr' },
+  { source: 'n1', target: 'n2', type: 'open' },
+  { source: 'n2', target: 'n3', type: 'corr' }
+];
+
+async function initFromSupabase() {
+  // Load profile
+  userProfile = await loadProfile();
+
+  // Load nodes
+  const persistedNodes = await loadNodes();
+  persistedNodes.forEach(n => {
+    if (!graphNodes.find(existing => existing.id === n.id)) {
+      graphNodes.push(n);
+      nodeMap[n.id] = n;
+    }
+  });
+
+  // Load links
+  const persistedLinks = await loadLinks();
+  persistedLinks.forEach(l => {
+    const exists = graphLinks.some(el => el.source === l.source && el.target === l.target);
+    if (!exists) graphLinks.push(l);
+  });
+
+  // Update badge
+  const badge = document.getElementById('graphBadge');
+  if (badge) {
+    badge.textContent = graphNodes.length;
+    badge.classList.add('visible');
+  }
+
+  // Update profile indicator
+  if (userProfile && userProfile.sessions > 0) {
+    const indicator = document.getElementById('profileIndicator');
+    if (indicator) {
+      indicator.textContent = `${userProfile.sessions} sesión${userProfile.sessions > 1 ? 'es' : ''}`;
+      indicator.style.display = 'block';
+    }
+    if (userProfile.sessions >= 2) {
+      const welcomeTagline = document.querySelector('.welcome-tagline');
+      if (welcomeTagline) welcomeTagline.textContent = `${userProfile.sessions} sesiones. El motor ya te conoce.`;
+    }
+  }
+}
+
+const nodeMap = {};
+function rebuildNodeMap() {
+  graphNodes.forEach(n => {
+    if (!nodeMap[n.id]) {
+      nodeMap[n.id] = n;
+      n.vx = n.vx || 0;
+      n.vy = n.vy || 0;
+    }
+  });
+}
+rebuildNodeMap();
+
+// ═══════════════════════════════════════════════
+// VIEW SWITCHING
+// ═══════════════════════════════════════════════
+
+function switchView(view) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+
+  document.getElementById(view + 'View').classList.add('active');
+  document.querySelector(`.tab[onclick="switchView('${view}')"]`).classList.add('active');
+
+  if (view === 'graph') {
+    setTimeout(() => { resizeGraph(); }, 50);
+    showGraphHelp();
+  }
+}
+
+// ═══════════════════════════════════════════════
+// MOTOR
+// ═══════════════════════════════════════════════
+
+function parseResponse(text) {
+  const result = { main: text, correspondence: null, crystallized: null, destilado: null };
+
+  // Destilado
+  if (text.includes('DESTILADO:')) {
+    result.destilado = text;
+    return result;
+  }
+
+  // Correspondence
+  const ci = text.indexOf('Correspondencia:');
+  if (ci !== -1) {
+    result.main = text.slice(0, ci).trim();
+    const after = text.slice(ci + 'Correspondencia:'.length).trim();
+    result.correspondence = after.split('\n')[0].trim();
+    if (result.correspondence) sessionMemory.correspondences.push(result.correspondence);
+  }
+
+  // Crystallized
+  const ki = result.main.indexOf('CRISTALIZA:');
+  if (ki !== -1) {
+    const before = result.main.slice(0, ki).trim();
+    const after = result.main.slice(ki + 'CRISTALIZA:'.length).trim();
+    result.crystallized = after.split('\n')[0].trim();
+    result.main = (before + ' ' + after.slice(result.crystallized.length)).trim();
+    if (result.crystallized) sessionMemory.ideas.push(result.crystallized);
+  }
+
+  return result;
+}
+
+function parseDestilado(text) {
+  const ideas = [], corrs = [], opens = [];
+  let orientation = 'espacio';
+  let mode = null;
+
+  const im = text.match(/IDEAS:([\s\S]*?)(?=CORRESPONDENCIAS:|ABIERTO:|ORIENTACION:|MODO:|$)/);
+  if (im) im[1].trim().split('\n').filter(l => l.trim().startsWith('—')).forEach(l => ideas.push(l.replace('—','').trim()));
+
+  const cm = text.match(/CORRESPONDENCIAS:([\s\S]*?)(?=ABIERTO:|ORIENTACION:|MODO:|$)/);
+  if (cm) cm[1].trim().split('\n').filter(l => l.trim().startsWith('↔')).forEach(l => corrs.push(l.replace('↔','').trim()));
+
+  const om = text.match(/ABIERTO:([\s\S]*?)(?=ORIENTACION:|MODO:|$)/);
+  if (om) om[1].trim().split('\n').filter(l => l.trim().startsWith('...')).forEach(l => opens.push(l.replace('...','').trim()));
+
+  const orm = text.match(/ORIENTACION:\s*(espacio|energia|trans)/i);
+  if (orm) orientation = orm[1].toLowerCase();
+
+  const mm = text.match(/MODO:\s*([a-z_]+)/i);
+  if (mm) mode = mm[1].toLowerCase();
+
+  return { ideas, correspondences: corrs, open: opens, orientation, mode };
+}
+
+function addMsgToGraph(destilado) {
+  const d = parseDestilado(destilado);
+  if (!d.ideas.length && !d.correspondences.length) return;
+
+  const id = 'session_' + Date.now();
+  const label = d.ideas[0] ? d.ideas[0].slice(0, 40) + (d.ideas[0].length > 40 ? '…' : '') : 'Nueva sesión';
+  const sessions = 1;
+
+  const newNode = {
+    id, label,
+    orientation: d.orientation,
+    size: 20 + Math.min(d.ideas.length * 4, 16),
+    sessions,
+    persona: 'Esta sesión',
+    date: new Date().toLocaleDateString('es-AR'),
+    ideas: d.ideas,
+    correspondences: d.correspondences,
+    open: d.open,
+    vx: 0, vy: 0
+  };
+
+  // Position near center with slight offset
+  const cx = gCanvas ? gCanvas.width / 2 / gScale : 400;
+  const cy = gCanvas ? gCanvas.height / 2 / gScale : 300;
+  newNode.x = cx + (Math.random() - 0.5) * 200;
+  newNode.y = cy + (Math.random() - 0.5) * 200;
+
+  graphNodes.push(newNode);
+  nodeMap[id] = newNode;
+
+  // Link to most related existing node
+  if (graphNodes.length > 1) {
+    const link = { source: id, target: graphNodes[0].id, type: 'corr' };
+    graphLinks.push(link);
+    saveLink(link);
+  }
+
+  // Update badge
+  const badge = document.getElementById('graphBadge');
+  badge.textContent = graphNodes.length;
+  badge.classList.add('visible');
+
+  // Persist nodes to Supabase
+  saveNodes(graphNodes);
+
+  // Update user profile
+  userProfile = updateUserProfile(destilado);
+  saveProfile(userProfile);
+
+  // Show profile sessions count
+  const sessionsMsg = userProfile.sessions > 1
+    ? `Sesión ${userProfile.sessions} guardada.`
+    : 'Primera sesión guardada en el grafo.';
+  showToast(sessionsMsg);
+
+  // Detect semantic links with all existing nodes
+  setTimeout(() => detectSemanticLinks(newNode), 800);
+
+  // Check resonance with shared pool
+  setTimeout(() => checkResonanceWithPool(newNode), 2000);
+}
+
+function addMessage(role, text, isSystem, systemAction) {
+  const messagesEl = document.getElementById('messages');
+
+  if (isSystem) {
+    const w = document.createElement('div');
+    w.className = 'message sysnote';
+    const b = document.createElement('div');
+    b.className = 'msg-bubble';
+    b.textContent = text;
+    if (systemAction) b.onclick = systemAction;
+    w.appendChild(b);
+    messagesEl.appendChild(w);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return;
+  }
+
+  const w = document.createElement('div');
+  w.className = `message ${role}`;
+
+  const label = document.createElement('div');
+  label.className = 'msg-label';
+  label.textContent = role === 'motor' ? 'Arquigenesis' : 'Vos';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+
+  if (role === 'motor') {
+    const p = parseResponse(text);
+
+    if (p.destilado) {
+      bubble.textContent = 'Sesión destilada y guardada en el grafo.';
+      bubble.style.cursor = 'pointer';
+      bubble.onclick = () => switchView('graph');
+      addMsgToGraph(p.destilado);
+    } else {
+      bubble.textContent = p.main;
+      if (p.crystallized) {
+        const c = document.createElement('div');
+        c.className = 'crystallized';
+        c.textContent = '◆ ' + p.crystallized;
+        bubble.appendChild(c);
+      }
+      if (p.correspondence) {
+        const c = document.createElement('div');
+        c.className = 'correspondence';
+        c.textContent = '↔ ' + p.correspondence;
+        bubble.appendChild(c);
+      }
+    }
+  } else {
+    bubble.textContent = text;
+  }
+
+  w.appendChild(label);
+  w.appendChild(bubble);
+  messagesEl.appendChild(w);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  msgCount++;
+
+  // Show close session button after first real exchange
+  if (msgCount >= 2) {
+    document.getElementById('btnCloseSession').classList.add('visible');
+    showCloseHelp();
+  }
+
+  // Show motor help after first motor response
+  if (msgCount === 1) showMotorHelp();
+
+  // Reset inactivity timer
+  resetInactivityTimer();
+}
+
+function showTyping() {
+  const messagesEl = document.getElementById('messages');
+  const w = document.createElement('div');
+  w.className = 'message motor';
+  w.id = 'typing';
+  const label = document.createElement('div');
+  label.className = 'msg-label';
+  label.textContent = 'Arquigenesis';
+  const t = document.createElement('div');
+  t.className = 'typing';
+  t.innerHTML = '<span></span><span></span><span></span>';
+  w.appendChild(label);
+  w.appendChild(t);
+  messagesEl.appendChild(w);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function removeTyping() {
+  const el = document.getElementById('typing');
+  if (el) el.remove();
+}
+
+async function sendMessage() {
+  const inputEl = document.getElementById('input');
+  const text = inputEl.value.trim();
+  if (!text || isLoading) return;
+
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+  isLoading = true;
+  document.getElementById('sendBtn').disabled = true;
+  document.getElementById('logoDot')?.classList.add('processing');
+
+  addMessage('user', text);
+  history.push({ role: 'user', content: text });
+  showTyping();
+
+  try {
+    const calibration = buildCalibrationContext(userProfile);
+    const response = await fetch(ANTHROPIC_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        system: SYSTEM_PROMPT + calibration,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        messages: history
+      })
+    });
+
+    const data = await response.json();
+    let reply = '';
+    if (data.content) data.content.forEach(b => { if (b.type === 'text') reply += b.text; });
+    if (!reply) reply = '...';
+
+    removeTyping();
+    addMessage('motor', reply);
+    history.push({ role: 'assistant', content: data.content || reply });
+
+  } catch (err) {
+    removeTyping();
+    addMessage('motor', 'Hubo un problema de conexión. Intentá de nuevo.');
+  }
+
+  isLoading = false;
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('logoDot')?.classList.remove('processing');
+  inputEl.focus();
+}
+
+function newSession() {
+  if (history.length <= 1) return;
+
+  if (!confirm('¿Empezar una nueva sesión? La conversación actual se cerrará.')) return;
+
+  history = [];
+  sessionMemory = { ideas: [], correspondences: [], open: [] };
+  msgCount = 0;
+  currentNodeContext = null;
+  isLoading = false;
+  document.getElementById('sendBtn').disabled = false;
+
+  const messagesEl = document.getElementById('messages');
+  messagesEl.innerHTML = '';
+
+  document.getElementById('btnCloseSession').classList.remove('visible');
+  clearTimeout(inactivityTimer);
+
+  // Show welcome screen again
+  const welcome = document.getElementById('welcome');
+  welcome.style.display = 'flex';
+  setTimeout(() => welcome.classList.remove('hidden'), 10);
+
+  switchView('motor');
+}
+
+// Input handlers
+document.getElementById('input').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  resetInactivityTimer();
+});
+
+document.getElementById('input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// ═══════════════════════════════════════════════
+// GRAPH ENGINE
+// ═══════════════════════════════════════════════
+
+let gCanvas, gCtx;
+let gScale = 1, gOffX = 0, gOffY = 0;
+let gDragging = false, gDragStart = { x: 0, y: 0 };
+let gHovered = null;
+let gAnimating = false;
+
+const ORIENT_COLORS = { espacio: '#4A90D9', energia: '#2D9E6B', trans: '#9B6DD6' };
+const LINK_COLORS = {
+  corr: 'rgba(74,144,217,0.4)',
+  dev: 'rgba(45,158,107,0.35)',
+  open: 'rgba(201,146,42,0.4)'
+};
+
+function initGraphPositions() {
+  if (!gCanvas) return;
+  const cx = gCanvas.width / 2 / gScale;
+  const cy = gCanvas.height / 2 / gScale;
+
+  graphNodes.forEach((n, i) => {
+    if (!n.x) {
+      if (i === 0) { n.x = cx; n.y = cy; }
+      else {
+        const angle = (i / graphNodes.length) * Math.PI * 2;
+        const r = 160 + Math.random() * 60;
+        n.x = cx + Math.cos(angle) * r;
+        n.y = cy + Math.sin(angle) * r;
+      }
+    }
+    n.vx = n.vx || 0;
+    n.vy = n.vy || 0;
+  });
+}
+
+function resizeGraph() {
+  if (!gCanvas) return;
+  const parent = gCanvas.parentElement;
+  gCanvas.width = parent.clientWidth;
+  gCanvas.height = parent.clientHeight;
+  initGraphPositions();
+}
+
+function simulateGraph() {
+  const rep = 7000, sLen = 150, sK = 0.025, damp = 0.84, cpull = 0.006;
+  const cx = gCanvas.width / 2, cy = gCanvas.height / 2;
+
+  for (let i = 0; i < graphNodes.length; i++) {
+    for (let j = i + 1; j < graphNodes.length; j++) {
+      const a = graphNodes[i], b = graphNodes[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.sqrt(dx*dx + dy*dy) || 1;
+      const f = rep / (d * d);
+      a.vx -= (dx/d)*f; a.vy -= (dy/d)*f;
+      b.vx += (dx/d)*f; b.vy += (dy/d)*f;
+    }
+  }
+
+  graphLinks.forEach(l => {
+    const a = nodeMap[l.source], b = nodeMap[l.target];
+    if (!a || !b) return;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const d = Math.sqrt(dx*dx + dy*dy) || 1;
+    const f = (d - sLen) * sK;
+    a.vx += (dx/d)*f; a.vy += (dy/d)*f;
+    b.vx -= (dx/d)*f; b.vy -= (dy/d)*f;
+  });
+
+  graphNodes.forEach(n => {
+    n.vx += (cx - n.x * gScale) * cpull;
+    n.vy += (cy - n.y * gScale) * cpull;
+    n.vx *= damp; n.vy *= damp;
+    n.x += n.vx; n.y += n.vy;
+  });
+}
+
+function drawGraph() {
+  if (!gCanvas || !document.getElementById('graphView').classList.contains('active')) {
+    requestAnimationFrame(drawGraph);
+    return;
+  }
+
+  gCtx.clearRect(0, 0, gCanvas.width, gCanvas.height);
+  gCtx.save();
+  gCtx.translate(gOffX, gOffY);
+  gCtx.scale(gScale, gScale);
+
+  // Links
+  graphLinks.forEach(l => {
+    const a = nodeMap[l.source], b = nodeMap[l.target];
+    if (!a || !b) return;
+    const hi = selectedGraphNode && (selectedGraphNode.id === l.source || selectedGraphNode.id === l.target);
+
+    gCtx.beginPath();
+    gCtx.moveTo(a.x, a.y);
+    const mx = (a.x+b.x)/2 + (b.y-a.y)*0.12;
+    const my = (a.y+b.y)/2 - (b.x-a.x)*0.12;
+    gCtx.quadraticCurveTo(mx, my, b.x, b.y);
+    gCtx.strokeStyle = hi ? LINK_COLORS[l.type].replace(/[\d.]+\)$/, '0.85)') : LINK_COLORS[l.type];
+    gCtx.lineWidth = hi ? 2.2 : 1.4;
+    if (l.type === 'open') gCtx.setLineDash([4,4]); else gCtx.setLineDash([]);
+    gCtx.stroke();
+    gCtx.setLineDash([]);
+  });
+
+  // Nodes
+  graphNodes.forEach(n => {
+    const isSel = selectedGraphNode && selectedGraphNode.id === n.id;
+    const isHov = gHovered && gHovered.id === n.id;
+    const isConn = selectedGraphNode && graphLinks.some(l =>
+      (l.source === selectedGraphNode.id && l.target === n.id) ||
+      (l.target === selectedGraphNode.id && l.source === n.id)
+    );
+
+    const color = ORIENT_COLORS[n.orientation] || '#4A90D9';
+    const r = n.size + (isSel ? 5 : 0);
+    gCtx.globalAlpha = selectedGraphNode && !isSel && !isConn ? 0.28 : 1;
+
+    if (isSel || isHov) {
+      const glow = gCtx.createRadialGradient(n.x, n.y, r*0.4, n.x, n.y, r*2.8);
+      glow.addColorStop(0, color + '35');
+      glow.addColorStop(1, color + '00');
+      gCtx.beginPath();
+      gCtx.arc(n.x, n.y, r*2.8, 0, Math.PI*2);
+      gCtx.fillStyle = glow;
+      gCtx.fill();
+    }
+
+    gCtx.beginPath();
+    gCtx.arc(n.x, n.y, r+3, 0, Math.PI*2);
+    gCtx.strokeStyle = color + (isSel ? 'BB' : '35');
+    gCtx.lineWidth = isSel ? 2 : 1;
+    gCtx.stroke();
+
+    const grad = gCtx.createRadialGradient(n.x-r*0.3, n.y-r*0.3, 0, n.x, n.y, r);
+    grad.addColorStop(0, color + 'EE');
+    grad.addColorStop(1, color + '77');
+    gCtx.beginPath();
+    gCtx.arc(n.x, n.y, r, 0, Math.PI*2);
+    gCtx.fillStyle = grad;
+    gCtx.fill();
+
+    if (n.sessions > 1) {
+      gCtx.font = `bold ${Math.max(9, r*0.48)}px Segoe UI`;
+      gCtx.fillStyle = 'rgba(255,255,255,0.9)';
+      gCtx.textAlign = 'center';
+      gCtx.textBaseline = 'middle';
+      gCtx.fillText(n.sessions, n.x, n.y);
+    }
+
+    gCtx.font = `${isSel ? 'bold ' : ''}11.5px Segoe UI`;
+    gCtx.fillStyle = isSel ? '#E2EAF4' : '#7A8FA8';
+    gCtx.textAlign = 'center';
+    gCtx.textBaseline = 'top';
+    gCtx.fillText(n.label.length > 22 ? n.label.slice(0,22)+'…' : n.label, n.x, n.y + r + 5);
+
+    if (isHov || isSel) {
+      gCtx.font = '10px Segoe UI';
+      gCtx.fillStyle = color + '99';
+      gCtx.fillText(n.persona, n.x, n.y + r + 18);
+    }
+
+    gCtx.globalAlpha = 1;
+  });
+
+  gCtx.restore();
+  simulateGraph();
+  requestAnimationFrame(drawGraph);
+}
+
+function getGraphNodeAt(ex, ey) {
+  const x = (ex - gOffX) / gScale;
+  const y = (ey - gOffY) / gScale;
+  return graphNodes.find(n => {
+    const dx = n.x - x, dy = n.y - y;
+    return Math.sqrt(dx*dx+dy*dy) < n.size + 10;
+  });
+}
+
+// Graph mouse events
+function setupGraphEvents() {
+  gCanvas.addEventListener('mousedown', e => {
+    const rect = gCanvas.getBoundingClientRect();
+    const node = getGraphNodeAt(e.clientX, e.clientY - rect.top);
+    if (node) { selectedGraphNode = node; openGraphPanel(node); }
+    else { gDragging = true; gDragStart = { x: e.clientX - gOffX, y: e.clientY - gOffY }; }
+  });
+
+  gCanvas.addEventListener('mousemove', e => {
+    const rect = gCanvas.getBoundingClientRect();
+    const ey = e.clientY - rect.top;
+    if (gDragging) { gOffX = e.clientX - gDragStart.x; gOffY = ey - gDragStart.y; return; }
+    const node = getGraphNodeAt(e.clientX, ey);
+    gHovered = node || null;
+    const tip = document.getElementById('graphTooltip');
+    if (node) {
+      gCanvas.style.cursor = 'pointer';
+      tip.textContent = node.label + ' · ' + node.persona;
+      tip.style.left = (e.clientX + 12) + 'px';
+      tip.style.top = (ey - 8) + 'px';
+      tip.classList.add('visible');
+    } else {
+      gCanvas.style.cursor = gDragging ? 'grabbing' : 'grab';
+      tip.classList.remove('visible');
+    }
+  });
+
+  gCanvas.addEventListener('mouseup', () => { gDragging = false; });
+  gCanvas.addEventListener('mouseleave', () => { gDragging = false; document.getElementById('graphTooltip').classList.remove('visible'); });
+
+  gCanvas.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      const rect = gCanvas.getBoundingClientRect();
+      const node = getGraphNodeAt(t.clientX, t.clientY - rect.top);
+      if (node) { selectedGraphNode = node; openGraphPanel(node); }
+      else { gDragging = true; gDragStart = { x: t.clientX - gOffX, y: t.clientY - rect.top - gOffY }; }
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  gCanvas.addEventListener('touchmove', e => {
+    if (gDragging && e.touches.length === 1) {
+      const t = e.touches[0];
+      const rect = gCanvas.getBoundingClientRect();
+      gOffX = t.clientX - gDragStart.x;
+      gOffY = (t.clientY - rect.top) - gDragStart.y;
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  gCanvas.addEventListener('touchend', () => { gDragging = false; });
+
+  gCanvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    gScale = Math.max(0.3, Math.min(3, gScale * (e.deltaY < 0 ? 1.1 : 0.9)));
+  }, { passive: false });
+}
+
+function zoomGraph(f) { gScale = Math.max(0.3, Math.min(3, gScale * f)); }
+function resetGraph() { gScale = 1; gOffX = 0; gOffY = 0; }
+
+// Graph panel
+function openGraphPanel(node) {
+  document.getElementById('gpTitle').textContent = node.label;
+  const colors = { espacio: '#4A90D9', energia: '#2D9E6B', trans: '#9B6DD6' };
+  const labels = { espacio: 'Espacio', energia: 'Energía', trans: 'Transformación' };
+  const oe = document.getElementById('gpOrient');
+  oe.textContent = labels[node.orientation] || node.orientation;
+  oe.style.color = colors[node.orientation] || '#4A90D9';
+
+  const body = document.getElementById('gpBody');
+  body.innerHTML = '';
+
+  if (node.ideas.length) {
+    const sec = document.createElement('div');
+    sec.className = 'gp-section';
+    sec.innerHTML = '<div class="gp-section-title">Ideas que tomaron forma</div>';
+    node.ideas.forEach(i => {
+      const el = document.createElement('div');
+      el.className = 'gp-item idea';
+      el.textContent = i;
+      sec.appendChild(el);
+    });
+    body.appendChild(sec);
+  }
+
+  if (node.correspondences.length) {
+    const sec = document.createElement('div');
+    sec.className = 'gp-section';
+    sec.innerHTML = '<div class="gp-section-title">Correspondencias</div>';
+    node.correspondences.forEach(c => {
+      const el = document.createElement('div');
+      el.className = 'gp-item corr';
+      el.textContent = '↔ ' + c;
+      sec.appendChild(el);
+    });
+    body.appendChild(sec);
+  }
+
+  if (node.open.length) {
+    const sec = document.createElement('div');
+    sec.className = 'gp-section';
+    sec.innerHTML = '<div class="gp-section-title">En proceso</div>';
+    node.open.forEach(o => {
+      const el = document.createElement('div');
+      el.className = 'gp-item open';
+      el.textContent = '... ' + o;
+      sec.appendChild(el);
+    });
+    body.appendChild(sec);
+  }
+
+  const connected = graphLinks
+    .filter(l => l.source === node.id || l.target === node.id)
+    .map(l => nodeMap[l.source === node.id ? l.target : l.source])
+    .filter(Boolean);
+
+  if (connected.length) {
+    const sec = document.createElement('div');
+    sec.className = 'gp-section';
+    sec.innerHTML = '<div class="gp-section-title">Conectado con</div><div class="gp-connections"></div>';
+    const cont = sec.querySelector('.gp-connections');
+    connected.forEach(cn => {
+      const link = graphLinks.find(l =>
+        (l.source === node.id && l.target === cn.id) ||
+        (l.target === node.id && l.source === cn.id)
+      );
+      const tag = document.createElement('div');
+      tag.className = 'conn-tag';
+      tag.textContent = (link?.auto ? '◉ ' : '') + (cn.label.length > 20 ? cn.label.slice(0,20)+'…' : cn.label);
+      if (link?.auto && link.reason) tag.title = link.reason;
+      tag.onclick = () => { selectedGraphNode = cn; openGraphPanel(cn); };
+      cont.appendChild(tag);
+    });
+
+    // Show auto-detected reasons
+    const autoLinks = graphLinks.filter(l =>
+      (l.source === node.id || l.target === node.id) && l.auto && l.reason
+    );
+    if (autoLinks.length) {
+      const reasonSec = document.createElement('div');
+      reasonSec.className = 'gp-section';
+      reasonSec.innerHTML = '<div class="gp-section-title">Vínculos detectados</div>';
+      autoLinks.forEach(al => {
+        const other = nodeMap[al.source === node.id ? al.target : al.source];
+        if (!other) return;
+        const el = document.createElement('div');
+        el.className = 'gp-item corr';
+        el.textContent = `◉ ${other.label}: ${al.reason}`;
+        reasonSec.appendChild(el);
+      });
+      body.appendChild(reasonSec);
+    }
+
+    body.appendChild(sec);
+  }
+
+  document.getElementById('graphPanel').classList.add('open');
+
+  // Add share button after other content
+  const shareBtn = addShareButton(node);
+  document.getElementById('gpBody').appendChild(shareBtn);
+}
+
+function closeGraphPanel() {
+  document.getElementById('graphPanel').classList.remove('open');
+  selectedGraphNode = null;
+}
+
+function continueFromNode() {
+  if (!selectedGraphNode) return;
+  currentNodeContext = selectedGraphNode;
+
+  const context = `Continuamos desde el nodo "${selectedGraphNode.label}".
+Ideas previas: ${selectedGraphNode.ideas.join(' / ')}
+Correspondencias: ${selectedGraphNode.correspondences.join(' / ')}
+Preguntas abiertas: ${selectedGraphNode.open.join(' / ')}`;
+
+  history = [];
+  sessionMemory = { ideas: [], correspondences: [], open: [] };
+  msgCount = 0;
+
+  const messagesEl = document.getElementById('messages');
+  messagesEl.innerHTML = '';
+
+  const opening = `Retomamos desde "${selectedGraphNode.label}". ¿Qué querés explorar desde ahí?`;
+  addMessage('motor', opening);
+  history.push({ role: 'assistant', content: opening });
+  history.push({ role: 'user', content: context });
+  history.push({ role: 'assistant', content: opening });
+
+  closeGraphPanel();
+  switchView('motor');
+}
+
+// Toast
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ═══════════════════════════════════════════════
+// CONTEXTUAL HELP
+// ═══════════════════════════════════════════════
+
+const HELP_KEYS = {
+  motor: 'arquigenesis_help_motor',
+  close: 'arquigenesis_help_close',
+  graph: 'arquigenesis_help_graph'
+};
+
+function hasSeenHelp(key) {
+  return localStorage.getItem(key) === 'true';
+}
+
+function markHelpSeen(key) {
+  localStorage.setItem(key, 'true');
+}
+
+function showHelp(id, text, action1Text, action1Fn, action2Text, action2Fn) {
+  const bar = document.getElementById('inactivityBar');
+  bar.innerHTML = `
+    <div class="inactivity-text">${text}</div>
+    <div class="inactivity-actions">
+      <button class="inactivity-yes" onclick="(${action1Fn})(); dismissInactivity();">${action1Text}</button>
+      ${action2Text ? `<button class="inactivity-no" onclick="(${action2Fn})(); dismissInactivity();">${action2Text}</button>` : ''}
+    </div>
+  `;
+  bar.classList.add('show');
+}
+
+function showMotorHelp() {
+  if (hasSeenHelp(HELP_KEYS.motor)) return;
+  markHelpSeen(HELP_KEYS.motor);
+  setTimeout(() => {
+    showHelp(
+      'motor',
+      'Cada sesión se guarda en tu grafo al cerrarla. Tocá "Grafo" arriba para verlo crecer.',
+      'Entendido',
+      'function(){}',
+      null, null
+    );
+    setTimeout(() => dismissInactivity(), 5000);
+  }, 3000);
+}
+
+function showCloseHelp() {
+  if (hasSeenHelp(HELP_KEYS.close)) return;
+  markHelpSeen(HELP_KEYS.close);
+  const bar = document.getElementById('inactivityBar');
+  bar.innerHTML = `
+    <div class="inactivity-text">Para guardar esta sesión en tu grafo tocá "Guardar sesión" o escribí "hasta luego".</div>
+    <div class="inactivity-actions">
+      <button class="inactivity-yes" onclick="dismissInactivity()">Entendido</button>
+    </div>
+  `;
+  bar.classList.add('show');
+  setTimeout(() => dismissInactivity(), 6000);
+}
+
+function showGraphHelp() {
+  if (hasSeenHelp(HELP_KEYS.graph)) return;
+  markHelpSeen(HELP_KEYS.graph);
+  setTimeout(() => {
+    const bar = document.getElementById('inactivityBar');
+    bar.innerHTML = `
+      <div class="inactivity-text">Cada nodo es una sesión. Tocá cualquiera para ver las ideas y correspondencias que emergieron.</div>
+      <div class="inactivity-actions">
+        <button class="inactivity-yes" onclick="dismissInactivity()">Entendido</button>
+      </div>
+    `;
+    bar.classList.add('show');
+    setTimeout(() => dismissInactivity(), 6000);
+  }, 1000);
+}
+
+
+
+let inactivityTimer = null;
+const INACTIVITY_MS = 5 * 60 * 1000; // 5 minutes
+
+function resetInactivityTimer() {
+  clearTimeout(inactivityTimer);
+  dismissInactivity();
+  if (history.length > 2) {
+    inactivityTimer = setTimeout(showInactivityBar, INACTIVITY_MS);
+  }
+}
+
+function showInactivityBar() {
+  if (document.getElementById('motorView').classList.contains('active')) {
+    document.getElementById('inactivityBar').classList.add('show');
+  }
+}
+
+function dismissInactivity() {
+  document.getElementById('inactivityBar').classList.remove('show');
+  clearTimeout(inactivityTimer);
+}
+
+async function closeSession() {
+  dismissInactivity();
+  if (history.length <= 2) return;
+
+  // Show close button loading state
+  const btn = document.getElementById('btnCloseSession');
+  btn.textContent = 'Guardando...';
+  btn.disabled = true;
+
+  // Ask motor to generate destilado
+  const closeMsg = 'Gracias, hasta luego.';
+  history.push({ role: 'user', content: closeMsg });
+
+  try {
+    const response = await fetch(ANTHROPIC_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        system: SYSTEM_PROMPT,
+        messages: history
+      })
+    });
+
+    const data = await response.json();
+    let reply = '';
+    if (data.content) data.content.forEach(b => { if (b.type === 'text') reply += b.text; });
+
+    addMessage('motor', reply || 'Sesión guardada.');
+    history.push({ role: 'assistant', content: reply });
+
+  } catch {
+    addMessage('motor', 'Sesión guardada en el grafo.');
+  }
+
+  btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4M16 17l5-5-5-5M21 12H9"/></svg> Guardar sesión';
+  btn.disabled = false;
+}
+
+
+
+const sharedPool = [
+  {
+    id: 'ext_1', label: 'Identidad que se diluye al crecer',
+    orientation: 'trans', domain: 'Comunidades rurales · Argentina',
+    ideas: ['Las comunidades pequeñas pierden su identidad colectiva cuando crecen por encima de cierto umbral.', 'El crecimiento económico no compensa la pérdida de cohesión cultural.'],
+    correspondences: ['Un río que se convierte en lago — pierde la dirección aunque gane en volumen.'],
+    open: ['¿Existe un tamaño óptimo para una comunidad que quiera mantener identidad?']
+  },
+  {
+    id: 'ext_2', label: 'El conocimiento que no se puede transmitir',
+    orientation: 'energia', domain: 'Educación superior · México',
+    ideas: ['Hay conocimiento tácito que no puede formalizarse sin perder lo esencial.', 'La transmisión institucional destruye lo que intenta preservar.'],
+    correspondences: ['Una llama que se copia — la copia es fuego pero no es la misma llama.'],
+    open: ['¿Cómo se transmite lo que no puede enseñarse?']
+  },
+  {
+    id: 'ext_3', label: 'Estructura que contiene sin limitar',
+    orientation: 'espacio', domain: 'Arquitectura · España',
+    ideas: ['Los mejores espacios no definen lo que ocurre dentro, crean condiciones para que ocurra.', 'La estructura óptima es invisible cuando funciona bien.'],
+    correspondences: ['Un cauce de río — no decide el agua, la orienta.'],
+    open: ['¿Cuánta estructura es demasiada para que algo vivo pueda existir?']
+  }
+];
+
+let pendingResonance = null;
+let currentExtNode = null;
+
+async function checkResonanceWithPool(newNode) {
+  for (const extNode of sharedPool) {
+    const nodeA = `NODO A: "${newNode.label}"\nIdeas: ${newNode.ideas.join(' / ')}\nCorrespondencias: ${newNode.correspondences.join(' / ')}\nAbierto: ${newNode.open.join(' / ')}\nOrientación: ${newNode.orientation}`;
+    const nodeB = `NODO B: "${extNode.label}"\nIdeas: ${extNode.ideas.join(' / ')}\nCorrespondencias: ${extNode.correspondences.join(' / ')}\nAbierto: ${extNode.open.join(' / ')}\nOrientación: ${extNode.orientation}`;
+    try {
+      const response = await fetch(ANTHROPIC_PROXY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 200, system: LINK_PROMPT, messages: [{ role: 'user', content: nodeA + '\n\n' + nodeB }] })
+      });
+      const data = await response.json();
+      let result;
+      try { result = JSON.parse((data.content?.[0]?.text || '').replace(/```json|```/g,'').trim()); } catch { continue; }
+      if (result.connected) {
+        pendingResonance = { localNode: newNode, extNode, reason: result.reason };
+        document.getElementById('resonanceNodeText').textContent = `"${extNode.label}" · ${extNode.domain}`;
+        document.getElementById('resonanceCard').classList.add('show');
+        return;
+      }
+    } catch { continue; }
+  }
+}
+
+function dismissResonance() {
+  document.getElementById('resonanceCard').classList.remove('show');
+  pendingResonance = null;
+}
+
+function showExternalNode() {
+  document.getElementById('resonanceCard').classList.remove('show');
+  if (!pendingResonance) return;
+  const ext = pendingResonance.extNode;
+  currentExtNode = ext;
+  document.getElementById('extNodeTitle').textContent = ext.label;
+  document.getElementById('extNodeDomain').textContent = ext.domain;
+  document.getElementById('extNodeReason').textContent = '↔ ' + (pendingResonance.reason || 'Comparten la misma estructura de relaciones');
+  const body = document.getElementById('extNodeBody');
+  body.innerHTML = '';
+  ['ideas','correspondences','open'].forEach(key => {
+    if (!ext[key]?.length) return;
+    const labels = { ideas: 'Ideas que tomaron forma', correspondences: 'Correspondencias', open: 'En proceso' };
+    const classes = { ideas: 'idea', correspondences: 'corr', open: 'open' };
+    const prefixes = { ideas: '', correspondences: '↔ ', open: '... ' };
+    const sec = document.createElement('div');
+    sec.style.marginBottom = '16px';
+    sec.innerHTML = `<div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#4A5568;margin-bottom:8px">${labels[key]}</div>`;
+    ext[key].forEach(item => {
+      const el = document.createElement('div');
+      el.className = `gp-item ${classes[key]}`;
+      el.style.marginBottom = '6px';
+      el.textContent = prefixes[key] + item;
+      sec.appendChild(el);
+    });
+    body.appendChild(sec);
+  });
+  document.getElementById('extNodeOverlay').classList.add('open');
+}
+
+function closeExternalNode() {
+  document.getElementById('extNodeOverlay').classList.remove('open');
+  currentExtNode = null;
+}
+
+function continueFromExternal() {
+  if (!currentExtNode) return;
+  closeExternalNode();
+  history = [];
+  sessionMemory = { ideas: [], correspondences: [], open: [] };
+  msgCount = 0;
+  document.getElementById('messages').innerHTML = '';
+  const opening = `Hay algo que alguien en otro dominio exploró y resuena con lo tuyo. ¿Qué ves desde acá?`;
+  addMessage('motor', opening);
+  history.push({ role: 'assistant', content: opening });
+  switchView('motor');
+}
+
+// Add share button to node panel
+function addShareButton(node) {
+  const isShared = node.shared || false;
+  const btn = document.createElement('button');
+  btn.className = 'btn-share-node' + (isShared ? ' shared' : '');
+  btn.innerHTML = isShared ? '◉ Visible para resonancias' : '○ Hacer visible para resonancias';
+  btn.onclick = () => {
+    node.shared = !node.shared;
+    btn.className = 'btn-share-node' + (node.shared ? ' shared' : '');
+    btn.innerHTML = node.shared ? '◉ Visible para resonancias' : '○ Hacer visible para resonancias';
+    if (node.shared) showToast('Nodo visible para resonancias con otros usuarios');
+  };
+  return btn;
+}
+
+// ═══════════════════════════════════════════════
+// SEMANTIC LINK DETECTION
+// ═══════════════════════════════════════════════
+
+const LINK_PROMPT = `Sos un analizador de relaciones estructurales. Se te dan dos nodos de un grafo de conocimiento. Cada nodo contiene ideas, correspondencias y preguntas abiertas generadas por conversaciones sobre fenómenos distintos.
+
+Tu tarea: determinar si estos dos nodos comparten la misma estructura de relaciones subyacente, aunque pertenezcan a dominios completamente distintos.
+
+No buscás similitud temática ni vocabulario común. Buscás si el principio generador es el mismo: si ambos están observando el mismo fenómeno desde distintos dominios o escalas.
+
+Respondé SOLO con este JSON exacto, sin texto adicional:
+{
+  "connected": true | false,
+  "type": "corr" | "open" | "dev",
+  "reason": "una línea explicando la estructura compartida"
+}
+
+Tipos:
+- "corr": comparten la misma estructura de relaciones (correspondencia profunda)
+- "open": uno abre una pregunta que el otro podría responder
+- "dev": uno es un desarrollo o caso particular del otro
+
+Si no hay conexión estructural real, respondé {"connected": false, "type": null, "reason": null}`;
+
+async function detectSemanticLinks(newNode) {
+  const existingNodes = graphNodes.filter(n => n.id !== newNode.id);
+  if (!existingNodes.length) return;
+
+  for (const existing of existingNodes) {
+    // Skip if already linked
+    const alreadyLinked = graphLinks.some(l =>
+      (l.source === newNode.id && l.target === existing.id) ||
+      (l.target === newNode.id && l.source === existing.id)
+    );
+    if (alreadyLinked) continue;
+
+    const nodeA = `NODO A: "${newNode.label}"
+Ideas: ${newNode.ideas.join(' / ')}
+Correspondencias: ${newNode.correspondences.join(' / ')}
+Abierto: ${newNode.open.join(' / ')}
+Orientación: ${newNode.orientation}`;
+
+    const nodeB = `NODO B: "${existing.label}"
+Ideas: ${existing.ideas.join(' / ')}
+Correspondencias: ${existing.correspondences.join(' / ')}
+Abierto: ${existing.open.join(' / ')}
+Orientación: ${existing.orientation}`;
+
+    try {
+      const response = await fetch(ANTHROPIC_PROXY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 200,
+          system: LINK_PROMPT,
+          messages: [{ role: 'user', content: nodeA + '\n\n' + nodeB }]
+        })
+      });
+
+      const data = await response.json();
+      const text = data.content?.[0]?.text || '';
+
+      let result;
+      try {
+        result = JSON.parse(text.replace(/```json|```/g, '').trim());
+      } catch { continue; }
+
+      if (result.connected && result.type) {
+        const autoLink = {
+          source: newNode.id,
+          target: existing.id,
+          type: result.type,
+          reason: result.reason,
+          auto: true
+        };
+        graphLinks.push(autoLink);
+        saveLink(autoLink);
+
+        // Visual feedback
+        showToast(`↔ Vínculo detectado: ${newNode.label} · ${existing.label}`);
+        await new Promise(r => setTimeout(r, 300));
+      }
+
+    } catch (e) { continue; }
+  }
+}
+
+
+function openAbout() {
+  document.getElementById('aboutOverlay').classList.add('open');
+}
+
+function closeAbout() {
+  document.getElementById('aboutOverlay').classList.remove('open');
+}
+
+const OPENINGS = {
+  postponed: '¿Qué es lo que estás postergando pensar?',
+  loop: '¿Qué es lo que se repite sin resolverse?',
+  half: '¿Qué es lo que entendés a medias y no podés terminar de ver?',
+  open: '¿Qué no podés terminar de entender?'
+};
+
+function enterMotor(type) {
+  const welcome = document.getElementById('welcome');
+  welcome.classList.add('hidden');
+
+  setTimeout(() => {
+    welcome.style.display = 'none';
+    const opening = OPENINGS[type] || OPENINGS.open;
+    addMessage('motor', opening);
+    history.push({ role: 'assistant', content: opening });
+  }, 400);
+}
+
+
+
+window.addEventListener('resize', () => {
+  if (document.getElementById('graphView').classList.contains('active')) resizeGraph();
+});
+
+window.addEventListener('load', async () => {
+  // Init graph canvas
+  gCanvas = document.getElementById('graphCanvas');
+  gCtx = gCanvas.getContext('2d');
+  resizeGraph();
+  setupGraphEvents();
+  drawGraph();
+
+  // Load from Supabase
+  await initFromSupabase();
+
+  // Show welcome back if arriving from free version
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('key') || localStorage.getItem('arquigenesis_restored')) {
+    localStorage.removeItem('arquigenesis_restored');
+    showToast('Progreso restaurado. Tu grafo y calibración están aquí.');
+  }
+
+  // Motor starts via welcome screen
+});
+</script>
+</body>
+</html>
