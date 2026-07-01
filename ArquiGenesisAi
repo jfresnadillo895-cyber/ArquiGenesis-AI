@@ -3317,8 +3317,8 @@ window.addEventListener('load', async () => {
   setupGraphEvents();
   drawGraph();
 
-  // Load from Supabase
-  await initFromSupabase();
+  // Load from Supabase in background — doesn't block welcome screen
+  initFromSupabase().catch(e => console.warn('Supabase init error:', e));
 
   // Show welcome back if arriving from free version
   const urlParams = new URLSearchParams(window.location.search);
