@@ -920,10 +920,300 @@ textarea::placeholder { color: #5A7090; font-style: italic; }
   transform: translateX(-50%) translateY(0);
 }
 
+/* ── HAMBURGER MENU ── */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.hamburger span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--muted2);
+  border-radius: 2px;
+  transition: all 0.2s;
+}
+
+.hamburger.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+.mobile-menu {
+  display: none;
+  position: absolute;
+  top: 50px;
+  right: 0;
+  left: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 40;
+}
+
+.mobile-menu.open { display: flex; }
+
+.mobile-menu-item {
+  background: none;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  color: var(--muted2);
+  font-size: 13px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.18s;
+}
+
+.mobile-menu-item:hover { border-color: var(--accent); color: var(--accent); }
+.mobile-menu-item.hidden { display: none; }
+
+/* ── DIAGNOSIS PANEL ── */
+#motorView {
+  flex-direction: row !important;
+  position: relative;
+}
+
+.motor-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.diag-panel {
+  width: 260px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.diag-header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.diag-header-title {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.diag-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.diag-block {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.3s;
+}
+
+.diag-block.active-espacio { border-color: rgba(91,143,212,0.5); }
+.diag-block.active-energia { border-color: rgba(74,158,112,0.5); }
+.diag-block.active-trans { border-color: rgba(138,107,196,0.5); }
+
+.diag-block-header {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diag-block-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 0.4;
+  transition: opacity 0.3s;
+}
+
+.diag-block.active-espacio .diag-block-dot { background: var(--accent); opacity: 1; animation: diag-pulse 1.5s infinite; }
+.diag-block.active-energia .diag-block-dot { background: var(--green); opacity: 1; animation: diag-pulse 1.5s infinite; }
+.diag-block.active-trans .diag-block-dot { background: var(--violet); opacity: 1; animation: diag-pulse 1.5s infinite; }
+
+.diag-block-dot.espacio { background: var(--accent); opacity: 0.4; }
+.diag-block-dot.energia { background: var(--green); opacity: 0.4; }
+.diag-block-dot.trans { background: var(--violet); opacity: 0.4; }
+
+@keyframes diag-pulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.diag-block-title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted2);
+}
+
+.diag-block-content {
+  padding: 0 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 32px;
+}
+
+.diag-item {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted2);
+  padding: 5px 8px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 5px;
+  animation: diag-appear 0.4s ease;
+}
+
+@keyframes diag-appear {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.diag-empty {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+  padding: 4px 8px;
+}
+
+/* Mobile diagnosis drawer */
+.diag-fab {
+  display: none;
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  background: var(--accent);
+  border: none;
+  border-radius: 24px;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  padding: 10px 16px;
+  cursor: pointer;
+  z-index: 30;
+  box-shadow: 0 4px 16px rgba(91,143,212,0.4);
+  display: none;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.diag-fab .fab-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: white;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.diag-fab .fab-dot.active { opacity: 1; animation: diag-pulse 1s infinite; }
+
+.diag-drawer {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  z-index: 50;
+  transform: translateY(100%);
+  transition: transform 0.35s ease;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.diag-drawer.open { transform: translateY(0); }
+
+.diag-drawer-handle {
+  width: 36px; height: 4px;
+  background: var(--border2);
+  border-radius: 2px;
+  margin: 12px auto 0;
+  flex-shrink: 0;
+}
+
+.diag-drawer-header {
+  padding: 12px 20px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.diag-drawer-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted2);
+}
+
+.diag-drawer-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.diag-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 700px) {
+  #motorView { flex-direction: column !important; }
+  .diag-panel { display: none; }
+  .diag-fab { display: flex; }
+}
+
 @media (max-width: 600px) {
+  .hamburger { display: flex; }
+  .btn-about { display: none !important; }
+  .btn-close-session { display: none !important; }
+  .btn-new { display: none !important; }
+  #profileIndicator { display: none !important; }
   .graph-panel { width: 100%; }
   .graph-legend { display: none; }
-  .btn-new span { display: none; }
 }
 
 /* ── ABOUT PANEL ── */
@@ -1115,8 +1405,29 @@ textarea::placeholder { color: #5A7090; font-style: italic; }
     <span>Nueva sesión</span>
   </button>
 
+  <button class="hamburger" id="hamburger" onclick="toggleMobileMenu()">
+    <span></span><span></span><span></span>
+  </button>
+
   <div class="dot"></div>
 </header>
+
+<!-- MOBILE MENU -->
+<div class="mobile-menu" id="mobileMenu">
+  <button class="mobile-menu-item" onclick="openAbout(); toggleMobileMenu()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+    Acerca de
+  </button>
+  <button class="mobile-menu-item hidden" id="mobileCloseBtn" onclick="closeSession(); toggleMobileMenu()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4M16 17l5-5-5-5M21 12H9"/></svg>
+    Guardar sesión
+  </button>
+  <button class="mobile-menu-item" onclick="newSession(); toggleMobileMenu()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5v14M5 12h14"/></svg>
+    Nueva sesión
+  </button>
+  <div id="mobileProfileIndicator" style="font-size:11px;color:var(--muted);padding:4px 16px;display:none;"></div>
+</div>
 
 <!-- WELCOME SCREEN -->
 <div class="welcome" id="welcome">
@@ -1151,14 +1462,71 @@ textarea::placeholder { color: #5A7090; font-style: italic; }
 
 <!-- MOTOR VIEW -->
 <div class="view active" id="motorView">
-  <div id="messages"></div>
-  <div class="motor-footer">
-    <div class="input-row">
-      <textarea id="input" placeholder="Escribí lo que traés..." rows="1"></textarea>
-      <button class="send-btn" id="sendBtn" onclick="sendMessage()">
-        <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
-      </button>
+  <!-- MAIN CHAT AREA -->
+  <div class="motor-main">
+    <div id="messages"></div>
+    <div class="motor-footer">
+      <div class="input-row">
+        <textarea id="input" placeholder="Escribí lo que traés..." rows="1"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+          <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+        </button>
+      </div>
     </div>
+  </div>
+
+  <!-- DIAGNOSIS PANEL — desktop -->
+  <div class="diag-panel" id="diagPanel">
+    <div class="diag-header">
+      <div class="diag-header-title">En esta sesión</div>
+    </div>
+    <div class="diag-body">
+      <div class="diag-block" id="diag-espacio">
+        <div class="diag-block-header">
+          <div class="diag-block-dot espacio"></div>
+          <div class="diag-block-title">¿Cómo está organizado?</div>
+        </div>
+        <div class="diag-block-content" id="diag-espacio-content">
+          <div class="diag-empty">Todavía no emergió nada</div>
+        </div>
+      </div>
+      <div class="diag-block" id="diag-energia">
+        <div class="diag-block-header">
+          <div class="diag-block-dot energia"></div>
+          <div class="diag-block-title">¿Qué está en movimiento?</div>
+        </div>
+        <div class="diag-block-content" id="diag-energia-content">
+          <div class="diag-empty">Todavía no emergió nada</div>
+        </div>
+      </div>
+      <div class="diag-block" id="diag-trans">
+        <div class="diag-block-header">
+          <div class="diag-block-dot trans"></div>
+          <div class="diag-block-title">¿Qué está cambiando?</div>
+        </div>
+        <div class="diag-block-content" id="diag-trans-content">
+          <div class="diag-empty">Todavía no emergió nada</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE FAB -->
+<button class="diag-fab" id="diagFab" onclick="openDiagDrawer()">
+  <div class="fab-dot" id="fabDot"></div>
+  Diagnóstico
+</button>
+
+<!-- MOBILE DIAGNOSIS DRAWER -->
+<div class="diag-drawer" id="diagDrawer">
+  <div class="diag-drawer-handle"></div>
+  <div class="diag-drawer-header">
+    <div class="diag-drawer-title">En esta sesión</div>
+    <button class="diag-drawer-close" onclick="closeDiagDrawer()">×</button>
+  </div>
+  <div class="diag-drawer-body" id="diagDrawerBody">
+    <!-- Populated dynamically -->
   </div>
 </div>
 
@@ -1342,6 +1710,18 @@ ORIENTACION: [espacio | energia | trans]
 MODO: [eterno_infinito | equilibrio | codificada | instinto_conjunto | fuerza_cohesion | diferenciado | conduccion | actividades | distancias]
 
 Cuando encontrás una correspondencia poderosa: Correspondencia: al final.
+
+En cada respuesta, al final de todo, agregás dos marcadores para el sistema. El usuario nunca los ve ni los mencionás:
+
+DIAG: [espacio | energia | trans]
+CONCEPTO: [frase corta de 3 a 6 palabras que captura el concepto central que está emergiendo en esta orientación, no la pregunta que hiciste sino la esencia de lo que el usuario está construyendo]
+
+Ejemplos de CONCEPTO:
+- "Estructura centrada en el titular"
+- "Vínculo que retiene en lugar de sostener"
+- "Transición sin forma todavía"
+- "Energía dispersa sin dirección"
+
 Respondé en español. Sé breve. Una pregunta precisa vale más que tres párrafos.`;
 
 // ═══════════════════════════════════════════════
@@ -1350,6 +1730,7 @@ Respondé en español. Sé breve. Una pregunta precisa vale más que tres párra
 
 const SUPABASE_URL = 'https://spavobqrigvbjabwyvbl.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwYXZvYnFyaWd2YmphYnd5dmJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4MzAxNjYsImV4cCI6MjA5ODQwNjE2Nn0.f6ke1OMNCPWiWL6L59PnaedZLohUYEd-fUdkYsPkQJo';
+const ANTHROPIC_PROXY_URL = 'https://spavobqrigvbjabwyvbl.supabase.co/functions/v1/anthropic-proxy';
 const ANTHROPIC_PROXY_URL = 'https://spavobqrigvbjabwyvbl.supabase.co/functions/v1/anthropic-proxy';
 
 const SB_HEADERS = {
@@ -1611,46 +1992,11 @@ let selectedGraphNode = null;
 let userProfile = null;
 
 // Graph nodes — sample data + loaded from Supabase
-const sampleNodes = [
-  {
-    id: 'n0', label: 'Crecimiento sin centro', orientation: 'espacio', size: 32, sessions: 3,
-    persona: 'Transversal', date: 'Ejemplo',
-    ideas: ['El crecimiento sin centro visible es el mismo fenómeno en organizaciones, ciudades e identidades.'],
-    correspondences: ['El toroide: cuando la expansión pierde contacto con el centro, la periferia se fragmenta.'],
-    open: ['¿Cuál es el tamaño máximo que un sistema puede alcanzar antes de necesitar un nuevo centro?']
-  },
-  {
-    id: 'n1', label: 'Propósito invisible', orientation: 'espacio', size: 24, sessions: 2,
-    persona: 'Martina', date: 'Sesión 1',
-    ideas: ['El propósito no desapareció. Dejó de ser visible desde cualquier punto de la organización.'],
-    correspondences: ['Una ciudad que crece sin plaza central.'],
-    open: ['¿Cuándo fue la última vez que todos vieron el propósito al mismo tiempo?']
-  },
-  {
-    id: 'n2', label: 'Memoria del lugar', orientation: 'trans', size: 28, sessions: 3,
-    persona: 'Carlos', date: 'Sesión 1',
-    ideas: ['Lo que cambió no es la ciudad. Es el lugar que los vecinos de siempre ocupaban dentro de ella.'],
-    correspondences: ['Un idioma que se habla menos — los hablantes originales no pierden el idioma, pierden el territorio.'],
-    open: ['¿Cómo se devuelve una función sin detener el crecimiento?']
-  },
-  {
-    id: 'n3', label: 'Sujeto de la investigación', orientation: 'trans', size: 22, sessions: 2,
-    persona: 'Sofía', date: 'Sesión 1',
-    ideas: ['La pregunta asumía que las redes hacen algo a la identidad. El sujeto real es la persona usando la red para hacerse visible.'],
-    correspondences: ['Un espejo no construye la cara que refleja — pero sin espejo esa cara no puede verses.'],
-    open: ['¿Dónde ocurre la construcción de identidad cuando las redes no están?']
-  }
-];
+let graphNodes = [];
 
-let graphNodes = [...sampleNodes];
+let graphLinks = [];
 
-let graphLinks = [
-  { source: 'n1', target: 'n0', type: 'corr' },
-  { source: 'n2', target: 'n0', type: 'corr' },
-  { source: 'n3', target: 'n0', type: 'corr' },
-  { source: 'n1', target: 'n2', type: 'open' },
-  { source: 'n2', target: 'n3', type: 'corr' }
-];
+
 
 async function initFromSupabase() {
   // Load profile
@@ -1727,6 +2073,10 @@ function switchView(view) {
 // ═══════════════════════════════════════════════
 
 function parseResponse(text) {
+  // Strip system markers before any processing — user never sees them
+  text = text.replace(/\nDIAG:\s*(espacio|energia|trans)/gi, '').trim();
+  text = text.replace(/\nCONCEPTO:\s*[^\n]+/gi, '').trim();
+
   const result = { main: text, correspondence: null, crystallized: null, destilado: null };
 
   // Destilado
@@ -1905,6 +2255,8 @@ function addMessage(role, text, isSystem, systemAction) {
   // Show close session button after first real exchange
   if (msgCount >= 2) {
     document.getElementById('btnCloseSession').classList.add('visible');
+    const mobileBtn = document.getElementById('mobileCloseBtn');
+    if (mobileBtn) mobileBtn.classList.remove('hidden');
     showCloseHelp();
   }
 
@@ -1975,6 +2327,9 @@ async function sendMessage() {
     addMessage('motor', reply);
     history.push({ role: 'assistant', content: data.content || reply });
 
+    // Update diagnosis panel
+    parseDiagFromResponse(reply, null);
+
   } catch (err) {
     removeTyping();
     addMessage('motor', 'Hubo un problema de conexión. Intentá de nuevo.');
@@ -1987,10 +2342,31 @@ async function sendMessage() {
 }
 
 function newSession() {
-  if (history.length <= 1) return;
+  // Close mobile menu first
+  const mobileMenu = document.getElementById('mobileMenu');
+  const hamburger = document.getElementById('hamburger');
+  if (mobileMenu) mobileMenu.classList.remove('open');
+  if (hamburger) hamburger.classList.remove('open');
 
-  if (!confirm('¿Empezar una nueva sesión? La conversación actual se cerrará.')) return;
+  // If no real conversation yet, go straight to welcome
+  if (history.length <= 2) {
+    executeNewSession();
+    return;
+  }
 
+  // Show inline confirmation bar
+  const bar = document.getElementById('inactivityBar');
+  bar.innerHTML = `
+    <div class="inactivity-text">¿Iniciás una nueva sesión?</div>
+    <div class="inactivity-actions">
+      <button class="inactivity-yes" onclick="executeNewSession(); dismissInactivity();">Sí, nueva sesión</button>
+      <button class="inactivity-no" onclick="dismissInactivity()">Cancelar</button>
+    </div>
+  `;
+  bar.classList.add('show');
+}
+
+function executeNewSession() {
   history = [];
   sessionMemory = { ideas: [], correspondences: [], open: [] };
   msgCount = 0;
@@ -1998,13 +2374,14 @@ function newSession() {
   isLoading = false;
   document.getElementById('sendBtn').disabled = false;
 
-  const messagesEl = document.getElementById('messages');
-  messagesEl.innerHTML = '';
-
+  document.getElementById('messages').innerHTML = '';
   document.getElementById('btnCloseSession').classList.remove('visible');
+  const mobileCloseBtn = document.getElementById('mobileCloseBtn');
+  if (mobileCloseBtn) mobileCloseBtn.classList.add('hidden');
   clearTimeout(inactivityTimer);
 
-  // Show welcome screen again
+  resetDiagPanel();
+
   const welcome = document.getElementById('welcome');
   welcome.style.display = 'flex';
   setTimeout(() => welcome.classList.remove('hidden'), 10);
@@ -2111,6 +2488,19 @@ function drawGraph() {
   }
 
   gCtx.clearRect(0, 0, gCanvas.width, gCanvas.height);
+
+  // Empty state
+  if (graphNodes.length === 0) {
+    gCtx.font = '14px Inter, system-ui';
+    gCtx.fillStyle = '#3D4F66';
+    gCtx.textAlign = 'center';
+    gCtx.textBaseline = 'middle';
+    gCtx.fillText('Tu grafo se construye con cada sesión.', gCanvas.width / 2, gCanvas.height / 2 - 16);
+    gCtx.font = '12px Inter, system-ui';
+    gCtx.fillText('Completá una conversación y guardala para ver el primer nodo.', gCanvas.width / 2, gCanvas.height / 2 + 12);
+    requestAnimationFrame(drawGraph);
+    return;
+  }
   gCtx.save();
   gCtx.translate(gOffX, gOffY);
   gCtx.scale(gScale, gScale);
@@ -2759,6 +3149,132 @@ Orientación: ${existing.orientation}`;
   }
 }
 
+
+function toggleMobileMenu() {
+  const menu = document.getElementById('mobileMenu');
+  const btn = document.getElementById('hamburger');
+  menu.classList.toggle('open');
+  btn.classList.toggle('open');
+}
+
+// Close mobile menu when clicking outside
+document.addEventListener('click', function(e) {
+  const menu = document.getElementById('mobileMenu');
+  const btn = document.getElementById('hamburger');
+  if (menu.classList.contains('open') && !menu.contains(e.target) && !btn.contains(e.target)) {
+    menu.classList.remove('open');
+    btn.classList.remove('open');
+  }
+});
+
+// ═══════════════════════════════════════════════
+// DIAGNOSIS PANEL
+// ═══════════════════════════════════════════════
+
+const diagState = {
+  espacio: [], energia: [], trans: [], activeOrientation: null
+};
+
+function addDiagItem(orientation, text) {
+  if (!text || text.length < 5) return;
+  const short = text.length > 80 ? text.slice(0, 80) + '…' : text;
+  if (!diagState[orientation].includes(short)) {
+    diagState[orientation].push(short);
+    renderDiagBlock(orientation);
+    pulseDiag(orientation);
+    updateMobileFab();
+  }
+}
+
+function pulseDiag(orientation) {
+  const logoDot = document.getElementById('logoDot');
+  if (logoDot) { logoDot.classList.add('processing'); setTimeout(() => logoDot.classList.remove('processing'), 1500); }
+  ['espacio','energia','trans'].forEach(o => { const b = document.getElementById('diag-'+o); if(b) b.classList.remove('active-espacio','active-energia','active-trans'); });
+  const block = document.getElementById('diag-'+orientation);
+  if (block) { block.classList.add('active-'+orientation); setTimeout(() => block.classList.remove('active-'+orientation), 3000); }
+}
+
+function renderDiagBlock(orientation) {
+  const content = document.getElementById('diag-'+orientation+'-content');
+  if (!content) return;
+  content.innerHTML = diagState[orientation].length > 0
+    ? diagState[orientation].map(item => `<div class="diag-item">${item}</div>`).join('')
+    : '<div class="diag-empty">Todavía no emergió nada</div>';
+  updateDrawerContent();
+}
+
+function updateMobileFab() {
+  const fab = document.getElementById('diagFab');
+  const dot = document.getElementById('fabDot');
+  if (fab) fab.style.display = 'flex';
+  if (dot) { dot.classList.add('active'); setTimeout(() => dot.classList.remove('active'), 2000); }
+}
+
+function updateDrawerContent() {
+  const body = document.getElementById('diagDrawerBody');
+  if (!body) return;
+  body.innerHTML = '';
+  [
+    { id: 'espacio', title: '¿Cómo está organizado?', color: 'var(--accent)' },
+    { id: 'energia', title: '¿Qué está en movimiento?', color: 'var(--green)' },
+    { id: 'trans', title: '¿Qué está cambiando?', color: 'var(--violet)' }
+  ].forEach(b => {
+    const sec = document.createElement('div');
+    sec.className = 'diag-block';
+    sec.innerHTML = `<div class="diag-block-header"><div class="diag-block-dot ${b.id}" style="background:${b.color};opacity:0.7"></div><div class="diag-block-title">${b.title}</div></div><div class="diag-block-content">${diagState[b.id].length > 0 ? diagState[b.id].map(i => `<div class="diag-item">${i}</div>`).join('') : '<div class="diag-empty">Todavía no emergió nada</div>'}</div>`;
+    body.appendChild(sec);
+  });
+}
+
+function openDiagDrawer() { updateDrawerContent(); document.getElementById('diagDrawer').classList.add('open'); }
+function closeDiagDrawer() { document.getElementById('diagDrawer').classList.remove('open'); }
+
+function detectOrientationFromText(text) {
+  const t = text.toLowerCase();
+  if (/cambia|cambiando|antes era|dejando de|emergiendo|transforma|dirección|ya no es|qué está/.test(t)) return 'trans';
+  if (/relación|interacción|fluye|fuerza|vínculo|mueve|ciclo|intercambio|cohesión|colectiv|dinámica/.test(t)) return 'energia';
+  if (/estructura|organiza|contiene|límite|forma|geometría|disposición|cómo está|qué permanece/.test(t)) return 'espacio';
+  return null;
+}
+
+function parseDiagFromResponse(text, fallbackOrientation) {
+  // Detect orientation from DIAG marker
+  const diagMatch = text.match(/DIAG:\s*(espacio|energia|trans)/i);
+  const orientation = diagMatch ? diagMatch[1].toLowerCase() : fallbackOrientation;
+
+  // Extract CONCEPTO marker — this is what goes in the panel
+  const conceptoMatch = text.match(/CONCEPTO:\s*([^\n]+)/i);
+  if (conceptoMatch && orientation) {
+    const concepto = conceptoMatch[1].trim();
+    if (concepto.length > 2) addDiagItem(orientation, concepto);
+  }
+
+  // Also add CRISTALIZA if present
+  const cristIdx = text.indexOf('CRISTALIZA:');
+  if (cristIdx !== -1) {
+    const line = text.slice(cristIdx + 'CRISTALIZA:'.length).trim().split('\n')[0].trim();
+    if (line && orientation) addDiagItem(orientation, '◆ ' + line);
+  }
+
+  // Add Correspondencia to panel
+  const corrIdx = text.indexOf('Correspondencia:');
+  if (corrIdx !== -1) {
+    const line = text.slice(corrIdx + 'Correspondencia:'.length).trim().split('\n')[0].trim();
+    if (line && orientation) addDiagItem(orientation, '↔ ' + line);
+  }
+}
+
+function resetDiagPanel() {
+  diagState.espacio = []; diagState.energia = []; diagState.trans = []; diagState.activeOrientation = null;
+  ['espacio','energia','trans'].forEach(o => {
+    const c = document.getElementById('diag-'+o+'-content');
+    if (c) c.innerHTML = '<div class="diag-empty">Todavía no emergió nada</div>';
+    const b = document.getElementById('diag-'+o);
+    if (b) b.className = 'diag-block';
+  });
+  const fab = document.getElementById('diagFab');
+  if (fab) fab.style.display = 'none';
+}
 
 function openAbout() {
   document.getElementById('aboutOverlay').classList.add('open');
