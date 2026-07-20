@@ -1,0 +1,2310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comprender · Contextos — versión profesional</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --fondo:#F7F6F3; --fondo-panel:#FFFFFF; --fondo-card:#FFFFFF;
+  --linea:#E2DFD8; --texto:#1C2A3A; --texto-suave:#5C6B7D; --tenue:#94A0AD;
+  --acento:#2E5A87; --acento-suave:#EAF0F6; --oro:#2E5A87;
+  --presion:#C1553F; --neutro:#94A0AD; --soporte:#3E8C7A;
+  --radio:12px; --grid-max:1080px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--fondo);color:var(--texto);font-family:'IBM Plex Sans',sans-serif;font-weight:300;line-height:1.6;min-height:100vh;}
+h1,h2,h3{font-family:'Fraunces',serif;font-weight:500;}
+header{display:flex;align-items:center;gap:14px;padding:11px 18px;border-bottom:1px solid var(--linea);position:sticky;top:0;background:rgba(247,246,243,.94);backdrop-filter:blur(8px);z-index:20;}
+#logoCanvas{width:44px;height:44px;flex:none;}
+.header-titles h1{font-size:1.15rem;line-height:1.2;}
+.header-titles .sub{font-family:'IBM Plex Mono',monospace;font-size:.68rem;color:var(--texto-suave);letter-spacing:.08em;text-transform:uppercase;}
+.badge-test{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:.65rem;color:var(--oro);border:1px solid var(--oro);padding:3px 10px;border-radius:99px;letter-spacing:.1em;white-space:nowrap;}
+main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
+.pantalla{display:none;animation:aparecer .5s ease;}
+.pantalla.activa{display:block;}
+@keyframes aparecer{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+.hero{display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center;}
+.hero-texto h2{font-size:1.9rem;margin-bottom:10px;font-weight:300;}
+.hero-texto h2 strong{font-weight:600;color:var(--oro);}
+.hero-texto p{color:var(--texto-suave);font-size:.95rem;max-width:46ch;}
+#heroCanvas{width:100%;aspect-ratio:1;max-width:420px;margin:0 auto;display:block;}
+.form-card{background:var(--fondo-panel);border:1px solid var(--linea);border-radius:var(--radio);padding:26px;margin-top:34px;}
+.form-card h3{font-size:1.05rem;margin-bottom:18px;color:var(--oro);font-weight:500;}
+.grid-form{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.campo{display:flex;flex-direction:column;gap:6px;}
+.campo.full{grid-column:1/-1;}
+.campo label{font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--texto-suave);}
+.campo input,.campo select,.campo textarea{background:var(--fondo-card);border:1px solid var(--linea);border-radius:6px;padding:11px 13px;color:var(--texto);font-family:'IBM Plex Sans',sans-serif;font-size:.95rem;}
+.campo textarea{min-height:90px;resize:vertical;}
+.campo input:focus,.campo select:focus,.campo textarea:focus{outline:2px solid var(--oro);outline-offset:1px;border-color:transparent;}
+.hint{font-size:.75rem;color:var(--texto-suave);}
+.btn{display:inline-flex;align-items:center;gap:8px;background:var(--acento);color:#FFFFFF;border:none;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:.95rem;padding:13px 26px;border-radius:8px;transition:transform .15s,box-shadow .15s;}
+.btn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(46,90,135,.22);}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none;}
+.btn.secundario{background:transparent;color:var(--texto);border:1px solid var(--linea);font-weight:400;}
+.btn.secundario:hover{border-color:var(--oro);box-shadow:none;}
+.btn .spinner{width:14px;height:14px;flex:none;border-radius:50%;border:2px solid rgba(255,255,255,.35);border-top-color:#FFFFFF;animation:girar .8s linear infinite;}
+@keyframes girar{to{transform:rotate(360deg);}}
+.acciones{margin-top:22px;display:flex;gap:12px;flex-wrap:wrap;}
+.diag-header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px;}
+.diag-header h2{font-size:1.6rem;font-weight:300;}
+.diag-header .tipo{font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:var(--texto-suave);letter-spacing:.08em;text-transform:uppercase;}
+.progreso{font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--texto-suave);margin:8px 0 20px;min-height:1.4em;}
+.progreso .punto{display:inline-block;animation:latir 1.2s infinite;color:var(--oro);}
+@keyframes latir{0%,100%{opacity:.25;}50%{opacity:1;}}
+.diag-grid{display:grid;grid-template-columns:330px 1fr;gap:26px;align-items:start;}
+.panel-canvas{background:var(--fondo-panel);border:1px solid var(--linea);border-radius:var(--radio);padding:16px;position:sticky;top:92px;}
+#diagCanvas{width:100%;aspect-ratio:1;display:block;}
+.leyenda{display:flex;justify-content:center;gap:14px;margin-top:10px;font-family:'IBM Plex Mono',monospace;font-size:.62rem;color:var(--texto-suave);flex-wrap:wrap;}
+.leyenda span::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle;}
+.leyenda .lp::before{background:var(--presion);}
+.leyenda .ln::before{background:var(--neutro);}
+.leyenda .ls::before{background:var(--soporte);}
+.leyenda .lt::before{background:transparent;border-top:2px solid var(--presion);border-radius:0;height:0;margin-bottom:3px;}
+.leyenda .lr::before{background:transparent;border-top:2px solid var(--soporte);border-radius:0;height:0;margin-bottom:3px;}
+.ivc-card{background:var(--fondo-panel);border:1px solid var(--linea);border-radius:var(--radio);padding:20px 22px;margin-bottom:16px;display:flex;align-items:center;gap:22px;flex-wrap:wrap;}
+.ivc-num{font-family:'Fraunces',serif;font-size:3rem;font-weight:600;line-height:1;}
+.ivc-info{flex:1;min-width:220px;}
+.ivc-info h3{font-size:.95rem;font-weight:500;}
+.ivc-info p{font-size:.8rem;color:var(--texto-suave);}
+.ivc-sistemas{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;}
+.ivc-sistema{font-family:'IBM Plex Mono',monospace;font-size:.66rem;color:var(--texto-suave);}
+.ivc-sistema b{font-weight:500;}
+.sistema-card{background:var(--fondo-panel);border:1px solid var(--linea);border-left:3px solid var(--linea);border-radius:var(--radio);margin-bottom:14px;overflow:hidden;}
+.sistema-head{width:100%;display:flex;align-items:center;gap:12px;padding:15px 18px;background:none;border:none;color:var(--texto);font-family:'Fraunces',serif;font-size:1rem;cursor:pointer;text-align:left;}
+.sistema-head .canon{font-family:'IBM Plex Mono',monospace;font-size:.62rem;color:var(--texto-suave);letter-spacing:.05em;}
+.sistema-head .estado{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--texto-suave);white-space:nowrap;}
+.sistema-body{display:none;padding:2px 18px 16px;}
+.sistema-card.abierta .sistema-body{display:block;}
+.item{padding:10px 0;border-top:1px solid var(--linea);}
+.item-fila{display:flex;align-items:center;gap:12px;}
+.item-nombre{font-size:.86rem;flex:1;}
+.item-nombre small{display:block;font-family:'IBM Plex Mono',monospace;font-size:.6rem;color:var(--texto-suave);}
+.item-valor{font-family:'IBM Plex Mono',monospace;font-size:.82rem;font-weight:500;width:34px;text-align:right;}
+.barra{height:5px;background:var(--fondo-card);border-radius:99px;overflow:hidden;margin-top:6px;}
+.barra i{display:block;height:100%;border-radius:99px;width:0;transition:width .8s ease;}
+.item-lectura{font-size:.8rem;color:var(--texto-suave);margin-top:6px;}
+.bloque{background:var(--fondo-panel);border:1px solid var(--linea);border-radius:var(--radio);padding:20px 22px;margin-bottom:16px;}
+.bloque h3{font-size:.95rem;color:var(--oro);font-weight:500;margin-bottom:10px;}
+.bloque p,.bloque li{font-size:.9rem;}
+.bloque ul{list-style:none;}
+.bloque li{padding:7px 0;border-top:1px solid var(--linea);}
+.bloque li:first-child{border-top:none;}
+.etq{font-family:'IBM Plex Mono',monospace;font-size:.65rem;letter-spacing:.06em;padding:2px 8px;border-radius:99px;margin-right:8px;white-space:nowrap;}
+.etq.p{color:var(--presion);border:1px solid var(--presion);}
+.etq.s{color:var(--soporte);border:1px solid var(--soporte);}
+.haiku{font-family:'Fraunces',serif;font-size:1.15rem;font-weight:300;font-style:italic;text-align:center;color:var(--oro);padding:26px 20px;white-space:pre-line;line-height:1.9;}
+.dos-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.tres-col{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+.meta-chip{border:1px solid var(--linea);border-radius:8px;padding:10px 12px;text-align:center;}
+.meta-chip .mn{font-family:'IBM Plex Mono',monospace;font-size:.58rem;text-transform:uppercase;letter-spacing:.06em;color:var(--texto-suave);}
+.meta-chip .mv{font-family:'Fraunces',serif;font-size:1.5rem;font-weight:600;}
+.trans-fila{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--linea);}
+.trans-fila:first-of-type{border-top:none;}
+.trans-nombre{flex:1;font-size:.82rem;}
+.trans-nombre small{display:block;font-family:'IBM Plex Mono',monospace;font-size:.58rem;color:var(--texto-suave);}
+.trans-valor{font-family:'IBM Plex Mono',monospace;font-size:.82rem;font-weight:500;width:34px;text-align:right;}
+.matriz-fila{display:flex;align-items:baseline;gap:10px;padding:7px 0;border-top:1px solid var(--linea);font-size:.84rem;flex-wrap:wrap;}
+.matriz-fila:first-of-type{border-top:none;}
+.matriz-par{font-family:'IBM Plex Mono',monospace;font-size:.7rem;white-space:nowrap;}
+.matriz-lectura{flex:1;min-width:200px;font-size:.8rem;color:var(--texto-suave);}
+.generando{background:var(--fondo-panel);border:1px dashed var(--oro);border-radius:var(--radio);padding:20px 22px;margin-bottom:16px;font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--oro);display:flex;align-items:center;gap:10px;}
+.generando .spinner{width:14px;height:14px;flex:none;border-radius:50%;border:2px solid rgba(46,90,135,.22);border-top-color:var(--oro);animation:girar .8s linear infinite;}
+.error-box{background:rgba(217,95,76,.08);border:1px solid var(--presion);border-radius:var(--radio);padding:16px 18px;margin:16px 0;font-size:.88rem;display:none;}
+.modal-fondo{display:none;position:fixed;inset:0;z-index:50;background:rgba(11,16,22,.85);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:16px;}
+.modal-fondo.visible{display:flex;}
+.modal-caja{background:var(--fondo-panel);border:1px solid var(--linea);border-radius:var(--radio);padding:22px;width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;gap:12px;}
+.modal-caja h3{font-size:1rem;color:var(--oro);font-weight:500;}
+.modal-ayuda{font-size:.8rem;color:var(--texto-suave);}
+#exportTexto{flex:1;min-height:200px;max-height:45vh;resize:none;background:var(--fondo-card);border:1px solid var(--linea);border-radius:6px;padding:12px;color:var(--texto);font-family:'IBM Plex Mono',monospace;font-size:.72rem;line-height:1.5;}
+.modal-estado{font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--soporte);min-height:1.2em;}
+.modal-caja .acciones{margin-top:0;}
+footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:.65rem;color:var(--texto-suave);letter-spacing:.06em;line-height:2;}
+@media(max-width:900px){
+  .hero{grid-template-columns:1fr;}
+  #heroCanvas{max-width:300px;}
+  .diag-grid{grid-template-columns:1fr;}
+  .panel-canvas{position:static;}
+  .grid-form,.dos-col{grid-template-columns:1fr;}
+  .tres-col{grid-template-columns:1fr 1fr 1fr;gap:6px;}
+}
+@media(max-width:600px){
+  main{padding:20px 12px 60px;}
+  header{flex-wrap:nowrap;padding:14px 16px;}
+  .badge-test{margin-left:0;}
+  .matriz-par{white-space:normal;}
+  .meta-chip{padding:8px 6px;}
+  .meta-chip .mn{font-size:.52rem;}
+  .meta-chip .mv{font-size:1.2rem;}
+  .diag-header h2{font-size:1.3rem;}
+  .bloque,.ivc-card{padding:16px 14px;}
+}
+body{overflow-x:hidden;}
+.bloque,.sistema-card,.ivc-card{min-width:0;max-width:100%;}
+.matriz-lectura,.item-lectura,.trans-nombre{overflow-wrap:break-word;}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+/* ══ Informe PDF (impresión) ══ */
+#pdfPortada{display:none;}
+@media print{
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  :root{--fondo:#fff;--fondo-panel:#fff;--fondo-card:#F2EFE8;--linea:#C4BFB2;
+        --texto:#151515;--texto-suave:#4A4A4A;--oro:#8A6D1A;
+        --presion:#B23A28;--neutro:#5C6773;--soporte:#1F7A6D;}
+  body{background:#fff;}
+  header,.panel-canvas,.progreso,.error-box,.acciones,#bloqueAjuste,.modal-fondo{display:none!important;}
+  #pdfPortada{display:flex!important;page-break-after:always;}
+  .diag-grid{display:block;}
+  .sistema-body{display:block!important;}
+  .sistema-head{cursor:default;}
+  .bloque,.sistema-card,.ivc-card{break-inside:avoid;}
+  .barra{background:#E5E1D6;}
+  .haiku{color:#8A6D1A;}
+  footer{border-top:1px solid #C4BFB2;}
+}
+
+@keyframes girar{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+main,.wrap,.contenedor{max-width:var(--grid-max);margin-left:auto;margin-right:auto}
+#heroCanvas{max-width:210px !important;opacity:.95}
+.hero{grid-template-columns:1.5fr .8fr !important;gap:26px !important}
+#diagCanvas{max-width:440px !important;margin:0 auto;display:block}
+canvas{animation:none !important}
+footer strong{color:var(--acento);font-weight:600}
+@media (max-width:840px){  .hero{grid-template-columns:1fr !important}#heroCanvas{max-width:155px !important;margin:0 auto}}
+
+header{overflow:hidden;min-width:0}
+header header .cai-ham{flex-shrink:0}
+@media (max-width:840px){
+}
+
+/* ===== TÍTULO DE MARCA — idéntico en los tres productos ===== */
+.cai-head{display:flex;align-items:center;gap:10px;flex:0 1 auto;min-width:0}
+.cai-toro{width:30px;height:30px;min-width:30px;flex:none;color:#2E5A87;
+  animation:girar 30s linear infinite;transform-origin:center}
+@keyframes girar{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.cai-titulo{
+  font-family:'DM Sans','Inter','IBM Plex Sans',system-ui,-apple-system,sans-serif !important;
+  font-size:21px !important; font-weight:400 !important; line-height:1.15 !important;
+  color:#1C2A3A !important; letter-spacing:-.01em !important;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.cai-titulo b{font-weight:700 !important;color:#2E5A87 !important}
+.cai-titulo .s{color:#94A0AD;font-weight:300;margin:0 2px}
+.cai-baja{font-family:'DM Sans','Inter','IBM Plex Sans',system-ui,sans-serif !important;
+  font-size:10px !important;color:#94A0AD !important;letter-spacing:.06em;margin-top:1px;
+  text-transform:none !important}
+.cai-ham{flex-shrink:0}
+@media (max-width:840px){
+  .cai-titulo{font-size:17px !important}
+  .cai-toro{width:26px;height:26px;min-width:26px}
+  .cai-baja{display:none}
+}
+
+/* Modal de exportación: botones compactos que no desbordan */
+.modal .modal-box{max-height:86vh;overflow-y:auto;box-sizing:border-box}
+.modal .modal-acciones,.modal .acciones{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;
+  padding-top:10px;position:sticky;bottom:0;background:var(--fondo-card)}
+.modal .btn{font-size:11.5px !important;padding:7px 12px !important;white-space:nowrap}
+.modal textarea{max-height:38vh}
+@media (max-width:840px){
+  .modal .btn{font-size:11px !important;padding:6px 10px !important;flex:1 1 auto}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Contextos</b></div><div class="cai-baja">Versión profesional</div></div></div>
+  <span style="flex:1"></span>
+  <button id="cai-cred" onclick="credTarjeta()" title="Comprensión disponible"><span class="cred-b"><i class="cred-i"></i></span><span class="cred-t">—</span></button>
+    <button class="cai-ham" onclick="caiToggle(this)" title="Menú">☰</button>
+</header>
+
+<main>
+
+<!-- ============ INICIO ============ -->
+<section id="pantallaInicio" class="pantalla activa">
+  <div class="hero">
+    <div class="hero-texto">
+      <h2>Urbanismo estudia el organismo. <strong>Contexto estudia el ecosistema.</strong></h2>
+      <p>Seis grandes sistemas — Natural, Territorial, Social, Institucional, Económico-Tecnológico y Global — leídos a través de 54 condiciones de existencia. El IVC mide cuánto condiciona el contexto; la matriz de influencias muestra por dónde se propaga.</p>
+    </div>
+    <canvas id="heroCanvas" width="840" height="840" style="display:none" aria-label="Hexagrama de los seis sistemas del contexto"></canvas>
+  </div>
+
+  <div class="form-card">
+    <h3>Territorio a contextualizar</h3>
+    <div class="grid-form">
+      <div class="campo">
+        <label for="inNombre">Nombre del territorio</label>
+        <input id="inNombre" type="text" placeholder="Ej.: Trenque Lauquen">
+        <span class="hint">Usá el mismo nombre que en Comprender · Urbanismo para vincular los archivos.</span>
+      </div>
+      <div class="campo">
+        <label for="inTipo">Tipo de territorio</label>
+        <select id="inTipo">
+          <option>Ciudad intermedia</option><option>Ciudad pequeña</option>
+          <option>Metrópolis</option><option>Área metropolitana</option>
+          <option>Área rural</option><option>Ciudad costera</option>
+          <option>Ciudad de montaña</option><option>Territorio de llanura</option>
+          <option>Territorio árido</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="inPais">País</label>
+        <input id="inPais" type="text" placeholder="Ej.: Argentina">
+      </div>
+      <div class="campo">
+        <label for="inRegion">Región / Provincia</label>
+        <input id="inRegion" type="text" placeholder="Ej.: Provincia de Buenos Aires, pampa húmeda">
+      </div>
+      <div class="campo full">
+        <label for="inDocs">Documentación propia (opcional)</label>
+        <textarea id="inDocs" placeholder="Pegá extractos de informes, planes o estudios — o el marco de comprensión exportado desde Comprender AI."></textarea>
+        <div id="acuseMarco" style="display:none;margin-top:8px;padding:.6rem .8rem;border-radius:8px;font-size:12px;line-height:1.5"></div>
+      </div>
+    </div>
+    <div class="acciones" style="flex-direction:column;align-items:stretch;gap:10px">
+      <button class="btn" id="btnIniciar" style="justify-content:center">Diagnosticar el ecosistema</button>
+      <button class="btn secundario" style="justify-content:center" onclick="enfocarMarco()">🧠 Cargar marco de Comprender AI</button>
+    </div>
+    <div class="error-box" id="errInicio"></div>
+  </div>
+</section>
+
+<!-- ============ DIAGNÓSTICO ============ -->
+<section id="pantallaDiag" class="pantalla">
+
+  <!-- PORTADA DEL INFORME — solo visible al imprimir -->
+  <div id="pdfPortada">
+    <div style="min-height:96vh;display:flex;flex-direction:column;justify-content:space-between;width:100%;padding:1.5cm 1cm">
+      <div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#777;margin-bottom:2.5cm">COMPRENDER · CONTEXTOS — Diagnóstico del ecosistema territorial · Un producto de ARQUIGÉNESIS</div>
+        <div id="pdfCiudad" style="font-family:'Fraunces',serif;font-size:46px;font-weight:600;color:#151515;line-height:1.1"></div>
+        <div id="pdfSub" style="font-size:16px;color:#555;margin-top:8px"></div>
+        <div style="width:60px;height:4px;background:#8A6D1A;margin:24px 0"></div>
+        <div id="pdfIVC" style="font-size:15px;color:#333;max-width:60ch"></div>
+      </div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#666;line-height:1.9">
+        <span id="pdfFecha"></span><br>
+        Javier Darío Fresnadillo · Arquitecto (UNLP, Argentina)<br>
+        Máster en Desarrollo Sustentable (dir. Rubén Pesci, Argentina) · Magíster en Conservazione e Restauro dei Patrimoni Culturali (Italia)<br>
+        ArquiGenesis 2008 · Geometría Urbana 2015
+      </div>
+    </div>
+  </div>
+
+  <div class="diag-header">
+    <h2 id="diagTitulo">—</h2>
+    <span class="tipo" id="diagTipo">—</span>
+  </div>
+  <div class="progreso" id="progreso"></div>
+  <div class="error-box" id="errDiag"></div>
+
+  <div class="diag-grid">
+    <div class="panel-canvas">
+      <div class="ctitle" style="text-align:center;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--acento);margin-bottom:8px">Campo de fuerzas</div>
+      <canvas id="diagCanvas" width="880" height="880" aria-label="Campo de fuerzas del ecosistema"></canvas>
+      <div class="leyenda">
+        <span class="lp">presión</span><span class="ln">neutro</span><span class="ls">soporte</span>
+        <span class="lt">arista tensiona</span><span class="lr">arista refuerza</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="ivc-card" id="ivcCard" style="display:none">
+        <div class="ivc-num" id="ivcNum">—</div>
+        <div class="ivc-info">
+          <h3>IVC · Índice de Vulnerabilidad Contextual <span style="font-family:'IBM Plex Mono',monospace;font-size:.6rem;color:var(--texto-suave)">serie 2</span></h3>
+          <p id="ivcTexto"></p>
+          <div class="ivc-sistemas" id="ivcSistemas"></div>
+        </div>
+      </div>
+
+      <div id="contSistemas"></div>
+      <div id="contTransversales"></div>
+      <div id="contMatriz"></div>
+      <div id="contSintesis"></div>
+
+      <div class="bloque" id="bloqueAjuste" style="display:none">
+        <h3>Ajustar diagnóstico</h3>
+        <p style="font-size:.8rem;color:var(--texto-suave);margin-bottom:10px">Si tenés documentación de referencia o no estás de acuerdo con alguna valoración, pegala acá. El motor revalorará los 54 ítems considerando tu aporte, sosteniendo lo que la estructura relacional sostiene.</p>
+        <div class="campo">
+          <textarea id="inAjuste" placeholder="Documentación adicional, datos locales u observaciones sobre valoraciones específicas."></textarea>
+        </div>
+        <div class="acciones">
+          <button class="btn secundario" id="btnAjustar">Rediagnosticar con este aporte</button>
+        </div>
+      </div>
+
+      <div id="contProyectivo"></div>
+
+      <div class="acciones" id="accionesFinal" style="display:none">
+        <button class="btn" id="btnProyectivo">Generar proyectivo contextual</button>
+        <button class="btn" id="btnExportar">Exportar capa para Urbanismo</button>
+        <button class="btn" style="flex:1 1 100%;justify-content:center" onclick="copiarDerivaParaCore()">→ Llevar a Comprender AI</button>
+        <button class="btn secundario" id="btnPDF">Descargar informe PDF</button>
+        <button class="btn secundario" id="btnNuevo">Nuevo diagnóstico</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ MODAL EXPORT ============ -->
+<div class="modal-fondo" id="modalExport">
+  <div class="modal-caja" role="dialog" aria-label="Exportar capa de contexto">
+    <h3>Capa de contexto para Urbanismo — contrato v2.1</h3>
+    <p class="modal-ayuda">Copiá el JSON y guardalo, o descargalo si tu navegador lo permite. Este archivo se importa en Comprender · Urbanismo como capa de contexto, o en Comprender AI para la ficha del organismo.</p>
+    <textarea id="exportTexto" readonly spellcheck="false"></textarea>
+    <div class="modal-estado" id="exportEstado"></div>
+    <div class="acciones">
+      <button class="btn" onclick="copiarExport()">Copiar</button>
+      <button class="btn secundario" onclick="descargarExport()">Descargar .json</button>
+      <button class="btn secundario" onclick="cerrarExport()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL PDF ============ -->
+<div class="modal-fondo" id="modalPDF">
+  <div class="modal-caja" role="dialog" aria-label="Exportar informe PDF">
+    <h3>Descargar el informe como PDF</h3>
+    <p class="modal-ayuda">Se abrirá el diálogo de impresión de tu navegador. Para guardar el informe completo:</p>
+    <div style="font-size:.85rem;line-height:1.9">
+      1 · En "Destino" o "Impresora", elegí <strong>"Guardar como PDF"</strong>.<br>
+      2 · En "Más opciones", activá <strong>"Gráficos de fondo"</strong> para conservar los colores.<br>
+      3 · Guardá el archivo.
+    </div>
+    <p class="modal-ayuda">En Safari: tocá el ícono PDF en la esquina inferior del diálogo. El informe incluye portada, los seis sistemas completos, las lecturas transversales, la matriz de influencias, la síntesis y el proyectivo si fue generado.</p>
+    <div class="acciones">
+      <button class="btn" onclick="confirmarPDF()">Abrir diálogo de impresión</button>
+      <button class="btn secundario" onclick="cerrarPDF()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Comprender · Contextos — versión profesional<br>
+  <strong>Un producto de ARQUIGÉNESIS</strong>
+</footer>
+
+<script>
+/* --- Candado provisorio de acceso (H03 · previo al backend de login/creditos) ----------------
+   El proxy /api/anthropic exige el header 'x-comprender-acceso'. Este bloque pide la clave una
+   sola vez, la guarda en el navegador y la agrega a toda llamada al proxy. No toca el codigo de
+   los productos: envuelve fetch. Si el servidor responde 401, borra la clave para permitir
+   reintentar. Provisorio: se retira cuando exista sesion real de usuario. --- */
+(function(){
+  var LLAVE = 'comprender_acceso';
+  function leer(){ try{ return localStorage.getItem(LLAVE) || ''; }catch(e){ return ''; } }
+  function guardar(v){ try{ localStorage.setItem(LLAVE, v); }catch(e){} }
+  function borrar(){ try{ localStorage.removeItem(LLAVE); }catch(e){} }
+  function obtener(){
+    var v = leer();
+    if(!v){ v = (window.prompt('Clave de acceso a Comprender:') || '').trim(); if(v) guardar(v); }
+    return v;
+  }
+  window.olvidarClaveComprender = function(){ borrar(); alert('Clave borrada. Se pedira de nuevo en la proxima consulta.'); };
+  var _fetch = window.fetch;
+  window.fetch = function(recurso, opciones){
+    var url = '';
+    try{ url = String((recurso && recurso.url) ? recurso.url : recurso || ''); }catch(e){}
+    if(url.indexOf('/api/anthropic') === -1) return _fetch.apply(this, arguments);
+    opciones = opciones || {};
+    var h = opciones.headers;
+    var plano = {};
+    try{
+      if(h && typeof h.forEach === 'function' && !Array.isArray(h)){ h.forEach(function(val,k){ plano[k]=val; }); }
+      else if(h){ for(var k in h){ if(Object.prototype.hasOwnProperty.call(h,k)) plano[k]=h[k]; } }
+    }catch(e){}
+    plano['x-comprender-acceso'] = obtener();
+    opciones.headers = plano;
+    return _fetch.call(this, recurso, opciones).then(function(resp){
+      if(resp && resp.status === 401){ borrar(); }
+      return resp;
+    });
+  };
+})();
+</script>
+<script>
+/* --- Candado provisorio de acceso (H03 · previo al backend de login/creditos) ----------------
+   El proxy /api/anthropic exige el header 'x-comprender-acceso'. Este bloque pide la clave una
+   sola vez, la guarda en el navegador y la agrega a toda llamada al proxy. No toca el codigo de
+   los productos: envuelve fetch. Si el servidor responde 401, borra la clave para permitir
+   reintentar. Provisorio: se retira cuando exista sesion real de usuario. --- */
+(function(){
+  var LLAVE = 'comprender_acceso';
+  function leer(){ try{ return localStorage.getItem(LLAVE) || ''; }catch(e){ return ''; } }
+  function guardar(v){ try{ localStorage.setItem(LLAVE, v); }catch(e){} }
+  function borrar(){ try{ localStorage.removeItem(LLAVE); }catch(e){} }
+  function obtener(){
+    var v = leer();
+    if(!v){ v = (window.prompt('Clave de acceso a Comprender:') || '').trim(); if(v) guardar(v); }
+    return v;
+  }
+  window.olvidarClaveComprender = function(){ borrar(); alert('Clave borrada. Se pedira de nuevo en la proxima consulta.'); };
+  var _fetch = window.fetch;
+  window.fetch = function(recurso, opciones){
+    var url = '';
+    try{ url = String((recurso && recurso.url) ? recurso.url : recurso || ''); }catch(e){}
+    if(url.indexOf('/api/anthropic') === -1) return _fetch.apply(this, arguments);
+    opciones = opciones || {};
+    var h = opciones.headers;
+    var plano = {};
+    try{
+      if(h && typeof h.forEach === 'function' && !Array.isArray(h)){ h.forEach(function(val,k){ plano[k]=val; }); }
+      else if(h){ for(var k in h){ if(Object.prototype.hasOwnProperty.call(h,k)) plano[k]=h[k]; } }
+    }catch(e){}
+    plano['x-comprender-acceso'] = obtener();
+    opciones.headers = plano;
+    return _fetch.call(this, recurso, opciones).then(function(resp){
+      if(resp && resp.status === 401){ borrar(); }
+      return resp;
+    });
+  };
+})();
+</script>
+<script>
+/* =====================================================
+   ArquiGenesis AI Context v2.0 — reconstrucción canónica
+   6 sistemas × 9 cualidades = 54 · IVC serie 2 · matriz 6×6
+   Llamadas: 6 sistemas + 1 matriz + 2 síntesis (+2 proyectivo)
+   ===================================================== */
+
+/* FIRMA_METODOLOGICA v1.0 — idéntica en los tres productos */
+const FIRMA_METODOLOGICA =
+`NÚCLEO METODOLÓGICO (ArquiGenesis · Geometría Urbana · v2.0 — realineado al Contrato Ontológico v1.0 y al Catálogo de Tensiones v1.0):
+Principio fundamental: la relación es anterior al objeto. Ningún fenómeno se comprende aislado; todo objeto emerge como nodo dentro de una red de relaciones que lo precede.
+Tres orientaciones simultáneas de observación — ninguna genera a las otras, ninguna existe sin las otras:
+- ESPACIO detecta estructura: qué contiene qué, qué límites definen el fenómeno, qué permanece fijo mientras lo demás cambia.
+- ENERGÍA detecta interacción: qué se mueve, qué ciclos existen, qué fuerzas se atraen o repelen.
+- TRANSFORMACIÓN detecta cambio: qué estaba siendo, qué está dejando de ser, qué está emergiendo.
+Movimiento toroidal: primero PASIVO (contemplación del campo de relaciones sin categorizar ni juzgar), luego ACTIVO (definición: estructuras, interacciones y transformaciones identificadas), luego PROYECTIVO (lo comprendido vuelve como capacidad generadora).
+PIPELINE DE COMPRENSIÓN (canon rector, tensión-primero): síntoma → tensión → función que la resuelve → intervención. La función precede al operador.
+REPERTORIO DE TENSIONES: exceso de variabilidad→estabilizar · discontinuidad→conectar · desborde→contener · asimetría de distribución→transferir · forma agotada→transformar · predominio unilateral→equilibrar · indistinción funcional→diferenciar · fragmentación→integrar · pérdida de lo acumulado→conservar · proceso sin retroalimentación→regular · escala insuficiente→amplificar · saturación indiferenciada→filtrar · direcciones múltiples sin criterio→orientar · futuro sin preparación→anticipar.
+REGLA DE LECTURA RAÍZ: identificar LA tensión raíz — la que, resuelta, reordena a las demás.
+LÍMITE DE ROL (Principio 9): este producto evalúa el CAMPO que condiciona al organismo. El campo condiciona, no proyecta: el proyectivo del organismo es único y lo produce Urbanismo. Lo que este producto proyecta es la DERIVA DEL CAMPO.
+El sistema no responde al contenido: revela la estructura de relaciones y expande la comprensión hacia lo que permanecía invisible.`;
+
+/* Traducción de dominio canónica (Patrón Generativo v1.4) */
+const SISTEMAS = [
+  {id:'institucional', nombre:'Sistema Institucional', canon:'Civilización', polo:'Ambiente', elemento:'Metal', color:'#8E9BAA',
+   pregunta:'¿Quién toma las decisiones y cómo se gobierna el sistema?',
+   desc:'Legislación, planificación, gobernanza, instituciones, políticas públicas, capacidades estatales y marcos regulatorios.'},
+  {id:'global', nombre:'Sistema Global', canon:'Cultura', polo:'Ambiente', elemento:'Madera', color:'#558B2F',
+   pregunta:'¿Qué fuerzas externas condicionan al sistema?',
+   desc:'Geopolítica, comercio internacional, mercados, acuerdos, migraciones, cambio climático global, conflictos y tendencias mundiales.'},
+  {id:'natural', nombre:'Sistema Natural', canon:'Historia', polo:'Ambiente', elemento:'Agua', color:'#3F7CAC',
+   pregunta:'¿Sobre qué condiciones naturales existe el sistema?',
+   desc:'Clima, relieve, geología, hidrología, cuencas, suelos, biodiversidad, ecosistemas, recursos naturales y riesgos ambientales.'},
+  {id:'economico', nombre:'Sistema Económico-Tecnológico', canon:'Mente', polo:'Sujeto', elemento:'Fuego', color:'#E4572E',
+   pregunta:'¿Qué capacidades sostienen y transforman el sistema?',
+   desc:'Producción, empleo, innovación, cadenas de valor, infraestructura tecnológica, energía, telecomunicaciones y transformación digital.'},
+  {id:'social', nombre:'Sistema Social', canon:'Emoción', polo:'Sujeto', elemento:'Madera', color:'#9CCC65',
+   pregunta:'¿Quiénes conforman el sistema y cómo se organizan?',
+   desc:'Demografía, educación, salud, migraciones, desigualdad, cohesión social, seguridad y dinámicas poblacionales.'},
+  {id:'territorial', nombre:'Sistema Territorial', canon:'Cuerpo Físico', polo:'Sujeto', elemento:'Tierra', color:'#A1887F',
+   pregunta:'¿Cómo se relaciona espacialmente con otros sistemas?',
+   desc:'Redes urbanas, corredores, infraestructura, conectividad, logística, áreas metropolitanas, posición regional y organización territorial.'}
+];
+
+/* Las 9 cualidades traducidas al dominio ecosistema (Patrón v1.5) */
+const CUALIDADES = [
+  {id:'condicion_fundante',    nombre:'Condición fundante',      canon:'Eterno Infinito',    infl:'Espacio',        form:'¿Qué existe ahí independientemente de toda decisión?'},
+  {id:'tension_estructural',   nombre:'Tensión estructural',     canon:'Equilibrio',         infl:'Espacio',        form:'¿Qué tensiones presenta?'},
+  {id:'reglas_juego',          nombre:'Reglas del juego',        canon:'Codificada',         infl:'Espacio',        form:'¿Cómo está organizado?'},
+  {id:'red_dependencias',      nombre:'Red de dependencias',     canon:'Instinto Conjunto',  infl:'Energía',        form:'¿De qué depende?'},
+  {id:'vinculos_sostenedores', nombre:'Vínculos sostenedores',   canon:'Fuerza de Cohesión', infl:'Energía',        form:'¿Qué relaciones mantiene?'},
+  {id:'posicion_diferencial',  nombre:'Posición diferencial',    canon:'Diferenciado',       infl:'Energía',        form:'¿Qué lo distingue de otros contextos comparables?'},
+  {id:'conduccion_tendencias', nombre:'Conducción de tendencias',canon:'Conducción',         infl:'Transformación', form:'¿Las tendencias admiten dirección o solo adaptación?'},
+  {id:'dinamica_curso',        nombre:'Dinámica en curso',       canon:'Actividades',        infl:'Transformación', form:'¿Qué flujos lo atraviesan y cómo se transforma?'},
+  {id:'brecha_horizonte',      nombre:'Brecha y horizonte',      canon:'Distancias',         infl:'Transformación', form:'¿Qué escenarios pueden emerger, y a qué distancia?'}
+];
+
+/* Correspondencia estructural Context -> Urban (vía canon) */
+const DIM_URBAN = {
+  institucional:'Marco Institucional', global:'Patrimonio y Expresión',
+  natural:'Dinámica Territorial', economico:'Intención Proyectual',
+  social:'Cohesión Social', territorial:'Actor Territorial'
+};
+
+/* Los 15 pares de la matriz de influencias */
+const PARES = [];
+for(let i=0;i<SISTEMAS.length;i++)
+  for(let j=i+1;j<SISTEMAS.length;j++)
+    PARES.push([SISTEMAS[i].id, SISTEMAS[j].id]);
+
+const state = {
+  territorio:null,
+  valores:{},          // sistemaId -> [{id,nombre,valor,lectura} x9]
+  ivc:null,            // {global, sistemas:{}, transversales:[9], metas:[3]}
+  matriz:null,         // [{de,hacia,intensidad,signo,lectura}]
+  sintesisA:null, sintesisB:null, sintesis:null,
+  proyectivoA:null, proyectivoB:null,
+  ajusteDocs:'', valoresPrevios:null,
+  enCurso:false
+};
+
+/* ---------------- API ---------------- */
+const pausa = ms => new Promise(r=>setTimeout(r,ms));
+
+/* --- H03: seguridad de entorno (mismo criterio que el Core). Fuera de un origen de
+       desarrollo el cliente NUNCA llama al proveedor directo; sale por el proxy. --- */
+const ENTORNO = { modo:'test', proxyUrl:'/api/anthropic' };
+function esEntornoDev(){
+  try{ var h=(location.hostname||'').toLowerCase();
+    return location.protocol==='file:'||h===''||h==='localhost'||h==='127.0.0.1'||h.endsWith('.local')||h.indexOf('claude.ai')>-1||h.indexOf('anthropic')>-1||h.indexOf('usercontent')>-1;
+  }catch(e){ return false; }
+}
+function modoEfectivo(){ return ENTORNO.modo==='prod' ? 'prod' : (esEntornoDev()?'test':'prod'); }
+function apiEndpoint(){
+  if(modoEfectivo()==='prod'){ if(!ENTORNO.proxyUrl){ throw new Error('proxy_no_configurado'); } return ENTORNO.proxyUrl; }
+  return 'https://api.anthropic.com/v1/messages';
+}
+
+async function llamarClaude(prompt){
+  /* Patrón de red canónico del sistema: timeout por Promise.race.
+     Nunca AbortSignal (no clonable en el sandbox de artifacts). */
+  const resp = await Promise.race([
+    fetch(apiEndpoint(),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+    }),
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout de 90 segundos')),90000))
+  ]);
+  if(!resp.ok) throw new Error('Error de API ('+resp.status+')');
+  const data = await resp.json();
+  return (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
+}
+
+function parsearJSON(texto){
+  const limpio = (texto||'').replace(/```json|```/g,'').trim();
+  const ini = limpio.indexOf('{');
+  if(ini===-1) throw new Error('Respuesta sin JSON. Inicio: "'+limpio.slice(0,120)+'"');
+  // Parseo balanceado respetando llaves dentro de strings
+  let prof=0, enStr=false, esc=false;
+  for(let i=ini;i<limpio.length;i++){
+    const c=limpio[i];
+    if(esc){esc=false;continue;}
+    if(c==='\\'){esc=true;continue;}
+    if(c==='"'){enStr=!enStr;continue;}
+    if(enStr) continue;
+    if(c==='{')prof++;
+    if(c==='}'){prof--;if(prof===0)return JSON.parse(limpio.slice(ini,i+1));}
+  }
+  throw new Error('JSON incompleto (respuesta truncada). Final: "...'+limpio.slice(-100)+'"');
+}
+
+async function llamarConReintento(prompt, etiqueta){
+  let ultimoError;
+  for(let intento=1;intento<=3;intento++){
+    try{
+      const crudo = await llamarClaude(intento===1?prompt:
+        prompt+'\n\nIMPORTANTE: tu respuesta anterior falló ('+ultimoError.message.slice(0,80)+'). Respondé ÚNICAMENTE el objeto JSON pedido, con textos breves, empezando con { y terminando con }.');
+      const r = parsearJSON(crudo);
+      console.log('[Context v2] '+etiqueta+' · intento '+intento+': OK');
+      return r;
+    }catch(e){
+      ultimoError=e;
+      console.log('[Context v2] '+etiqueta+' · intento '+intento+' falló: '+e.message);
+      if(intento<3) await pausa(800);
+    }
+  }
+  throw ultimoError;
+}
+
+
+/* --- H06: identidad unificada de productos ---------------------------------
+   Nombre canonico de la plataforma: COMPRENDER. Un solo software, especialidades adentro.
+     Core     -> 'Comprender AI'
+     Urbanismo-> 'Comprender Urbanismo'
+     Contextos-> 'Comprender Contextos'
+   Emitimos SIEMPRE el canonico. Los receptores aceptan ademas los nombres heredados
+   ('ArquiGenesis AI ...') para no romper exports generados antes de esta unificacion.
+   El identificador puede viajar en 'producto' o en 'software' (campo historico de Urbanismo). */
+var PRODUCTO_CORE      = 'Comprender AI';
+var PRODUCTO_URBANISMO = 'Comprender Urbanismo';
+var PRODUCTO_CONTEXTOS = 'Comprender Contextos';
+function idProducto(d){ return (d && (d.producto || d.software)) || ''; }
+function esProductoCore(d){ var p = idProducto(d); return p === PRODUCTO_CORE || p === 'ArquiGenesis AI Core' || p === 'Comprender AI Core'; }
+function esProductoUrbanismo(d){ var p = idProducto(d); return p === PRODUCTO_URBANISMO || p === 'ArquiGenesis AI Urban'; }
+function esProductoContextos(d){ var p = idProducto(d); return p === PRODUCTO_CONTEXTOS || p === 'ArquiGenesis AI Context'; }
+
+/* ---------------- Prompts ---------------- */
+function intentarLeerMarcoCore(txt){
+  try{
+    const i = txt.indexOf('{'), j = txt.lastIndexOf('}');
+    if(i<0||j<0) return null;
+    const o = JSON.parse(txt.slice(i,j+1));
+    if(o && esProductoCore(o) && o.tipo==='marco_de_comprension' && o.marco) return o;
+  }catch(e){}
+  return null;
+}
+
+function contextoBase(){
+  const t = state.territorio;
+  let base =
+`Sos el motor de Comprender · Contextos (versión profesional), producto de ARQUIGÉNESIS, instrumento de contextualización del sistema ArquiGenesis (Javier Darío Fresnadillo). Tu propósito: comprender las condiciones de existencia de un sistema territorial — su ecosistema. Urban estudia el organismo; vos estudiás el ecosistema donde existe.
+
+${FIRMA_METODOLOGICA}
+
+DOMINIO: el contexto no se divide por disciplinas sino por los seis grandes sistemas que organizan la realidad (traducción canónica del hexágono al ecosistema):
+${SISTEMAS.map(s=>`- ${s.nombre} (${s.canon}, ${s.polo}, ${s.elemento}): ${s.pregunta}`).join('\n')}
+
+TERRITORIO: ${t.nombre}, ${t.region}, ${t.pais}. Tipo: ${t.tipo}.`;
+  if(t.docs){
+    const marco = intentarLeerMarcoCore(t.docs);
+    if(marco){
+      base += `\n\nMARCO DE COMPRENSIÓN PROYECTADO POR EL CORE (Sujeto) — investigación "${marco.investigacion||''}":\nEste marco es contexto previo del Sujeto, no una orden. Orienta la lectura.\nPRINCIPIOS (ideas cristalizadas): ${(marco.marco.ideas||[]).join(' · ')}\nCORRESPONDENCIAS (estructuras de relación ya identificadas): ${(marco.marco.correspondencias||[]).join(' · ')}\nABIERTO (tensiones sin resolver): ${(marco.marco.abierto||[]).join(' · ')}`;
+    } else {
+      base += `\n\nDOCUMENTACIÓN APORTADA POR EL USUARIO:\n${t.docs.slice(0,4000)}`;
+    }
+  }
+  if(state.ajusteDocs) base += `\n\nAPORTE DEL USUARIO TRAS EL DIAGNÓSTICO ANTERIOR (documentación u observaciones de desacuerdo):\n${state.ajusteDocs.slice(0,4000)}`;
+  return base;
+}
+
+function promptSistema(sistema){
+  const lista = CUALIDADES.map(c=>`- "${c.id}" (${c.nombre} / canon: ${c.canon}, vía ${c.infl}): ${c.form}`).join('\n');
+  let revaloracion = '';
+  if(state.valoresPrevios && state.valoresPrevios[sistema.id]){
+    const prev = state.valoresPrevios[sistema.id].map(f=>`${f.id}: valor ${f.valor} ("${f.lectura}")`).join('\n');
+    revaloracion = `
+
+DIAGNÓSTICO ANTERIOR DE ESTE SISTEMA:
+${prev}
+
+Esto es una REVALORACIÓN: considerá el aporte del usuario incluido arriba. Ajustá los valores que la nueva evidencia efectivamente cuestione y sostené los que la estructura relacional sostiene. Si mantenés un valor cuestionado, explicá por qué en la lectura.`;
+  }
+  return `${contextoBase()}
+
+Analizá el ${sistema.nombre.toUpperCase()} del ecosistema de este territorio.
+Pregunta fundamental: ${sistema.pregunta}
+Comprende: ${sistema.desc}${revaloracion}
+
+MOMENTO PASIVO (interno, no lo escribas): contemplá el campo completo de relaciones entre este territorio y este sistema, sin categorizar.
+MOMENTO ACTIVO: valorá cada cualidad como CONDICIÓN DE EXISTENCIA. Cada lectura debe nombrar una relación, no un atributo aislado.
+
+Escala 0-10 según presión o soporte sobre el desarrollo territorial:
+- 0 a 3: alta presión o amenaza (la condición actúa en contra)
+- 4 a 6: neutro o ambivalente
+- 7 a 10: soporte u oportunidad (la condición favorece)
+
+LAS 9 CUALIDADES A VALORAR:
+${lista}
+
+Respondé SOLO con JSON válido, sin markdown, empezando con { y terminando con }. Estructura exacta:
+{"items":[{"id":"id_de_la_cualidad","valor":N,"lectura":"máximo 22 palabras, en español"}]}
+Incluí las 9 cualidades en el mismo orden.`;
+}
+
+function promptMatriz(){
+  const estados = SISTEMAS.map(s=>`${s.id}: IVC ${state.ivc.sistemas[s.id]}`).join(' · ');
+  const pares = PARES.map(p=>`${p[0]} ↔ ${p[1]}`).join('\n');
+  return `${contextoBase()}
+
+DIAGNÓSTICO COMPLETO DE LOS 6 SISTEMAS. IVC por sistema (0=favorable, 10=vulnerable): ${estados}.
+
+Producí la MATRIZ DE INFLUENCIAS: la geometría del contexto. Para cada par de sistemas, determiná la influencia DOMINANTE: cuál influye más sobre cuál en este territorio, con qué intensidad (0-10) y con qué signo ("refuerza" si la influencia sostiene el desarrollo, "tensiona" si lo presiona). La lectura nombra el mecanismo de propagación concreto.
+
+LOS 15 PARES:
+${pares}
+
+Respondé SOLO con JSON válido, sin markdown, empezando con {. Estructura exacta:
+{"influencias":[{"de":"id_sistema_origen","hacia":"id_sistema_destino","intensidad":N,"signo":"refuerza","lectura":"máximo 16 palabras"}]}
+Incluí los 15 pares. "de" y "hacia" deben ser ids de la lista: ${SISTEMAS.map(s=>s.id).join(', ')}.`;
+}
+
+function resumenValores(conLecturas){
+  return SISTEMAS.map(s=>{
+    const fs = state.valores[s.id].map(f=>
+      conLecturas ? `${f.nombre}: valor ${f.valor} (${f.lectura})` : `${f.nombre}: valor ${f.valor}`
+    ).join(' | ');
+    return `${s.nombre} [IVC de sistema: ${state.ivc.sistemas[s.id]}]: ${fs}`;
+  }).join('\n');
+}
+
+const NOTA_ESCALA = `IMPORTANTE sobre los números: el "valor" de cada ítem va de 0 (máxima presión externa) a 10 (máximo soporte). El IVC es su inverso: 0 = contexto favorable, 10 = máxima vulnerabilidad. Si citás un número, indicá si es "valor" o "IVC".`;
+
+function promptSintesisA(){
+  const topInfl = (state.matriz||[]).slice().sort((a,b)=>b.intensidad-a.intensidad).slice(0,5)
+    .map(m=>`${m.de}→${m.hacia} (${m.signo}, ${m.intensidad}): ${m.lectura}`).join('\n');
+  return `${contextoBase()}
+
+DIAGNÓSTICO COMPLETO. IVC global: ${state.ivc.global}.
+${NOTA_ESCALA}
+
+VALORES POR SISTEMA:
+${resumenValores(true)}
+
+PRINCIPALES INFLUENCIAS ENTRE SISTEMAS:
+${topInfl}
+
+Producí la primera parte de la síntesis. Respondé SOLO con JSON válido, sin markdown, empezando con {. Estructura exacta:
+{"sintesis":"síntesis narrativa del ecosistema en 4 a 6 oraciones, con lectura sistémica y relacional que incorpore las cadenas de propagación entre sistemas","tensiones":["2 a 4 tensiones entre sistemas"],"haiku":"haiku contextual en tres líneas separadas por \\n"}`;
+}
+
+function promptSintesisB(){
+  return `${contextoBase()}
+
+DIAGNÓSTICO COMPLETO. IVC global: ${state.ivc.global}.
+${NOTA_ESCALA}
+
+VALORES POR SISTEMA:
+${resumenValores(false)}
+
+Producí la segunda parte. Las palancas son los 3 ítems de mayor impacto positivo y las restricciones los 3 de mayor amenaza (nombrá el ítem y su sistema).
+
+En modificadores_urban aplicá la correspondencia estructural canónica — cada sistema modifica su dimensión hermana en Urbanismo:
+${SISTEMAS.map(s=>`- ${s.nombre} → "${DIM_URBAN[s.id]}"`).join('\n')}
+Incluí un modificador por cada sistema cuyo IVC sea 5 o mayor (mínimo 2, máximo 6), usando el nombre EXACTO de la dimensión.
+
+Respondé SOLO con JSON válido, sin markdown, empezando con {. Estructura exacta:
+{"palancas":[{"factor":"ítem (sistema)","razon":"máximo 25 palabras"},{},{}],"restricciones":[{"factor":"ítem (sistema)","razon":"máximo 25 palabras"},{},{}],"modificadores_urban":[{"dimension":"nombre exacto","ajuste":"máximo 30 palabras"}]}`;
+}
+
+function promptProyectivoA(){
+  const s = state.sintesis||{};
+  return `${contextoBase()}
+
+DIAGNÓSTICO COMPLETO. IVC global: ${state.ivc.global}.
+${NOTA_ESCALA}
+VALORES POR SISTEMA:
+${resumenValores(false)}
+SÍNTESIS: ${s.sintesis||''}
+
+Producí la DERIVA DEL CAMPO: cómo evoluciona el contexto mismo. No es el proyectivo del organismo (el campo condiciona, no proyecta): es insumo del proyectivo integrado que produce Urbanismo. Cada escenario recorre 5, 10 y 20 años mostrando el encadenamiento entre sistemas (usá las cadenas de propagación).
+
+Respondé SOLO con JSON válido, empezando con {. Estructura exacta:
+{"escenario_favorable":"5 a 7 oraciones recorriendo 5-10-20 años","escenario_adverso":"5 a 7 oraciones recorriendo 5-10-20 años"}`;
+}
+
+function promptProyectivoB(){
+  const s = state.sintesis||{};
+  return `${contextoBase()}
+
+DIAGNÓSTICO COMPLETO. IVC global: ${state.ivc.global}.
+VALORES POR SISTEMA:
+${resumenValores(false)}
+RESTRICCIONES: ${(s.restricciones||[]).map(r=>r.factor).join(', ')}.
+PALANCAS: ${(s.palancas||[]).map(p=>p.factor).join(', ')}.
+
+Producí ventanas de oportunidad (períodos concretos favorables para intervenciones) y horizontes de inercia (trayectoria del ecosistema sin intervención).
+
+Respondé SOLO con JSON válido, empezando con {. Estructura exacta:
+{"ventanas_oportunidad":[{"periodo":"ej 2026-2029","tema":"máximo 8 palabras","descripcion":"máximo 30 palabras"}],"horizonte_5":"3 a 4 oraciones","horizonte_10":"3 a 4 oraciones"}
+Incluí 2 a 4 ventanas.`;
+}
+
+/* ---------------- Cálculo: IVC + transversales ---------------- */
+function calcularIVC(){
+  const sistemas = {};
+  let suma=0, n=0;
+  SISTEMAS.forEach(s=>{
+    const vals = state.valores[s.id].map(f=>f.valor);
+    sistemas[s.id] = +(10 - vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1);
+    suma += vals.reduce((a,b)=>a+b,0); n += vals.length;
+  });
+  // Transversales: promedio de cada cualidad a través de los 6 sistemas (en escala soporte 0-10)
+  const transversales = CUALIDADES.map((c,i)=>{
+    const vs = SISTEMAS.map(s=>state.valores[s.id][i].valor);
+    return +(vs.reduce((a,b)=>a+b,0)/vs.length).toFixed(1);
+  });
+  const metas = [0,1,2].map(g=>
+    +((transversales[g*3]+transversales[g*3+1]+transversales[g*3+2])/3).toFixed(1));
+  state.ivc = {global:+(10-suma/n).toFixed(1), sistemas, transversales, metas};
+}
+
+function lecturaIVC(v){
+  if(v>=7) return 'Ecosistema adverso: gran parte del margen de maniobra está condicionado por fuerzas que el territorio no controla.';
+  if(v>=4) return 'Ecosistema ambivalente: las condiciones de existencia presionan y sostienen en simultáneo. Mirá Conducción de tendencias para saber si el condicionamiento admite dirección.';
+  return 'Ecosistema favorable: las condiciones de existencia sostienen el desarrollo.';
+}
+
+/* ---------------- Flujo ---------------- */
+function val(id){ return document.getElementById(id).value.trim(); }
+function clamp(n,a,b){ return isNaN(n)?5:Math.min(b,Math.max(a,n)); }
+function escaparHTML(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function iniciarDiagnostico(){
+  const nombre=val('inNombre'), pais=val('inPais'), region=val('inRegion');
+  const err=document.getElementById('errInicio');
+  err.style.display='none';
+  if(!nombre||!pais){
+    err.textContent='Ingresá al menos el nombre del territorio y el país.';
+    err.style.display='block'; return;
+  }
+  state.territorio={nombre,pais,region:region||pais,tipo:val('inTipo'),docs:val('inDocs')};
+  state.valores={}; state.ivc=null; state.matriz=null;
+  state.sintesisA=null; state.sintesisB=null; state.sintesis=null;
+  state.proyectivoA=null; state.proyectivoB=null;
+  state.ajusteDocs=''; state.valoresPrevios=null;
+  document.getElementById('inAjuste').value='';
+  document.getElementById('bloqueAjuste').style.display='none';
+  ['contTransversales','contMatriz','contSintesis','contProyectivo'].forEach(id=>document.getElementById(id).innerHTML='');
+  document.getElementById('ivcCard').style.display='none';
+  document.getElementById('accionesFinal').style.display='none';
+  const bp=document.getElementById('btnProyectivo');
+  bp.style.display=''; bp.disabled=false; bp.innerHTML='Generar proyectivo contextual';
+
+  mostrarPantalla('pantallaDiag');
+  document.getElementById('diagTitulo').textContent=nombre;
+  document.getElementById('diagTipo').textContent=`${state.territorio.tipo} · ${state.territorio.region} · ${pais}`;
+  renderSistemasPendientes();
+  continuarDiagnostico();
+}
+
+async function continuarDiagnostico(){
+  if(!permitirOperacion('diagnostico')) return;   // C-05
+  if(state.enCurso) return;
+  state.enCurso=true;
+  document.getElementById('errDiag').style.display='none';
+  redibujar();   // refleja el estado del toroide al (re)iniciar (limpia un diagnóstico previo)
+  try{
+    for(const sistema of SISTEMAS){
+      if(state.valores[sistema.id]) continue;
+      setProgreso(`Leyendo ${sistema.nombre.toLowerCase()}`, true);
+      const r = await llamarConReintento(promptSistema(sistema), sistema.id);
+      state.valores[sistema.id] = CUALIDADES.map(c=>{
+        const rf = (r.items||[]).find(x=>x.id===c.id)||{};
+        return {id:c.id, nombre:c.nombre, valor:clamp(Number(rf.valor),0,10), lectura:rf.lectura||'Sin lectura disponible.'};
+      });
+      renderSistema(sistema);
+      await pausa(400);
+    }
+
+    if(!state.ivc){ calcularIVC(); }
+    renderIVC(); renderTransversales();
+    redibujar();   // los 6 análisis están: recién ahora se construye el campo con esos valores
+
+    if(!state.matriz){
+      setProgreso('Trazando la geometría del contexto (matriz de influencias)', true);
+      const r = await llamarConReintento(promptMatriz(), 'matriz');
+      const ids = SISTEMAS.map(s=>s.id);
+      state.matriz = (r.influencias||[]).filter(m=>ids.includes(m.de)&&ids.includes(m.hacia))
+        .map(m=>({de:m.de, hacia:m.hacia, intensidad:clamp(Number(m.intensidad),0,10),
+          signo:m.signo==='refuerza'?'refuerza':'tensiona', lectura:m.lectura||''}));
+      await pausa(400);
+    }
+    renderMatriz();
+    redibujar();   // aparecen las aristas de influencia sobre el campo
+
+    if(!state.sintesisA){
+      setProgreso('Elaborando síntesis sistémica', true);
+      state.sintesisA = await llamarConReintento(promptSintesisA(),'sintesisA');
+      await pausa(400);
+    }
+    if(!state.sintesisB){
+      setProgreso('Identificando palancas, restricciones y modificadores', true);
+      state.sintesisB = await llamarConReintento(promptSintesisB(),'sintesisB');
+    }
+    state.sintesis = Object.assign({}, state.sintesisA, state.sintesisB);
+    renderSintesis();
+
+    setProgreso('Diagnóstico del ecosistema completo.');
+    document.getElementById('accionesFinal').style.display='flex';
+    document.getElementById('bloqueAjuste').style.display='block';
+  }catch(e){
+    const err=document.getElementById('errDiag');
+    err.innerHTML='El diagnóstico se interrumpió: '+escaparHTML(e.message)+
+      '<br><br><button class="btn secundario" onclick="reanudarDiagnostico()">Reanudar desde donde quedó</button>';
+    err.style.display='block';
+    setProgreso('Diagnóstico interrumpido.');
+  }finally{
+    state.enCurso=false;
+  }
+}
+
+function reanudarDiagnostico(){ if(!state.enCurso) continuarDiagnostico(); }
+
+function rediagnosticar(){
+  if(state.enCurso) return;
+  const aporte = val('inAjuste');
+  if(!aporte){ document.getElementById('inAjuste').focus(); return; }
+  state.ajusteDocs = state.ajusteDocs ? state.ajusteDocs+'\n---\n'+aporte : aporte;
+  state.valoresPrevios = state.valores;
+  state.valores={}; state.ivc=null; state.matriz=null;
+  state.sintesisA=null; state.sintesisB=null; state.sintesis=null;
+  state.proyectivoA=null; state.proyectivoB=null;
+  document.getElementById('inAjuste').value='';
+  document.getElementById('bloqueAjuste').style.display='none';
+  document.getElementById('ivcCard').style.display='none';
+  ['contTransversales','contMatriz','contSintesis','contProyectivo'].forEach(id=>document.getElementById(id).innerHTML='');
+  document.getElementById('accionesFinal').style.display='none';
+  const bp=document.getElementById('btnProyectivo');
+  bp.style.display=''; bp.disabled=false; bp.innerHTML='Generar proyectivo contextual';
+  renderSistemasPendientes();
+  continuarDiagnostico();
+}
+
+async function generarProyectivo(){
+  if(!permitirOperacion('proyectivo')) return;   // C-05
+  if(state.enCurso || !state.sintesis) return;
+  state.enCurso=true;
+  document.getElementById('errDiag').style.display='none';
+  const btn=document.getElementById('btnProyectivo');
+  const textoOriginal=btn.innerHTML;
+  btn.disabled=true;
+  const cont=document.getElementById('contProyectivo');
+  const setEtapa=txt=>{
+    btn.innerHTML='<span class="spinner"></span>'+txt;
+    cont.innerHTML='<div class="generando"><span class="spinner"></span>'+txt+'…</div>';
+    setProgreso(txt,true);
+  };
+  try{
+    if(!state.proyectivoA){
+      setEtapa('Proyectando escenarios del ecosistema');
+      cont.scrollIntoView({behavior:'smooth',block:'center'});
+      state.proyectivoA=await llamarConReintento(promptProyectivoA(),'proyectivoA');
+      await pausa(400);
+    }
+    if(!state.proyectivoB){
+      setEtapa('Detectando ventanas de oportunidad');
+      state.proyectivoB=await llamarConReintento(promptProyectivoB(),'proyectivoB');
+    }
+    renderProyectivo();
+    redibujar();   // se superpone la capa proyectiva (deriva del campo) sobre el estado actual
+    setProgreso('Proyectivo contextual completo.');
+    btn.style.display='none';
+  }catch(e){
+    cont.innerHTML='';
+    btn.innerHTML=textoOriginal; btn.disabled=false;
+    const err=document.getElementById('errDiag');
+    err.innerHTML='El proyectivo se interrumpió: '+escaparHTML(e.message)+
+      '<br><br><button class="btn secundario" onclick="generarProyectivo()">Reanudar proyectivo</button>';
+    err.style.display='block';
+    setProgreso('Proyectivo interrumpido.');
+  }finally{
+    state.enCurso=false;
+  }
+}
+
+/* ---------------- Render ---------------- */
+function mostrarPantalla(id){
+  document.querySelectorAll('.pantalla').forEach(p=>p.classList.remove('activa'));
+  document.getElementById(id).classList.add('activa');
+  window.scrollTo({top:0});
+  if(typeof redibujar === 'function') setTimeout(redibujar, 30);
+}
+function setProgreso(texto,activo){
+  document.getElementById('progreso').innerHTML = activo ? texto+' <span class="punto">●</span>' : texto;
+}
+function colorValor(v){ return v<=3?'var(--presion)':v<=6?'var(--neutro)':'var(--soporte)'; }
+
+function renderSistemasPendientes(){
+  const cont=document.getElementById('contSistemas');
+  cont.innerHTML='';
+  SISTEMAS.forEach(s=>{
+    const card=document.createElement('div');
+    card.className='sistema-card'; card.id='card_'+s.id;
+    card.style.borderLeftColor=s.color;
+    card.innerHTML=
+      `<button class="sistema-head" onclick="toggleSistema('${s.id}')">
+        <span style="color:${s.color};font-size:.75rem">⬢</span>
+        <span>${s.nombre}<br><span class="canon">${s.pregunta}</span></span>
+        <span class="estado" id="estado_${s.id}">pendiente</span>
+      </button>
+      <div class="sistema-body" id="body_${s.id}"></div>`;
+    cont.appendChild(card);
+  });
+}
+function toggleSistema(id){ document.getElementById('card_'+id).classList.toggle('abierta'); }
+
+function renderSistema(sistema){
+  const body=document.getElementById('body_'+sistema.id);
+  const estado=document.getElementById('estado_'+sistema.id);
+  const vals=state.valores[sistema.id];
+  const prom=(vals.reduce((a,f)=>a+f.valor,0)/vals.length);
+  estado.textContent='IVC '+(10-prom).toFixed(1);
+  estado.style.color = (10-prom)>=7?'var(--presion)':(10-prom)>=4?'var(--oro)':'var(--soporte)';
+  body.innerHTML=vals.map((f,i)=>
+    `<div class="item">
+      <div class="item-fila">
+        <span class="item-nombre">${f.nombre}<small>${CUALIDADES[i].form}</small></span>
+        <span class="item-valor" style="color:${colorValor(f.valor)}">${f.valor}</span>
+      </div>
+      <div class="barra"><i style="background:${colorValor(f.valor)}"></i></div>
+      <div class="item-lectura">${f.lectura}</div>
+    </div>`).join('');
+  document.getElementById('card_'+sistema.id).classList.add('abierta');
+  requestAnimationFrame(()=>{
+    body.querySelectorAll('.barra i').forEach((b,i)=>{ b.style.width=(vals[i].valor*10)+'%'; });
+  });
+}
+
+function renderIVC(){
+  const card=document.getElementById('ivcCard');
+  card.style.display='flex';
+  const num=document.getElementById('ivcNum');
+  num.textContent=state.ivc.global.toFixed(1);
+  num.style.color=state.ivc.global>=7?'var(--presion)':state.ivc.global>=4?'var(--oro)':'var(--soporte)';
+  document.getElementById('ivcTexto').textContent=lecturaIVC(state.ivc.global);
+  document.getElementById('ivcSistemas').innerHTML=SISTEMAS.map(s=>
+    `<span class="ivc-sistema" style="color:${s.color}">${s.id}: <b>${state.ivc.sistemas[s.id].toFixed(1)}</b></span>`).join('');
+}
+
+function renderTransversales(){
+  const tv=state.ivc.transversales, metas=state.ivc.metas;
+  const nombresMeta=['Condiciones establecidas','Redes y dependencias','Tendencias y horizontes'];
+  const coloresMeta=['#3E8C7A','#2E5A87','#C1553F'];
+  const max=tv.indexOf(Math.max(...tv)), min=tv.indexOf(Math.min(...tv));
+  document.getElementById('contTransversales').innerHTML=`
+    <div class="bloque">
+      <h3>Lecturas transversales del contexto</h3>
+      <div class="tres-col">
+        ${metas.map((m,i)=>`<div class="meta-chip"><div class="mn">${nombresMeta[i]}</div><div class="mv" style="color:${coloresMeta[i]}">${m.toFixed(1)}</div></div>`).join('')}
+      </div>
+      ${tv.map((v,i)=>`
+        <div class="trans-fila">
+          <span class="trans-nombre">${CUALIDADES[i].nombre}${i===max?' <span style="color:var(--soporte)" title="Palanca transversal">▲</span>':''}${i===min?' <span style="color:var(--presion)" title="Fragilidad transversal">▼</span>':''}<small>${CUALIDADES[i].form}</small></span>
+          <div class="barra" style="flex:1;margin-top:0"><i style="background:${colorValor(v)};width:${v*10}%"></i></div>
+          <span class="trans-valor" style="color:${colorValor(v)}">${v.toFixed(1)}</span>
+        </div>`).join('')}
+      <p style="font-size:.72rem;color:var(--texto-suave);margin-top:8px">Promedio de cada cualidad a través de los seis sistemas (0 presión · 10 soporte). ▲ la más fuerte del contexto · ▼ la más débil.</p>
+    </div>`;
+}
+
+function renderMatriz(){
+  if(!state.matriz) return;
+  const nom=id=>{const s=SISTEMAS.find(x=>x.id===id);return s?s.nombre.replace('Sistema ',''):id;};
+  const col=id=>{const s=SISTEMAS.find(x=>x.id===id);return s?s.color:'#999';};
+  const orden=state.matriz.slice().sort((a,b)=>b.intensidad-a.intensidad);
+  document.getElementById('contMatriz').innerHTML=`
+    <div class="bloque">
+      <h3>Geometría del contexto — matriz de influencias</h3>
+      ${orden.map(m=>`
+        <div class="matriz-fila">
+          <span class="matriz-par"><span style="color:${col(m.de)}">${nom(m.de)}</span> → <span style="color:${col(m.hacia)}">${nom(m.hacia)}</span></span>
+          <span class="etq ${m.signo==='refuerza'?'s':'p'}">${m.signo} ${m.intensidad}</span>
+          <span class="matriz-lectura">${m.lectura}</span>
+        </div>`).join('')}
+      <p style="font-size:.72rem;color:var(--texto-suave);margin-top:8px">Influencia dominante por par, ordenada por intensidad. En el diagrama: ancho de la línea = intensidad, color = signo.</p>
+    </div>`;
+}
+
+function renderSintesis(){
+  const s=state.sintesis;
+  const cont=document.getElementById('contSintesis');
+  cont.innerHTML=`
+    <div class="bloque"><h3>Síntesis del ecosistema</h3><p>${s.sintesis||''}</p></div>
+    <div class="bloque"><h3>Tensiones entre sistemas</h3><ul>${(s.tensiones||[]).map(x=>`<li>${x}</li>`).join('')}</ul></div>
+    <div class="dos-col">
+      <div class="bloque"><h3>Palancas de contexto</h3><ul>${(s.palancas||[]).map(p=>`<li><span class="etq s">${p.factor||''}</span>${p.razon||''}</li>`).join('')}</ul></div>
+      <div class="bloque"><h3>Restricciones estructurales</h3><ul>${(s.restricciones||[]).map(p=>`<li><span class="etq p">${p.factor||''}</span>${p.razon||''}</li>`).join('')}</ul></div>
+    </div>
+    <div class="bloque"><h3>Modificadores para Urbanismo (correspondencia estructural)</h3><ul>${(s.modificadores_urban||[]).map(m=>`<li><b>${m.dimension||''}</b> — ${m.ajuste||''}</li>`).join('')}</ul></div>
+    <div class="bloque"><div class="haiku">${(s.haiku||'').replace(/\\n/g,'\n')}</div></div>`;
+}
+
+function renderProyectivo(){
+  const a=state.proyectivoA||{}, b=state.proyectivoB||{};
+  document.getElementById('contProyectivo').innerHTML=`
+    <div class="bloque" style="border-color:var(--oro)">
+      <h3>Proyectivo contextual</h3>
+      <p style="font-size:.8rem;color:var(--texto-suave)">Evolución del ecosistema a 5, 10 y 20 años.</p>
+    </div>
+    <div class="dos-col">
+      <div class="bloque"><h3 style="color:var(--soporte)">Escenario favorable</h3><p>${a.escenario_favorable||''}</p></div>
+      <div class="bloque"><h3 style="color:var(--presion)">Escenario adverso</h3><p>${a.escenario_adverso||''}</p></div>
+    </div>
+    <div class="bloque"><h3>Ventanas de oportunidad</h3><ul>${(b.ventanas_oportunidad||[]).map(v=>`<li><span class="etq s">${v.periodo||''}</span><b>${v.tema||''}</b> — ${v.descripcion||''}</li>`).join('')}</ul></div>
+    <div class="dos-col">
+      <div class="bloque"><h3>Inercia a 5 años</h3><p>${b.horizonte_5||''}</p></div>
+      <div class="bloque"><h3>Inercia a 10 años</h3><p>${b.horizonte_10||''}</p></div>
+    </div>`;
+}
+
+/* ---------------- Exportación (contrato v2.0) ---------------- */
+function construirSalida(){
+  const t=state.territorio, s=state.sintesis||{};
+  const sistemas={};
+  SISTEMAS.forEach(sis=>{
+    sistemas[sis.id]={
+      nombre:sis.nombre, canon:sis.canon, polo:sis.polo,
+      ivc:state.ivc.sistemas[sis.id],
+      dimension_urban:DIM_URBAN[sis.id],
+      items:state.valores[sis.id]
+    };
+  });
+  const transversales={};
+  CUALIDADES.forEach((c,i)=>{transversales[c.id]={nombre:c.nombre,canon:c.canon,infl:c.infl,valor:state.ivc.transversales[i]};});
+  return {
+    version_contrato:'2.1', lenguaje:'universal', ontology_version:'3.0',
+    version:'2.1',
+    producto:PRODUCTO_CONTEXTOS,
+    deriva_campo:(state.proyectivoA||state.proyectivoB)?{escenarios:state.proyectivoA||null,ventanas:state.proyectivoB||null}:null,
+    generado:new Date().toISOString(),
+    ciudad:t.nombre, tipo_territorio:t.tipo, pais:t.pais, region:t.region,
+    ivc_global:state.ivc.global,
+    ivc_serie:2,
+    sistemas,
+    transversales,
+    meta_lecturas:{espacio:state.ivc.metas[0],energia:state.ivc.metas[1],transformacion:state.ivc.metas[2]},
+    matriz_influencias:state.matriz||[],
+    revalorado:!!state.valoresPrevios,
+    aportes_usuario:state.ajusteDocs||'',
+    sintesis:s.sintesis||'', tensiones:s.tensiones||[], haiku:s.haiku||'',
+    palancas:s.palancas||[], restricciones:s.restricciones||[],
+    modificadores_urban:s.modificadores_urban||[],
+    escenario_favorable:(state.proyectivoA||{}).escenario_favorable||'',
+    escenario_adverso:(state.proyectivoA||{}).escenario_adverso||'',
+    ventanas_oportunidad:(state.proyectivoB||{}).ventanas_oportunidad||[],
+    horizonte_5:(state.proyectivoB||{}).horizonte_5||'',
+    horizonte_10:(state.proyectivoB||{}).horizonte_10||''
+  };
+}
+
+/* Acuse de recibo del marco del Core.
+   Contextos detectaba el marco recién al armar el prompt: lo absorbía en silencio y el
+   usuario no sabía si había entrado. Ahora se reconoce al pegarlo y se dice en pantalla.
+   (Urbanismo ya lo hacía con su cartel verde; esto empareja el comportamiento.) */
+function revisarMarcoPegado(){
+  var ta = document.getElementById('inDocs');
+  var av = document.getElementById('acuseMarco');
+  if(!ta || !av) return null;
+  var txt = ta.value.trim();
+  if(!txt){ av.style.display='none'; return null; }
+  var marco = intentarLeerMarcoCore(txt);
+  if(marco){
+    var m = marco.marco || {};
+    av.style.display='block';
+    av.style.background='var(--soporte-c,#E6F2EF)';
+    av.style.border='1px solid rgba(62,140,122,.35)';
+    av.style.color='#2C6B5C';
+    av.innerHTML = '<strong>✓ Marco de comprensión de Comprender AI reconocido</strong>'
+      + '<br>Investigación: “' + escaparHTML(marco.investigacion || '—') + '”'
+      + '<br>' + ((m.correspondencias||[]).length) + ' correspondencia(s) · '
+      + ((m.ideas||[]).length) + ' principio(s) · '
+      + ((m.abierto||[]).length) + ' tensión(es) abierta(s)'
+      + '<br><span style="font-size:11px;opacity:.8">Orienta la lectura como comprensión previa del Sujeto. No reemplaza el diagnóstico del campo.</span>';
+    return marco;
+  }
+  // Hay texto, pero no es un marco: se usará como documentación suelta.
+  av.style.display='block';
+  av.style.background='var(--gris,#F1EFEA)';
+  av.style.border='1px solid var(--borde,#E2DFD8)';
+  av.style.color='#5C6B7D';
+  av.textContent = 'Se tomará como documentación aportada. (Si querías cargar el marco de Comprender AI, pegá el JSON completo que exporta el Core.)';
+  return null;
+}
+
+(function(){
+  function enganchar(){
+    var ta = document.getElementById('inDocs');
+    if(!ta) return;
+    ta.addEventListener('input', revisarMarcoPegado);
+    ta.addEventListener('paste', function(){ setTimeout(revisarMarcoPegado, 40); });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enganchar);
+  else enganchar();
+})();
+
+function enfocarMarco(){
+  var t = document.getElementById('inDocs');
+  if(!t) return;
+  try{ t.scrollIntoView({ behavior:'smooth', block:'center' }); }catch(e){}
+  t.focus();
+  t.style.transition = 'box-shadow .3s';
+  t.style.boxShadow = '0 0 0 3px rgba(46,90,135,.35)';
+  setTimeout(function(){ t.style.boxShadow = ''; }, 1400);
+}
+
+function copiarDerivaParaCore(){
+  var NL = String.fromCharCode(10);
+  var sin = state.sintesis || {};
+  var ciudad = state.ciudad || (state.marcoCore && state.marcoCore.investigacion) || '(organismo)';
+
+  var txt = 'LECTURA DEL CAMPO — Comprender · Contextos' + NL +
+            'Organismo: ' + ciudad + NL + NL +
+            'Contextos evaluó el CAMPO EXTERNO que condiciona a este organismo. El campo condiciona, no proyecta: ' +
+            'lo que sigue es la lectura de las fuerzas del contexto, para que la integres a la comprensión del organismo ' +
+            'y hagas evolucionar el paradigma de intervención.' + NL + NL;
+
+  // ── 1. Lo que el campo dice, en una síntesis ──
+  if(sin.sintesis){
+    txt += '════ SÍNTESIS DEL CAMPO ════' + NL + limpiar(sin.sintesis) + NL + NL;
+  }
+  if(state.ivc){
+    txt += 'Viabilidad contextual global: ' + state.ivc.global + '/10 ' +
+           '(0 = el campo acompaña · 10 = el campo bloquea)' + NL + NL;
+  }
+
+  // ── 2. PALANCAS: lo que el campo habilita ──
+  if(sin.palancas && sin.palancas.length){
+    txt += '════ PALANCAS DEL CAMPO — dónde el contexto empuja a favor ════' + NL;
+    sin.palancas.forEach(function(pl,i){
+      txt += (i+1) + '. ' + limpiar(pl.factor || '') + NL;
+      if(pl.razon) txt += '   Por qué es palanca: ' + limpiar(pl.razon) + NL;
+    });
+    txt += NL;
+  }
+
+  // ── 3. RESTRICCIONES: lo que el campo bloquea ──
+  if(sin.restricciones && sin.restricciones.length){
+    txt += '════ RESTRICCIONES ESTRUCTURALES — dónde el contexto bloquea ════' + NL;
+    sin.restricciones.forEach(function(rs,i){
+      txt += (i+1) + '. ' + limpiar(rs.factor || '') + NL;
+      if(rs.razon) txt += '   Por qué restringe: ' + limpiar(rs.razon) + NL;
+    });
+    txt += NL;
+  }
+
+  // ── 4. TENSIONES ENTRE SISTEMAS ──
+  if(sin.tensiones && sin.tensiones.length){
+    txt += '════ TENSIONES ENTRE LOS SISTEMAS DEL CAMPO ════' + NL;
+    sin.tensiones.forEach(function(tt,i){ txt += (i+1) + '. ' + limpiar(tt) + NL; });
+    txt += NL;
+  }
+
+  // ── 5. Los seis sistemas: LECTURA, no números sueltos ──
+  txt += '════ LOS SEIS SISTEMAS — cómo está cada fuerza del campo ════' + NL;
+  SISTEMAS.forEach(function(sis){
+    var vals = state.valores[sis.id];
+    if(!vals) return;
+    var ivc = state.ivc ? state.ivc.sistemas[sis.id] : null;
+    var estado = (ivc == null) ? '' :
+      (ivc >= 6.5 ? 'BLOQUEA' : ivc >= 4.5 ? 'AMBIVALENTE' : 'ACOMPAÑA');
+    txt += NL + '▸ ' + sis.nombre.toUpperCase() + (estado ? ' — el campo ' + estado : '') + NL;
+    // solo lo relevante: lo más débil y lo más fuerte, con su lectura
+    var orden = vals.slice().sort(function(a,b){ return a.valor - b.valor; });
+    var bajo = orden[0], alto = orden[orden.length-1];
+    if(bajo && bajo.nombre){
+      txt += '   Punto más frágil — ' + bajo.nombre + ' (' + bajo.valor + '/10): ' + limpiar(bajo.lectura) + NL;
+    }
+    if(alto && alto.nombre && alto !== bajo){
+      txt += '   Punto más sólido — ' + alto.nombre + ' (' + alto.valor + '/10): ' + limpiar(alto.lectura) + NL;
+    }
+  });
+  txt += NL;
+
+  // ── 6. Influencias con su mecanismo (por qué, no solo cuánto) ──
+  if(state.matriz && state.matriz.length){
+    var fuertes = state.matriz.slice().sort(function(a,b){ return b.intensidad - a.intensidad; }).slice(0,8);
+    txt += '════ CÓMO SE INFLUYEN ENTRE SÍ (las más determinantes) ════' + NL;
+    fuertes.forEach(function(m2){
+      var de = nombreSis(m2.de), a = nombreSis(m2.hacia);
+      txt += '· ' + de + (m2.signo==='refuerza' ? ' refuerza a ' : ' tensiona a ') + a + NL;
+      if(m2.mecanismo) txt += '  Mecanismo: ' + limpiar(m2.mecanismo) + NL;
+    });
+    txt += NL;
+  }
+
+  // ── 7. Deriva del campo ──
+  // ── 7. Deriva del campo (proyectivo) ──
+  if(state.proyectivoA){
+    txt += '════ DERIVA DEL CAMPO — hacia dónde va el contexto ════' + NL + textoPlano(state.proyectivoA) + NL + NL;
+    if(state.proyectivoB){
+      txt += '════ VENTANAS DE OPORTUNIDAD ════' + NL + textoPlano(state.proyectivoB) + NL + NL;
+    }
+  } else {
+    txt += '════ DERIVA DEL CAMPO ════' + NL +
+           '(Aún no generada. Generá el «proyectivo contextual» antes de llevar la lectura para incluir hacia dónde va el campo y sus ventanas de oportunidad.)' + NL + NL;
+  }
+
+  // ── 8. Consigna ──
+  txt += '════ QUÉ NECESITO DE VOS ════' + NL +
+         'Trabajemos esta lectura del campo dentro del organismo:' + NL +
+         '1. ¿Cuáles de estas palancas del contexto puedo aprovechar para las tensiones que ya tiene el organismo?' + NL +
+         '2. ¿Qué restricciones estructurales condicionan lo que puedo hacer, y cuáles se pueden rodear?' + NL +
+         '3. De las tensiones entre sistemas, ¿cuál toca la raíz del organismo?' + NL +
+         '4. ¿Qué ventana de oportunidad conviene aprovechar primero, y qué habría que preparar para llegar a tiempo?' + NL +
+         '5. A la luz de todo esto, ¿cómo evoluciona el paradigma de intervención?' + NL;
+
+  copiarAlPortapapeles(txt, 'Lectura del campo copiada. Pegala en Comprender AI, dentro del organismo.');
+}
+
+function nombreSis(id){
+  var s = SISTEMAS.filter(function(x){ return x.id === id; })[0];
+  return s ? s.nombre : id;
+}
+
+function limpiar(v){
+  if(v == null) return '';
+  if(typeof v === 'object') return textoPlano(v);
+  return String(v).replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim();
+}
+
+function textoPlano(obj){
+  var NL = String.fromCharCode(10);
+  if(obj == null) return '';
+  if(typeof obj === 'string') return obj.replace(/<[^>]+>/g,'').trim();
+  if(Array.isArray(obj)) return obj.map(function(x){ return '· ' + textoPlano(x); }).join(NL);
+  if(typeof obj === 'object'){
+    var out = [];
+    for(var k in obj){
+      if(!obj.hasOwnProperty(k)) continue;
+      var v = obj[k];
+      var etiqueta = k.replace(/_/g,' ');
+      etiqueta = etiqueta.charAt(0).toUpperCase() + etiqueta.slice(1);
+      if(typeof v === 'object'){
+        out.push(etiqueta + ':' + NL + textoPlano(v));
+      } else {
+        out.push(etiqueta + ': ' + String(v));
+      }
+    }
+    return out.join(NL);
+  }
+  return String(obj);
+}
+
+function copiarAlPortapapeles(txt, mensajeOk){
+  var ta = document.createElement('textarea');
+  ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  var ok=false; try{ ok=document.execCommand('copy'); }catch(e){}
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(function(){ alert(mensajeOk); })
+      .catch(function(){ alert(ok ? mensajeOk : 'Copialo manualmente desde el cuadro de exportación.'); });
+  } else {
+    alert(ok ? mensajeOk : 'Copialo manualmente desde el cuadro de exportación.');
+  }
+  ta.remove();
+}
+
+function exportarJSON(){
+  document.getElementById('exportTexto').value=JSON.stringify(construirSalida(),null,2);
+  document.getElementById('exportEstado').textContent='';
+  document.getElementById('modalExport').classList.add('visible');
+}
+function cerrarExport(){ document.getElementById('modalExport').classList.remove('visible'); }
+async function copiarExport(){
+  const ta=document.getElementById('exportTexto');
+  const estado=document.getElementById('exportEstado');
+  try{
+    await navigator.clipboard.writeText(ta.value);
+    estado.textContent='Copiado al portapapeles.';
+  }catch(e){
+    ta.focus(); ta.select();
+    try{ document.execCommand('copy'); estado.textContent='Copiado al portapapeles.'; }
+    catch(e2){ estado.textContent='No se pudo copiar automáticamente: mantené presionado el texto y copialo a mano.'; }
+  }
+}
+function descargarExport(){
+  const t=state.territorio;
+  const blob=new Blob([document.getElementById('exportTexto').value],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='ArquiGenesis_Context_v2_'+t.nombre.replace(/\s+/g,'_')+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  document.getElementById('exportEstado').textContent='Descarga iniciada. Si el navegador no la permite, usá "Copiar".';
+}
+
+/* ---------------- Canvas: hexagrama del ecosistema ---------------- */
+const reducirMovimiento=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+/* Posiciones: los seis sistemas sobre el borde del toroide, en pares canónicos opuestos */
+const ANGULOS={institucional:90, social:30, natural:-30, economico:-90, global:-150, territorial:150};
+// Rango de radios de las puntas del campo, compartido por la superficie actual y la proyectiva.
+// min más chico = más contraste (las puntas fuertes entran más al centro). 0.42 = suave · 0.25 = marcado.
+const CAMPO_MIN = 0.08, CAMPO_MAX = 1.0;
+// Amplificación del contraste: estira cada valor respecto del centro (5). 1 = fiel · >1 = más marcado.
+const CAMPO_GAIN = 1.7;
+// Proyectivo: qué tan lejos lleva cada sistema hacia el equilibrio del organismo (0..1). "Lentamente".
+const CAMPO_CORRECCION = 0.5;
+
+function posNodo(id,cx,cy,r){
+  const a=ANGULOS[id]*Math.PI/180;
+  return [cx+Math.cos(a)*r, cy-Math.sin(a)*r];
+}
+
+function dibujarHexagrama(canvas,t){
+  if(!canvas) return;
+  // aviso: la superficie se construye al terminar el recorrido de los seis sistemas
+  const _falta = SISTEMAS.filter(function(s){ return !state.valores[s.id]; }).length;
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2;
+  const R=Math.min(W,H)/2-80;
+  ctx.clearRect(0,0,W,H);
+
+  // Fondo: toroide visto desde arriba (misma geometría que el logotipo)
+  // Campo: mismo toroide que Comprender · Urbanismo
+  ctx.fillStyle='#F7F6F3';
+  ctx.beginPath(); ctx.arc(cx,cy,R+28,0,Math.PI*2); ctx.fill();
+  ctx.save();
+  [0.34,0.52,0.70,0.86,1.0].forEach(function(f,i){
+    ctx.beginPath(); ctx.arc(cx,cy,(R+20)*f,0,Math.PI*2);
+    ctx.strokeStyle='rgba(46,90,135,'+(0.05+i*0.018)+')';
+    ctx.lineWidth=0.7; ctx.stroke();
+  });
+  for(let k=0;k<24;k++){
+    const a=(k/24)*Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(cx+Math.cos(a)*(R+20)*0.34, cy+Math.sin(a)*(R+20)*0.34);
+    ctx.lineTo(cx+Math.cos(a)*(R+20), cy+Math.sin(a)*(R+20));
+    ctx.strokeStyle='rgba(46,90,135,.045)'; ctx.lineWidth=0.6; ctx.stroke();
+  }
+  ctx.restore();
+  SISTEMAS.forEach(function(sis){
+    const [x,y]=posNodo(sis.id,cx,cy,R);
+    const ang=Math.atan2(y-cy,x-cx);
+    ctx.beginPath();
+    ctx.moveTo(cx+Math.cos(ang)*R*0.30, cy+Math.sin(ang)*R*0.30);
+    ctx.lineTo(x,y);
+    ctx.strokeStyle='rgba(46,90,135,.22)'; ctx.lineWidth=1; ctx.stroke();
+  });
+
+  // Radios, completo y hayDatos se calculan ACÁ, antes de cualquier uso (aristas y capa proyectiva
+  // dependen de ellos). Declararlos más abajo rompía la función con un error de zona muerta temporal.
+  const radios = {};
+  SISTEMAS.forEach(function(s){
+    const tiene = !!state.valores[s.id];
+    if(!tiene){ radios[s.id] = R; return; }
+    const prom = state.valores[s.id].reduce((a,f)=>a+f.valor,0)/9;
+    radios[s.id] = R * (1 - (prom/10) * 0.50);
+  });
+  const completo = SISTEMAS.every(function(s){
+    const v = state.valores[s.id];
+    return !!v && v.length && v.every(function(f){ return typeof f.valor === 'number' && !isNaN(f.valor); });
+  });
+  const hayDatos = completo;
+
+  // Las influencias de la matriz NO se dibujan sobre el toroide: seis conexiones entre nodos
+  // que cruzan el centro forman una estrella de 6 puntas, ajena a la geometría circular del campo
+  // (y aparecían como un "segundo trazo" encima del círculo). La matriz se lee en su propio panel
+  // (renderMatriz), sin ensuciar el campo de fuerzas.
+
+  // Capa proyectiva: se superpone al estado actual cuando existe la deriva del campo.
+  // Punteada, para distinguir lo proyectado de lo diagnosticado.
+  // Capa proyectiva: la misma superficie, deformada por la deriva del campo.
+  // Punteada y en violeta, superpuesta al estado actual.
+  if(state.proyectivoA && state.ivc && hayDatos){
+    ctx.save();
+    ctx.setLineDash([6,5]);
+    // El proyectivo lleva el diagnóstico hacia su equilibrio: como un electrocardiograma que
+    // vuelve a la línea de base, cada sistema se mueve hacia el CENTRO del organismo (el promedio
+    // de los seis). Los más en conflicto —los que más se apartan— son los que más se mueven: el
+    // conflicto se convierte en oportunidad de cambio. Es un paso parcial ("lentamente"), no el destino.
+    var promSis = {}, sumProm = 0, nProm = 0;
+    SISTEMAS.forEach(function(s){
+      var vv = state.valores[s.id];
+      if(!vv || !vv.length) return;
+      var sm = 0; for(var q = 0; q < vv.length; q++){ sm += vv[q].valor; }
+      promSis[s.id] = sm / vv.length; sumProm += promSis[s.id]; nProm++;
+    });
+    var equilibrio = nProm ? sumProm / nProm : 5;
+    const ptsP = superficieCampo(function(s, cual){
+      var prom = promSis[s.id];
+      if(prom == null) return cual.valor;
+      // cada sistema vuelve hacia el equilibrio; la distancia recorrida crece con el conflicto
+      return Math.max(0, Math.min(10, prom + (equilibrio - prom) * CAMPO_CORRECCION));
+    }, R, CAMPO_MIN, CAMPO_MAX);
+    trazarSuave(ptsP);
+    ctx.strokeStyle='rgba(123,94,167,.75)';
+    ctx.lineWidth=1.7;
+    ctx.stroke();
+    ctx.fillStyle='rgba(123,94,167,.05)';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Nodos: la DISTANCIA AL CENTRO representa el valor (como en Comprender · Urbanismo).
+  // Valor alto → cerca del núcleo (el sistema sostiene). Valor bajo → lejos (el sistema presiona).
+  // radios / completo / hayDatos ya se calcularon al inicio de la función (antes de su primer uso).
+
+  // ── Superficie del campo ──
+  // No es un polígono de 6 vértices: son 54 puntos (6 sistemas × 9 cualidades) distribuidos
+  // angularmente alrededor del toroide. Cada punto se acerca al núcleo cuanto mayor es su valor.
+  // Unidos con curvas, forman una superficie continua: se hunde donde el campo bloquea,
+  // se expande donde acompaña.
+  function superficieCampo(valorDe, R0, min, max){
+    // Un punto por sistema, con radio según su valor AGREGADO (promedio de las nueve cualidades),
+    // ORDENADO POR ÁNGULO alrededor del círculo antes de unirlo. El array SISTEMAS no está en
+    // orden angular (sus ángulos son 90, -150, -30, -90, 30, 150): si se unen en el orden del
+    // array, la curva cruza el círculo en diagonal y forma una "estrella de mar". Ordenando por
+    // ángulo, la curva recorre el círculo sin cruzarse → una geometría circular deformada por los
+    // valores (cada sistema acerca o aleja su parte del centro).
+    const items = [];
+    SISTEMAS.forEach(function(s){
+      const vals = state.valores[s.id];
+      if(!vals || !vals.length) return;
+      let suma = 0;
+      for(let q = 0; q < vals.length; q++){ suma += valorDe(s, vals[q], q); }
+      const vProm = suma / vals.length;                       // 0..10, valor agregado del sistema
+      const v = Math.max(0, Math.min(10, 5 + (vProm - 5) * CAMPO_GAIN));  // amplifica el contraste respecto del centro
+      const ang = ANGULOS[s.id] * Math.PI / 180;
+      const r = R0 * (min + (1 - v/10) * (max - min));        // valor alto → cerca del núcleo
+      items.push({ ang: ang, x: cx + Math.cos(ang) * r, y: cy - Math.sin(ang) * r });
+    });
+    items.sort(function(a, b){ return a.ang - b.ang; });      // orden angular → sin cruces
+    return items.map(function(it){ return [it.x, it.y]; });
+  }
+
+  function trazarSuave(pts){
+    const n = pts.length;
+    if(n < 3) return;
+    // Catmull-Rom cerrada → Bézier: la curva PASA POR cada punto (no por los puntos medios),
+    // así cada punta llega hasta el radio real de su valor y la deformación se nota. Suave, sin
+    // vértices duros. (Antes se aproximaba por puntos medios y achataba los picos: casi un círculo.)
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for(let i = 0; i < n; i++){
+      const p0 = pts[(i - 1 + n) % n];
+      const p1 = pts[i];
+      const p2 = pts[(i + 1) % n];
+      const p3 = pts[(i + 2) % n];
+      const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+      ctx.bezierCurveTo(c1x, c1y, c2x, c2y, p2[0], p2[1]);
+    }
+    ctx.closePath();
+  }
+
+  if(hayDatos){
+    const pts = superficieCampo(function(s, cual){ return cual.valor; }, R, CAMPO_MIN, CAMPO_MAX);
+    trazarSuave(pts);
+    const grad = ctx.createRadialGradient(cx, cy, R*0.15, cx, cy, R);
+    grad.addColorStop(0, 'rgba(46,90,135,.16)');
+    grad.addColorStop(1, 'rgba(46,90,135,.05)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(46,90,135,.6)';
+    ctx.lineWidth = 1.8;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
+  SISTEMAS.forEach(s=>{
+    const tiene=!!state.valores[s.id];
+    // durante el recorrido, los nodos quedan en el borde: no insinúan una forma que aún no existe
+    const rNodo = completo ? radios[s.id] : R;
+    const[x,y]=posNodo(s.id,cx,cy,rNodo);
+    let radio=5, colorNodo='rgba(148,160,173,.45)';
+    if(tiene){
+      const prom=state.valores[s.id].reduce((a,f)=>a+f.valor,0)/9;
+      radio=5+prom*0.35;
+      colorNodo=prom<=3.9?'#C1553F':prom<=6?'#94A0AD':'#3E8C7A';
+    }
+    const pulso=0;  // diagramas estáticos
+    // Halo del color del sistema
+    ctx.beginPath(); ctx.arc(x,y,radio+5,0,Math.PI*2);
+    ctx.strokeStyle=s.color+'55'; ctx.lineWidth=1.2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x,y,radio+pulso,0,Math.PI*2);
+    ctx.fillStyle=tiene?colorNodo:'rgba(148,160,173,.35)';
+    ctx.fill();
+    ctx.strokeStyle=s.color; ctx.lineWidth=2; ctx.stroke();
+    // Etiqueta: siempre en el borde del toroide, no sobre el nodo (que se mueve con el valor)
+    const [lx,ly] = posNodo(s.id, cx, cy, R);
+    ctx.font='600 26px "IBM Plex Mono",monospace';
+    ctx.fillStyle='#1C2A3A'; ctx.textAlign='center';
+    const et={institucional:'INS',global:'GLO',natural:'NAT',economico:'ECO',social:'SOC',territorial:'TER'}[s.id];
+    ctx.fillText(et, lx, ly+9);
+    ctx.font='500 31px "IBM Plex Sans",sans-serif';
+    ctx.fillStyle=s.color;
+    const nomDominio={institucional:'Institucional',global:'Global',natural:'Natural',economico:'Económico',social:'Social',territorial:'Territorial'}[s.id];
+    const dy = ly<cy ? -34 : 52;
+    ctx.fillText(nomDominio, lx, ly+dy);
+  });
+
+  // Aviso central mientras el recorrido no está completo
+  if(!completo){
+    ctx.font='500 26px "IBM Plex Sans",sans-serif';
+    ctx.fillStyle='rgba(92,107,125,.75)';
+    ctx.textAlign='center';
+    ctx.fillText('El campo se traza al completar', cx, cy - 12);
+    ctx.fillText('los seis sistemas  (faltan ' + _falta + ')', cx, cy + 22);
+    return;   // no se dibuja superficie con datos parciales
+  }
+
+  // Territorio al centro
+  const pulso=0;
+  ctx.beginPath(); ctx.arc(cx,cy,11+pulso,0,Math.PI*2);
+  ctx.fillStyle='#2E5A87'; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx,cy,20+pulso,0,Math.PI*2);
+  ctx.strokeStyle='rgba(46,90,135,.35)'; ctx.stroke();
+}
+
+function dibujarLogo(t){
+  const c=document.getElementById('logoCanvas');
+  if(!c) return;   // el logo ahora es el toroide SVG del encabezado
+  const ctx=c.getContext('2d');
+  const W=c.width,cx=W/2,cy=W/2,r=W/2-8;
+  ctx.clearRect(0,0,W,W);
+  // Mini hexagrama
+  [[90,-30,-150],[30,-90,150]].forEach((tri,k)=>{
+    ctx.beginPath();
+    tri.forEach((ang,i)=>{
+      const a=ang*Math.PI/180 + (reducirMovimiento?0:t*0.15*(k?-1:1));
+      const x=cx+Math.cos(a)*r, y=cy-Math.sin(a)*r;
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    });
+    ctx.closePath();
+    ctx.strokeStyle=k?'rgba(62,140,122,.8)':'rgba(46,90,135,.8)';
+    ctx.lineWidth=1.8; ctx.stroke();
+  });
+  ctx.beginPath(); ctx.arc(cx,cy,3.5,0,Math.PI*2);
+  ctx.fillStyle='#2E5A87'; ctx.fill();
+}
+
+// Diagramas estáticos: se redibujan cuando cambia el estado, no en bucle.
+function redibujar(){
+  dibujarLogo(0);
+  const hero = document.getElementById('heroCanvas');
+  const diag = document.getElementById('diagCanvas');
+  if(hero) dibujarHexagrama(hero, 0);
+  if(diag) dibujarHexagrama(diag, 0);
+}
+redibujar();
+window.addEventListener('resize', redibujar);
+
+/* ---------------- Informe PDF ---------------- */
+function abrirPDF(){
+  if(!state.ivc) return;
+  document.getElementById('modalPDF').classList.add('visible');
+}
+function cerrarPDF(){ document.getElementById('modalPDF').classList.remove('visible'); }
+function confirmarPDF(){
+  cerrarPDF();
+  SISTEMAS.forEach(s=>{
+    const c=document.getElementById('card_'+s.id);
+    if(c) c.classList.add('abierta');
+  });
+  const t=state.territorio;
+  document.getElementById('pdfCiudad').textContent=t.nombre;
+  document.getElementById('pdfSub').textContent=t.tipo+' · '+t.region+' · '+t.pais;
+  document.getElementById('pdfIVC').textContent='IVC global: '+state.ivc.global.toFixed(1)+' — '+lecturaIVC(state.ivc.global);
+  document.getElementById('pdfFecha').textContent=new Date().toLocaleDateString('es-AR',{year:'numeric',month:'long',day:'numeric'});
+  // window.print() está bloqueado dentro del sandbox de artifacts (iframe sin
+  // permiso 'allow-modals'). Se intenta; si falla o no ocurre nada, se abre
+  // el informe en una pestaña nueva desde donde el navegador sí permite imprimir.
+  let impreso=false;
+  try{ window.print(); impreso=true; }catch(e){ impreso=false; }
+  setTimeout(()=>{ if(!impreso) abrirInformeEnPestaña(); }, 400);
+}
+
+function abrirInformeEnPestaña(){
+  const seccion=document.getElementById('pantallaDiag');
+  const estilos=Array.from(document.querySelectorAll('style')).map(s=>s.outerHTML).join('\n');
+  const w=window.open('','_blank');
+  if(!w){
+    setProgreso('Tu navegador bloqueó la ventana. Habilitá las ventanas emergentes para descargar el informe, o abrí Context en una pestaña propia (fuera de esta vista) y usá "Descargar informe PDF".');
+    return;
+  }
+  w.document.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'+estilos+
+    '<style>body{background:#fff!important;}@media screen{.print-only-hint{position:fixed;top:0;left:0;right:0;background:#2E5A87;color:#FFFFFF;font-family:sans-serif;font-size:13px;text-align:center;padding:8px;z-index:999}}@media print{.print-only-hint{display:none}}</style>'+
+    '</head><body><div class="print-only-hint">Informe listo · usá Ctrl/Cmd+P o el menú del navegador → Imprimir → Guardar como PDF</div>'+
+    '<main style="max-width:1080px;margin:0 auto;padding:70px 20px 40px">'+seccion.innerHTML+'</main></body></html>');
+  w.document.close();
+}
+
+/* ---------------- Eventos ---------------- */
+document.getElementById('btnIniciar').addEventListener('click',()=>{ if(!state.enCurso) iniciarDiagnostico(); });
+document.getElementById('btnExportar').addEventListener('click',exportarJSON);
+document.getElementById('btnProyectivo').addEventListener('click',generarProyectivo);
+document.getElementById('btnAjustar').addEventListener('click',rediagnosticar);
+document.getElementById('btnPDF').addEventListener('click',abrirPDF);
+document.getElementById('btnNuevo').addEventListener('click',()=>{ if(!state.enCurso) mostrarPantalla('pantallaInicio'); });
+</script>
+<script>
+/* ================================================================
+   MÓDULO COMPARTIDO — Identidad Comprender AI
+   Se inyecta idéntico en Comprender · Urbanismo y Comprender · Contextos.
+   Contiene: menú hamburguesa, ciclo de comprensión, ayuda, opinión, acerca de.
+   ================================================================ */
+
+const CAI = {
+  producto: '',      // se define al inicializar: 'Urbanismo' | 'Contextos'
+  rol: '',           // frase de rol del producto
+  ciclo: [
+    ['1','Comprender','chat · comprender ai','c1','Traés lo que no anda. El motor no describe: encuentra la tensión que organiza el problema por debajo de los síntomas, y la función que la resuelve.'],
+    ['2','Dar identidad','organismo · ficha viva','c1','Cuando la conversación se organiza alrededor de algo, le das nombre. Nace el organismo: una comprensión que decide continuar.'],
+    ['3','Diagnosticar','comprender · urbanismo','c2','El organismo se lee desde adentro: dimensiones, tensión raíz, estado. Devuelve un proyectivo interno: hacia dónde puede evolucionar según sus propias dinámicas.'],
+    ['4','Situar','comprender · contextos','c2','Las fuerzas que lo condicionan desde afuera. Cruzadas con la lectura interna, el proyectivo se vuelve integrado: uno solo, ahora completo.'],
+    ['5','Construir el paradigma','chat · comprender ai','c3','El corazón del ciclo. El proyectivo vuelve a la conversación y trabajás cómo intervenir: qué priorizar, desde qué criterio, hacia qué estado.'],
+    ['6','Comunicar','informe','c3','La comprensión construida se vuelve documento: para el equipo, el cliente, el concejo, el municipio.']
+  ]
+};
+
+function caiEstilos(){
+  const st = document.createElement('style');
+  st.textContent = `
+  #cai-menu{position:fixed;top:56px;right:12px;z-index:9000;background:#FFF;border:1px solid var(--borde,#E2DFD8);
+    border-radius:14px;padding:6px;min-width:210px;box-shadow:0 12px 34px rgba(28,42,58,.16);display:none;flex-direction:column}
+  #cai-menu.open{display:flex}
+  .cai-item{text-align:left;padding:11px 14px;font-size:13.5px;color:#1C2A3A;border-radius:9px;background:none;border:none;
+    cursor:pointer;font-family:inherit;transition:background .15s}
+  .cai-item:hover{background:#F1EFEA}
+  #cai-ov{position:fixed;inset:0;background:rgba(28,42,58,.38);backdrop-filter:blur(4px);display:none;
+    align-items:center;justify-content:center;z-index:9100;padding:22px}
+  #cai-ov.open{display:flex}
+  .cai-card{background:#FFF;border:1px solid #E2DFD8;border-radius:18px;max-width:520px;width:100%;padding:26px;
+    max-height:84dvh;overflow-y:auto;box-shadow:0 18px 50px rgba(28,42,58,.16);color:#1C2A3A;
+    font-family:system-ui,-apple-system,'Segoe UI',sans-serif}
+  .cai-card h3{font-size:17px;font-weight:600;margin:0 0 12px}
+  .cai-card p{color:#5C6B7D;font-size:13.5px;line-height:1.6;margin:0 0 12px}
+  .cai-card label{display:block;font-size:12px;color:#5C6B7D;margin-bottom:6px}
+  .cai-card select,.cai-card input,.cai-card textarea{width:100%;background:#F1EFEA;border:1px solid #E2DFD8;
+    border-radius:10px;padding:10px 12px;color:#1C2A3A;font-size:14px;font-family:inherit;outline:none;margin-bottom:14px}
+  .cai-card textarea{height:110px;resize:vertical;line-height:1.5}
+  .cai-row{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px}
+  .cai-btn{padding:9px 16px;border-radius:10px;font-size:13px;border:1px solid #E2DFD8;color:#5C6B7D;background:none;
+    cursor:pointer;font-family:inherit}
+  .cai-btn.pri{background:#2E5A87;color:#FFF;border-color:#2E5A87;font-weight:600}
+  .cai-sec{margin-bottom:15px}
+  .cai-sec h4{font-size:13.5px;font-weight:600;margin:0 0 4px}
+  .cai-sec p{font-size:12.5px;margin:0}
+  .cai-paso{display:flex;gap:12px}
+  .cai-col{display:flex;flex-direction:column;align-items:center;width:26px;flex-shrink:0}
+  .cai-num{width:24px;height:24px;border-radius:50%;border:1px solid #E2DFD8;display:flex;align-items:center;
+    justify-content:center;font-size:10px;color:#94A0AD;flex-shrink:0}
+  .cai-ln{width:1px;flex:1;background:#E2DFD8;min-height:12px}
+  .cai-cu{padding-bottom:13px;min-width:0}
+  .cai-cu h5{font-size:13.5px;font-weight:600;margin:0 0 2px}
+  .cai-cu .cai-do{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+  .cai-cu p{font-size:12.5px;margin:0}
+  .cai-c1{color:#2E5A87}.cai-c2{color:#3E8C7A}.cai-c3{color:#7B5EA7}
+  .cai-n1{border-color:rgba(46,90,135,.6);color:#2E5A87}
+  .cai-n2{border-color:rgba(62,140,122,.6);color:#3E8C7A}
+  .cai-n3{border-color:rgba(123,94,167,.6);color:#7B5EA7}
+  .cai-vu{border:1px dashed #E2DFD8;border-radius:12px;padding:12px 15px;margin-top:6px;font-size:12.5px;color:#5C6B7D;line-height:1.55}
+  .cai-vu b{color:#1C2A3A}
+
+  #cai-cred{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;letter-spacing:.05em;color:#5C6B7D;border:1px solid #E2DFD8;border-radius:20px;
+    padding:4px 10px;cursor:pointer;flex-shrink:0;background:none;transition:border-color .2s}
+  #cai-cred:hover{border-color:#2E5A87}
+  #cai-cred .cred-b{width:30px;height:4px;border-radius:3px;background:#E2DFD8;overflow:hidden;flex-shrink:0}
+  #cai-cred .cred-i{display:block;height:100%;background:#2E5A87;transition:width .4s ease}
+  #cai-cred.bajo{border-color:rgba(201,162,75,.5);color:#9C5A20}
+  #cai-cred.bajo .cred-i{background:#C9A24B}
+  #cai-cred.agotado{border-color:rgba(193,85,63,.5);color:#C1553F}
+  #cai-cred.agotado .cred-i{background:#C1553F}
+  @media (max-width:840px){ #cai-cred .cred-t{display:none} #cai-cred{padding:4px 8px} }
+  .cai-ham{background:none;border:1px solid #E2DFD8;color:#5C6B7D;border-radius:9px;padding:6px 11px;
+    font-size:15px;cursor:pointer;line-height:1;flex-shrink:0;font-family:inherit}
+  .cai-ham:hover{border-color:#2E5A87;color:#2E5A87}
+  `;
+  document.head.appendChild(st);
+}
+
+function caiOverlay(){
+  let ov = document.getElementById('cai-ov');
+  if(!ov){
+    ov = document.createElement('div'); ov.id = 'cai-ov';
+    ov.innerHTML = '<div class="cai-card" id="cai-card"></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function(e){ if(e.target === ov) caiCerrar(); });
+  }
+  return document.getElementById('cai-card');
+}
+function caiAbrir(){ document.getElementById('cai-ov').classList.add('open'); }
+function caiCerrar(){ const o = document.getElementById('cai-ov'); if(o) o.classList.remove('open'); }
+
+function caiCiclo(){
+  const c = caiOverlay(); c.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = 'El ciclo de comprensión';
+  const i = document.createElement('p');
+  i.textContent = 'Comprender AI no es una herramienta que se usa una vez. Es un ciclo que se retroalimenta: cada vuelta comprende más que la anterior, sobre la misma memoria.';
+  c.appendChild(h); c.appendChild(i);
+  CAI.ciclo.forEach(function(p, idx){
+    const fila = document.createElement('div'); fila.className='cai-paso';
+    const col = document.createElement('div'); col.className='cai-col';
+    const n = document.createElement('div'); n.className = 'cai-num cai-n' + p[3].slice(1); n.textContent = p[0];
+    col.appendChild(n);
+    if(idx < CAI.ciclo.length-1){ const l = document.createElement('div'); l.className='cai-ln'; col.appendChild(l); }
+    const cu = document.createElement('div'); cu.className='cai-cu';
+    const t = document.createElement('h5'); t.textContent = p[1];
+    const d = document.createElement('div'); d.className = 'cai-do ' + p[3].replace('c','cai-c'); d.textContent = p[2];
+    const x = document.createElement('p'); x.textContent = p[4];
+    cu.appendChild(t); cu.appendChild(d); cu.appendChild(x);
+    fila.appendChild(col); fila.appendChild(cu); c.appendChild(fila);
+  });
+  const v = document.createElement('div'); v.className='cai-vu';
+  const b = document.createElement('b'); b.textContent = '↻ Y vuelve a empezar. ';
+  v.appendChild(b);
+  v.appendChild(document.createTextNode('Con el paradigma construido, la próxima lectura no arranca de cero: lo toma como insumo. Diagnóstico → comprensión → paradigma → nuevo diagnóstico. La ficha conserva cada vuelta.'));
+  c.appendChild(v);
+  const row = document.createElement('div'); row.className='cai-row';
+  const bt = document.createElement('button'); bt.className='cai-btn pri'; bt.textContent='Entendido'; bt.onclick=caiCerrar;
+  row.appendChild(bt); c.appendChild(row);
+  caiAbrir();
+}
+
+function caiAyuda(){
+  const c = caiOverlay(); c.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = 'Ayuda';
+  c.appendChild(h);
+  const secs = [
+    ['¿Qué es este producto?', 'Comprender · ' + CAI.producto + ' es la versión profesional del ecosistema. ' + CAI.rol],
+    ['¿Cómo se conecta con Comprender AI?', 'Comprender AI construye la comprensión en conversación y guarda la ficha viva del organismo. Desde su Ficha, el botón «Marco para Pro» exporta esa comprensión: la pegás acá, y el diagnóstico se interpreta a su luz. Al terminar, exportás el resultado y lo importás de vuelta para trabajarlo en el chat.'],
+    ['El diagnóstico asiste, no dictamina.', 'Los diagnósticos, proyectivos e informes son insumos para tu criterio profesional. No constituyen dictamen técnico ni asesoramiento legal, financiero o de ingeniería. Verificá los datos concretos con fuentes propias antes de fundar decisiones que afecten a terceros.'],
+    ['Tus datos', 'Los diagnósticos se guardan en el almacenamiento local de tu dispositivo. Podés exportarlos en JSON y eliminarlos cuando quieras.']
+  ];
+  for(const s of secs){
+    const d = document.createElement('div'); d.className='cai-sec';
+    const t = document.createElement('h4'); t.textContent = s[0];
+    const p = document.createElement('p'); p.textContent = s[1];
+    d.appendChild(t); d.appendChild(p); c.appendChild(d);
+  }
+  const row = document.createElement('div'); row.className='cai-row';
+  const b1 = document.createElement('button'); b1.className='cai-btn'; b1.textContent='El ciclo de comprensión';
+  b1.onclick = function(){ caiCerrar(); caiCiclo(); };
+  const b2 = document.createElement('button'); b2.className='cai-btn pri'; b2.textContent='Cerrar'; b2.onclick=caiCerrar;
+  row.appendChild(b1); row.appendChild(b2); c.appendChild(row);
+  caiAbrir();
+}
+
+function caiOpinion(){
+  const c = caiOverlay(); c.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = 'Tu opinión';
+  const p = document.createElement('p');
+  p.textContent = 'Comprender AI mejora con el uso real. Contanos qué funcionó, qué no, o qué te gustaría que hiciera. Lo leemos todo.';
+  c.appendChild(h); c.appendChild(p);
+  const l1 = document.createElement('label'); l1.textContent = '¿Sobre qué querés escribirnos?';
+  const sel = document.createElement('select');
+  for(const t of ['Una idea o sugerencia','Algo no funcionó como esperaba','El diagnóstico no fue útil','Sobre precios y planes','Otra cosa']){
+    const o = document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o);
+  }
+  const l2 = document.createElement('label'); l2.textContent = 'Tu mensaje';
+  const ta = document.createElement('textarea');
+  const l3 = document.createElement('label'); l3.textContent = 'Tu correo (opcional, si querés respuesta)';
+  const inp = document.createElement('input'); inp.type='email'; inp.placeholder='nombre@correo.com';
+  c.appendChild(l1); c.appendChild(sel); c.appendChild(l2); c.appendChild(ta); c.appendChild(l3); c.appendChild(inp);
+  const row = document.createElement('div'); row.className='cai-row';
+  const b1 = document.createElement('button'); b1.className='cai-btn'; b1.textContent='Cancelar'; b1.onclick=caiCerrar;
+  const b2 = document.createElement('button'); b2.className='cai-btn pri'; b2.textContent='Enviar';
+  b2.onclick = function(){
+    if(!ta.value.trim()){ ta.focus(); return; }
+    try{
+      const list = JSON.parse(localStorage.getItem('ag_core_opiniones') || '[]');
+      list.push({ fecha:new Date().toISOString(), tema:sel.value, mensaje:ta.value.trim(),
+                  correo:inp.value.trim()||null, producto:'Comprender · ' + CAI.producto });
+      localStorage.setItem('ag_core_opiniones', JSON.stringify(list));
+    }catch(e){}
+    caiCerrar();
+    setTimeout(function(){
+      const c2 = caiOverlay(); c2.innerHTML = '';
+      const hh = document.createElement('h3'); hh.textContent = 'Gracias';
+      const pp = document.createElement('p');
+      pp.textContent = 'Tu mensaje quedó registrado. En esta variante de prueba se guarda en el dispositivo; en producción llega directamente a nosotros.';
+      const r = document.createElement('div'); r.className='cai-row';
+      const bb = document.createElement('button'); bb.className='cai-btn pri'; bb.textContent='Cerrar'; bb.onclick=caiCerrar;
+      r.appendChild(bb); c2.appendChild(hh); c2.appendChild(pp); c2.appendChild(r);
+      caiAbrir();
+    }, 120);
+  };
+  row.appendChild(b1); row.appendChild(b2); c.appendChild(row);
+  caiAbrir();
+  setTimeout(function(){ ta.focus(); }, 60);
+}
+
+function caiAcerca(){
+  const c = caiOverlay(); c.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = 'Comprender · ' + CAI.producto;
+  const p1 = document.createElement('p'); p1.textContent = 'Versión profesional del ecosistema Comprender AI. ' + CAI.rol;
+  const p2 = document.createElement('p');
+  p2.textContent = 'Inteligencia artificial para aprender a comprender. No entrega información: entrega comprensión que se vuelve capacidad.';
+  const p3 = document.createElement('p');
+  p3.style.cssText = 'font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#94A0AD';
+  p3.textContent = 'Un producto de ARQUIGÉNESIS · Metodología ArquiGenesis — Javier Darío Fresnadillo';
+  const row = document.createElement('div'); row.className='cai-row';
+  const b = document.createElement('button'); b.className='cai-btn pri'; b.textContent='Cerrar'; b.onclick=caiCerrar;
+  row.appendChild(b);
+  c.appendChild(h); c.appendChild(p1); c.appendChild(p2); c.appendChild(p3); c.appendChild(row);
+  caiAbrir();
+}
+
+function caiMenuNodo(){
+  let menu = document.getElementById('cai-menu');
+  if(menu) return menu;
+  menu = document.createElement('div');
+  menu.id = 'cai-menu';
+  const items = [['El ciclo de comprensión', caiCiclo],['Ayuda', caiAyuda],['Tu opinión', caiOpinion],['Acerca de', caiAcerca]];
+  for(const it of items){
+    const b = document.createElement('button');
+    b.className = 'cai-item'; b.textContent = it[0];
+    b.addEventListener('click', function(){ menu.classList.remove('open'); it[1](); });
+    menu.appendChild(b);
+  }
+  document.body.appendChild(menu);
+  document.addEventListener('click', function(e){
+    if(menu.classList.contains('open') && !menu.contains(e.target) && !e.target.classList.contains('cai-ham')) menu.classList.remove('open');
+  });
+  return menu;
+}
+
+function caiToggle(boton){
+  const menu = caiMenuNodo();
+  if(menu.classList.contains('open')){ menu.classList.remove('open'); return; }
+  const r = boton.getBoundingClientRect();
+  menu.style.top = (r.bottom + 8) + 'px';
+  menu.style.right = Math.max(10, window.innerWidth - r.right) + 'px';
+  setTimeout(function(){ menu.classList.add('open'); }, 0);
+}
+
+
+/* ===== Medidor de comprensión disponible (créditos) ===== */
+/* C-04 · configuración de créditos sincronizada con el Core (v1-5).
+   Los tres productos comparten la clave ag_core_cred en el mismo dominio:
+   si las ventanas no coinciden, el contador se reinicia al cambiar de producto. */
+const CRED_PLANES = {
+  gratis:      { nombre:'Gratis',        creditos: 50,   ventana:'unica' },
+  profesional: { nombre:'Profesional',   creditos: 1800, ventana:'mes' },
+  estudio:     { nombre:'Pro · Estudio', creditos: 4500, ventana:'mes' }
+};
+const CRED_COSTO = { diagnostico: 12, proyectivo: 8, refinamiento: 3, campo: 12 };
+const CRED_RECARGA = { creditos: 600, precio: 'USD 19' };   // C-04: sincronizado con el Core
+
+function credPlan(){ try{ return localStorage.getItem('ag_core_plan') || 'gratis'; }catch(e){ return 'gratis'; } }
+function credClave(p){
+  const d=new Date().toISOString();
+  if(p.ventana==='unica') return 'bienvenida';        // C-04: misma lógica que el Core
+  return p.ventana==='mes' ? d.slice(0,7) : d.slice(0,10);
+}
+function credEtiquetaVentana(p){ return p.ventana==='mes' ? 'mes' : (p.ventana==='unica' ? 'única vez' : 'día'); }
+function credEstado(){
+  const plan = CRED_PLANES[credPlan()] || CRED_PLANES.gratis;
+  const clave = credClave(plan);
+  let usado=0, extra=0;
+  try{
+    const raw = JSON.parse(localStorage.getItem('ag_core_cred') || '{}');
+    if(raw.clave === clave){ usado = raw.usado||0; extra = raw.extra||0; }
+  }catch(e){}
+  const total = plan.creditos + extra;
+  return { plan:plan, clave:clave, usado:usado, extra:extra, total:total,
+           resta: Math.max(0,total-usado), renueva: credEtiquetaVentana(plan) };
+}
+function credAlcanza(tipo){ return credEstado().resta >= (CRED_COSTO[tipo]||1); }
+function credConsumir(tipo){
+  const c = credEstado();
+  try{ localStorage.setItem('ag_core_cred', JSON.stringify({clave:c.clave, usado:c.usado+(CRED_COSTO[tipo]||1), extra:c.extra})); }catch(e){}
+  credRender();
+}
+function credRecargar(){
+  const c = credEstado();
+  try{ localStorage.setItem('ag_core_cred', JSON.stringify({clave:c.clave, usado:c.usado, extra:c.extra+CRED_RECARGA.creditos})); }catch(e){}
+  credRender(); caiCerrar();
+  setTimeout(function(){ caiMensaje('Créditos añadidos', CRED_RECARGA.creditos + ' créditos se sumaron a tu saldo. Podés seguir ahora mismo. (En esta variante de prueba la compra es simulada.)'); }, 100);
+}
+function credRender(){
+  const cont = document.getElementById('cai-cred');
+  if(!cont) return;
+  const c = credEstado();
+  const pct = c.total ? Math.round((c.resta/c.total)*100) : 0;
+  const barra = cont.querySelector('.cred-i');
+  const txt = cont.querySelector('.cred-t');
+  if(barra) barra.style.width = pct + '%';
+  if(txt) txt.textContent = c.resta;
+  cont.classList.toggle('bajo', pct<=25 && pct>0);
+  cont.classList.toggle('agotado', c.resta===0);
+}
+function credTarjeta(){
+  const c = credEstado();
+  const card = caiOverlay(); card.innerHTML='';
+  const h=document.createElement('h3'); h.textContent='Comprensión disponible';
+  const p=document.createElement('p');
+  p.textContent = 'Plan ' + c.plan.nombre + ' · ' + c.resta + ' de ' + c.total + ' créditos' +
+    (c.extra ? ' (incluye ' + c.extra + ' de recarga)' : '') + ', se renuevan cada ' + c.renueva + '.';
+  card.appendChild(h); card.appendChild(p);
+  const filas = [['Diagnóstico completo', CRED_COSTO.diagnostico],['Abordaje proyectivo', CRED_COSTO.proyectivo],['Refinamiento', CRED_COSTO.refinamiento]];
+  for(const f of filas){
+    const d=document.createElement('div');
+    d.style.cssText='display:flex;justify-content:space-between;font-size:13px;color:#5C6B7D;padding:7px 0;border-bottom:1px solid #E2DFD8';
+    const a=document.createElement('span'); a.textContent=f[0];
+    const b=document.createElement('b'); b.style.color='#1C2A3A'; b.textContent=f[1]+' créditos';
+    d.appendChild(a); d.appendChild(b); card.appendChild(d);
+  }
+  const row=document.createElement('div'); row.className='cai-row';
+  const b1=document.createElement('button'); b1.className='cai-btn'; b1.textContent='Cerrar'; b1.onclick=caiCerrar;
+  const b2=document.createElement('button'); b2.className='cai-btn pri'; b2.textContent='Recargar · '+CRED_RECARGA.precio; b2.onclick=credRecargar;
+  row.appendChild(b1); row.appendChild(b2); card.appendChild(row);
+  caiAbrir();
+}
+
+/* ============ C-05 · ACCESO POR MÓDULO ============
+   module_id estable, en minúscula, sin tildes y sin traducir: es el identificador
+   de contrato entre productos. El nombre visible va aparte y puede cambiar.
+   Para sumar una especialidad, se agrega una fila. No se toca la lógica. */
+var MODULE_ID = 'contextos';
+var ACCESO_MODULOS = {
+  urbanismo:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Urbanismo' },
+  contextos:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Contextos' },
+  tecnologias:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Tecnologías' },
+  sustentabilidad: { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Sustentabilidad' },
+  negocios:        { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Negocios' },
+  capacidades:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Integración de capacidades' },
+  trayectoria:     { plan_minimo:'estudio', prueba_en_gratis:false, nombre:'Trayectoria' }
+};
+var ORDEN_PLANES = ['gratis','profesional','estudio'];
+function moduloHabilitado(id){
+  var m = ACCESO_MODULOS[id || MODULE_ID];
+  if(!m) return true;                                  // módulo no declarado: no se bloquea
+  var p = credPlan();
+  /* El paquete de bienvenida es una prueba del producto completo, no de Profesional:
+     quien prueba ve todo una vez, con el tope duro de sus 50 créditos. */
+  if(p === 'gratis') return !!m.prueba_en_gratis;
+  return ORDEN_PLANES.indexOf(p) >= ORDEN_PLANES.indexOf(m.plan_minimo);
+}
+function moduloBloqueado(id){
+  var m = ACCESO_MODULOS[id || MODULE_ID] || { nombre:'Este módulo', plan_minimo:'estudio' };
+  var req = (typeof CRED_PLANES !== 'undefined' && CRED_PLANES[m.plan_minimo])
+            ? CRED_PLANES[m.plan_minimo].nombre : m.plan_minimo;
+  var card = caiOverlay(); card.innerHTML = '';
+  var h = document.createElement('h3'); h.textContent = m.nombre + ' está incluido en ' + req;
+  var p1 = document.createElement('p');
+  p1.textContent = 'Tu plan actual no incluye este módulo. ' + m.nombre +
+    ' entrega diagnóstico y proyectivo completos, y forma parte de ' + req + '.';
+  var p2 = document.createElement('p');
+  p2.textContent = 'Lo que ya cargaste queda intacto: nada se pierde al cambiar de plan.';
+  var row = document.createElement('div'); row.className = 'cai-row';
+  var b = document.createElement('button'); b.className = 'cai-btn pri';
+  b.textContent = 'Entendido'; b.onclick = caiCerrar;
+  row.appendChild(b);
+  card.appendChild(h); card.appendChild(p1); card.appendChild(p2); card.appendChild(row);
+  caiAbrir();
+}
+/* Portero único: toda operación que gasta API pasa por acá. */
+function permitirOperacion(tipo){
+  if(!moduloHabilitado()){ moduloBloqueado(); return false; }
+  if(!credAlcanza(tipo)){ credSinCreditos(tipo); return false; }
+  credConsumir(tipo);
+  return true;
+}
+
+function credSinCreditos(tipo){
+  const c = credEstado();
+  const nombres = {diagnostico:'un diagnóstico completo', proyectivo:'un abordaje proyectivo', refinamiento:'un refinamiento', campo:'una evaluación de campo'};
+  const card = caiOverlay(); card.innerHTML='';
+  const h=document.createElement('h3'); h.textContent = credPlan()==='gratis' ? 'Usaste el paquete de bienvenida' : 'Se agotaron tus créditos del mes';
+  const p1=document.createElement('p');
+  p1.textContent = 'Te quedan ' + c.resta + ' créditos y ' + (nombres[tipo]||'esta operación') + ' cuesta ' + (CRED_COSTO[tipo]||1) + '.';
+  const p2=document.createElement('p');
+  p2.textContent = 'Tus diagnósticos están intactos — nada se pierde. Podés seguir ahora con una recarga, o esperar la renovación.';
+  const row=document.createElement('div'); row.className='cai-row';
+  const b1=document.createElement('button'); b1.className='cai-btn'; b1.textContent='Esperar'; b1.onclick=caiCerrar;
+  const b2=document.createElement('button'); b2.className='cai-btn pri'; b2.textContent='Seguir ahora · '+CRED_RECARGA.precio; b2.onclick=credRecargar;
+  row.appendChild(b1); row.appendChild(b2);
+  card.appendChild(h); card.appendChild(p1); card.appendChild(p2); card.appendChild(row);
+  caiAbrir();
+}
+function caiMensaje(titulo, texto){
+  const card = caiOverlay(); card.innerHTML='';
+  const h=document.createElement('h3'); h.textContent=titulo;
+  const p=document.createElement('p'); p.textContent=texto;
+  const row=document.createElement('div'); row.className='cai-row';
+  const b=document.createElement('button'); b.className='cai-btn pri'; b.textContent='Cerrar'; b.onclick=caiCerrar;
+  row.appendChild(b); card.appendChild(h); card.appendChild(p); card.appendChild(row);
+  caiAbrir();
+}
+
+function caiInit(producto, rol){
+  CAI.producto = producto;
+  CAI.rol = rol;
+  caiEstilos();
+  caiOverlay();
+  credRender();
+}
+
+caiInit("Contextos", "Evalúa el campo externo que condiciona al organismo: las fuerzas que lo empujan y lo tensionan desde afuera.");
+
+/* ============================================================================
+   BANCO DE PRUEBAS · Comprender · Contextos
+   ----------------------------------------------------------------------------
+   Mismo patrón que el banco del Core (H04). Cierra la condición 7 de la
+   Directiva de Unificación: "pruebas mínimas de regresión para cada producto".
+
+   Acceso: agregá #pruebas a la URL, o Ctrl+Alt+P. No aparece en la UI.
+
+   Cubre la plomería que se puede verificar sola. Lo que depende del juicio del
+   modelo va en el protocolo manual de abajo: ahí viven los límites canónicos
+   (sobre todo A07: el campo condiciona, NO proyecta).
+   ============================================================================ */
+var BANCO_CTX_VERSION = 'v1.0';
+
+function correrPruebasCtx(){
+  var casos = [];
+  function chk(nombre, cond){ casos.push({ nombre: nombre, ok: !!cond }); }
+
+  try{
+    /* ── H06 · identidad unificada de productos ── */
+    chk('H06 · Core canónico', esProductoCore({ producto:'Comprender AI' }) === true);
+    chk('H06 · Core heredado', esProductoCore({ producto:'ArquiGenesis AI Core' }) === true);
+    chk('H06 · Urbanismo por campo software', esProductoUrbanismo({ software:'ArquiGenesis AI Urban' }) === true);
+    chk('H06 · Contextos canónico', esProductoContextos({ producto:PRODUCTO_CONTEXTOS }) === true);
+    chk('H06 · no cruza productos', esProductoCore({ producto:PRODUCTO_URBANISMO }) === false);
+
+    /* ── Marco del Core: el puente que H06 destrabó ── */
+    var marcoOk = JSON.stringify({ producto:'Comprender AI', tipo:'marco_de_comprension', marco:{ ideas:[] } });
+    chk('marco · acepta el marco real del Core', intentarLeerMarcoCore(marcoOk) !== null);
+    var marcoViejo = JSON.stringify({ producto:'ArquiGenesis AI Core', tipo:'marco_de_comprension', marco:{ ideas:[] } });
+    chk('marco · acepta exports anteriores', intentarLeerMarcoCore(marcoViejo) !== null);
+    chk('marco · rechaza texto sin marco', intentarLeerMarcoCore('hola qué tal') === null);
+    chk('marco · rechaza JSON de otro tipo', intentarLeerMarcoCore(JSON.stringify({ producto:'Comprender AI', tipo:'otra_cosa' })) === null);
+
+    /* ── Estructura canónica: 6 sistemas × 9 cualidades = matriz de 54 ── */
+    chk('canon · 6 sistemas', SISTEMAS.length === 6);
+    chk('canon · 9 cualidades', CUALIDADES.length === 9);
+    var idsUnicos = {}; SISTEMAS.forEach(function(s){ idsUnicos[s.id] = 1; });
+    chk('canon · ids de sistema únicos', Object.keys(idsUnicos).length === 6);
+
+    /* ── Toroide: los seis sistemas en pares canónicos OPUESTOS ──
+       Si un par deja de ser opuesto, la geometría del campo se deforma mal. */
+    function opuestos(a, b){
+      var d = Math.abs(((ANGULOS[a] - ANGULOS[b]) % 360 + 360) % 360);
+      return Math.abs(d - 180) < 0.001;
+    }
+    chk('toroide · institucional ↔ económico opuestos', opuestos('institucional','economico'));
+    chk('toroide · social ↔ global opuestos', opuestos('social','global'));
+    chk('toroide · natural ↔ territorial opuestos', opuestos('natural','territorial'));
+    chk('toroide · los 6 sistemas tienen ángulo', SISTEMAS.every(function(s){ return typeof ANGULOS[s.id] === 'number'; }));
+
+    /* ── IVC: invierte la escala de soporte ──
+       Los valores se cargan como SOPORTE (10 = sostiene). El IVC mide
+       CONDICIONAMIENTO (10 = adverso). Si esta inversión se rompe, todo el
+       diagnóstico se lee al revés. */
+    var estadoPrevio = state.valores, ivcPrevio = state.ivc;
+    function cargarTodo(v){
+      var m = {};
+      SISTEMAS.forEach(function(s){
+        m[s.id] = CUALIDADES.map(function(c){ return { id:c.id, valor:v, lectura:'' }; });
+      });
+      state.valores = m;
+      calcularIVC();
+      return state.ivc;
+    }
+    var ivcAlto = cargarTodo(10);
+    chk('IVC · soporte máximo → condicionamiento 0', ivcAlto.global === 0);
+    var ivcBajo = cargarTodo(0);
+    chk('IVC · soporte nulo → condicionamiento 10', ivcBajo.global === 10);
+    var ivcMedio = cargarTodo(5);
+    chk('IVC · soporte medio → condicionamiento 5', ivcMedio.global === 5);
+    chk('IVC · devuelve los 6 sistemas', Object.keys(ivcMedio.sistemas).length === 6);
+    chk('IVC · devuelve las 9 transversales', ivcMedio.transversales.length === 9);
+    chk('IVC · devuelve 3 metas', ivcMedio.metas.length === 3);
+
+    /* Contrato de salida (H01) — se verifica con el estado sintético todavía cargado,
+       porque construirSalida() necesita territorio e IVC. */
+    var territorioPrevio = state.territorio;
+    state.territorio = { nombre:'Prueba', tipo:'ciudad', pais:'', region:'' };
+    var salida = construirSalida();
+    chk('contrato · version_contrato 2.1', salida.version_contrato === '2.1');
+    chk('contrato · lenguaje universal', salida.lenguaje === 'universal');
+    chk('contrato · ontology_version 3.0', salida.ontology_version === '3.0');
+    chk('contrato · producto canónico', salida.producto === PRODUCTO_CONTEXTOS);
+    chk('contrato · exporta deriva_campo (no "proyectivo")', 'deriva_campo' in salida);
+    chk('contrato · incluye los 6 sistemas', Object.keys(salida.sistemas).length === 6);
+
+    state.valores = estadoPrevio; state.ivc = ivcPrevio; state.territorio = territorioPrevio;   // restaurar
+
+    /* ── Lectura del IVC: los umbrales del canon ── */
+    chk('lecturaIVC · 7 o más = adverso', lecturaIVC(7).indexOf('adverso') > -1);
+    chk('lecturaIVC · entre 4 y 7 = ambivalente', lecturaIVC(5).indexOf('ambivalente') > -1);
+    chk('lecturaIVC · menos de 4 = favorable', lecturaIVC(2).indexOf('favorable') > -1);
+
+    /* ── Parseo de la respuesta del modelo ── */
+    chk('parsearJSON · quita las vallas de código', parsearJSON('```json\n{"a":1}\n```').a === 1);
+    chk('parsearJSON · tolera texto antes', parsearJSON('Acá va: {"a":2}').a === 2);
+    chk('parsearJSON · respeta llaves dentro de strings', parsearJSON('{"t":"tiene } adentro","b":3}').b === 3);
+    var tiro = false; try{ parsearJSON('sin json'); }catch(e){ tiro = true; }
+    chk('parsearJSON · avisa cuando no hay JSON', tiro === true);
+
+    /* ── Higiene de texto ── */
+    chk('limpiar · quita HTML', limpiar('<b>hola</b>') === 'hola');
+    chk('limpiar · colapsa espacios', limpiar('a    b') === 'a b');
+    chk('limpiar · tolera nulo', limpiar(null) === '');
+    chk('clamp · corta por arriba', clamp(99, 0, 10) === 10);
+    chk('clamp · corta por abajo', clamp(-5, 0, 10) === 0);
+    chk('clamp · NaN cae a 5', clamp(NaN, 0, 10) === 5);
+
+  }catch(e){
+    casos.push({ nombre: 'ERROR al correr el banco: ' + (e && e.message ? e.message : e), ok: false });
+  }
+  return casos;
+}
+
+/* ── Protocolo manual: lo que ninguna prueba automática puede verificar ──
+   Son los límites canónicos. Se corren a mano, en una sesión limpia. */
+var CASOS_CTX = [
+  { id:'C01', titulo:'El campo no proyecta (A07)',
+    entrada:'Diagnosticá el ecosistema de una ciudad chica y después pedile el proyectivo.',
+    espera:'La salida es la DERIVA DEL CAMPO, no un proyectivo del organismo. No debe pronosticar qué va a hacer la ciudad: describe la tendencia que el campo imprime. El texto no debe presentarse como el futuro del organismo.' },
+  { id:'C02', titulo:'La deriva es retorno al equilibrio',
+    entrada:'Cargá seis sistemas con valores muy dispares y mirá el toroide.',
+    espera:'La superficie punteada se acerca al promedio del conjunto, y el sistema más en conflicto es el que más se mueve. La curva es una circular deformada, nunca una estrella de mar.' },
+  { id:'C03', titulo:'El marco del Core orienta, no reemplaza',
+    entrada:'Cargá un marco de comprensión del Core y después diagnosticá.',
+    espera:'El marco se aplica como comprensión previa del Sujeto y se ve el cartel verde. El diagnóstico lo usa para orientarse, pero sigue leyendo el campo por su cuenta: no copia las conclusiones del marco.' },
+  { id:'C04', titulo:'No inventa el organismo',
+    entrada:'Pedile que diagnostique el ecosistema de un territorio del que no hay datos.',
+    espera:'Declara lo que no puede sostener en vez de completar con genéricos. La lectura dice sobre qué se apoya.' }
+];
+
+/* ── Presentación: usa la ficha del kit (caiOverlay) ── */
+function bancoPruebasCtx(){
+  var casos = correrPruebasCtx();
+  var pasan = casos.filter(function(c){ return c.ok; }).length;
+  var card = caiOverlay(); card.innerHTML = '';
+
+  var h = document.createElement('h3');
+  h.textContent = 'Banco de pruebas · Contextos ' + BANCO_CTX_VERSION;
+  card.appendChild(h);
+
+  var res = document.createElement('p');
+  res.style.cssText = 'font-weight:600;color:' + (pasan === casos.length ? '#3E8C7A' : '#C1553F');
+  res.textContent = 'Automáticas: ' + pasan + ' / ' + casos.length + (pasan === casos.length ? ' ✓' : ' — revisar');
+  card.appendChild(res);
+
+  casos.forEach(function(c){
+    var l = document.createElement('div');
+    l.style.cssText = 'font-family:IBM Plex Mono,monospace;font-size:11px;padding:2px 0;color:' + (c.ok ? '#3E8C7A' : '#C1553F');
+    l.textContent = (c.ok ? '✓ ' : '✗ ') + c.nombre;
+    card.appendChild(l);
+  });
+
+  var hm = document.createElement('p');
+  hm.style.cssText = 'font-weight:600;margin-top:16px';
+  hm.textContent = 'Casos canónicos · protocolo manual';
+  card.appendChild(hm);
+  var hms = document.createElement('p');
+  hms.style.cssText = 'font-size:12px;color:#94A0AD;margin-bottom:8px';
+  hms.textContent = 'Verifican los límites que ninguna prueba automática alcanza. Corrélos a mano en una sesión limpia.';
+  card.appendChild(hms);
+
+  CASOS_CTX.forEach(function(caso){
+    var box = document.createElement('div');
+    box.style.cssText = 'border:1px solid #E2DFD8;border-radius:8px;padding:10px;margin-bottom:8px';
+    var t = document.createElement('div');
+    t.style.cssText = 'font-weight:600;font-size:13px;margin-bottom:3px';
+    t.textContent = caso.id + ' · ' + caso.titulo;
+    var e = document.createElement('div');
+    e.style.cssText = 'font-size:12px;color:#5C6B7D;margin-bottom:3px';
+    e.textContent = 'Hacé: ' + caso.entrada;
+    var d = document.createElement('div');
+    d.style.cssText = 'font-size:12px;color:#94A0AD';
+    d.textContent = 'Debe demostrar: ' + caso.espera;
+    box.appendChild(t); box.appendChild(e); box.appendChild(d);
+    card.appendChild(box);
+  });
+
+  var row = document.createElement('div'); row.className = 'cai-row';
+  var bx = document.createElement('button'); bx.className = 'cai-btn'; bx.textContent = 'Copiar resultados';
+  bx.onclick = function(){
+    var payload = {
+      version_contrato:'2.1', lenguaje:'universal', ontology_version:'3.0',
+      producto: PRODUCTO_CONTEXTOS, tipo_export:'banco_pruebas',
+      banco: BANCO_CTX_VERSION, exportado: new Date().toISOString(),
+      automaticas: { pasan: pasan, total: casos.length, detalle: casos }
+    };
+    var txt = JSON.stringify(payload, null, 2);
+    if(navigator.clipboard){ navigator.clipboard.writeText(txt).then(function(){ bx.textContent = 'Copiado ✓'; }).catch(function(){}); }
+  };
+  var bc = document.createElement('button'); bc.className = 'cai-btn pri'; bc.textContent = 'Cerrar'; bc.onclick = caiCerrar;
+  row.appendChild(bx); row.appendChild(bc);
+  card.appendChild(row);
+  caiAbrir();
+}
+
+window.correrPruebas = function(){ return correrPruebasCtx(); };
+document.addEventListener('keydown', function(e){
+  if(e.ctrlKey && e.altKey && (e.key === 'p' || e.key === 'P')){ e.preventDefault(); bancoPruebasCtx(); }
+});
+window.addEventListener('hashchange', function(){ if(location.hash === '#pruebas') bancoPruebasCtx(); });
+if(location.hash === '#pruebas') bancoPruebasCtx();
+
+</script>
+</body>
+</html>
