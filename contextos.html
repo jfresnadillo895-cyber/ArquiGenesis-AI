@@ -1908,12 +1908,35 @@ function caiAcerca(){
   caiAbrir();
 }
 
+
+/* ---- C-07 · navegación entre productos (kit CAI) ----
+   El Core lleva a los módulos; los módulos tienen que poder volver.
+   Se arma desde ACCESO_MODULOS: sumar una especialidad con archivo la agrega sola. */
+var NAV_CORE = { nombre:'Comprender AI', archivo:'index.html' };
+function caiIrA(archivo){
+  try{ window.open(archivo, '_blank'); }catch(e){ location.href = archivo; }
+}
+function caiNavItems(){
+  var out = [], k, m;
+  out.push([NAV_CORE.nombre + ' →', function(){ caiIrA(NAV_CORE.archivo); }]);
+  for(k in ACCESO_MODULOS){
+    if(!Object.prototype.hasOwnProperty.call(ACCESO_MODULOS, k)) continue;
+    m = ACCESO_MODULOS[k];
+    if(!m.archivo || k === MODULE_ID) continue;
+    (function(id, mod){
+      out.push([mod.nombre + (moduloHabilitado(id) ? ' →' : ' · Estudio'),
+                function(){ if(moduloHabilitado(id)) caiIrA(mod.archivo); else moduloBloqueado(id); }]);
+    })(k, m);
+  }
+  return out;
+}
+
 function caiMenuNodo(){
   let menu = document.getElementById('cai-menu');
   if(menu) return menu;
   menu = document.createElement('div');
   menu.id = 'cai-menu';
-  const items = [['El ciclo de comprensión', caiCiclo],['Ayuda', caiAyuda],['Tu opinión', caiOpinion],['Acerca de', caiAcerca]];
+  const items = caiNavItems().concat([['El ciclo de comprensión', caiCiclo],['Ayuda', caiAyuda],['Tu opinión', caiOpinion],['Acerca de', caiAcerca]]);
   for(const it of items){
     const b = document.createElement('button');
     b.className = 'cai-item'; b.textContent = it[0];
@@ -2021,8 +2044,10 @@ function credTarjeta(){
    Para sumar una especialidad, se agrega una fila. No se toca la lógica. */
 var MODULE_ID = 'contextos';
 var ACCESO_MODULOS = {
-  urbanismo:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Urbanismo' },
-  contextos:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Contextos' },
+  urbanismo:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Urbanismo', archivo:'urbanismo.html',
+                     desc:'Lectura hexaédrica del territorio: 36 indicadores, diagnóstico y proyectivo.' },
+  contextos:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Contextos', archivo:'contextos.html',
+                     desc:'Campo de fuerzas externas: 6 sistemas, 54 cualidades y deriva del campo.' },
   tecnologias:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Tecnologías' },
   sustentabilidad: { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Sustentabilidad' },
   negocios:        { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Negocios' },
@@ -2064,6 +2089,33 @@ function permitirOperacion(tipo){
   credConsumir(tipo);
   return true;
 }
+
+
+/* ---- C-06 · marco pendiente dejado por el Core ----
+   El Core guarda el marco del organismo activo al abrir este módulo.
+   Se toma una sola vez y se descarta, para no reaplicarlo en cada recarga. */
+(function(){
+  try{
+    var raw = localStorage.getItem('ag_marco_pendiente');
+    if(!raw) return;
+    localStorage.removeItem('ag_marco_pendiente');
+    var p = JSON.parse(raw);
+    if(!p || !p.marco) return;
+    var texto = JSON.stringify(p.marco, null, 2);
+    window.addEventListener('load', function(){
+      setTimeout(function(){
+        try{
+          var ta = document.getElementById('inDocs');
+          if(!ta) return;
+          if(ta.value && ta.value.trim()) return;   // no pisar lo que el usuario ya cargó
+          ta.value = texto;
+          ta.dispatchEvent(new Event('input', { bubbles:true }));
+          ta.dispatchEvent(new Event('change', { bubbles:true }));
+        }catch(e){}
+      }, 400);
+    });
+  }catch(e){}
+})();
 
 function credSinCreditos(tipo){
   const c = credEstado();

@@ -70,7 +70,9 @@ header .spacer{flex:1}
 }
 .hbtn:hover{color:var(--text);border-color:var(--accent)}
 #btnPrincipios{display:none}
-#btnMenu{display:none}
+/* C-06: el menú también en escritorio. Antes sólo existía en móvil, y todo lo
+   que vive adentro (créditos, consumo, propuestas, módulos) era inalcanzable. */
+#btnMenu{display:inline-block}
 
 /* ---------- menú hamburguesa ---------- */
 #menu{
@@ -289,7 +291,7 @@ header .spacer{flex:1}
 .fitem .fval{font-size:13px;color:var(--text)}
 
 /* ---------- menú hamburguesa (mobile) ---------- */
-#btnMenu{display:none;font-size:16px;line-height:1;padding:6px 11px}
+#btnMenu{display:inline-block;font-size:16px;line-height:1;padding:6px 11px}   /* C-06 */
 #menuDrop{
   position:fixed;top:56px;right:12px;background:var(--panel);border:1px solid var(--line);
   border-radius:12px;padding:6px;display:none;flex-direction:column;z-index:60;min-width:180px;
@@ -1879,6 +1881,74 @@ function credEstado(){
            renueva: etiquetaVentana(plan) };
 }
 
+/* ============ C-06 · ACCESO A LOS MÓDULOS ESPECIALIZADOS ============
+   Misma tabla declarativa que urbanismo.html y contextos.html. Sumar una
+   especialidad es agregar una fila, acá y allá. El module_id es el contrato. */
+var ACCESO_MODULOS = {
+  urbanismo:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Urbanismo',  archivo:'urbanismo.html',
+                     desc:'Lectura hexaédrica del territorio: 36 indicadores, diagnóstico y proyectivo.' },
+  contextos:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Contextos',  archivo:'contextos.html',
+                     desc:'Campo de fuerzas externas: 6 sistemas, 54 cualidades y deriva del campo.' },
+  tecnologias:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Tecnologías' },
+  sustentabilidad: { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Sustentabilidad' },
+  negocios:        { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Negocios' },
+  capacidades:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Integración de capacidades' },
+  trayectoria:     { plan_minimo:'estudio', prueba_en_gratis:false, nombre:'Trayectoria' }
+};
+var ORDEN_PLANES = ['gratis','profesional','estudio'];
+function moduloHabilitado(id){
+  var m = ACCESO_MODULOS[id];
+  if(!m) return true;
+  var p = planActual();
+  if(p === 'gratis') return !!m.prueba_en_gratis;
+  return ORDEN_PLANES.indexOf(p) >= ORDEN_PLANES.indexOf(m.plan_minimo);
+}
+/* Módulos publicados: los que ya tienen archivo. El resto todavía no existe. */
+function modulosDisponibles(){
+  var out = [], k;
+  for(k in ACCESO_MODULOS){
+    if(Object.prototype.hasOwnProperty.call(ACCESO_MODULOS, k) && ACCESO_MODULOS[k].archivo) out.push(k);
+  }
+  return out;
+}
+function abrirModulo(id){
+  var m = ACCESO_MODULOS[id];
+  if(!m || !m.archivo) return;
+  if(!moduloHabilitado(id)){ cardModuloBloqueado(id); return; }
+  /* Si hay organismo activo, se deja el marco a mano para no copiar y pegar. */
+  try{
+    if(state.organismo){
+      localStorage.setItem('ag_marco_pendiente', JSON.stringify({
+        generado: new Date().toISOString(),
+        organismo: state.organismo.nombre,
+        marco: construirMarcoCore(state.organismo)
+      }));
+    }
+  }catch(e){}
+  try{ window.open(m.archivo, '_blank'); }catch(e){ location.href = m.archivo; }
+}
+function cardModuloBloqueado(id){
+  var m = ACCESO_MODULOS[id];
+  var req = (PLANES[m.plan_minimo] || {}).nombre || m.plan_minimo;
+  el.cardContent.innerHTML = '';
+  var h = document.createElement('h3');
+  h.textContent = m.nombre + ' está incluido en ' + req;
+  var p1 = document.createElement('p'); p1.textContent = m.desc || '';
+  var p2 = document.createElement('p');
+  p2.textContent = 'Tu plan actual no lo incluye. Todo lo que comprendiste hasta acá queda intacto: al cambiar de plan, el organismo sigue donde está.';
+  el.cardContent.appendChild(h);
+  if(m.desc) el.cardContent.appendChild(p1);
+  el.cardContent.appendChild(p2);
+  var row = document.createElement('div'); row.className = 'cardrow';
+  var b1 = document.createElement('button'); b1.className='btn'; b1.textContent='Ahora no';
+  b1.onclick = cerrarOverlay;
+  var b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Ver planes';
+  b2.onclick = function(){ cerrarOverlay(); cardCreditos(); };
+  row.appendChild(b1); row.appendChild(b2);
+  el.cardContent.appendChild(row);
+  el.overlay.classList.add('open');
+}
+
 /* ============ C-02 · REGISTRO DE CONSUMO REAL ============
    La API devuelve usage.{input_tokens,output_tokens,...} en cada respuesta y hasta
    ahora se descartaba. Sin este dato, los cupos y los precios se calibran a ciegas.
@@ -3281,6 +3351,11 @@ function construirMenu(){
     items.push(['Guardar sesión', function(){ ofrecerGuardado(null); }]);
     items.push(['Nueva sesión', nuevaSesion]);
   }
+  modulosDisponibles().forEach(function(id){
+    var m = ACCESO_MODULOS[id];
+    items.push([m.nombre + (moduloHabilitado(id) ? ' →' : ' · Estudio'),
+                function(){ abrirModulo(id); }]);
+  });
   items.push(['El ciclo de comprensión', mostrarCiclo]);
   items.push(['Comprensión disponible', cardCreditos]);
   items.push(['Consumo real', cardConsumo]);
@@ -3558,6 +3633,25 @@ function correrPruebasAuto(){
       var _uso = localStorage.getItem('ag_core_uso');
     try{
       localStorage.removeItem('ag_core_uso');
+      var _pl = localStorage.getItem('ag_core_plan');
+      try{
+        localStorage.setItem('ag_core_plan','estudio');
+        chk('C08 · con Estudio los módulos están habilitados',
+            moduloHabilitado('urbanismo') === true && moduloHabilitado('contextos') === true);
+        localStorage.setItem('ag_core_plan','profesional');
+        chk('C09 · con Profesional los módulos están bloqueados',
+            moduloHabilitado('urbanismo') === false && moduloHabilitado('contextos') === false);
+        localStorage.setItem('ag_core_plan','gratis');
+        chk('C10 · con Gratis se habilitan como prueba, salvo Trayectoria',
+            moduloHabilitado('urbanismo') === true && moduloHabilitado('trayectoria') === false);
+      }finally{
+        if(_pl === null) localStorage.removeItem('ag_core_plan'); else localStorage.setItem('ag_core_plan', _pl);
+      }
+      chk('C11 · sólo se ofrecen los módulos que tienen archivo',
+          modulosDisponibles().join(',') === 'urbanismo,contextos');
+      chk('C12 · la tabla declara las siete especialidades',
+          Object.keys(ACCESO_MODULOS).length === 7 && !!ACCESO_MODULOS.negocios &&
+          ACCESO_MODULOS.trayectoria.prueba_en_gratis === false);
       chk('C07 · la recarga es mas cara por credito que la suscripcion',
           (parseFloat(RECARGA.precio.replace(/[^0-9.]/g,'')) / RECARGA.creditos) >
           (19 / PLANES.profesional.creditos) * 2);
