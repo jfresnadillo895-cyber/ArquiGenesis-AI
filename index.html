@@ -204,6 +204,19 @@ header .spacer{flex:1}
   color:var(--faint);padding:18px 18px 12px;text-transform:uppercase;
 }
 #hilo{flex:1;overflow-y:auto;padding:0 18px 18px;display:flex;flex-direction:column;gap:11px}
+/* N2.1 · dos solapas: mismo hilo, dos profundidades */
+#panel-tabs{display:flex;gap:4px;padding:0 18px 12px}
+.ptab{
+  flex:1;background:none;border:none;border-bottom:1.5px solid var(--line);
+  font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--faint);padding:6px 2px 8px;cursor:pointer;transition:color .15s,border-color .15s;
+}
+.ptab:hover{color:var(--dim)}
+.ptab.activa{color:var(--text);border-bottom-color:var(--accent)}
+#recorrido{flex:1;overflow-y:auto;padding:0 18px 18px}
+#recorrido .rec-item{border-left-width:2px;padding-left:11px;padding-bottom:14px}
+#recorrido .rec-txt{font-size:12.5px}
+#recorrido .rec-dia{margin:10px 0 10px}
 .principio{
   border-left:2px solid var(--line);padding:9px 13px;font-size:12.5px;color:var(--dim);
   line-height:1.5;border-radius:0 8px 8px 0;background:var(--panel2);
@@ -510,8 +523,13 @@ header .spacer{flex:1}
   </div>
 
   <aside id="panel">
-    <h2>Hilo de principios</h2>
+    <h2>Hilo de comprensión</h2>
+    <div id="panel-tabs">
+      <button id="tab-principios" class="ptab activa" onclick="verPanel('principios')">Principios</button>
+      <button id="tab-recorrido" class="ptab" onclick="verPanel('recorrido')">Recorrido</button>
+    </div>
     <div id="hilo"><div class="vacio">Los principios organizadores de esta sesión van a aparecer acá, numerados, a medida que emerjan.</div></div>
+    <div id="recorrido" style="display:none"></div>
   </aside>
 </div>
 
@@ -1007,6 +1025,7 @@ function addError(msg){
    organismo se perdía de vista lo ya construido, que quedaba únicamente en la ficha.
    Ahora vuelven atenuados, con un separador, y debajo aparecen los de hoy. */
 function resetHilo(org){
+  try{ verPanel('principios'); }catch(e){}   /* N2.1: al cambiar de organismo se vuelve a Principios */
   var previos = (org && org.principios) ? org.principios : [];
   if(!previos.length){
     el.hilo.innerHTML = '<div class="vacio">Los principios organizadores de esta sesión van a aparecer acá, numerados, a medida que emerjan.</div>';
@@ -1965,6 +1984,8 @@ function registrarMomento(tipo, texto, lectura){
                            diag: lectura.diag || null } : null
     };
     o.momentos.push(m);
+    try{ var _r = document.getElementById('recorrido');
+         if(_r && _r.style.display !== 'none') setTimeout(renderRecorrido, 0); }catch(e){}
     if(o.momentos.length > RECORRIDO_MAX) o.momentos = o.momentos.slice(o.momentos.length - RECORRIDO_MAX);
     guardarOrganismo(o);
     return m;
@@ -1983,6 +2004,53 @@ function sesionesDelRecorrido(org){
     act.momentos.push(ms[i]);
   }
   return out;
+}
+function verPanel(cual){
+  var esRec = (cual === 'recorrido');
+  var h = document.getElementById('hilo'), r = document.getElementById('recorrido');
+  if(!h || !r) return;
+  h.style.display = esRec ? 'none' : 'flex';
+  r.style.display = esRec ? 'block' : 'none';
+  document.getElementById('tab-principios').classList.toggle('activa', !esRec);
+  document.getElementById('tab-recorrido').classList.toggle('activa', esRec);
+  if(esRec) renderRecorrido();
+}
+function renderRecorrido(){
+  var cont = document.getElementById('recorrido');
+  if(!cont) return;
+  cont.innerHTML = '';
+  if(!state.organismo){
+    cont.innerHTML = '<div class="vacio">Abrí un organismo para ver su recorrido.</div>';
+    return;
+  }
+  var ses = sesionesDelRecorrido(), total = momentosDe().length;
+  if(!total){
+    cont.innerHTML = '<div class="vacio">Acá se va a ir armando el recorrido: las reflexiones, los principios y las síntesis, con el turno en que aparecieron.</div>';
+    return;
+  }
+  ses.forEach(function(sx){
+    var cab = document.createElement('div');
+    cab.className = 'rec-dia';
+    var d = sx.dia.split('-');
+    cab.textContent = d[2] + '/' + d[1] + ' · ' + sx.momentos.length +
+                      (sx.momentos.length === 1 ? ' momento' : ' momentos');
+    cont.appendChild(cab);
+    sx.momentos.forEach(function(m){
+      var it = document.createElement('div');
+      it.className = 'rec-item rec-' + m.tipo;
+      var enc = document.createElement('div'); enc.className = 'rec-enc';
+      enc.textContent = TIPO_MOMENTO[m.tipo] + (m.turno ? ' · turno ' + m.turno : '');
+      var tx = document.createElement('div'); tx.className = 'rec-txt';
+      tx.textContent = m.texto;
+      it.appendChild(enc); it.appendChild(tx);
+      if(m.lectura && (m.lectura.funcion || m.lectura.diag)){
+        var le = document.createElement('div'); le.className = 'rec-lec';
+        le.textContent = [m.lectura.diag, m.lectura.funcion].filter(Boolean).join(' · ');
+        it.appendChild(le);
+      }
+      cont.appendChild(it);
+    });
+  });
 }
 function cardRecorrido(){
   var ses = sesionesDelRecorrido(), total = momentosDe().length;
@@ -3525,7 +3593,6 @@ function construirMenu(){
   });
   items.push(['El ciclo de comprensión', mostrarCiclo]);
   items.push(['Comprensión disponible', cardCreditos]);
-  items.push(['Cómo llegamos acá', cardRecorrido]);
   items.push(['Consumo real', cardConsumo]);
   items.push(['Ayuda', mostrarAyuda]);
   items.push(['Tu opinión', cardOpinion]);
@@ -3822,7 +3889,16 @@ function correrPruebasAuto(){
             (function(){ registrarMomento('principio','Un principio.', null);
               var s2 = sesionesDelRecorrido();
               return s2.length === 1 && s2[0].momentos.length === 2; })());
-        chk('N19 · el recorrido no viaja al prompt',
+        chk('N20 · verPanel existe y no falla con ninguna solapa',
+          (function(){ if(typeof verPanel !== 'function') return false;
+            try{ verPanel('recorrido'); verPanel('principios'); }catch(e){ return false; }
+            return typeof renderRecorrido === 'function';   /* la conmutación visual se verifica en navegador */
+          })());
+      chk('N21 · el recorrido ya no está en el menú',
+          (function(){ construirMenu();
+            return [].slice.call(document.querySelectorAll('#menu .mitem'))
+                     .filter(function(x){ return x.textContent === 'Cómo llegamos acá'; }).length === 0; })());
+      chk('N19 · el recorrido no viaja al prompt',
             buildSystem().indexOf('El margen se diluye.') === -1);
       }finally{ state.organismo = _org; }
       chk('C13 · nomenclatura unificada en las descripciones de plan',
