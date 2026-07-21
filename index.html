@@ -273,6 +273,19 @@ header .spacer{flex:1}
 .field input,.field select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
 .field input:focus,.field select:focus{border-color:var(--accent)}
 .fichagrid{display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+/* N2 · recorrido de la comprensión */
+.rec-dia{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);border-top:1px solid var(--line);margin:16px 0 10px;padding-top:10px}
+.rec-item{border-left:2px solid var(--line);padding:0 0 12px 12px;margin-bottom:2px}
+.rec-item.rec-principio{border-left-color:var(--accent)}
+.rec-item.rec-destilado{border-left-color:var(--trans)}
+.rec-item.rec-ficha_confirmada{border-left-color:var(--energia)}
+.rec-enc{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:3px}
+.rec-txt{font-size:13.5px;line-height:1.5;color:var(--text)}
+.rec-lec{font-size:11px;color:var(--faint);margin-top:4px;font-style:italic}
+/* C-09 · principios heredados en el hilo */
+.hilo-heredado-cab{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:2px 0 8px}
+.principio.heredado{opacity:.55}
+.hilo-sep{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);border-top:1px solid var(--line);margin:12px 0 8px;padding-top:8px}
 /* ---- N1.0 · lazo propuesta -> confirmación ---- */
 .propaviso{margin:8px 0 2px;padding:9px 12px;border:1px solid var(--line);border-left:2px solid var(--espacio);border-radius:8px;font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .propaviso.warn{border-left-color:#C0453B}
@@ -759,7 +772,7 @@ const DIMENSIONES_URBAN = {
 };
 
 // Los 9 subtítulos canónicos del dialecto urbano (Geometría Urbana), divididos en las tres
-// triadas EET. Las glosas son las específicas del urbanismo — las mismas que usa Urban Pro:
+// triadas EET. Las glosas son las específicas del urbanismo — las mismas que usa Comprender Urbanismo:
 // el subtítulo bloqueado señala DÓNDE se manifiesta la tensión.
 // Viven en el cliente: no viajan en el prompt salvo cuando se profundiza una dimensión.
 const SUBTITULOS_9 = [
@@ -938,6 +951,7 @@ function addMotorMsg(parsed){
     cd.className = 'cristaliza';
     cd.textContent = c;
     d.appendChild(cd);
+    registrarMomento('cristalizacion', c, { tension: parsed.tension, funcion: parsed.funcion, diag: parsed.diag });   /* N2 */
   }
 
   if(parsed.tension || parsed.funcion){
@@ -989,9 +1003,41 @@ function addError(msg){
   scrollBottom();
 }
 
+/* C-09 · El hilo mostraba sólo los principios de la sesión en curso: al retomar un
+   organismo se perdía de vista lo ya construido, que quedaba únicamente en la ficha.
+   Ahora vuelven atenuados, con un separador, y debajo aparecen los de hoy. */
+function resetHilo(org){
+  var previos = (org && org.principios) ? org.principios : [];
+  if(!previos.length){
+    el.hilo.innerHTML = '<div class="vacio">Los principios organizadores de esta sesión van a aparecer acá, numerados, a medida que emerjan.</div>';
+    return;
+  }
+  el.hilo.innerHTML = '';
+  var cab = document.createElement('div');
+  cab.className = 'hilo-heredado-cab';
+  cab.textContent = previos.length + (previos.length === 1 ? ' principio ya construido' : ' principios ya construidos');
+  el.hilo.appendChild(cab);
+  previos.forEach(function(p, i){
+    var d = document.createElement('div');
+    d.className = 'principio heredado' + (p.fam ? (' ' + p.fam) : '');
+    var n = document.createElement('span'); n.className = 'pnum'; n.textContent = (i+1);
+    var x = document.createElement('span'); x.textContent = p.texto;
+    d.appendChild(n); d.appendChild(x);
+    el.hilo.appendChild(d);
+  });
+  var sep = document.createElement('div');
+  sep.className = 'hilo-sep';
+  sep.textContent = 'esta sesión';
+  el.hilo.appendChild(sep);
+}
+
 function addPrincipio(texto, fam){
-  if(state.principios.length === 0) el.hilo.innerHTML = '';
+  if(state.principios.length === 0){
+    var v = el.hilo.querySelector('.vacio');   // C-09: sólo se quita el marcador de vacío
+    if(v) v.remove();
+  }
   state.principios.push({texto, fam});
+  registrarMomento('principio', texto, state.ultimaLectura);   /* N2 */
   const n = String(state.principios.length).padStart(2,'0');
   const d = document.createElement('div');
   d.className = 'principio' + (fam ? ' f-'+fam : '');
@@ -1212,6 +1258,12 @@ function aplicarPropuesta(p, correccion){
   });
 
   fusionarFicha(aplicado);            /* <-- única invocación, desde confirmación explícita */
+  try{                                 /* N2 · queda en el recorrido qué se confirmó y cuándo */
+    registrarMomento('ficha_confirmada',
+      p.campos.filter(function(k){ return CAMPOS_OCULTOS.indexOf(k) === -1; })
+              .map(function(k){ return (CAMPO_LABEL[k] || k) + ': ' + aplicado[k]; }).join(' · '),
+      p.lectura);
+  }catch(e){}
 
   o.ficha.version = fichaVersion(o) + 1;
   o.actualizado = new Date().toISOString();
@@ -1624,7 +1676,7 @@ function ofrecerGuardado(textoDestilado){
 
 /* ================= E1 — PUENTE CON LOS PRODUCTOS PRO =================
    Dirección A: ficha viva → marco_de_comprension (Urban v22 ya lo ingiere).
-   Dirección B: exports de Urban Pro / Context Pro → diagnosticos_pro de la ficha.
+   Dirección B: exports de Comprender Urbanismo / Comprender Contextos → diagnosticos_pro de la ficha.
 ====================================================================== */
 
 function construirMarcoCore(o){
@@ -1725,7 +1777,7 @@ function cardMarcoPro(o){
   el.cardContent.innerHTML = '';
   const h = document.createElement('h3'); h.textContent = 'Marco para los productos Pro';
   const p1 = document.createElement('p');
-  p1.textContent = 'Este es el marco de comprensión de «' + o.nombre + '». Copialo y pegalo en la carga de contexto de Urban Pro o Context Pro: el diagnóstico profesional va a interpretarse a la luz de lo ya comprendido acá. El marco orienta; los hechos del territorio mandan.';
+  p1.textContent = 'Este es el marco de comprensión de «' + o.nombre + '». Copialo y pegalo en la carga de contexto de Comprender Urbanismo o Comprender Contextos: el diagnóstico profesional va a interpretarse a la luz de lo ya comprendido acá. El marco orienta; los hechos del territorio mandan.';
   const ta = document.createElement('textarea');
   ta.value = texto; ta.readOnly = true;
   ta.style.cssText = 'width:100%;height:180px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);font-family:DM Mono,monospace;font-size:11px;padding:12px;resize:vertical;margin-bottom:14px';
@@ -1802,7 +1854,7 @@ function adjuntarDiagnosticoPro(datos, ciudad, origen, silencioso){
   if(!destino){
     const msj = 'sin organismo coincidente — incorporá «' + (ciudad || '?') + '» y reimportá';
     if(silencioso) return msj;
-    cardMensaje('Diagnóstico Pro sin destino', 'Reconocí un export de ' + (origen === 'context_pro' ? 'Context Pro' : 'Urban Pro') + (ciudad ? (' sobre «' + ciudad + '»') : '') + ', pero no hay organismo con ese nombre ni uno activo compatible. Incorporá el organismo y volvé a importar.');
+    cardMensaje('Diagnóstico Pro sin destino', 'Reconocí un export de ' + (origen === 'context_pro' ? PRODUCTO_CONTEXTOS : PRODUCTO_URBANISMO) + (ciudad ? (' sobre «' + ciudad + '»') : '') + ', pero no hay organismo con ese nombre ni uno activo compatible. Incorporá el organismo y volvé a importar.');
     return msj;
   }
   destino.diagnosticos_pro = destino.diagnosticos_pro || [];
@@ -1810,12 +1862,12 @@ function adjuntarDiagnosticoPro(datos, ciudad, origen, silencioso){
   let resumen = '';
   if(origen === 'context_pro'){
     const sis = datos.sistemas || {};
-    resumen = 'Context Pro — IVC global ' + datos.ivc_global + ' (0 favorable · 10 vulnerable). Sistemas: ' +
+    resumen = PRODUCTO_CONTEXTOS + ' — IVC global ' + datos.ivc_global + ' (0 favorable · 10 vulnerable). Sistemas: ' +
       Object.keys(sis).map(function(k){ return (sis[k].nombre || k) + ' ' + sis[k].ivc; }).join(' · ');
   }else{
     const ds2 = datos.diagnosticos || [];
     const u = ds2.length ? ds2[ds2.length-1] : null;
-    resumen = 'Urban Pro — ' + ds2.length + ' diagnóstico(s) de «' + (ciudad || '—') + '»' + (u && u.fecha ? (', último: ' + u.fecha) : '') + '.';
+    resumen = PRODUCTO_URBANISMO + ' — ' + ds2.length + ' diagnóstico(s) de «' + (ciudad || '—') + '»' + (u && u.fecha ? (', último: ' + u.fecha) : '') + '.';
   }
   destino.diagnosticos_pro.push({ origen: origen, version: version, fecha: new Date().toISOString(), resumen: resumen, datos: datos });
   destino.actualizado = new Date().toISOString();
@@ -1836,13 +1888,13 @@ function adjuntarDiagnosticoPro(datos, ciudad, origen, silencioso){
 
 const PLANES = {
   gratis:      { nombre:'Gratis',        creditos: 50,   ventana:'unica', precio:'USD 0',
-                 desc:'Paquete de bienvenida, por única vez: alcanza para recorrer el ciclo completo — llegar a un organismo con ficha, una lectura territorial y un informe.' },
+                 desc:'Paquete de bienvenida, por única vez: alcanza para recorrer el ciclo completo — llegar a un organismo con ficha, probar los módulos especializados y generar un informe. No se renueva.' },
   profesional: { nombre:'Profesional',   creditos: 1800, ventana:'mes',  precio:'USD 19/mes',
                  anual:'USD 190/año (2 meses sin cargo)',
-                 desc:'Comprender AI completo. Bolsa mensual: usás los créditos cuando los necesitás, sin tope diario.' },
+                 desc:'Comprender AI completo, sin tope diario: bolsa mensual de créditos para conversar, construir organismos y generar informes. No incluye los módulos especializados.' },
   estudio:     { nombre:'Pro · Estudio', creditos: 4500, ventana:'mes',  precio:'USD 49/mes',
                  anual:'USD 490/año (2 meses sin cargo)',
-                 desc:'Suma Urban Pro y Context Pro: matriz completa, toroide y PDF de presentación.' }
+                 desc:'Todo lo de Profesional y además habilita los módulos especializados — Comprender Urbanismo y Comprender Contextos — con lectura territorial completa, campo de fuerzas y PDF de presentación.' }
 };
 
 // Paquete de recarga: salvavidas puntual, sin compromiso. Deliberadamente algo más caro
@@ -1879,6 +1931,120 @@ function credEstado(){
   const total = plan.creditos + extra;
   return { plan: plan, clave: clave, usado: usado, extra: extra, total: total, resta: Math.max(0, total - usado),
            renueva: etiquetaVentana(plan) };
+}
+
+/* ============ N2 · RECORRIDO DE LA COMPRENSIÓN ============
+   Capa de "comprensión en elaboración": guarda CUÁNDO apareció cada cosa y sobre
+   qué lectura, para poder reconstruir cómo se llegó hasta acá.
+   No reemplaza a organismo.principios ni a organismo.destilados: se suma al lado.
+   Vive en el navegador y NO viaja al prompt — guardar texto no gasta tokens. */
+var RECORRIDO_MAX = 400;
+var TIPO_MOMENTO = {
+  cristalizacion:  'Reflexión',
+  principio:       'Principio',
+  paradigma:       'Paradigma',
+  destilado:       'Síntesis de sesión',
+  ficha_confirmada:'Ficha confirmada'
+};
+function turnoActual(){
+  try{ return state.history ? Math.ceil(state.history.length / 2) : 0; }catch(e){ return 0; }
+}
+function registrarMomento(tipo, texto, lectura){
+  try{
+    if(!texto || !TIPO_MOMENTO[tipo]) return null;
+    var o = state.organismo;
+    if(!o) return null;                       // sin organismo no hay recorrido que reconstruir
+    o.momentos = Array.isArray(o.momentos) ? o.momentos : [];
+    var m = {
+      f: new Date().toISOString(),
+      turno: turnoActual(),
+      tipo: tipo,
+      texto: String(texto),
+      lectura: lectura ? { tension: lectura.tension || null,
+                           funcion: lectura.funcion || null,
+                           diag: lectura.diag || null } : null
+    };
+    o.momentos.push(m);
+    if(o.momentos.length > RECORRIDO_MAX) o.momentos = o.momentos.slice(o.momentos.length - RECORRIDO_MAX);
+    guardarOrganismo(o);
+    return m;
+  }catch(e){ return null; }
+}
+function momentosDe(org){
+  var o = org || state.organismo;
+  return (o && Array.isArray(o.momentos)) ? o.momentos : [];
+}
+/* Agrupa por día: una sesión es un día de trabajo sobre el organismo. */
+function sesionesDelRecorrido(org){
+  var ms = momentosDe(org), out = [], i, dia, act = null;
+  for(i = 0; i < ms.length; i++){
+    dia = ms[i].f.slice(0,10);
+    if(!act || act.dia !== dia){ act = { dia: dia, momentos: [] }; out.push(act); }
+    act.momentos.push(ms[i]);
+  }
+  return out;
+}
+function cardRecorrido(){
+  var ses = sesionesDelRecorrido(), total = momentosDe().length;
+  el.cardContent.innerHTML = '';
+  var h = document.createElement('h3'); h.textContent = 'Cómo llegamos acá';
+  el.cardContent.appendChild(h);
+  var p = document.createElement('p');
+  if(!state.organismo){
+    p.textContent = 'Abrí un organismo para ver su recorrido.';
+    el.cardContent.appendChild(p);
+  }else if(!total){
+    p.textContent = 'Todavía no hay recorrido registrado. Se va a ir armando solo, a medida que aparezcan reflexiones, principios y síntesis.';
+    el.cardContent.appendChild(p);
+  }else{
+    p.textContent = total + (total === 1 ? ' momento registrado en ' : ' momentos registrados en ') +
+                    ses.length + (ses.length === 1 ? ' sesión.' : ' sesiones.');
+    el.cardContent.appendChild(p);
+    ses.forEach(function(sx){
+      var cab = document.createElement('div');
+      cab.className = 'rec-dia';
+      var d = sx.dia.split('-');
+      cab.textContent = d[2] + '/' + d[1] + '/' + d[0] + ' · ' + sx.momentos.length +
+                        (sx.momentos.length === 1 ? ' momento' : ' momentos');
+      el.cardContent.appendChild(cab);
+      sx.momentos.forEach(function(m){
+        var it = document.createElement('div');
+        it.className = 'rec-item rec-' + m.tipo;
+        var enc = document.createElement('div'); enc.className = 'rec-enc';
+        enc.textContent = TIPO_MOMENTO[m.tipo] + (m.turno ? ' · turno ' + m.turno : '');
+        var tx = document.createElement('div'); tx.className = 'rec-txt';
+        tx.textContent = m.texto;
+        it.appendChild(enc); it.appendChild(tx);
+        if(m.lectura && (m.lectura.funcion || m.lectura.diag)){
+          var le = document.createElement('div'); le.className = 'rec-lec';
+          le.textContent = [m.lectura.diag, m.lectura.funcion].filter(Boolean).join(' · ');
+          it.appendChild(le);
+        }
+        el.cardContent.appendChild(it);
+      });
+    });
+  }
+  var row = document.createElement('div'); row.className = 'cardrow';
+  if(total){
+    var bX = document.createElement('button'); bX.className = 'btn'; bX.textContent = 'Exportar';
+    bX.onclick = function(){
+      var texto = JSON.stringify({ organismo: state.organismo.nombre, momentos: momentosDe() }, null, 2);
+      try{
+        var blob = new Blob([texto], { type:'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = 'comprender_recorrido_' + new Date().toISOString().slice(0,10) + '.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      }catch(e){}
+      try{ if(navigator.clipboard) navigator.clipboard.writeText(texto); }catch(e){}
+    };
+    row.appendChild(bX);
+  }
+  var bC = document.createElement('button'); bC.className = 'btn primary'; bC.textContent = 'Cerrar';
+  bC.onclick = cerrarOverlay; row.appendChild(bC);
+  el.cardContent.appendChild(row);
+  el.overlay.classList.add('open');
 }
 
 /* ============ C-06 · ACCESO A LOS MÓDULOS ESPECIALIZADOS ============
@@ -2616,7 +2782,7 @@ function abrirEnContext(org){
   state.started = false;
   state.derivarAvisado = true; // en Context la derivación es el contexto, no un aviso
   el.stream.innerHTML = '';
-  el.hilo.innerHTML = '<div class="vacio">Los principios organizadores de esta sesión van a aparecer acá, numerados, a medida que emerjan.</div>';
+  resetHilo(org);
   state.organismo = org;
   state.modoUrban = false;
   state.modoContext = true;
@@ -2805,7 +2971,7 @@ function abrirEnUrban(org){
   state.started = false;
   state.derivarAvisado = true; // en Urban la derivación es el contexto, no un aviso
   el.stream.innerHTML = '';
-  el.hilo.innerHTML = '<div class="vacio">Los principios organizadores de esta sesión van a aparecer acá, numerados, a medida que emerjan.</div>';
+  resetHilo(org);
   state.organismo = org;
   state.modoUrban = true;
   state.modoContext = false;
@@ -2970,6 +3136,7 @@ function guardarSesion(destilado){
     const o = state.organismo;
     o.destilados = o.destilados || [];
     o.destilados.push({ fecha: new Date().toISOString(), destilado: destilado, lectura: state.ultimaLectura });
+    registrarMomento('destilado', destilado, state.ultimaLectura);   /* N2 */
     o.actualizado = new Date().toISOString();
     guardarOrganismo(o);
     return;
@@ -3003,7 +3170,7 @@ function nuevaSesion(){
   state.derivarAvisado = false;
   el.orgchip.classList.remove('urban');
   el.stream.innerHTML = '';
-  el.hilo.innerHTML = '<div class="vacio">Los principios organizadores de esta sesión van a aparecer acá, numerados, a medida que emerjan.</div>';
+  resetHilo(null);
   el.chat.style.display = 'none';
   el.welcome.style.display = 'flex';
   el.btnGuardar.style.display = 'none';
@@ -3164,7 +3331,7 @@ function abrirOrganismo(org){
   state.started = false;
   state.derivarAvisado = !!(org.derivable && org.derivable.length); // si ya está marcada, no repetir el aviso
   el.stream.innerHTML = '';
-  el.hilo.innerHTML = '<div class="vacio">Los principios organizadores de esta sesión van a aparecer acá, numerados, a medida que emerjan.</div>';
+  resetHilo(org);
   state.organismo = org;
   state.modoUrban = false;
   state.modoContext = false;
@@ -3358,6 +3525,7 @@ function construirMenu(){
   });
   items.push(['El ciclo de comprensión', mostrarCiclo]);
   items.push(['Comprensión disponible', cardCreditos]);
+  items.push(['Cómo llegamos acá', cardRecorrido]);
   items.push(['Consumo real', cardConsumo]);
   items.push(['Ayuda', mostrarAyuda]);
   items.push(['Tu opinión', cardOpinion]);
@@ -3427,7 +3595,7 @@ function exportarDatos(){
   el.cardContent.innerHTML = '';
   const h = document.createElement('h3'); h.textContent = 'Exportar respaldo';
   const p1 = document.createElement('p');
-  p1.textContent = 'Copiá el respaldo y guardalo donde quieras (notas, correo, archivo de texto). Para restaurar, usá Importar respaldo y pegalo. Ojo: este respaldo no sirve para los productos Pro — para llevar un organismo a Urban Pro o Context Pro, usá el botón «Marco para Pro» dentro de su Ficha.';
+  p1.textContent = 'Copiá el respaldo y guardalo donde quieras (notas, correo, archivo de texto). Para restaurar, usá Importar respaldo y pegalo. Ojo: este respaldo no sirve para los productos Pro — para llevar un organismo a Comprender Urbanismo o Comprender Contextos, usá el botón «Marco para Pro» dentro de su Ficha.';
   const ta = document.createElement('textarea');
   ta.value = texto; ta.readOnly = true;
   ta.style.cssText = 'width:100%;height:180px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);font-family:DM Mono,monospace;font-size:11px;padding:12px;resize:vertical;margin-bottom:14px';
@@ -3636,7 +3804,33 @@ function correrPruebasAuto(){
       var _pl = localStorage.getItem('ag_core_plan');
       try{
         localStorage.setItem('ag_core_plan','estudio');
-        chk('C08 · con Estudio los módulos están habilitados',
+        var _org = state.organismo;
+      try{
+        state.organismo = { id:'__t', nombre:'T', tipo:'empresa', ficha:{}, principios:[], momentos:[] };
+        state.history = [{role:'user',content:'a'},{role:'assistant',content:'b'}];
+        chk('N15 · sin organismo no se registra nada',
+            (function(){ var g = state.organismo; state.organismo = null;
+                         var r = registrarMomento('principio','x',null); state.organismo = g; return r === null; })());
+        chk('N16 · una cristalización queda registrada con turno y lectura',
+            (function(){ var m = registrarMomento('cristalizacion','El margen se diluye.',
+                             { tension:'T08', funcion:'integrar', diag:'energia' });
+              return !!m && m.tipo === 'cristalizacion' && m.turno === 1 &&
+                     m.lectura.funcion === 'integrar' && momentosDe().length === 1; })());
+        chk('N17 · un tipo desconocido se ignora',
+            registrarMomento('inventado','x',null) === null && momentosDe().length === 1);
+        chk('N18 · el recorrido se agrupa por sesión',
+            (function(){ registrarMomento('principio','Un principio.', null);
+              var s2 = sesionesDelRecorrido();
+              return s2.length === 1 && s2[0].momentos.length === 2; })());
+        chk('N19 · el recorrido no viaja al prompt',
+            buildSystem().indexOf('El margen se diluye.') === -1);
+      }finally{ state.organismo = _org; }
+      chk('C13 · nomenclatura unificada en las descripciones de plan',
+          PLANES.estudio.desc.indexOf('Urban Pro') === -1 && PLANES.estudio.desc.indexOf('Context Pro') === -1 &&
+          PLANES.estudio.desc.indexOf('Comprender Urbanismo') > -1 && PLANES.estudio.desc.indexOf('Comprender Contextos') > -1);
+      chk('C14 · Profesional aclara que no incluye los módulos',
+          /No incluye los módulos/.test(PLANES.profesional.desc));
+      chk('C08 · con Estudio los módulos están habilitados',
             moduloHabilitado('urbanismo') === true && moduloHabilitado('contextos') === true);
         localStorage.setItem('ag_core_plan','profesional');
         chk('C09 · con Profesional los módulos están bloqueados',

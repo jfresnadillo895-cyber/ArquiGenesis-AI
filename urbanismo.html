@@ -481,7 +481,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--azul);ba
 .ley-dot{width:10px;height:10px;border-radius:50%}
 
 /* botón proyectivo */
-.btn-proyectivo{width:100%;padding:14px;background:var(--card);border:1px solid var(--borde);color:var(--texto);border:none;border-radius:12px;font-size:15px;font-weight:700;margin-top:1rem;cursor:pointer;transition:opacity .2s}
+.btn-proyectivo{width:100%;padding:14px;background:var(--azul);color:#FFFFFF;border:none;border-radius:12px;font-size:15px;font-weight:700;margin-top:1rem;cursor:pointer;transition:background .2s}   /* C-10: era var(--card) con border:none — blanco sobre blanco */
 .carga-overlay{display:none;position:fixed;inset:0;background:#F7F6F3;z-index:300;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem}
 .carga-overlay.vis{display:flex}
 .carga-logo{font-size:24px;font-weight:700;color:var(--texto);letter-spacing:.05em;font-family:var(--mono)}
@@ -497,13 +497,17 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--azul);ba
 .carga-paso.activo .carga-paso-dot{background:#fff;animation:pulse 1s infinite}
 .carga-paso.hecho .carga-paso-dot{background:#2E5A87}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.btn-proyectivo:hover{opacity:.9}
+.btn-proyectivo:hover{background:var(--azul-2)}
 .btn-pdf{width:100%;padding:12px;background:#fff;border:2px solid var(--azul);border-radius:10px;font-size:14px;font-weight:700;color:var(--azul);cursor:pointer;margin-top:.75rem;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
 .btn-pdf:hover{background:var(--azul-c)}
 @media print{
   .topbar,.etapas,.subtabs,.btn-proyectivo,.btn-pdf,.fb-band,.hist-panel,.carga-overlay,
   #t1,#t2,button,.modal,.status-box,.err-box,#pasivo-ini,#c2-box,
-  canvas,.leyenda,#conf-resumen .btn-pdf{display:none!important}
+  canvas,.leyenda,#conf-resumen .btn-pdf,
+  /* C-10 · controles y áreas de trabajo: no forman parte del informe */
+  input,select,textarea,.cai-header,#cai-menu,.cai-ham,#ctx-json,
+  .hist-badge,#btn-ir-proy{display:none!important}
+  *{box-shadow:none!important;text-shadow:none!important;animation:none!important;transition:none!important}
   body{background:#fff;font-size:11px}
   .card{box-shadow:none;border:1px solid #ddd;break-inside:avoid;margin-bottom:.4cm}
   .wrap{max-width:100%;padding:.3cm 0}
@@ -4541,46 +4545,42 @@ function confirmarPDF(){
   const canvasProy = document.getElementById('c-proy');
 
   // Agregar imágenes de los canvas al PDF
-  if(canvasDiag){
-    const imgDiag = document.getElementById('pdf-img-diag');
-    if(imgDiag) imgDiag.src = canvasDiag.toDataURL('image/png');
+  /* C-10 · JPEG en vez de PNG: el gráfico pesa ~5 veces menos y se ve igual impreso. */
+  const pendientes = [];
+  function ponerImagen(canvas, idImg){
+    if(!canvas) return;
+    const img = document.getElementById(idImg);
+    if(!img) return;
+    pendientes.push(new Promise(function(res){
+      img.onload = res; img.onerror = res;
+      setTimeout(res, 1200);   // red de seguridad
+      try{ img.src = canvas.toDataURL('image/jpeg', 0.85); }
+      catch(e){ img.src = canvas.toDataURL('image/png'); res(); }
+    }));
   }
-  if(canvasProy){
-    const imgProy = document.getElementById('pdf-img-proy');
-    if(imgProy) imgProy.src = canvasProy.toDataURL('image/png');
-  }
+  ponerImagen(canvasDiag, 'pdf-img-diag');
+  ponerImagen(canvasProy, 'pdf-img-proy');
 
   // Mostrar portada y secciones PDF
   document.getElementById('pdf-portada').style.display = 'block';
 
-  // Mostrar ambas pestañas para el print
-  const t0 = document.getElementById('t0');
-  const t3 = document.getElementById('t3');
+  /* C-10 · t0 y t3 no existen en el documento: restos de otra versión.
+     Y en vez de esperar 500 ms a ciegas, se espera a que las imágenes carguen. */
   const etapaDiag = document.getElementById('etapa-diag');
   const etapaProy = document.getElementById('etapa-proy');
-  
-  const t0Display = t0?.style.display;
-  const t3Display = t3?.style.display;
-  const diagDisplay = etapaDiag?.style.display;
-  const proyDisplay = etapaProy?.style.display;
-
-  if(t0) t0.style.display = 'block';
-  if(t3) t3.style.display = 'block';
+  const diagDisplay = etapaDiag ? etapaDiag.style.display : null;
+  const proyDisplay = etapaProy ? etapaProy.style.display : null;
   if(etapaDiag) etapaDiag.style.display = 'block';
   if(etapaProy) etapaProy.style.display = 'block';
 
-  // Imprimir
-  setTimeout(()=>{
+  Promise.all(pendientes).then(function(){
     window.print();
-    // Restaurar estado después de imprimir
-    setTimeout(()=>{
+    setTimeout(function(){
       document.getElementById('pdf-portada').style.display = 'none';
-      if(t0) t0.style.display = t0Display;
-      if(t3) t3.style.display = t3Display;
       if(etapaDiag) etapaDiag.style.display = diagDisplay;
       if(etapaProy) etapaProy.style.display = proyDisplay;
-    }, 1000);
-  }, 500);
+    }, 600);
+  });
 }
 // fin confirmarPDF
 
