@@ -393,96 +393,248 @@ header header .cai-ham{flex-shrink:0}
 </footer>
 
 <script>
-/* --- Candado de acceso v2 · claves individuales por cliente (previo al backend) ---------------
-   El proxy /api/anthropic exige el header 'x-comprender-acceso'. Este bloque pide la clave una
-   sola vez, la guarda en el navegador y la agrega a toda llamada al proxy. No toca el codigo de
-   los productos: envuelve fetch.
-   v2 agrega dos cosas:
-     - declara desde que modulo se llama ('x-comprender-modulo'), para que el proxy pueda
-       aplicar el plan del lado del servidor;
-     - aprende el plan de la respuesta ('x-comprender-plan') y lo aplica localmente, de modo
-       que el plan deja de depender de lo que el usuario ponga en su propio navegador.
-   Si el servidor responde 401, borra la clave para permitir reintentar.
-   Si responde 403, avisa que el plan no incluye ese modulo. --- */
+/* --- Candado de acceso v3 · sesion real de usuario (Supabase Auth) ----------------------------
+   Reemplaza al candado v2 (clave unica en el navegador). Se inyecta igual: gen_deploy.py lo
+   inserta despues del primer <script> de cada fuente.
+
+   QUE HACE
+     1. Si no hay sesion, muestra un portal de ingreso y no deja pasar.
+     2. Guarda la sesion y la renueva sola cuando vence.
+     3. Agrega el token a toda llamada a /api/anthropic, mas el modulo desde donde se llama.
+     4. Lee el saldo del servidor y lo deja donde credEstado() lo encuentra.
+
+   POR QUE SIN LIBRERIA
+     supabase-js resolveria esto, pero traeria una dependencia de CDN a un producto que hoy no
+     tiene ninguna: si el CDN falla, no abre nada. Los tres endpoints que hacen falta son REST
+     comun y entran en cien lineas. Se sostiene la regla de la casa: HTML monolitico, sin build.
+
+   NO HACE REGISTRO NI RECUPERACION DE CONTRASENA
+     A proposito. El correo integrado de Supabase entrega 2 mensajes por hora y solo a
+     direcciones del equipo: no sirve para usuarios reales. Hasta que haya SMTP propio con
+     dominio verificado, las altas las hace Javier desde el panel. El registro publico esta
+     apagado del lado del servidor, que es donde corresponde.
+
+   LO QUE VIAJA AL NAVEGADOR
+     La URL y la clave publicable son publicas por diseno: no autorizan nada por si solas.
+     Quien decide es la politica de RLS y el proxy. La clave secreta no aparece aca.  --- */
 (function(){
-  var LLAVE = 'comprender_acceso';
-  function leer(){ try{ return localStorage.getItem(LLAVE) || ''; }catch(e){ return ''; } }
-  function guardar(v){ try{ localStorage.setItem(LLAVE, v); }catch(e){} }
-  function borrar(){ try{ localStorage.removeItem(LLAVE); }catch(e){} }
-  function obtener(){
-    var v = leer();
-    if(!v){ v = (window.prompt('Clave de acceso a Comprender:') || '').trim(); if(v) guardar(v); }
-    return v;
+  var SB_URL = 'https://spavobqrigvbjabwyvbl.supabase.co';
+  var SB_KEY = 'sb_publishable_QbvJTscQJ63YjLasQ4p51w_0nLqwm6j';
+  var LLAVE   = 'comprender_sesion';
+  var MARGEN  = 60000;   // se renueva un minuto antes de vencer
+
+  /* ---------- sesion guardada ---------- */
+  function leer(){
+    try{ return JSON.parse(localStorage.getItem(LLAVE) || 'null'); }catch(e){ return null; }
   }
-  window.olvidarClaveComprender = function(){ borrar(); alert('Clave borrada. Se pedira de nuevo en la proxima consulta.'); };
+  function guardar(s){
+    try{ localStorage.setItem(LLAVE, JSON.stringify(s)); }catch(e){}
+  }
+  function borrar(){
+    try{ localStorage.removeItem(LLAVE); }catch(e){}
+    try{ localStorage.removeItem('ag_core_saldo'); }catch(e){}
+  }
+  function desdeRespuesta(d){
+    if(!d || !d.access_token) return null;
+    return {
+      token:   d.access_token,
+      refresco: d.refresh_token || '',
+      vence:   Date.now() + ((d.expires_in || 3600) * 1000),
+      correo:  (d.user && d.user.email) || ''
+    };
+  }
+
+  /* ---------- llamadas a Supabase ---------- */
+  function auth(ruta, cuerpo){
+    return fetch(SB_URL + '/auth/v1/' + ruta, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify(cuerpo)
+    }).then(function(r){
+      return r.json().then(function(d){ return { ok: r.ok, estado: r.status, datos: d }; });
+    });
+  }
+
+  function ingresar(correo, clave){
+    return auth('token?grant_type=password', { email: correo, password: clave })
+      .then(function(r){
+        if(!r.ok) return { ok:false, mensaje: mensajeAuth(r) };
+        var s = desdeRespuesta(r.datos);
+        if(!s) return { ok:false, mensaje:'Respuesta inesperada del servidor.' };
+        guardar(s);
+        return { ok:true };
+      })
+      .catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor. Revisá tu conexión.' }; });
+  }
+
+  function mensajeAuth(r){
+    var d = r.datos || {};
+    var t = String(d.error_description || d.msg || d.message || '').toLowerCase();
+    if(r.estado === 400 || r.estado === 401) return 'Correo o contraseña incorrectos.';
+    if(t.indexOf('confirm') > -1) return 'La cuenta todavía no está confirmada.';
+    if(r.estado >= 500) return 'El servicio no está disponible en este momento. Probá en unos minutos.';
+    return 'No se pudo iniciar sesión.';
+  }
+
+  var renovando = null;
+  function refrescar(){
+    var s = leer();
+    if(!s || !s.refresco) return Promise.resolve(null);
+    if(renovando) return renovando;              // una sola renovacion a la vez
+    renovando = auth('token?grant_type=refresh_token', { refresh_token: s.refresco })
+      .then(function(r){
+        renovando = null;
+        if(!r.ok){ borrar(); return null; }
+        var n = desdeRespuesta(r.datos);
+        if(n) guardar(n);
+        return n;
+      })
+      .catch(function(){ renovando = null; return null; });
+    return renovando;
+  }
+
+  // Devuelve un token utilizable, renovando si hace falta. null = hay que ingresar.
+  function tokenVigente(){
+    var s = leer();
+    if(!s) return Promise.resolve(null);
+    if(Date.now() < (s.vence - MARGEN)) return Promise.resolve(s.token);
+    return refrescar().then(function(n){ return n ? n.token : null; });
+  }
+
+  /* ---------- saldo ---------- */
+  // Se guarda donde credEstado() lo busca. El navegador deja de calcular el saldo:
+  // pasa a mostrarlo. Esa es la diferencia entre honor system y contabilidad real.
+  function anotarSaldo(plan, saldo){
+    try{
+      if(plan && ['gratis','profesional','estudio'].indexOf(plan) > -1){
+        if(localStorage.getItem('ag_core_plan') !== plan) localStorage.setItem('ag_core_plan', plan);
+      }
+      if(saldo !== null && saldo !== undefined && saldo !== '' && !isNaN(Number(saldo))){
+        localStorage.setItem('ag_core_saldo', JSON.stringify({ saldo: Number(saldo), momento: Date.now() }));
+      }
+      if(typeof renderCred === 'function') renderCred();
+    }catch(e){}
+  }
+
+  // Al abrir, se lee la fila propia. La politica de RLS deja ver solo esa.
+  function sincronizarSaldo(){
+    return tokenVigente().then(function(t){
+      if(!t) return;
+      return fetch(SB_URL + '/rest/v1/perfiles?select=plan,saldo', {
+        headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t }
+      }).then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(f){ if(f && f[0]) anotarSaldo(f[0].plan, f[0].saldo); })
+        .catch(function(){});
+    });
+  }
+
+  /* ---------- portal de ingreso ---------- */
+  var portalAbierto = false;
+  function portal(aviso){
+    if(portalAbierto) return;
+    portalAbierto = true;
+    var capa = document.createElement('div');
+    capa.setAttribute('id','comprenderPortal');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fbfaf8;display:flex;' +
+      'align-items:center;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif;';
+    capa.innerHTML =
+      '<div style="width:100%;max-width:360px;">' +
+        '<div style="font-size:19px;font-weight:600;margin-bottom:6px;color:#1a1a1a;">Comprender</div>' +
+        '<div style="font-size:14px;color:#666;margin-bottom:22px;">Ingresá para continuar.</div>' +
+        '<input id="cpMail" type="email" autocomplete="username" placeholder="Correo" ' +
+          'style="width:100%;padding:12px;font-size:16px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;box-sizing:border-box;">' +
+        '<input id="cpClave" type="password" autocomplete="current-password" placeholder="Contraseña" ' +
+          'style="width:100%;padding:12px;font-size:16px;border:1px solid #ddd;border-radius:8px;margin-bottom:14px;box-sizing:border-box;">' +
+        '<button id="cpEntrar" style="width:100%;padding:12px;font-size:16px;font-weight:600;color:#fff;' +
+          'background:#1a1a1a;border:0;border-radius:8px;cursor:pointer;">Ingresar</button>' +
+        '<div id="cpAviso" style="font-size:13px;color:#b4441f;margin-top:12px;min-height:18px;"></div>' +
+      '</div>';
+    document.body.appendChild(capa);
+
+    var mail = capa.querySelector('#cpMail');
+    var pass = capa.querySelector('#cpClave');
+    var boton = capa.querySelector('#cpEntrar');
+    var texto = capa.querySelector('#cpAviso');
+    if(aviso) texto.textContent = aviso;
+
+    function intentar(){
+      var c = (mail.value || '').trim();
+      var k = pass.value || '';
+      if(!c || !k){ texto.textContent = 'Faltan datos.'; return; }
+      boton.disabled = true; boton.textContent = 'Entrando…'; texto.textContent = '';
+      ingresar(c, k).then(function(r){
+        if(r.ok){
+          portalAbierto = false;
+          capa.remove();
+          sincronizarSaldo();
+        }else{
+          boton.disabled = false; boton.textContent = 'Ingresar';
+          texto.textContent = r.mensaje;
+        }
+      });
+    }
+    boton.addEventListener('click', intentar);
+    pass.addEventListener('keydown', function(e){ if(e.key === 'Enter') intentar(); });
+    setTimeout(function(){ try{ mail.focus(); }catch(e){} }, 60);
+  }
+
+  window.cerrarSesionComprender = function(){
+    borrar();
+    location.reload();
+  };
+
+  /* ---------- arranque ---------- */
+  function arrancar(){
+    tokenVigente().then(function(t){
+      if(!t) portal('');
+      else sincronizarSaldo();
+    });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar);
+  else arrancar();
+
+  /* ---------- envoltorio de fetch ---------- */
   var _fetch = window.fetch;
   window.fetch = function(recurso, opciones){
     var url = '';
     try{ url = String((recurso && recurso.url) ? recurso.url : recurso || ''); }catch(e){}
     if(url.indexOf('/api/anthropic') === -1) return _fetch.apply(this, arguments);
-    opciones = opciones || {};
-    var h = opciones.headers;
-    var plano = {};
-    try{
-      if(h && typeof h.forEach === 'function' && !Array.isArray(h)){ h.forEach(function(val,k){ plano[k]=val; }); }
-      else if(h){ for(var k in h){ if(Object.prototype.hasOwnProperty.call(h,k)) plano[k]=h[k]; } }
-    }catch(e){}
-    plano['x-comprender-acceso'] = obtener();
-    try{ if(typeof MODULE_ID === 'string' && MODULE_ID) plano['x-comprender-modulo'] = MODULE_ID; }catch(e){}
-    opciones.headers = plano;
-    return _fetch.call(this, recurso, opciones).then(function(resp){
-      if(resp && resp.status === 401){ borrar(); }
+
+    var args = arguments;
+    var yo = this;
+    return tokenVigente().then(function(t){
+      if(!t){ portal('Tu sesión venció. Ingresá de nuevo.');
+              return Promise.reject(new Error('sin sesión')); }
+
+      opciones = opciones || {};
+      var h = opciones.headers, plano = {};
       try{
-        var plan = resp && resp.headers && resp.headers.get ? resp.headers.get('x-comprender-plan') : null;
-        if(plan && ['gratis','profesional','estudio'].indexOf(plan) > -1){
-          if(localStorage.getItem('ag_core_plan') !== plan){
-            localStorage.setItem('ag_core_plan', plan);   /* el plan lo decide el servidor */
-            try{ if(typeof renderCred === 'function') renderCred(); }catch(e){}
-          }
-        }
+        if(h && typeof h.forEach === 'function' && !Array.isArray(h)){ h.forEach(function(v,k){ plano[k]=v; }); }
+        else if(h){ for(var k in h){ if(Object.prototype.hasOwnProperty.call(h,k)) plano[k]=h[k]; } }
       }catch(e){}
-      return resp;
+      plano['Authorization'] = 'Bearer ' + t;
+      try{ plano['x-comprender-modulo'] = (typeof MODULE_ID === 'string' && MODULE_ID) ? MODULE_ID : 'core'; }
+      catch(e){ plano['x-comprender-modulo'] = 'core'; }
+      opciones.headers = plano;
+
+      return _fetch.call(yo, recurso, opciones).then(function(resp){
+        try{
+          var g = resp && resp.headers && resp.headers.get ? resp.headers : null;
+          if(g) anotarSaldo(g.get('x-comprender-plan'), g.get('x-comprender-saldo'));
+        }catch(e){}
+        // 401 del proxy = la sesion no sirve. Se limpia y se vuelve a pedir.
+        if(resp && resp.status === 401){ borrar(); portal('Tu sesión venció. Ingresá de nuevo.'); }
+        return resp;
+      });
     });
   };
 })();
 </script>
 <script>
-/* --- Candado provisorio de acceso (H03 · previo al backend de login/creditos) ----------------
-   El proxy /api/anthropic exige el header 'x-comprender-acceso'. Este bloque pide la clave una
-   sola vez, la guarda en el navegador y la agrega a toda llamada al proxy. No toca el codigo de
-   los productos: envuelve fetch. Si el servidor responde 401, borra la clave para permitir
-   reintentar. Provisorio: se retira cuando exista sesion real de usuario. --- */
-(function(){
-  var LLAVE = 'comprender_acceso';
-  function leer(){ try{ return localStorage.getItem(LLAVE) || ''; }catch(e){ return ''; } }
-  function guardar(v){ try{ localStorage.setItem(LLAVE, v); }catch(e){} }
-  function borrar(){ try{ localStorage.removeItem(LLAVE); }catch(e){} }
-  function obtener(){
-    var v = leer();
-    if(!v){ v = (window.prompt('Clave de acceso a Comprender:') || '').trim(); if(v) guardar(v); }
-    return v;
-  }
-  window.olvidarClaveComprender = function(){ borrar(); alert('Clave borrada. Se pedira de nuevo en la proxima consulta.'); };
-  var _fetch = window.fetch;
-  window.fetch = function(recurso, opciones){
-    var url = '';
-    try{ url = String((recurso && recurso.url) ? recurso.url : recurso || ''); }catch(e){}
-    if(url.indexOf('/api/anthropic') === -1) return _fetch.apply(this, arguments);
-    opciones = opciones || {};
-    var h = opciones.headers;
-    var plano = {};
-    try{
-      if(h && typeof h.forEach === 'function' && !Array.isArray(h)){ h.forEach(function(val,k){ plano[k]=val; }); }
-      else if(h){ for(var k in h){ if(Object.prototype.hasOwnProperty.call(h,k)) plano[k]=h[k]; } }
-    }catch(e){}
-    plano['x-comprender-acceso'] = obtener();
-    opciones.headers = plano;
-    return _fetch.call(this, recurso, opciones).then(function(resp){
-      if(resp && resp.status === 401){ borrar(); }
-      return resp;
-    });
-  };
-})();
+/* --- Punto de inyeccion del candado -----------------------------------------------------
+   gen_deploy.py inserta candado.txt inmediatamente despues de este <script>.
+   Este bloque queda vacio a proposito: la sesion es infraestructura de despliegue,
+   no codigo de producto. No escribir nada aca. --- */
 </script>
 <script>
 /* =====================================================
@@ -2004,8 +2156,16 @@ function credEstado(){
     if(raw.clave === clave){ usado = raw.usado||0; extra = raw.extra||0; }
   }catch(e){}
   const total = plan.creditos + extra;
+  let resta = Math.max(0, total - usado);
+  try{                       /* v3: si el servidor ya hablo, manda el servidor */
+    const _s = JSON.parse(localStorage.getItem('ag_core_saldo') || 'null');
+    if(_s && typeof _s.saldo === 'number'){
+      resta = Math.max(0, _s.saldo);
+      usado = Math.max(0, total - resta);
+    }
+  }catch(e){}
   return { plan:plan, clave:clave, usado:usado, extra:extra, total:total,
-           resta: Math.max(0,total-usado), renueva: credEtiquetaVentana(plan) };
+           resta: resta, renueva: credEtiquetaVentana(plan) };
 }
 function credAlcanza(tipo){ return credEstado().resta >= (CRED_COSTO[tipo]||1); }
 function credConsumir(tipo){
