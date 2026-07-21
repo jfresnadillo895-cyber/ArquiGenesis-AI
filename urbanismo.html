@@ -5,11 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprender · Urbanismo — versión profesional</title>
 <script>
-/* --- Candado provisorio de acceso (H03 · previo al backend de login/creditos) ----------------
+/* --- Candado de acceso v2 · claves individuales por cliente (previo al backend) ---------------
    El proxy /api/anthropic exige el header 'x-comprender-acceso'. Este bloque pide la clave una
    sola vez, la guarda en el navegador y la agrega a toda llamada al proxy. No toca el codigo de
-   los productos: envuelve fetch. Si el servidor responde 401, borra la clave para permitir
-   reintentar. Provisorio: se retira cuando exista sesion real de usuario. --- */
+   los productos: envuelve fetch.
+   v2 agrega dos cosas:
+     - declara desde que modulo se llama ('x-comprender-modulo'), para que el proxy pueda
+       aplicar el plan del lado del servidor;
+     - aprende el plan de la respuesta ('x-comprender-plan') y lo aplica localmente, de modo
+       que el plan deja de depender de lo que el usuario ponga en su propio navegador.
+   Si el servidor responde 401, borra la clave para permitir reintentar.
+   Si responde 403, avisa que el plan no incluye ese modulo. --- */
 (function(){
   var LLAVE = 'comprender_acceso';
   function leer(){ try{ return localStorage.getItem(LLAVE) || ''; }catch(e){ return ''; } }
@@ -34,9 +40,19 @@
       else if(h){ for(var k in h){ if(Object.prototype.hasOwnProperty.call(h,k)) plano[k]=h[k]; } }
     }catch(e){}
     plano['x-comprender-acceso'] = obtener();
+    try{ if(typeof MODULE_ID === 'string' && MODULE_ID) plano['x-comprender-modulo'] = MODULE_ID; }catch(e){}
     opciones.headers = plano;
     return _fetch.call(this, recurso, opciones).then(function(resp){
       if(resp && resp.status === 401){ borrar(); }
+      try{
+        var plan = resp && resp.headers && resp.headers.get ? resp.headers.get('x-comprender-plan') : null;
+        if(plan && ['gratis','profesional','estudio'].indexOf(plan) > -1){
+          if(localStorage.getItem('ag_core_plan') !== plan){
+            localStorage.setItem('ag_core_plan', plan);   /* el plan lo decide el servidor */
+            try{ if(typeof renderCred === 'function') renderCred(); }catch(e){}
+          }
+        }
+      }catch(e){}
       return resp;
     });
   };

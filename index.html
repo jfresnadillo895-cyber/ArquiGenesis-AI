@@ -547,11 +547,17 @@ header .spacer{flex:1}
 </div>
 
 <script>
-/* --- Candado provisorio de acceso (H03 · previo al backend de login/creditos) ----------------
+/* --- Candado de acceso v2 · claves individuales por cliente (previo al backend) ---------------
    El proxy /api/anthropic exige el header 'x-comprender-acceso'. Este bloque pide la clave una
    sola vez, la guarda en el navegador y la agrega a toda llamada al proxy. No toca el codigo de
-   los productos: envuelve fetch. Si el servidor responde 401, borra la clave para permitir
-   reintentar. Provisorio: se retira cuando exista sesion real de usuario. --- */
+   los productos: envuelve fetch.
+   v2 agrega dos cosas:
+     - declara desde que modulo se llama ('x-comprender-modulo'), para que el proxy pueda
+       aplicar el plan del lado del servidor;
+     - aprende el plan de la respuesta ('x-comprender-plan') y lo aplica localmente, de modo
+       que el plan deja de depender de lo que el usuario ponga en su propio navegador.
+   Si el servidor responde 401, borra la clave para permitir reintentar.
+   Si responde 403, avisa que el plan no incluye ese modulo. --- */
 (function(){
   var LLAVE = 'comprender_acceso';
   function leer(){ try{ return localStorage.getItem(LLAVE) || ''; }catch(e){ return ''; } }
@@ -576,9 +582,19 @@ header .spacer{flex:1}
       else if(h){ for(var k in h){ if(Object.prototype.hasOwnProperty.call(h,k)) plano[k]=h[k]; } }
     }catch(e){}
     plano['x-comprender-acceso'] = obtener();
+    try{ if(typeof MODULE_ID === 'string' && MODULE_ID) plano['x-comprender-modulo'] = MODULE_ID; }catch(e){}
     opciones.headers = plano;
     return _fetch.call(this, recurso, opciones).then(function(resp){
       if(resp && resp.status === 401){ borrar(); }
+      try{
+        var plan = resp && resp.headers && resp.headers.get ? resp.headers.get('x-comprender-plan') : null;
+        if(plan && ['gratis','profesional','estudio'].indexOf(plan) > -1){
+          if(localStorage.getItem('ag_core_plan') !== plan){
+            localStorage.setItem('ag_core_plan', plan);   /* el plan lo decide el servidor */
+            try{ if(typeof renderCred === 'function') renderCred(); }catch(e){}
+          }
+        }
+      }catch(e){}
       return resp;
     });
   };
@@ -1502,6 +1518,30 @@ function textoHistorialFicha(o){
   return 'ficha v' + fichaVersion(o) + ' · ' + hs.length + ' cambio(s) · ' + ult;
 }
 
+/* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
+   Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
+   invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
+   un turno temprano. Enviando el sistema como bloques y marcando el invariable con
+   cache_control, esa parte se cobra a un décimo al releerse.
+   El orden importa: SYSTEM_PROMPT primero (idéntico siempre), lo variable después. */
+function buildSystemBloques(){
+  var completo = buildSystem();
+  /* Sin organismo, todo el sistema es el prompt base: un solo bloque cacheable. */
+  if(completo === SYSTEM_PROMPT){
+    return [{ type:'text', text: SYSTEM_PROMPT, cache_control:{ type:'ephemeral' } }];
+  }
+  /* Con organismo, buildSystem() devuelve SYSTEM_PROMPT + lo variable, en ese orden. */
+  if(completo.indexOf(SYSTEM_PROMPT) === 0){
+    var variable = completo.slice(SYSTEM_PROMPT.length);
+    var bloques = [{ type:'text', text: SYSTEM_PROMPT, cache_control:{ type:'ephemeral' } }];
+    if(variable) bloques.push({ type:'text', text: variable });
+    return bloques;
+  }
+  /* Si algún día deja de empezar por el prompt base, se manda entero sin caché:
+     peor precio, nunca comportamiento distinto. */
+  return [{ type:'text', text: completo }];
+}
+
 function buildSystem(){
   if(!state.organismo) return SYSTEM_PROMPT;
   const o = state.organismo;
@@ -1592,7 +1632,7 @@ async function enviar(texto){
       body: JSON.stringify({
         model:'claude-sonnet-4-6',
         max_tokens: apiMaxTokens(),
-        system: buildSystem(),
+        system: buildSystemBloques(),   /* C-11 */
         messages: state.history
       })
     });
@@ -3889,7 +3929,28 @@ function correrPruebasAuto(){
             (function(){ registrarMomento('principio','Un principio.', null);
               var s2 = sesionesDelRecorrido();
               return s2.length === 1 && s2[0].momentos.length === 2; })());
-        chk('N20 · verPanel existe y no falla con ninguna solapa',
+        chk('C15 · sin organismo, el sistema es un único bloque cacheable',
+          (function(){ var g = state.organismo; state.organismo = null;
+            var b = buildSystemBloques(); state.organismo = g;
+            return b.length === 1 && b[0].text === SYSTEM_PROMPT &&
+                   !!(b[0].cache_control && b[0].cache_control.type === 'ephemeral'); })());
+      chk('C16 · con organismo, el invariable va primero y marcado',
+          (function(){ var g = state.organismo;
+            state.organismo = { id:'c', nombre:'C', tipo:'ciudad', ficha:{funcion:'integrar'}, principios:[] };
+            var b = buildSystemBloques(); var completo = buildSystem(); state.organismo = g;
+            return b.length === 2 &&
+                   b[0].text === SYSTEM_PROMPT &&
+                   !!(b[0].cache_control && b[0].cache_control.type === 'ephemeral') &&
+                   !b[1].cache_control &&
+                   (b[0].text + b[1].text) === completo; })());
+      chk('C17 · los bloques reconstruyen exactamente el prompt de siempre',
+          (function(){ var g = state.organismo;
+            state.organismo = { id:'c', nombre:'C', tipo:'empresa',
+                                ficha:{funcion:'integrar',diagnostico:'d',proximo:'p'},
+                                principios:[{texto:'un principio'}] };
+            var b = buildSystemBloques(), completo = buildSystem(); state.organismo = g;
+            return b.map(function(x){ return x.text; }).join('') === completo; })());
+      chk('N20 · verPanel existe y no falla con ninguna solapa',
           (function(){ if(typeof verPanel !== 'function') return false;
             try{ verPanel('recorrido'); verPanel('principios'); }catch(e){ return false; }
             return typeof renderRecorrido === 'function';   /* la conmutación visual se verifica en navegador */
