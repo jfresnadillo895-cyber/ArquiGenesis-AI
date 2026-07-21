@@ -1,158 +1,193 @@
-// api/anthropic.js — Proxy de producción de la suite Comprender (Vercel Serverless Function)
+// api/anthropic.js — Proxy de produccion de la suite Comprender (Vercel Serverless Function)
 // ---------------------------------------------------------------------------------------------
-// El cliente (Comprender AI, Urbanismo, Contextos) pega a  /api/anthropic  y esta función agrega
-// la clave del lado del SERVIDOR y reenvía a Anthropic. La clave NUNCA viaja al navegador.
+// v3 · SESION REAL Y SALDO EN BASE DE DATOS
 //
-// v2 · CLAVES INDIVIDUALES POR CLIENTE  (Camino A)
-// ---------------------------------------------------------------------------------------------
-// Antes había UNA clave compartida: no se sabía quién consumía, no se podía revocar a uno solo,
-// y el plan vivía en el navegador del usuario (cualquiera se ponía Estudio desde la consola).
-// Ahora cada cliente tiene su propia clave y su plan vive en el SERVIDOR.
+// QUE CAMBIO RESPECTO DE v2
+//   ✔ La identidad ya no es una clave en una variable de entorno: es un usuario
+//     de Supabase Auth. El cliente manda su token en `Authorization: Bearer`.
+//   ✔ El plan ya no sale de una tabla en el codigo: sale de la base.
+//   ✔ El saldo AHORA SE CUENTA. Era lo unico que v2 no podia hacer.
+//   ✔ El control por modulo lo decide la funcion `puede()`, no PLAN_MINIMO_MODULO.
+//   ✘ Se elimino CLAVES_ACCESO / CLAVE_ACCESO. No hay camino de respaldo:
+//     si la base no responde, el proxy falla CERRADO. Ver "FALLA CERRADO".
 //
-// PUESTA EN MARCHA
-//   En Vercel → Settings → Environment Variables:
+// VARIABLES DE ENTORNO EN VERCEL
+//   ANTHROPIC_API_KEY    sk-ant-...
+//   SUPABASE_URL         https://spavobqrigvbjabwyvbl.supabase.co     (sin barra final)
+//   SUPABASE_SECRET_KEY  sb_secret_...   ← va de Supabase a Vercel, nunca por chat
 //
-//     ANTHROPIC_API_KEY = sk-ant-...
+//   Las viejas CLAVES_ACCESO y CLAVE_ACCESO se pueden borrar DESPUES de que los
+//   tres HTML manden token. Mientras tanto no molestan: ya no se leen.
 //
-//     CLAVES_ACCESO = juana-mx:estudio,carlos-co:profesional,udelar-uy:estudio,demo:gratis
+// ORDEN DE LA LLAMADA
+//   1. Validar el token contra Supabase  →  obtener el id del usuario.
+//   2. puede(id, modulo)                 →  plan, saldo, factor, permitido.
+//   3. Recien entonces llamar a Anthropic.
+//   4. consumir(id, modulo, tokens)      →  descontar por consumo REAL.
 //
-//   Formato: pares  clave:plan  separados por coma. Planes válidos: gratis, profesional, estudio.
-//   Si se omite el plan, se asume 'profesional'.  Ej.:  "unaclave,otra:estudio"
+//   El paso 4 va despues porque el consumo se conoce despues de la respuesta.
+//   Consecuencia aceptada: el saldo puede quedar levemente negativo, como maximo
+//   lo que cuesta una consulta. Es preferible a cobrar por adelantado un numero
+//   inventado y despues devolver.
 //
-//   COMPATIBILIDAD: si CLAVES_ACCESO no está definida pero sí CLAVE_ACCESO (la vieja, singular),
-//   se sigue aceptando esa única clave con plan 'estudio'. Así el despliegue no se corta al
-//   actualizar. Cuando cargues CLAVES_ACCESO, borrá la vieja.
-//
-// QUÉ RESUELVE Y QUÉ NO
-//   ✔ Vender y revocar de a uno, sin tocar el código.
-//   ✔ El plan deja de ser honor system: lo decide el servidor y lo informa al cliente.
-//   ✔ Se sabe qué cliente hizo cada llamada (queda en los logs de Vercel).
-//   ✘ NO cuenta créditos: una función serverless no guarda estado entre llamadas.
-//     El tope real de consumo necesita base de datos. Esto controla QUIÉN entra y CON QUÉ PLAN,
-//     no CUÁNTO consume.
-//
-// TODO backend: reemplazar por sesión real + saldo en base de datos.
+// FALLA CERRADO
+//   Si Supabase no responde, nadie entra. Se devuelve 503 —no 401— para que el
+//   cliente diga "el servicio esta con problemas, reintenta" y no "tu acceso fue
+//   revocado". Un cliente que paga no tiene que creer que lo echaste.
+//   Causa mas probable de caida, con el volumen actual: el plan gratuito de
+//   Supabase pausa los proyectos con poca actividad en una ventana de 7 dias.
+//   Un proyecto pausado responde 540 a todo. Se evita con una consulta
+//   automatica cada 3 dias (cron de Vercel o GitHub Actions).
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 
-// --- Guardas (reducen abuso y protegen el costo) ---
-const MODELOS_PERMITIDOS = null;          // null = sin restricción. Ej.: ['claude-sonnet-4-6']
-const MAX_TOKENS_TOPE = 4000;             // tope duro aunque el cliente pida más
+const MODELOS_PERMITIDOS = null;   // null = sin restriccion. Ej.: ['claude-sonnet-4-6']
+const MAX_TOKENS_TOPE = 4000;      // tope duro aunque el cliente pida mas
 
-// Qué plan mínimo exige cada módulo especializado. Espejo de ACCESO_MODULOS en los HTML.
-const PLAN_MINIMO_MODULO = {
-  urbanismo: 'estudio',
-  contextos: 'estudio',
-  tecnologias: 'estudio',
-  sustentabilidad: 'estudio',
-  negocios: 'estudio',
-  capacidades: 'estudio',
-  trayectoria: 'estudio',
-};
-const ORDEN_PLANES = ['gratis', 'profesional', 'estudio'];
+const TIEMPO_LIMITE_MS = 6000;     // por intento contra Supabase
+const REINTENTOS = 2;              // la mayoria de los tropiezos duran segundos
+const ESPERA_MS = 400;
 
-// Comparación en tiempo constante (evita filtrar la clave por diferencias de tiempo).
-function comparaSegura(a, b) {
-  const x = String(a == null ? '' : a);
-  const y = String(b == null ? '' : b);
-  if (x.length !== y.length) return false;
-  let dif = 0;
-  for (let i = 0; i < x.length; i++) dif |= x.charCodeAt(i) ^ y.charCodeAt(i);
-  return dif === 0;
-}
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Lee la tabla de claves de las variables de entorno. Devuelve [] si no hay nada configurado.
-function leerClaves() {
-  const crudo = process.env.CLAVES_ACCESO;
-  if (crudo && String(crudo).trim()) {
-    return String(crudo)
-      .split(',')
-      .map((par) => {
-        const t = par.trim();
-        if (!t) return null;
-        const i = t.indexOf(':');
-        const clave = (i === -1 ? t : t.slice(0, i)).trim();
-        let plan = (i === -1 ? 'profesional' : t.slice(i + 1)).trim().toLowerCase();
-        if (ORDEN_PLANES.indexOf(plan) === -1) plan = 'profesional';
-        return clave ? { clave, plan } : null;
-      })
-      .filter(Boolean);
+// --- Llamada a Supabase con reintentos y tiempo limite -------------------------
+// Devuelve { ok, estado, datos }  o  lanza si se agotaron los reintentos.
+async function pedirASupabase(ruta, opciones) {
+  const base = String(process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+  let ultimoError = null;
+
+  for (let intento = 0; intento <= REINTENTOS; intento++) {
+    const aborto = new AbortController();
+    const reloj = setTimeout(() => aborto.abort(), TIEMPO_LIMITE_MS);
+    try {
+      const r = await fetch(base + ruta, { ...opciones, signal: aborto.signal });
+      clearTimeout(reloj);
+
+      // 540 = proyecto pausado por inactividad. 5xx = tropiezo. Ambos se reintentan.
+      if (r.status >= 500) {
+        ultimoError = new Error('supabase respondio ' + r.status);
+        if (intento < REINTENTOS) { await dormir(ESPERA_MS * (intento + 1)); continue; }
+        throw ultimoError;
+      }
+      let datos = null;
+      try { datos = await r.json(); } catch (e) { datos = null; }
+      return { ok: r.ok, estado: r.status, datos };
+    } catch (e) {
+      clearTimeout(reloj);
+      ultimoError = e;
+      if (intento < REINTENTOS) { await dormir(ESPERA_MS * (intento + 1)); continue; }
+      throw ultimoError;
+    }
   }
-  // Compatibilidad con la clave única anterior.
-  const vieja = process.env.CLAVE_ACCESO;
-  if (vieja && String(vieja).trim()) return [{ clave: String(vieja).trim(), plan: 'estudio' }];
-  return [];
+  throw ultimoError || new Error('supabase inalcanzable');
 }
 
-// Busca la clave recorriendo SIEMPRE la lista completa: el tiempo de respuesta no revela
-// en qué posición estaba ni cuántas claves hay.
-function buscarCliente(recibida, claves) {
-  let hallado = null;
-  for (let i = 0; i < claves.length; i++) {
-    if (comparaSegura(recibida, claves[i].clave) && !hallado) hallado = claves[i];
-  }
-  return hallado;
+// --- 1 · Quien es -------------------------------------------------------------
+// Se valida contra Supabase en vez de verificar la firma localmente. Cuesta un
+// salto de red mas, pero respeta la revocacion: si cerraste la sesion de alguien,
+// deja de entrar en el acto. Verificar la firma sola no se entera.
+async function identificar(token, secreta) {
+  const r = await pedirASupabase('/auth/v1/user', {
+    method: 'GET',
+    headers: { apikey: secreta, Authorization: 'Bearer ' + token },
+  });
+  if (!r.ok || !r.datos || !r.datos.id) return null;
+  return r.datos.id;
 }
 
-function planAlcanza(planCliente, planMinimo) {
-  return ORDEN_PLANES.indexOf(planCliente) >= ORDEN_PLANES.indexOf(planMinimo);
+// --- Llamada a una funcion de la base ----------------------------------------
+async function rpc(nombre, cuerpo, secreta) {
+  const r = await pedirASupabase('/rest/v1/rpc/' + nombre, {
+    method: 'POST',
+    headers: {
+      apikey: secreta,
+      Authorization: 'Bearer ' + secreta,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(cuerpo),
+  });
+  if (!r.ok) throw new Error('rpc ' + nombre + ' devolvio ' + r.estado);
+  return Array.isArray(r.datos) ? r.datos[0] : r.datos;
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: { message: 'Método no permitido. Usá POST.' } });
+    return res.status(405).json({ error: { message: 'Metodo no permitido. Usa POST.' } });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: { message: 'Falta configurar ANTHROPIC_API_KEY en el servidor.' } });
+  const secreta = process.env.SUPABASE_SECRET_KEY;
+  const urlBase = process.env.SUPABASE_URL;
+
+  if (!apiKey)  return res.status(500).json({ error: { message: 'Falta ANTHROPIC_API_KEY en el servidor.' } });
+  if (!secreta || !urlBase) {
+    return res.status(500).json({ error: { message: 'Falta SUPABASE_URL o SUPABASE_SECRET_KEY. El proxy no atiende sin base.' } });
   }
 
-  // --- Candado: falla cerrado ---
-  const claves = leerClaves();
-  if (!claves.length) {
-    return res.status(500).json({
-      error: { message: 'Falta configurar CLAVES_ACCESO en el servidor. El proxy no atiende sin candado.' },
+  // --- Token ---
+  const cabecera = String(req.headers['authorization'] || '');
+  const token = cabecera.toLowerCase().startsWith('bearer ') ? cabecera.slice(7).trim() : '';
+  if (!token) {
+    return res.status(401).json({ error: { message: 'Falta la sesion. Inicia sesion para continuar.', codigo: 'sin_sesion' } });
+  }
+
+  const modulo = String(req.headers['x-comprender-modulo'] || 'core').trim().toLowerCase() || 'core';
+
+  // --- 1 y 2 · Identidad y autorizacion ---
+  let usuario, permiso;
+  try {
+    usuario = await identificar(token, secreta);
+    if (!usuario) {
+      return res.status(401).json({ error: { message: 'Sesion vencida o invalida. Volve a iniciar sesion.', codigo: 'sesion_invalida' } });
+    }
+    permiso = await rpc('puede', { p_perfil: usuario, p_modulo: modulo }, secreta);
+  } catch (e) {
+    // FALLA CERRADO. 503, no 401: el problema es el servicio, no el usuario.
+    console.error(JSON.stringify({ evento: 'base_inalcanzable', detalle: String((e && e.message) || e) }));
+    return res.status(503).json({
+      error: {
+        message: 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.',
+        codigo: 'servicio_no_disponible',
+      },
     });
   }
 
-  const cliente = buscarCliente(req.headers['x-comprender-acceso'], claves);
-  if (!cliente) {
-    return res.status(401).json({ error: { message: 'Clave de acceso incorrecta o ausente.' } });
+  if (!permiso || !permiso.permitido) {
+    const motivo = (permiso && permiso.motivo) || 'no_autorizado';
+    const mapa = {
+      sin_saldo:          [402, 'Te quedaste sin creditos.'],
+      requiere_plan:      [403, 'Tu plan no incluye este modulo.'],
+      modulo_inactivo:    [403, 'Este modulo no esta disponible.'],
+      perfil_inexistente: [401, 'No encontramos tu cuenta. Volve a iniciar sesion.'],
+    };
+    const [codigo, mensaje] = mapa[motivo] || [403, 'No autorizado.'];
+    return res.status(codigo).json({
+      error: {
+        message: mensaje,
+        codigo: motivo,
+        modulo,
+        plan_actual: permiso ? permiso.plan : null,
+        saldo: permiso ? permiso.saldo : null,
+      },
+    });
   }
 
-  // --- Control de acceso por plan ---
-  // El cliente declara desde qué módulo llama. Es informativo: un usuario decidido podría
-  // falsear el header. Sirve para que el plan tenga efecto real sin base de datos, no como
-  // barrera criptográfica.
-  const modulo = String(req.headers['x-comprender-modulo'] || '').trim().toLowerCase();
-  if (modulo && PLAN_MINIMO_MODULO[modulo]) {
-    if (!planAlcanza(cliente.plan, PLAN_MINIMO_MODULO[modulo])) {
-      return res.status(403).json({
-        error: {
-          message: 'Tu plan no incluye este módulo.',
-          modulo,
-          plan_actual: cliente.plan,
-          plan_requerido: PLAN_MINIMO_MODULO[modulo],
-        },
-      });
-    }
-  }
+  // El cliente aprende su estado del servidor, no de su propio navegador.
+  res.setHeader('x-comprender-plan', String(permiso.plan));
+  res.setHeader('x-comprender-saldo', String(permiso.saldo));
+  res.setHeader('x-comprender-factor', String(permiso.factor));
+  res.setHeader('x-comprender-estimado', String(permiso.estimado));
+  res.setHeader('Access-Control-Expose-Headers',
+    'x-comprender-plan, x-comprender-saldo, x-comprender-factor, x-comprender-estimado');
 
-  // El cliente aprende su plan desde el servidor, no desde su propio navegador.
-  res.setHeader('x-comprender-plan', cliente.plan);
-  res.setHeader('Access-Control-Expose-Headers', 'x-comprender-plan');
-
+  // --- Cuerpo ---
   let body = req.body;
-  if (typeof body === 'string') {
-    try { body = JSON.parse(body); } catch (e) { body = null; }
-  }
+  if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = null; } }
   if (!body || !Array.isArray(body.messages)) {
-    return res.status(400).json({ error: { message: 'Cuerpo inválido: se esperaba { model, max_tokens, messages }.' } });
+    return res.status(400).json({ error: { message: 'Cuerpo invalido: se esperaba { model, max_tokens, messages }.' } });
   }
-
   if (MODELOS_PERMITIDOS && MODELOS_PERMITIDOS.indexOf(body.model) === -1) {
     return res.status(400).json({ error: { message: 'Modelo no permitido.' } });
   }
@@ -160,8 +195,10 @@ export default async function handler(req, res) {
     body.max_tokens = MAX_TOKENS_TOPE;
   }
 
+  // --- 3 · Anthropic ---
+  let r, data;
   try {
-    const r = await fetch(ANTHROPIC_URL, {
+    r = await fetch(ANTHROPIC_URL, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -170,26 +207,46 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify(body),
     });
-    const data = await r.json();
-
-    // Queda en los logs de Vercel quién consumió y cuánto. Nunca se registra la clave.
-    try {
-      const u = (data && data.usage) || {};
-      console.log(JSON.stringify({
-        evento: 'consumo',
-        cliente: cliente.clave.slice(0, 3) + '***',
-        plan: cliente.plan,
-        modulo: modulo || 'core',
-        entrada: u.input_tokens || 0,
-        salida: u.output_tokens || 0,
-        estado: r.status,
-      }));
-    } catch (e) { /* el registro nunca debe romper la respuesta */ }
-
-    return res.status(r.status).json(data);
+    data = await r.json();
   } catch (e) {
     return res.status(502).json({
       error: { message: 'No se pudo contactar al proveedor de IA.', detalle: String((e && e.message) || e) },
     });
   }
+
+  // --- 4 · Descontar por consumo REAL ---
+  // Solo si la respuesta fue buena: una consulta que fallo no se cobra.
+  if (r.ok && data && data.usage) {
+    const u = data.usage;
+    try {
+      const cobro = await rpc('consumir', {
+        p_perfil:          usuario,
+        p_modulo:          modulo,
+        p_entrada:         u.input_tokens || 0,
+        p_salida:          u.output_tokens || 0,
+        p_cache_lectura:   u.cache_read_input_tokens || 0,
+        p_cache_escritura: u.cache_creation_input_tokens || 0,
+      }, secreta);
+
+      if (cobro) {
+        res.setHeader('x-comprender-saldo', String(cobro.saldo));
+        res.setHeader('x-comprender-cobrado', String(cobro.creditos));
+        res.setHeader('Access-Control-Expose-Headers',
+          'x-comprender-plan, x-comprender-saldo, x-comprender-factor, x-comprender-estimado, x-comprender-cobrado');
+      }
+    } catch (e) {
+      // La respuesta ya existe y el usuario la merece: no se le niega por un
+      // fallo de contabilidad. Pero esto es plata sin cobrar y tiene que gritar.
+      console.error(JSON.stringify({
+        evento: 'COBRO_PERDIDO',
+        usuario: String(usuario).slice(0, 8),
+        modulo,
+        entrada: u.input_tokens || 0,
+        salida: u.output_tokens || 0,
+        detalle: String((e && e.message) || e),
+      }));
+    }
+  }
+
+  return res.status(r.status).json(data);
 }
