@@ -130,6 +130,11 @@ export default async function handler(req, res) {
 
   const tipo = String(cuerpo.type || cuerpo.topic || req.query.type || req.query.topic || '');
   const id   = String((cuerpo.data && cuerpo.data.id) || req.query['data.id'] || req.query.id || '');
+
+  // Se registra TODA notificacion al entrar, antes de procesar. Si algo falla
+  // despues, al menos consta que llego. Un aviso invisible no se puede depurar.
+  registrar({ accion: 'recibido', tipo: tipo || '(sin tipo)', id: id || '(sin id)' });
+
   if (!id) { registrar({ aviso: 'aviso sin id', tipo }); return res.status(200).json({ ok: true }); }
 
   try {
@@ -159,6 +164,7 @@ export default async function handler(req, res) {
       suscripcionId = s.id;
       monto = s.auto_recurring?.transaction_amount;
       moneda = s.auto_recurring?.currency_id || 'ARS';
+
       // La suscripcion recien autorizada todavia no cobro: el cobro llega
       // por subscription_authorized_payment. Aca solo interesa la baja.
       if (s.status === 'cancelled' || s.status === 'paused') {
@@ -166,9 +172,17 @@ export default async function handler(req, res) {
         if (perfil) {
           const r = await rpc('cancelar', { p_perfil: perfil });
           registrar({ accion: 'cancelada', perfil: String(perfil).slice(0, 8), estado: r?.estado });
+        } else {
+          registrar({ accion: 'cancelada_sin_perfil', suscripcion: s.id, estado: s.status });
         }
         return res.status(200).json({ ok: true });
       }
+      // Todo otro estado se registra igual. Ningun camino sale en silencio:
+      // un aviso que no deja rastro es un aviso que no se puede depurar.
+      registrar({
+        accion: 'suscripcion_estado', estado: s.status, suscripcion: s.id,
+        perfil: String(s.external_reference || '').slice(0, 8), monto,
+      });
       return res.status(200).json({ ok: true });
 
     } else {
