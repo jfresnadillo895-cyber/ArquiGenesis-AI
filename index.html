@@ -1161,6 +1161,29 @@ CIERRE DE LECTURA: cuando las seis dimensiones estén comprendidas (o declaradas
 [[PROYECTIVO:2 a 4 líneas: hacia dónde puede evolucionar este organismo según sus dinámicas internas, con la deriva más probable y la más deseable]]
 Después, el texto visible: síntesis territorial clara — qué estructura el estado actual, qué tensión raíz ordena el territorio, criterio y próximo paso. Aclarale al usuario que este proyectivo es de alcance interno: lee al organismo desde adentro, y se profundizará cuando la lectura del campo externo (Context) esté disponible.`;
 
+/* ===== CORTE F: extensión Negocios (se anexa al system solo en modo Negocio) =====
+   Dialecto empresarial. NO crea funciones nuevas: mapea al alfabeto universal (N1).
+   Reutiliza ficha, lazo propuesta→confirmación y sello de contrato SIN cambios.
+   Fuente: Documento Maestro de Reinicio v2.0, §4, §6, §11, §14. */
+const DIMENSIONES_NEGOCIO_MODO = {
+  B1:'Identidad y dirección', B2:'Mercado y relaciones', B3:'Economía y viabilidad',
+  B4:'Operaciones y capacidad', B5:'Organización y personas', B6:'Adaptación y evolución'
+};
+
+const NEGOCIO_PROMPT = `
+
+=== MODO NEGOCIO: LECTURA DEL ORGANISMO EMPRESARIAL (ACTIVO) ===
+Estás conduciendo una lectura estructurada de una organización entendida como organismo (empresa, emprendimiento, estudio, institución, proyecto económico). No sos un consultor ni un generador de plan de negocio: comprendés qué relación organiza realmente el estado del negocio antes de sugerir cualquier acción. Trabajás en lenguaje universal (no urbano): identificás primero la función del alfabeto universal y leés a través de seis dimensiones en dos triadas. Las dimensiones no son departamentos: son fuerzas que organizan el negocio.
+Triada de la dirección (por qué existe y con quién se sostiene): B1 Identidad y dirección (propósito, propuesta de valor, prioridades, criterios de decisión) · B2 Mercado y relaciones (clientes, canales, confianza, recurrencia, proveedores, competencia) · B3 Economía y viabilidad (ingresos, margen, precios, caja, capital de trabajo, concentración).
+Triada de la capacidad (con qué cumple y cómo perdura): B4 Operaciones y capacidad (procesos, tiempos, calidad, cuellos de botella, continuidad) · B5 Organización y personas (roles, decisión, coordinación, conocimiento, dependencia de personas clave) · B6 Adaptación y evolución (señales externas, aprendizaje, escenarios, forma agotada, preparación futura).
+
+CONDUCCIÓN: presentá la lectura brevemente y recorré las triadas en orden, preguntando en lenguaje llano por hasta dos dimensiones por turno (3-4 turnos en total). Preguntas concretas y observables, adaptadas al tipo y escala del negocio. El síntoma no es la tensión: "vendo poco", "trabajo demasiado", "no alcanza la plata" o "nadie se hace cargo" son entradas; descubrí qué relación las organiza. No confundas métrica con comprensión: los números son evidencia, no diagnóstico. No recomiendes antes de comprender: la función es anterior al operador (una contratación, un software, un crédito o un proceso sólo tiene sentido una vez reconocida la función que debe cumplir). Nunca muestres códigos B1-B6 ni las palabras "triada" o "dimensión" al usuario. Si el usuario no sabe responder una dimensión, registrala como desconocida y seguí sin insistir. Cuando aparezca un límite profesional (contable, impositivo, legal, financiero regulado, laboral), nombralo, derivá al matriculado que corresponde y ordená qué conviene reunir, sin dictaminar.
+
+CIERRE DE LECTURA: cuando las seis dimensiones estén comprendidas (o declaradas sin datos), cerrá la lectura. Al INICIO de esa respuesta final, además de los marcadores habituales, emití EXACTAMENTE seis marcadores de dimensión y un proyectivo:
+[[NDIM:B1|estado|nota de una línea]] (uno por dimensión, estado ∈ critica, tensionada, estable, potencia, desconocida)
+[[PROYECTIVO:2 a 4 líneas: hacia dónde puede evolucionar este negocio según sus dinámicas internas — qué forma actual se agota, qué capacidad emergente puede organizar la etapa siguiente, la deriva más probable y la más deseable]]
+Después, el texto visible: síntesis clara — qué tensión raíz organiza hoy el negocio, qué función debe restaurarse o fortalecerse, qué capacidades lo sostienen y qué fragilidades o dependencias lo exponen, y un próximo paso verificable. Distinguí dato declarado, cálculo, inferencia e hipótesis. Aclarale al usuario que esta lectura es de alcance interno y se potencia al cruzarla con una evaluación del campo externo (Context).`;
+
 /* ================= estado ================= */
 const state = {
   history: [],        // mensajes {role, content} para la API (content crudo con marcadores)
@@ -1169,6 +1192,7 @@ const state = {
   organismo: null,    // ficha viva activa o null (Modo Chat)
   modoUrban: false,   // lectura territorial en curso
   modoContext: false, // evaluación de campo en curso
+  modoNegocio: false, // lectura empresarial en curso
   epoch: 0,           // token de sesión: invalida respuestas en vuelo al cambiar de organismo/sesión
   started: false,
   busy: false
@@ -1200,8 +1224,8 @@ const TENSION_NOMBRE = {
 
 /* ================= parsing de marcadores ================= */
 function parseMotor(raw){
-  const out = { visible: raw, diag:null, tension:null, funcion:null, principios:[], cristaliza:[], destilado:null, ficha:null, derivar:null, udims:[], proyectivo:null, paradigma:null, cfuers:[], campo:null };
-  const re = /\[\[(DIAG|TENSION|FUNCION|PRINCIPIO|CRISTALIZA|DESTILADO|FICHA|DERIVAR|UDIM|PROYECTIVO|PARADIGMA|CFUER|CAMPO)(?::([\s\S]*?))?\]\]/g;
+  const out = { visible: raw, diag:null, tension:null, funcion:null, principios:[], cristaliza:[], destilado:null, ficha:null, derivar:null, udims:[], ndims:[], proyectivo:null, paradigma:null, cfuers:[], campo:null };
+  const re = /\[\[(DIAG|TENSION|FUNCION|PRINCIPIO|CRISTALIZA|DESTILADO|FICHA|DERIVAR|UDIM|NDIM|PROYECTIVO|PARADIGMA|CFUER|CAMPO)(?::([\s\S]*?))?\]\]/g;
   let m;
   while((m = re.exec(raw)) !== null){
     const tipo = m[1]; const val = (m[2]||'').trim();
@@ -1225,6 +1249,16 @@ function parseMotor(raw){
       const partes = val.split('|');
       if(partes.length >= 2){
         out.udims.push({
+          cod: partes[0].trim().toUpperCase(),
+          estado: partes[1].trim().toLowerCase(),
+          nota: (partes[2] || '').trim()
+        });
+      }
+    }
+    else if(tipo==='NDIM' && val){
+      const partes = val.split('|');
+      if(partes.length >= 2){
+        out.ndims.push({
           cod: partes[0].trim().toUpperCase(),
           estado: partes[1].trim().toLowerCase(),
           nota: (partes[2] || '').trim()
@@ -1442,6 +1476,46 @@ var CAMPOS_FICHA = ['funcion','modo','tensiones','diagnostico','proximo'];
 var FUNCIONES_14 = ['estabilizar','conectar','contener','transferir','transformar','equilibrar',
                     'diferenciar','integrar','conservar','regular','amplificar','filtrar',
                     'orientar','anticipar'];
+/* ============ N1 · NEGOCIOS — DICCIONARIO Y COBERTURA (DATO INERTE) ============
+   Primer incremento de la especialidad Negocios. Es SÓLO dato: no se lee en
+   runtime, no persiste, no toca el prompt ni la UI. Su única lectura vive en el
+   banco de pruebas (#pruebas), como autocomprobación de correspondencia.
+   Rollback: borrar este bloque y el sub-bloque «N1 · Negocios» de correrPruebasAuto.
+   Los IDs NE## nunca se muestran (H02): son internos, como T## y M##. Cada tensión
+   mapea a funciones del alfabeto universal (FUNCIONES_14): el dialecto empresarial
+   NO crea funciones nuevas. Fuente: Documento Maestro de Reinicio v2.0, §4 y §6. */
+var DIMENSIONES_NEGOCIO = [
+  { cod:'D1', clave:'identidad_direccion',   nombre:'Identidad y dirección' },
+  { cod:'D2', clave:'mercado_relaciones',    nombre:'Mercado y relaciones' },
+  { cod:'D3', clave:'economia_viabilidad',   nombre:'Economía y viabilidad' },
+  { cod:'D4', clave:'operaciones_capacidad', nombre:'Operaciones y capacidad' },
+  { cod:'D5', clave:'organizacion_personas', nombre:'Organización y personas' },
+  { cod:'D6', clave:'adaptacion_evolucion',  nombre:'Adaptación y evolución' }
+];
+var TENSIONES_NEGOCIO = [
+  { id:'NE01', nombre:'Dirección dispersa',                funciones:['orientar'] },
+  { id:'NE02', nombre:'Propuesta de valor indistinta',     funciones:['diferenciar'] },
+  { id:'NE03', nombre:'Demanda desconectada',              funciones:['conectar'] },
+  { id:'NE04', nombre:'Dependencia comercial concentrada', funciones:['equilibrar','amplificar'] },
+  { id:'NE05', nombre:'Intercambio sin viabilidad',        funciones:['regular'] },
+  { id:'NE06', nombre:'Caja desfasada',                    funciones:['transferir'] },
+  { id:'NE07', nombre:'Capacidad saturada',                funciones:['contener'] },
+  { id:'NE08', nombre:'Capacidad fragmentada',             funciones:['integrar'] },
+  { id:'NE09', nombre:'Operación variable',                funciones:['estabilizar'] },
+  { id:'NE10', nombre:'Dependencia de persona clave',      funciones:['conservar'] },
+  { id:'NE11', nombre:'Roles indistintos',                 funciones:['diferenciar'] },
+  { id:'NE12', nombre:'Información que no circula',         funciones:['conectar'] },
+  { id:'NE13', nombre:'Exceso de oportunidades',           funciones:['filtrar'] },
+  { id:'NE14', nombre:'Crecimiento sin estructura',        funciones:['amplificar','contener'] },
+  { id:'NE15', nombre:'Forma de negocio agotada',          funciones:['transformar'] },
+  { id:'NE16', nombre:'Aprendizaje no incorporado',        funciones:['conservar','regular'] },
+  { id:'NE17', nombre:'Futuro no preparado',               funciones:['anticipar'] },
+  { id:'NE18', nombre:'Partes conectadas sin totalidad',   funciones:['integrar'] }
+];
+/* Matriz de cobertura 6×14 = 84 posiciones potenciales (§17 del maestro). No es
+   grilla obligatoria de UI: es control de puntos ciegos. Se deriva de los dos
+   ejes; ocupar las celdas es trabajo de incrementos posteriores (N2 en adelante). */
+/* ===================== fin bloque N1 · NEGOCIOS ===================== */
 var PROP_ESTADO_LABEL = { pendiente:'Propuesto', confirmada:'Confirmado', corregida:'Corregido',
                           rechazada:'Rechazado', caduca:'Necesita revisión' };
 var CAMPO_LABEL = { funcion:'Función vigente', modo:'Modo dominante', tensiones:'Tensiones activas',
@@ -1876,6 +1950,12 @@ function buildSystem(){
     ctx += '\nÚltima lectura territorial (v' + lu.version + '): ' +
       lu.dimensiones.map(function(d){ return (DIMENSIONES_URBAN[d.cod] || d.cod) + ': ' + d.estado; }).join(' · ');
   }
+  const lnegs = o.lecturas_negocio || [];
+  if(lnegs.length){
+    const ln = lnegs[lnegs.length - 1];
+    ctx += '\nÚltima lectura de negocio (v' + ln.version + '): ' +
+      ln.dimensiones.map(function(d){ return (DIMENSIONES_NEGOCIO_MODO[d.cod] || d.cod) + ': ' + d.estado; }).join(' · ');
+  }
   const pars = o.paradigmas || [];
   if(pars.length){
     const pp = pars[pars.length - 1];
@@ -1911,6 +1991,7 @@ function buildSystem(){
   ctx += '\nRespondé desde este estado. No empieces de cero.';
   if(state.modoUrban) ctx += URBAN_PROMPT;
   if(state.modoContext) ctx += CONTEXT_PROMPT;
+  if(state.modoNegocio) ctx += NEGOCIO_PROMPT;
   return ctx;
 }
 
@@ -1972,6 +2053,9 @@ async function enviar(texto){
     }
     if(state.modoContext && state.organismo && parsed.cfuers.length && parsed.campo){
       cerrarEvaluacionContext(parsed.cfuers, parsed.campo, parsed.proyectivo);
+    }
+    if(state.modoNegocio && state.organismo && parsed.ndims.length && parsed.proyectivo){
+      cerrarLecturaNegocio(parsed.ndims, parsed.proyectivo);
     }
     if(parsed.paradigma && state.organismo){
       const oPar = state.organismo;
@@ -3407,6 +3491,51 @@ function abrirEnUrban(org){
   enviar('Iniciá la lectura territorial de «' + org.nombre + '» (lectura v' + n + ').');
 }
 
+function abrirEnNegocio(org){
+  cerrarOverlay();
+  // Negocios (Corte F) es modo dentro del Core: reutiliza ficha, lazo y sello.
+  // No inventa un tipo de crédito propio; los turnos se cobran como chat normal
+  // (negocios.prueba_en_gratis:true; el precio se decide con medición real).
+  state.epoch++;
+  state.busy = false;
+  el.send.disabled = false;
+  el.dot.classList.remove('busy');
+  state.history = [];
+  state.principios = [];
+  state.ultimaLectura = null;
+  state.started = false;
+  state.derivarAvisado = true; // en Negocio la derivación es el contexto, no un aviso
+  el.stream.innerHTML = '';
+  resetHilo(org);
+  state.organismo = org;
+  state.modoUrban = false;
+  state.modoContext = false;
+  state.modoNegocio = true;
+  el.orgname.textContent = org.nombre;
+  el.orgchip.style.display = 'inline-flex';
+  el.orgchip.classList.remove('urban');
+  el.orgchip.classList.remove('context');
+  el.btnFicha.style.display = 'inline-block';
+  document.getElementById('btnPromover').style.display = 'none';
+  const n = (org.lecturas_negocio || []).length + 1;
+  enviar('Iniciá la lectura de negocio de «' + org.nombre + '» (lectura v' + n + ').');
+}
+
+function cerrarLecturaNegocio(ndims, proyectivo){
+  const o = state.organismo;
+  o.lecturas_negocio = o.lecturas_negocio || [];
+  o.proyectivos = o.proyectivos || [];
+  const version = o.lecturas_negocio.length + 1;
+  const dimensiones = ndims.map(function(u){
+    return { cod: u.cod, nombre: DIMENSIONES_NEGOCIO_MODO[u.cod] || u.cod, estado: u.estado, nota: u.nota };
+  });
+  o.lecturas_negocio.push({ version: version, fecha: new Date().toISOString(), dimensiones: dimensiones });
+  o.proyectivos.push({ version: o.proyectivos.length + 1, alcance: 'interno', texto: proyectivo, fecha: new Date().toISOString() });
+  o.actualizado = new Date().toISOString();
+  guardarOrganismo(o);
+  state.modoNegocio = false;
+}
+
 function cerrarLecturaUrban(udims, proyectivo){
   const o = state.organismo;
   o.lecturas_urban = o.lecturas_urban || [];
@@ -3588,6 +3717,7 @@ function nuevaSesion(){
   state.organismo = null;
   state.modoUrban = false;
   state.modoContext = false;
+  state.modoNegocio = false;
   state.started = false;
   state.derivarAvisado = false;
   el.orgchip.classList.remove('urban');
@@ -3757,6 +3887,7 @@ function abrirOrganismo(org){
   state.organismo = org;
   state.modoUrban = false;
   state.modoContext = false;
+  state.modoNegocio = false;
   el.orgchip.classList.remove('urban');
   el.orgchip.classList.remove('context');
   el.orgname.textContent = org.nombre;
@@ -3795,6 +3926,7 @@ function mostrarFicha(){
     ['Derivación', (o.derivable && o.derivable.indexOf('urban') > -1) ? 'Marcada para Urban (lectura territorial disponible)' : 'sin derivaciones marcadas'],
     ['Lecturas territoriales', (o.lecturas_urban && o.lecturas_urban.length) ? o.lecturas_urban.length + ' realizadas (última v' + o.lecturas_urban.length + ')' : 'ninguna todavía'],
     ['Evaluaciones de campo', (o.evaluaciones_context && o.evaluaciones_context.length) ? o.evaluaciones_context.length + ' realizadas (última v' + o.evaluaciones_context.length + ')' : 'ninguna todavía'],
+    ['Lecturas de negocio', (o.lecturas_negocio && o.lecturas_negocio.length) ? o.lecturas_negocio.length + ' realizadas (última v' + o.lecturas_negocio.length + ')' : 'ninguna todavía'],
     ['Diagnósticos Pro', (o.diagnosticos_pro && o.diagnosticos_pro.length) ? o.diagnosticos_pro[o.diagnosticos_pro.length-1].resumen : 'ninguno incorporado'],
     ['Proyectivo vigente', (o.proyectivos && o.proyectivos.length) ? ('v' + o.proyectivos[o.proyectivos.length-1].version + ' · alcance ' + o.proyectivos[o.proyectivos.length-1].alcance) : 'aún no generado'],
     ['Paradigma vigente', (o.paradigmas && o.paradigmas.length) ? o.paradigmas[o.paradigmas.length-1].texto : 'aún no construido'],
@@ -3824,6 +3956,13 @@ function mostrarFicha(){
   bC.style.borderColor = 'rgba(155,123,212,.5)'; bC.style.color = 'var(--trans)';
   bC.onclick = function(){ abrirEnContext(o); };
   row.appendChild(bC);
+  const esNegocio = (o.derivable && o.derivable.indexOf('negocio') > -1) || /empresa|instituci|emprend|estudio|proyecto econ|negocio/i.test(o.tipo || '');
+  if(esNegocio){
+    const bN = document.createElement('button'); bN.className='btn'; bN.textContent='Abrir en Negocios';
+    bN.style.borderColor = 'rgba(91,143,212,.5)'; bN.style.color = 'var(--espacio)';
+    bN.onclick = function(){ abrirEnNegocio(o); };
+    row.appendChild(bN);
+  }
   const bM = document.createElement('button'); bM.className='btn'; bM.textContent='Marco para Pro';
   bM.onclick = function(){ cardMarcoPro(o); };
   row.appendChild(bM);
@@ -4173,6 +4312,44 @@ function correrPruebasAuto(){
     chk('mergeOrganismos · recencia gana', (mg.lista.find(function(o){return o.id==='a';})||{}).actualizado === '2025-01-01');
     chk('mergeOrganismos · conteo nuevos/actualizados', mg.nuevos === 1 && mg.actualizados === 1);
 
+    /* ---- N1 · Negocios: correspondencia del diccionario (dato inerte, sin estado) ---- */
+    chk('NEG·1 · las 18 tensiones mapean al alfabeto de 14', (function(){
+      if(TENSIONES_NEGOCIO.length !== 18) return false;
+      for(var i=0;i<TENSIONES_NEGOCIO.length;i++){
+        var fs = TENSIONES_NEGOCIO[i].funciones || [];
+        if(!fs.length) return false;
+        for(var j=0;j<fs.length;j++){ if(FUNCIONES_14.indexOf(fs[j]) === -1) return false; }
+      }
+      return true;
+    })());
+    chk('NEG·2 · las 14 funciones quedan cubiertas por al menos una tensión', (function(){
+      var cubiertas = {};
+      TENSIONES_NEGOCIO.forEach(function(t){ (t.funciones||[]).forEach(function(f){ cubiertas[f] = true; }); });
+      for(var i=0;i<FUNCIONES_14.length;i++){ if(!cubiertas[FUNCIONES_14[i]]) return false; }
+      return true;
+    })());
+    chk('NEG·3 · IDs únicos y matriz de cobertura 6×14 = 84', (function(){
+      var vistos = {};
+      for(var i=0;i<TENSIONES_NEGOCIO.length;i++){
+        if(vistos[TENSIONES_NEGOCIO[i].id]) return false;
+        vistos[TENSIONES_NEGOCIO[i].id] = true;
+      }
+      return DIMENSIONES_NEGOCIO.length === 6 &&
+             DIMENSIONES_NEGOCIO.length * FUNCIONES_14.length === 84;
+    })());
+    /* ---- N2 · Negocios: modo, marcador y anexado (Corte F) ---- */
+    chk('NEG·4 · parseMotor entiende NDIM (dimensión de negocio)', (function(){
+      var p = parseMotor('[[NDIM:B3|tensionada|caja desfasada]]Texto visible.');
+      return p.ndims.length === 1 && p.ndims[0].cod === 'B3' &&
+             p.ndims[0].estado === 'tensionada' && p.visible === 'Texto visible.';
+    })());
+    chk('NEG·5 · el bloque Negocio existe y protege sus códigos internos', (function(){
+      return typeof NEGOCIO_PROMPT === 'string' &&
+             NEGOCIO_PROMPT.indexOf('MODO NEGOCIO') > -1 &&
+             NEGOCIO_PROMPT.indexOf('Nunca muestres códigos B1-B6') > -1 &&
+             Object.keys(DIMENSIONES_NEGOCIO_MODO).length === 6;
+    })());
+
     /* ---- N1.0 · lazo propuesta -> confirmación ---- */
     chk('N01 · validador rechaza {}', validarCandidatoFicha({}).ok === false);
     chk('N02 · validador rechaza modo mal formado',
@@ -4264,6 +4441,13 @@ function correrPruebasAuto(){
                                 principios:[{texto:'un principio'}] };
             var b = buildSystemBloques(), completo = buildSystem(); state.organismo = g;
             return b.map(function(x){ return x.text; }).join('') === completo; })());
+      chk('NEG·6 · buildSystem anexa el modo Negocio solo cuando está activo',
+          (function(){ var g = state.organismo, mn = state.modoNegocio;
+            state.organismo = { id:'n', nombre:'N', tipo:'empresa', ficha:{funcion:'integrar'}, principios:[] };
+            state.modoNegocio = false; var sin = buildSystem();
+            state.modoNegocio = true;  var con = buildSystem();
+            state.organismo = g; state.modoNegocio = mn;
+            return sin.indexOf('MODO NEGOCIO') === -1 && con.indexOf('MODO NEGOCIO') > -1; })());
       chk('N20 · verPanel existe y no falla con ninguna solapa',
           (function(){ if(typeof verPanel !== 'function') return false;
             try{ verPanel('recorrido'); verPanel('principios'); }catch(e){ return false; }
