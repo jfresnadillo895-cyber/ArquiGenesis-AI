@@ -2079,6 +2079,11 @@ function resolverPropuesta(id, accion, correccion){
 /* ================= N1.0 · interfaz ================= */
 
 function avisoPropuesta(p){
+  // Sólo puede haber UNA propuesta pendiente por organismo: retirar del hilo los
+  // carteles anteriores (ya caducados) antes de mostrar el nuevo, para no dejar
+  // varios "Revisar" colgados apuntando a propuestas superadas.
+  var viejos = el.stream.querySelectorAll('.propaviso');
+  for(var v=0; v<viejos.length; v++){ viejos[v].remove(); }
   var d = document.createElement('div');
   d.className = 'propaviso';
   var t = document.createElement('span'); t.className = 'pa-txt';
@@ -4769,6 +4774,14 @@ function correrPruebasAuto(){
       return p.visible === 'Texto visible del cierre.' &&
              p.visible.indexOf('M07') === -1 && p.visible.indexOf('FUNCION=') === -1 &&
              p.ficha === null; // malformado: no se interpreta como propuesta
+    })());
+    chk('NEG·8 · sólo un cartel de propuesta a la vez en el hilo', (function(){
+      var snap = el.stream.innerHTML;
+      try{
+        avisoPropuesta({ id:'p1', campos:['diagnostico'] });
+        avisoPropuesta({ id:'p2', campos:['diagnostico'] });
+        return el.stream.querySelectorAll('.propaviso').length === 1;
+      } finally { el.stream.innerHTML = snap; }
     })());
 
     /* ---- N1.0 · lazo propuesta -> confirmación ---- */
