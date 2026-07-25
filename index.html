@@ -148,6 +148,8 @@ header .spacer{flex:1}
 #orgchip.urban::after{content:"URBAN";font-size:8.5px;letter-spacing:.14em;color:var(--energia);font-weight:500}
 #orgchip.context{border-color:rgba(155,123,212,.5)}
 #orgchip.context::after{content:"CONTEXT";font-size:8.5px;letter-spacing:.14em;color:var(--trans);font-weight:500}
+#orgchip.negocio{border-color:rgba(91,143,212,.5)}
+#orgchip.negocio::after{content:"NEGOCIO";font-size:8.5px;letter-spacing:.14em;color:var(--espacio);font-weight:500}
 .upanel{box-shadow:0 2px 10px rgba(28,42,58,.06);
   border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--panel);
 }
@@ -3667,6 +3669,7 @@ function abrirEnContext(org){
   el.orgname.textContent = org.nombre;
   el.orgchip.style.display = 'inline-flex';
   el.orgchip.classList.remove('urban');
+  el.orgchip.classList.remove('negocio');
   el.orgchip.classList.add('context');
   el.btnFicha.style.display = 'inline-block';
   document.getElementById('btnPromover').style.display = 'none';
@@ -3691,6 +3694,7 @@ function cerrarEvaluacionContext(cfuers, campo, proyectivo){
   renderPanelContext(version, fuerzas, campo, proyectivo);
   state.modoContext = false;
   el.orgchip.classList.remove('context');
+  el.orgchip.classList.remove('negocio');
 }
 
 function renderPanelContext(version, fuerzas, campo, proyectivo){
@@ -3856,6 +3860,7 @@ function abrirEnUrban(org){
   el.orgname.textContent = org.nombre;
   el.orgchip.style.display = 'inline-flex';
   el.orgchip.classList.remove('context');
+  el.orgchip.classList.remove('negocio');
   el.orgchip.classList.add('urban');
   el.btnFicha.style.display = 'inline-block';
   document.getElementById('btnPromover').style.display = 'none';
@@ -3887,6 +3892,8 @@ function abrirEnNegocio(org){
   el.orgchip.style.display = 'inline-flex';
   el.orgchip.classList.remove('urban');
   el.orgchip.classList.remove('context');
+  el.orgchip.classList.remove('negocio');
+  el.orgchip.classList.add('negocio');
   el.btnFicha.style.display = 'inline-block';
   document.getElementById('btnPromover').style.display = 'none';
   const n = (org.lecturas_negocio || []).length + 1;
@@ -3906,6 +3913,8 @@ function cerrarLecturaNegocio(ndims, proyectivo){
   o.actualizado = new Date().toISOString();
   guardarOrganismo(o);
   state.modoNegocio = false;
+  el.orgchip.classList.remove('negocio');
+  renderPanelNegocio(version, dimensiones, proyectivo);
 }
 
 function cerrarLecturaUrban(udims, proyectivo){
@@ -3923,6 +3932,43 @@ function cerrarLecturaUrban(udims, proyectivo){
   renderPanelUrban(version, dimensiones, proyectivo);
   state.modoUrban = false;
   el.orgchip.classList.remove('urban');
+  el.orgchip.classList.remove('negocio');
+}
+
+function renderPanelNegocio(version, dimensiones, proyectivo){
+  const d = document.createElement('div');
+  d.className = 'msg motor';
+  const panel = document.createElement('div');
+  panel.className = 'upanel';
+  const t = document.createElement('div');
+  t.className = 'utitulo';
+  t.textContent = 'Lectura de negocio · v' + version;
+  panel.appendChild(t);
+  const grid = document.createElement('div');
+  grid.className = 'ugrid';
+  for(const dim of dimensiones){
+    const it = document.createElement('div');
+    it.className = 'udim';
+    it.style.borderLeftColor = ESTADO_COLOR[dim.estado] || ESTADO_COLOR.desconocida;
+    const nm = document.createElement('span'); nm.className = 'unombre'; nm.textContent = dim.nombre;
+    const es = document.createElement('span'); es.className = 'uestado';
+    es.textContent = dim.estado; es.style.color = ESTADO_COLOR[dim.estado] || ESTADO_COLOR.desconocida;
+    it.appendChild(nm); it.appendChild(es);
+    if(dim.nota){ const no = document.createElement('span'); no.className = 'unota'; no.textContent = dim.nota; it.appendChild(no); }
+    grid.appendChild(it);
+  }
+  panel.appendChild(grid);
+  const pr = document.createElement('div');
+  pr.className = 'uproyectivo';
+  pr.innerHTML = '<b>Proyectivo interno</b> · se potencia al cruzarlo con el campo (Context)';
+  const prt = document.createElement('div');
+  prt.style.marginTop = '6px';
+  prt.textContent = proyectivo;
+  pr.appendChild(prt);
+  panel.appendChild(pr);
+  d.appendChild(panel);
+  el.stream.appendChild(d);
+  scrollBottom();
 }
 
 function renderPanelUrban(version, dimensiones, proyectivo){
@@ -4093,6 +4139,7 @@ function nuevaSesion(){
   state.started = false;
   state.derivarAvisado = false;
   el.orgchip.classList.remove('urban');
+  el.orgchip.classList.remove('negocio');
   el.stream.innerHTML = '';
   resetHilo(null);
   el.chat.style.display = 'none';
@@ -4301,6 +4348,7 @@ function abrirOrganismo(org){
   state.modoNegocio = false;
   el.orgchip.classList.remove('urban');
   el.orgchip.classList.remove('context');
+  el.orgchip.classList.remove('negocio');
   el.orgname.textContent = org.nombre;
   el.orgchip.style.display = 'inline-flex';
   el.btnFicha.style.display = 'inline-block';
@@ -4781,6 +4829,17 @@ function correrPruebasAuto(){
         avisoPropuesta({ id:'p1', campos:['diagnostico'] });
         avisoPropuesta({ id:'p2', campos:['diagnostico'] });
         return el.stream.querySelectorAll('.propaviso').length === 1;
+      } finally { el.stream.innerHTML = snap; }
+    })());
+    chk('NEG·9 · el cierre de negocio pinta su panel con las seis dimensiones', (function(){
+      var snap = el.stream.innerHTML;
+      try{
+        var dims = ['B1','B2','B3','B4','B5','B6'].map(function(c){ return { cod:c, nombre:DIMENSIONES_NEGOCIO_MODO[c], estado:'estable', nota:'' }; });
+        renderPanelNegocio(1, dims, 'proyectivo de prueba');
+        var panels = el.stream.querySelectorAll('.upanel');
+        var panel = panels[panels.length-1];
+        return !!panel && panel.querySelectorAll('.udim').length === 6 &&
+               panel.textContent.indexOf('Lectura de negocio') > -1;
       } finally { el.stream.innerHTML = snap; }
     })());
 
