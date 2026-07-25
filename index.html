@@ -267,7 +267,9 @@ header .spacer{flex:1}
 .orgitem .oname{font-weight:600;font-size:13.5px;color:var(--text)}
 .orgitem .otipo{font-family:'DM Mono',monospace;font-size:10px;color:var(--faint);letter-spacing:.06em;display:block}
 .orgitem .ostado{flex:1;font-size:12px;color:var(--dim);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.orgnew{font-size:12.5px;color:var(--accent);padding:12px 2px;text-align:left}
+.orgnew{display:block;width:100%;text-align:left;padding:15px 17px;border:1px dashed var(--line);border-radius:var(--radius);background:var(--panel);font-size:13.5px;color:var(--accent);line-height:1.45;transition:all .2s;box-shadow:0 1px 2px rgba(28,42,58,.04);margin-top:2px}
+.orgnew:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 4px 14px rgba(46,90,135,.10)}
+.orgnew b{display:block;color:var(--accent);font-weight:600;font-size:13px;margin-bottom:3px;letter-spacing:.02em}
 .ofich{
   flex-shrink:0;font-size:15px;color:var(--faint);padding:4px 9px;border-radius:8px;
   border:1px solid transparent;transition:all .15s;line-height:1;
@@ -503,7 +505,7 @@ header .spacer{flex:1}
       <div class="orgsec">
         <h4>Organismos incorporados</h4>
         <div class="orglist" id="orglist"></div>
-        <button class="orgnew" id="btnOrgNuevo">+ Incorporar un organismo</button>
+        <button class="orgnew" id="btnOrgNuevo"><b>+ Incorporar un organismo</b>Un territorio, una empresa o un proyecto para comprender en el tiempo.</button>
         <div class="orgtools">
           <button class="orgtool" id="btnExportar">Exportar respaldo</button>
           <button class="orgtool" id="btnImportar">Importar respaldo</button>
@@ -1537,11 +1539,12 @@ Estás conduciendo una lectura estructurada de una organización entendida como 
 Triada de la dirección (por qué existe y con quién se sostiene): B1 Identidad y dirección (propósito, propuesta de valor, prioridades, criterios de decisión) · B2 Mercado y relaciones (clientes, canales, confianza, recurrencia, proveedores, competencia) · B3 Economía y viabilidad (ingresos, margen, precios, caja, capital de trabajo, concentración).
 Triada de la capacidad (con qué cumple y cómo perdura): B4 Operaciones y capacidad (procesos, tiempos, calidad, cuellos de botella, continuidad) · B5 Organización y personas (roles, decisión, coordinación, conocimiento, dependencia de personas clave) · B6 Adaptación y evolución (señales externas, aprendizaje, escenarios, forma agotada, preparación futura).
 
-CONDUCCIÓN: presentá la lectura brevemente y recorré las triadas en orden, preguntando en lenguaje llano por hasta dos dimensiones por turno (3-4 turnos en total). Preguntas concretas y observables, adaptadas al tipo y escala del negocio. El síntoma no es la tensión: "vendo poco", "trabajo demasiado", "no alcanza la plata" o "nadie se hace cargo" son entradas; descubrí qué relación las organiza. No confundas métrica con comprensión: los números son evidencia, no diagnóstico. No recomiendes antes de comprender: la función es anterior al operador (una contratación, un software, un crédito o un proceso sólo tiene sentido una vez reconocida la función que debe cumplir). Nunca muestres códigos B1-B6 ni las palabras "triada" o "dimensión" al usuario. Si el usuario no sabe responder una dimensión, registrala como desconocida y seguí sin insistir. Cuando aparezca un límite profesional (contable, impositivo, legal, financiero regulado, laboral), nombralo, derivá al matriculado que corresponde y ordená qué conviene reunir, sin dictaminar.
+CONDUCCIÓN: presentá la lectura brevemente y recorré las triadas en orden, preguntando en lenguaje llano por hasta dos dimensiones por turno (3-4 turnos en total). Preguntas concretas y observables, adaptadas al tipo y escala del negocio. El síntoma no es la tensión: "vendo poco", "trabajo demasiado", "no alcanza la plata" o "nadie se hace cargo" son entradas; descubrí qué relación las organiza. No confundas métrica con comprensión: los números son evidencia, no diagnóstico. No recomiendes antes de comprender: la función es anterior al operador (una contratación, un software, un crédito o un proceso sólo tiene sentido una vez reconocida la función que debe cumplir). Cuando en la lectura emerja un hallazgo que reorganiza la comprensión —una relación o una pregunta que corre el foco—, numeralo de forma visible (Hallazgo 1, Hallazgo 2…) y mantené esa numeración a lo largo de la conversación para poder referenciarlo después; ese número es para los hallazgos de este negocio, no para leyes universales. Nunca muestres códigos B1-B6 ni las palabras "triada" o "dimensión" al usuario. Si el usuario no sabe responder una dimensión, registrala como desconocida y seguí sin insistir. Cuando aparezca un límite profesional (contable, impositivo, legal, financiero regulado, laboral), nombralo, derivá al matriculado que corresponde y ordená qué conviene reunir, sin dictaminar.
 
 CIERRE DE LECTURA: cuando las seis dimensiones estén comprendidas (o declaradas sin datos), cerrá la lectura. Al INICIO de esa respuesta final, además de los marcadores habituales, emití EXACTAMENTE seis marcadores de dimensión y un proyectivo:
 [[NDIM:B1|estado|nota de una línea]] (uno por dimensión, estado ∈ critica, tensionada, estable, potencia, desconocida)
 [[PROYECTIVO:2 a 4 líneas: hacia dónde puede evolucionar este negocio según sus dinámicas internas — qué forma actual se agota, qué capacidad emergente puede organizar la etapa siguiente, la deriva más probable y la más deseable]]
+Para proponer la actualización de la ficha usá el marcador de contrato COMPLETO del canon, con su envoltura y la palabra FICHA al frente: [[FICHA:FUNCION=...|MODO=...|TENSIONES=...|DIAGNOSTICO=...|PROXIMO=...]]. Nunca emitas esos campos sueltos ni sin FICHA: adelante.
 Después, el texto visible: síntesis clara — qué tensión raíz organiza hoy el negocio, qué función debe restaurarse o fortalecerse, qué capacidades lo sostienen y qué fragilidades o dependencias lo exponen, y un próximo paso verificable. Distinguí dato declarado, cálculo, inferencia e hipótesis. Aclarale al usuario que esta lectura es de alcance interno y se potencia al cruzarla con una evaluación del campo externo (Context).`;
 
 /* ================= estado ================= */
@@ -1643,6 +1646,10 @@ function parseMotor(raw){
     }
   }
   let visible = raw.replace(re,'');
+  // Red de seguridad H02: cualquier [[...]] con forma de marcador interno —incluso
+  // malformado, p. ej. sin la envoltura FICHA:— se suprime del texto visible. Nunca
+  // se lo interpreta: un marcador mal formado se descarta, no se adivina.
+  visible = visible.replace(/\[\[\s*(?:DIAG|TENSION|FUNCION|PRINCIPIO|CRISTALIZA|DESTILADO|FICHA|DERIVAR|UDIM|NDIM|PROYECTIVO|PARADIGMA|CFUER|CAMPO|MODO|TENSIONES|DIAGNOSTICO|PROXIMO|ORIENTACION)[\s\S]*?\]\]/g, '');
   if(out.destilado){
     // el bloque destilado (IDEAS/CORRESPONDENCIAS/ABIERTO) se separa del texto visible
     const idx = visible.search(/IDEAS\s*[:\-]/i);
@@ -4756,6 +4763,12 @@ function correrPruebasAuto(){
              orientacionDeTipo('Especie / ser vivo') === null &&
              orientacionDeTipo('Investigación') === null &&
              orientacionDeTipo('Otro') === null;
+    })());
+    chk('NEG·7 · red H02: un marcador malformado no se filtra al texto visible', (function(){
+      var p = parseMotor('[[FUNCION=amplificar|MODO=M07|TENSIONES=a; b|DIAGNOSTICO=d|PROXIMO=p]]Texto visible del cierre.');
+      return p.visible === 'Texto visible del cierre.' &&
+             p.visible.indexOf('M07') === -1 && p.visible.indexOf('FUNCION=') === -1 &&
+             p.ficha === null; // malformado: no se interpreta como propuesta
     })());
 
     /* ---- N1.0 · lazo propuesta -> confirmación ---- */
