@@ -1681,7 +1681,7 @@ function addUserMsg(text){
   scrollBottom();
 }
 
-function addMotorMsg(parsed){
+function addMotorMsg(parsed, replay){
   const d = document.createElement('div');
   d.className = 'msg motor';
   const b = document.createElement('div');
@@ -1694,7 +1694,7 @@ function addMotorMsg(parsed){
     cd.className = 'cristaliza';
     cd.textContent = c;
     d.appendChild(cd);
-    registrarMomento('cristalizacion', c, { tension: parsed.tension, funcion: parsed.funcion, diag: parsed.diag });   /* N2 */
+    if(!replay) registrarMomento('cristalizacion', c, { tension: parsed.tension, funcion: parsed.funcion, diag: parsed.diag });   /* N2 · no re-registrar al restaurar borrador */
   }
 
   if(parsed.tension || parsed.funcion){
@@ -2422,14 +2422,15 @@ async function enviar(texto){
     }
     if(parsed.ficha) proponerFicha(parsed.ficha, state.ultimaLectura);
     else if(state.organismo && parsed.principios.length) guardarOrganismo(state.organismo);
+    var cerroLectura = false;
     if(state.modoUrban && state.organismo && parsed.udims.length && parsed.proyectivo){
-      cerrarLecturaUrban(parsed.udims, parsed.proyectivo);
+      cerrarLecturaUrban(parsed.udims, parsed.proyectivo); cerroLectura = true;
     }
     if(state.modoContext && state.organismo && parsed.cfuers.length && parsed.campo){
-      cerrarEvaluacionContext(parsed.cfuers, parsed.campo, parsed.proyectivo);
+      cerrarEvaluacionContext(parsed.cfuers, parsed.campo, parsed.proyectivo); cerroLectura = true;
     }
     if(state.modoNegocio && state.organismo && parsed.ndims.length && parsed.proyectivo){
-      cerrarLecturaNegocio(parsed.ndims, parsed.proyectivo);
+      cerrarLecturaNegocio(parsed.ndims, parsed.proyectivo); cerroLectura = true;
     }
     if(parsed.paradigma && state.organismo){
       const oPar = state.organismo;
@@ -2454,6 +2455,12 @@ async function enviar(texto){
       }
     }
     if(parsed.destilado && parsed.destiladoTexto) ofrecerGuardado(parsed.destiladoTexto);
+    // Borrador de sesión: mientras no consolide, se guarda el hilo en curso;
+    // al cerrar una lectura, se limpia (el significado ya es persistente).
+    if(state.organismo){
+      if(cerroLectura){ state.organismo.borrador = null; guardarOrganismo(state.organismo); }
+      else { guardarBorrador(); }
+    }
   }catch(err){
     if(epoch !== state.epoch) return;
     rmPensando();
@@ -4328,6 +4335,50 @@ function cardIncorporar(){
   setTimeout(function(){ inp.focus(); }, 60);
 }
 
+/* ===== Borrador de sesión (opción 3) =====================================
+   Guarda el hilo EN CURSO por organismo mientras no consolide, para retomarlo
+   al reabrir. Al cerrar una lectura, se limpia: el significado ya vive en
+   principios/recorrido/ficha. Es un estado rodante, no un archivo del chat.
+   Vive en localStorage (con tope); si el navegador limpia su almacenamiento,
+   se va con él —igual que hoy—. Cola acotada: no crece sin límite. */
+var BORRADOR_MAX_MSGS = 40;   // ~20 turnos
+function guardarBorrador(){
+  var o = state.organismo;
+  if(!o || !state.history || !state.history.length) return;
+  var modo = state.modoNegocio ? 'negocio' : state.modoUrban ? 'urban' : state.modoContext ? 'context' : null;
+  var h = state.history.length > BORRADOR_MAX_MSGS
+        ? state.history.slice(state.history.length - BORRADOR_MAX_MSGS)
+        : state.history.slice();
+  o.borrador = { history: h, modo: modo, ts: new Date().toISOString() };
+  guardarOrganismo(o);
+}
+function restaurarBorrador(o){
+  var b = o && o.borrador;
+  if(!b || !b.history || !b.history.length) return false;
+  startChat();
+  el.stream.innerHTML = '';
+  state.history = b.history.slice();
+  state.started = true;
+  for(var i=0; i<state.history.length; i++){
+    var m = state.history[i];
+    if(m.role === 'user') addUserMsg(m.content);
+    else addMotorMsg(parseMotor(m.content), true);   // replay: no re-registra momentos
+  }
+  state.modoNegocio = b.modo === 'negocio';
+  state.modoUrban   = b.modo === 'urban';
+  state.modoContext = b.modo === 'context';
+  el.orgchip.classList.remove('urban');
+  el.orgchip.classList.remove('context');
+  el.orgchip.classList.remove('negocio');
+  if(b.modo) el.orgchip.classList.add(b.modo);
+  var av = document.createElement('div');
+  av.style.cssText = 'font-size:11px;color:var(--faint);text-align:center;padding:8px 0;letter-spacing:.04em';
+  av.textContent = 'Retomás donde quedaste — la lectura sigue en curso.';
+  el.stream.appendChild(av);
+  scrollBottom();
+  return true;
+}
+
 function abrirOrganismo(org){
   // invalidar cualquier respuesta en vuelo de la sesión anterior
   state.epoch++;
@@ -4354,6 +4405,7 @@ function abrirOrganismo(org){
   el.btnFicha.style.display = 'inline-block';
   renderChipPropuestas();
   document.getElementById('btnPromover').style.display = 'none';
+  if(restaurarBorrador(org)) return;   // hay hilo en curso sin consolidar: se retoma tal cual
   const tieneFicha = org.ficha && (org.ficha.funcion || org.ficha.diagnostico || org.ficha.proximo);
   if(tieneFicha){
     // prueba de continuidad (Principio 16): retomar debe demostrar memoria
@@ -4841,6 +4893,26 @@ function correrPruebasAuto(){
         return !!panel && panel.querySelectorAll('.udim').length === 6 &&
                panel.textContent.indexOf('Lectura de negocio') > -1;
       } finally { el.stream.innerHTML = snap; }
+    })());
+    chk('NEG·10 · el borrador restaura el hilo en curso al reabrir', (function(){
+      var g = state.organismo, gh = (state.history||[]).slice(), snap = el.stream.innerHTML,
+          gs = state.started, gmn = state.modoNegocio, gmu = state.modoUrban, gmc = state.modoContext,
+          gw = el.welcome.style.display, gc = el.chat.style.display;
+      try{
+        var o = { id:'__test_borrador', nombre:'B', tipo:'empresa', ficha:{}, principios:[],
+          borrador:{ history:[{role:'user',content:'hola'},
+                              {role:'assistant',content:'[[NDIM:B1|estable|x]]respuesta visible'}],
+                     modo:'negocio', ts:'x' } };
+        state.organismo = o; state.history = [];
+        return restaurarBorrador(o) === true &&
+               state.history.length === 2 &&
+               state.modoNegocio === true &&
+               el.stream.querySelectorAll('.msg').length >= 2;
+      } finally {
+        state.organismo = g; state.history = gh; el.stream.innerHTML = snap;
+        state.started = gs; state.modoNegocio = gmn; state.modoUrban = gmu; state.modoContext = gmc;
+        el.welcome.style.display = gw; el.chat.style.display = gc;
+      }
     })());
 
     /* ---- N1.0 · lazo propuesta -> confirmación ---- */
