@@ -3749,6 +3749,7 @@ function renderPanelContext(version, fuerzas, campo, proyectivo){
   }
   d.appendChild(panel);
   el.stream.appendChild(d);
+  ofrecerDerivacionInterna();
   scrollBottom();
 }
 
@@ -3795,16 +3796,51 @@ function mostrarDerivacion(){
   d.className = 'msg motor';
   const n = document.createElement('div');
   n.className = 'derivacion';
-  n.innerHTML = '';
   const b1 = document.createElement('b'); b1.textContent = 'Lectura territorial activada. ';
   n.appendChild(b1);
-  n.appendChild(document.createTextNode('Este caso pertenece al dominio urbano y el motor está aplicando su lectura territorial profunda. Para el diagnóstico completo — los 36 indicadores, el campo de fuerzas y el informe de presentación — el organismo está listo para llevarse a '));
+  n.appendChild(document.createTextNode('Este caso pertenece al dominio urbano. Para el diagnóstico completo — los 36 indicadores, el campo de fuerzas y el informe de presentación — el organismo está listo para llevarse a '));
   const b2 = document.createElement('b'); b2.textContent = 'Comprender · Urbanismo';
   n.appendChild(b2);
-  n.appendChild(document.createTextNode(': usá «Marco para Pro» en su Ficha.'));
+  n.appendChild(document.createTextNode('.'));
   d.appendChild(n);
+  const row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '8px';
+  const bt = document.createElement('button'); bt.className = 'btn primary'; bt.textContent = 'Abrir en Urbanismo →';
+  // abrirModulo ya gatea por plan: si no está habilitado, muestra la tarjeta de compra.
+  bt.onclick = function(){ abrirModulo('urbanismo'); };
+  row.appendChild(bt);
+  d.appendChild(row);
   el.stream.appendChild(d);
   scrollBottom();
+}
+
+/* N3 · DERIV·2 — tarjeta en el chat para seguir el MISMO organismo en otro modo
+   interno, sin pasar por Ficha. Reutiliza los handlers abrirEn* (no duplica lógica
+   de derivación); excluye el modo activo y respeta la elegibilidad de la Ficha.
+   H02: sin códigos internos; solo texto visible. */
+function ofrecerDerivacionInterna(){
+  var o = state.organismo; if(!o) return;
+  var esUrbano  = (o.derivable && o.derivable.indexOf('urban') > -1)  || orientacionDeTipo(o.tipo) === 'urban';
+  var esNegocio = (o.derivable && o.derivable.indexOf('negocio') > -1) || orientacionDeTipo(o.tipo) === 'negocio';
+  var destinos = [];
+  if(!state.modoUrban   && esUrbano)  destinos.push({ label:'Leer en Urbanismo', fn:function(){ abrirEnUrban(o); },   bc:'rgba(79,174,126,.5)', col:'var(--energia)' });
+  if(!state.modoContext)              destinos.push({ label:'Leer en Contextos', fn:function(){ abrirEnContext(o); }, bc:'rgba(155,123,212,.5)', col:'var(--trans)' });
+  if(!state.modoNegocio && esNegocio) destinos.push({ label:'Leer en Negocios', fn:function(){ abrirEnNegocio(o); }, bc:'rgba(91,143,212,.5)', col:'var(--espacio)' });
+  if(!destinos.length) return;
+  var d = document.createElement('div'); d.className = 'msg motor';
+  var n = document.createElement('div'); n.className = 'derivacion';
+  var b = document.createElement('b'); b.textContent = 'Seguir con este organismo. ';
+  n.appendChild(b);
+  n.appendChild(document.createTextNode('Podés leerlo en otra clave sin volver a la ficha. Abre una lectura nueva; Urbanismo y Contextos consumen una lectura.'));
+  d.appendChild(n);
+  var row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '8px';
+  destinos.forEach(function(t){
+    var bt = document.createElement('button'); bt.className = 'btn'; bt.textContent = t.label;
+    bt.style.borderColor = t.bc; bt.style.color = t.col;
+    bt.onclick = t.fn;
+    row.appendChild(bt);
+  });
+  d.appendChild(row);
+  el.stream.appendChild(d);
 }
 
 /* ================= CORTE C: Urban ================= */
@@ -3975,6 +4011,7 @@ function renderPanelNegocio(version, dimensiones, proyectivo){
   panel.appendChild(pr);
   d.appendChild(panel);
   el.stream.appendChild(d);
+  ofrecerDerivacionInterna();
   scrollBottom();
 }
 
@@ -4020,6 +4057,7 @@ function renderPanelUrban(version, dimensiones, proyectivo){
   panel.appendChild(pr);
   d.appendChild(panel);
   el.stream.appendChild(d);
+  ofrecerDerivacionInterna();
   scrollBottom();
 }
 
@@ -4913,6 +4951,30 @@ function correrPruebasAuto(){
         state.started = gs; state.modoNegocio = gmn; state.modoUrban = gmu; state.modoContext = gmc;
         el.welcome.style.display = gw; el.chat.style.display = gc;
       }
+    })());
+    chk('DERIV·1 · la derivación ofrece un botón directo al módulo', (function(){
+      var snap = el.stream.innerHTML;
+      try{
+        mostrarDerivacion();
+        var btns = el.stream.querySelectorAll('button'); var found = false;
+        for(var i=0;i<btns.length;i++){ if(/Urbanismo/i.test(btns[i].textContent)){ found = true; break; } }
+        return found;
+      } finally { el.stream.innerHTML = snap; }
+    })());
+
+    chk('DERIV·2 · la tarjeta interna ofrece los otros modos y excluye el actual', (function(){
+      var g = state.organismo, mn = state.modoNegocio, mu = state.modoUrban, mc = state.modoContext, snap = el.stream.innerHTML;
+      try{
+        // organismo de negocio (tipo empresa → esNegocio, no urbano), leyéndose en modo Negocio
+        state.organismo = { id:'__d2', nombre:'D2', tipo:'empresa', derivable:['negocio'], ficha:{}, principios:[] };
+        state.modoNegocio = true; state.modoUrban = false; state.modoContext = false;
+        ofrecerDerivacionInterna();
+        var labels = [].slice.call(el.stream.querySelectorAll('.cardrow button')).map(function(b){ return b.textContent; });
+        var ofreceContext = labels.indexOf('Leer en Contextos') > -1;   // aplicable y no es el modo actual
+        var excluyeActual = labels.indexOf('Leer en Negocios') === -1;   // modo activo excluido
+        var sinUrbano     = labels.indexOf('Leer en Urbanismo') === -1;  // empresa no es urbana
+        return ofreceContext && excluyeActual && sinUrbano;
+      } finally { state.organismo = g; state.modoNegocio = mn; state.modoUrban = mu; state.modoContext = mc; el.stream.innerHTML = snap; }
     })());
 
     /* ---- N1.0 · lazo propuesta -> confirmación ---- */
