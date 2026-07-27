@@ -84,12 +84,12 @@ export default async function handler(req, res) {
   }
 
   // --- Crear la suscripción ---
-  // NO se manda payer_email a propósito. Dos razones:
-  //   1. Mercado Pago no permite que el vendedor sea el comprador, y si el correo
-  //      de la sesión coincide con el de la cuenta que cobra, el checkout se traba
-  //      con el botón de confirmar deshabilitado y sin explicar por qué.
-  //   2. Es más correcto: el correo de Supabase no tiene por qué ser el de la
-  //      cuenta con la que se paga. Que el pagador se identifique en el checkout.
+  // Sobre payer_email: lo sacamos el 24/07 porque con credenciales de prueba, si
+  // el correo coincidía con la cuenta que cobra, el checkout se trababa. Pero el
+  // 25/07 la API pasó a EXIGIRLO (rechaza con "payer_email is required"). Volvió,
+  // entonces. Con vendedor real esto no da problema: el pagador puede ser
+  // cualquier correo real. Lo que ata el pago al usuario sigue siendo
+  // external_reference, no el correo.
   // La identidad de quien paga la resuelve Mercado Pago; a quién acreditamos lo
   // resuelve external_reference, que es lo único que necesitamos controlar.
   try {
@@ -99,6 +99,10 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         reason: plan.titulo,
         external_reference: usuario.id,      // ← lo que ata todo
+        // payer_email volvió a ser obligatorio en la API de Mercado Pago (25/07).
+        // Se usa el correo de la sesión. Para el pago de prueba a uno mismo está
+        // bien; en producción es el correo con el que la persona inició sesión.
+        payer_email: usuario.correo,
         back_url: VUELTA,
         status: 'pending',
         auto_recurring: {
