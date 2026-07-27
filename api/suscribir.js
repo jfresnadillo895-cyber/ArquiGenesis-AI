@@ -25,7 +25,11 @@ const MP = 'https://api.mercadopago.com';
 const VUELTA = 'https://app.comprenderai.com/?suscripcion=ok';
 
 const PLANES = {
-  profesional: { monto: 30000, titulo: 'Comprender · Profesional' },
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  PRUEBA · 25/07 · Profesional a $100 para verificar el circuito real.
+  //  RESTAURAR A 30000 apenas la prueba pase. Estudio queda en su precio real.
+  //  ═══════════════════════════════════════════════════════════════════════════
+  profesional: { monto: 100, titulo: 'Comprender · Profesional (PRUEBA)' },
   estudio:     { monto: 80000, titulo: 'Comprender · Estudio' },
 };
 
@@ -80,6 +84,14 @@ export default async function handler(req, res) {
   }
 
   // --- Crear la suscripción ---
+  // NO se manda payer_email a propósito. Dos razones:
+  //   1. Mercado Pago no permite que el vendedor sea el comprador, y si el correo
+  //      de la sesión coincide con el de la cuenta que cobra, el checkout se traba
+  //      con el botón de confirmar deshabilitado y sin explicar por qué.
+  //   2. Es más correcto: el correo de Supabase no tiene por qué ser el de la
+  //      cuenta con la que se paga. Que el pagador se identifique en el checkout.
+  // La identidad de quien paga la resuelve Mercado Pago; a quién acreditamos lo
+  // resuelve external_reference, que es lo único que necesitamos controlar.
   try {
     const r = await fetch(MP + '/preapproval', {
       method: 'POST',
@@ -87,7 +99,6 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         reason: plan.titulo,
         external_reference: usuario.id,      // ← lo que ata todo
-        payer_email: usuario.correo,
         back_url: VUELTA,
         status: 'pending',
         auto_recurring: {
