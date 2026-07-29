@@ -393,6 +393,752 @@ header header .cai-ham{flex-shrink:0}
 </footer>
 
 <script>
+/* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
+   v6 suma controles de cuenta sobre el v5 (sesion + planes + registro + recuperacion): ver el
+   correo logueado, cambiar la contraseña estando adentro (pidiendo la actual), cerrar sesión
+   desde un botón real -- antes existía la función pero ningún botón la llamaba en los tres
+   productos -- y eliminar la cuenta propia. Se inyecta igual: gen_deploy.py lo inserta despues
+   del primer <script> de cada fuente.
+
+   QUE HACE
+     1. Si no hay sesion, muestra un portal con tres caminos: ingresar, crear cuenta, recuperar
+        contrasena. No deja pasar sin sesion.
+     2. Guarda la sesion y la renueva sola cuando vence.
+     3. Agrega el token a toda llamada a /api/anthropic, mas el modulo desde donde se llama.
+     4. Lee el saldo del servidor y lo deja donde credEstado() lo encuentra.
+     5. Crea cuenta contra Supabase Auth. El disparador que ya esta en la base crea la fila de
+        perfiles solo -- este archivo no toca la base directamente.
+     6. Recupera contrasena: pide el link por correo y, cuando el usuario vuelve con ese link,
+        muestra la pantalla para elegir una nueva.
+     7. Mientras hay sesion, agrega un boton fijo ("Cuenta") que abre un panel con: el correo
+        logueado, cambiar contraseña (pide la actual, la vuelve a autenticar contra Supabase y
+        recien ahi cambia), cerrar sesión, y eliminar la cuenta (pide escribir una palabra de
+        confirmacion, y llama a /api/eliminar-cuenta -- ver mas abajo).
+
+   ELIMINAR CUENTA · ENDPOINT NUEVO EN EL SERVIDOR
+     Borrar el usuario de Auth necesita la clave de servicio, que nunca viaja al navegador. Este
+     archivo llama a POST /api/eliminar-cuenta con el token de sesion; ese endpoint (entregado
+     aparte, api/eliminar-cuenta.js) valida el token, borra al usuario con la Admin API de
+     Supabase, y borra a mano la fila de perfiles (verificado contra el esquema real el 29/07:
+     perfiles no tiene FK hacia auth.users, asi que nada la borra sola). consumo cascada desde
+     perfiles; pagos conserva el historial con perfil=NULL, a proposito.
+
+   REGISTRO Y RECUPERACION · COMO LLEGA EL CORREO
+     Via el SMTP de Resend ya configurado en Supabase Auth (dominio mail.comprenderai.com
+     verificado). El interruptor "Allow new users to sign up" tiene que estar PRENDIDO del lado
+     del servidor para que /auth/v1/signup funcione -- si esta apagado, el alta responde
+     "Signups not allowed for this instance" y el portal se lo dice al usuario con esas palabras.
+     A proposito NO se prende solo desde aca: es una decision de Javier, tomada cuando este
+     probado.
+
+   REDIRECT_TO · YA CONFIGURADO EN SUPABASE (27/07)
+     El registro y la recuperacion mandan redirect_to = la URL actual (origin + pathname). Javier
+     ya agrego las URLs de app.comprenderai.com a Authentication -> URL Configuration -> Redirect
+     URLs -- sin eso, Supabase ignora el redirect_to y manda a la Site URL por defecto.
+
+   POR QUE SIN LIBRERIA
+     supabase-js resolveria esto, pero traeria una dependencia de CDN a un producto que hoy no
+     tiene ninguna: si el CDN falla, no abre nada. Los endpoints que hacen falta son REST comun.
+     Se sostiene la regla de la casa: HTML monolitico, sin build.
+
+   LO QUE VIAJA AL NAVEGADOR
+     La URL y la clave publicable son publicas por diseno: no autorizan nada por si solas.
+     Quien decide es la politica de RLS y el proxy. La clave secreta no aparece aca.  --- */
+(function(){
+  var SB_URL = 'https://spavobqrigvbjabwyvbl.supabase.co';
+  var SB_KEY = 'sb_publishable_QbvJTscQJ63YjLasQ4p51w_0nLqwm6j';
+  var LLAVE   = 'comprender_sesion';
+  var MARGEN  = 60000;   // se renueva un minuto antes de vencer
+
+  /* ---------- sesion guardada ---------- */
+  function leer(){
+    try{ return JSON.parse(localStorage.getItem(LLAVE) || 'null'); }catch(e){ return null; }
+  }
+  function guardar(s){
+    try{ localStorage.setItem(LLAVE, JSON.stringify(s)); }catch(e){}
+  }
+  function borrar(){
+    try{ localStorage.removeItem(LLAVE); }catch(e){}
+    try{ localStorage.removeItem('ag_core_saldo'); }catch(e){}
+  }
+  function desdeRespuesta(d){
+    if(!d || !d.access_token) return null;
+    return {
+      token:   d.access_token,
+      refresco: d.refresh_token || '',
+      vence:   Date.now() + ((d.expires_in || 3600) * 1000),
+      correo:  (d.user && d.user.email) || ''
+    };
+  }
+
+  /* ---------- llamadas a Supabase ---------- */
+  function auth(ruta, cuerpo){
+    return fetch(SB_URL + '/auth/v1/' + ruta, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify(cuerpo)
+    }).then(function(r){
+      return r.json().then(function(d){ return { ok: r.ok, estado: r.status, datos: d }; });
+    });
+  }
+
+  function ingresar(correo, clave){
+    return auth('token?grant_type=password', { email: correo, password: clave })
+      .then(function(r){
+        if(!r.ok) return { ok:false, mensaje: mensajeAuth(r) };
+        var s = desdeRespuesta(r.datos);
+        if(!s) return { ok:false, mensaje:'Respuesta inesperada del servidor.' };
+        guardar(s);
+        return { ok:true };
+      })
+      .catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor. Revisá tu conexión.' }; });
+  }
+
+  function mensajeAuth(r){
+    var d = r.datos || {};
+    var t = String(d.error_description || d.msg || d.message || '').toLowerCase();
+    if(r.estado === 400 || r.estado === 401) return 'Correo o contraseña incorrectos.';
+    if(t.indexOf('confirm') > -1) return 'La cuenta todavía no está confirmada.';
+    if(r.estado >= 500) return 'El servicio no está disponible en este momento. Probá en unos minutos.';
+    return 'No se pudo iniciar sesión.';
+  }
+
+  /* ---------- alta de cuenta ---------- */
+  function registrar(correo, clave){
+    var destino = location.origin + location.pathname;
+    return auth('signup?redirect_to=' + encodeURIComponent(destino), { email: correo, password: clave })
+      .then(function(r){
+        if(!r.ok) return { ok:false, mensaje: mensajeRegistro(r) };
+        var s = desdeRespuesta(r.datos);
+        if(s){ guardar(s); return { ok:true, sesion:true }; }   // confirmacion automatica, poco comun
+        return { ok:true, sesion:false };                        // caso normal: espera el correo
+      })
+      .catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor. Revisá tu conexión.' }; });
+  }
+
+  function mensajeRegistro(r){
+    var d = r.datos || {};
+    var t = String(d.error_description || d.msg || d.message || '').toLowerCase();
+    if(t.indexOf('already registered') > -1 || t.indexOf('already exists') > -1) return 'Ese correo ya tiene cuenta. Ingresá con tu contraseña.';
+    if(t.indexOf('signups not allowed') > -1 || t.indexOf('signup is disabled') > -1) return 'El registro todavía no está habilitado.';
+    if(t.indexOf('password') > -1) return 'La contraseña no cumple los requisitos mínimos.';
+    if(t.indexOf('email') > -1 && t.indexOf('invalid') > -1) return 'Ese correo no es válido.';
+    if(r.estado >= 500) return 'El servicio no está disponible en este momento. Probá en unos minutos.';
+    return 'No se pudo crear la cuenta.';
+  }
+
+  /* ---------- recuperacion de contrasena ---------- */
+  function recuperar(correo){
+    var destino = location.origin + location.pathname;
+    return auth('recover?redirect_to=' + encodeURIComponent(destino), { email: correo })
+      .catch(function(){ return { ok:false }; });
+  }
+
+  function cambiarClave(token, clave){
+    return fetch(SB_URL + '/auth/v1/user', {
+      method: 'PUT',
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ password: clave })
+    }).then(function(r){
+      return r.json().then(function(d){ return { ok:r.ok, estado:r.status, datos:d }; });
+    }).then(function(r){
+      if(!r.ok) return { ok:false, mensaje:'No se pudo guardar. Probá de nuevo en un momento.' };
+      return { ok:true };
+    }).catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor.' }; });
+  }
+
+  /* ---------- datos del usuario logueado ---------- */
+  function obtenerUsuario(token){
+    return fetch(SB_URL + '/auth/v1/user', {
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + token }
+    }).then(function(r){ return r.ok ? r.json() : null; })
+      .catch(function(){ return null; });
+  }
+
+  /* ---------- link de correo (confirmacion de alta / recuperacion) ----------
+     Supabase devuelve al sitio con el token en el fragmento de la URL, nunca en la
+     query: #access_token=...&refresh_token=...&type=signup|recovery|magiclink|invite
+     Se lee una sola vez al arrancar y se limpia de la barra de direcciones. */
+  function leerHash(){
+    var h = location.hash || '';
+    if(h.charAt(0) === '#') h = h.slice(1);
+    if(!h) return null;
+    var p = {};
+    h.split('&').forEach(function(par){
+      var kv = par.split('=');
+      if(kv[0]) p[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
+    });
+    return p.access_token ? p : null;
+  }
+  function limpiarHash(){
+    try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){}
+  }
+
+  var renovando = null;
+  function refrescar(){
+    var s = leer();
+    if(!s || !s.refresco) return Promise.resolve(null);
+    if(renovando) return renovando;              // una sola renovacion a la vez
+    renovando = auth('token?grant_type=refresh_token', { refresh_token: s.refresco })
+      .then(function(r){
+        renovando = null;
+        if(!r.ok){ borrar(); return null; }
+        var n = desdeRespuesta(r.datos);
+        if(n) guardar(n);
+        return n;
+      })
+      .catch(function(){ renovando = null; return null; });
+    return renovando;
+  }
+
+  // Devuelve un token utilizable, renovando si hace falta. null = hay que ingresar.
+  function tokenVigente(){
+    var s = leer();
+    if(!s) return Promise.resolve(null);
+    if(Date.now() < (s.vence - MARGEN)) return Promise.resolve(s.token);
+    return refrescar().then(function(n){ return n ? n.token : null; });
+  }
+
+  /* ---------- saldo ---------- */
+  // Se guarda donde credEstado() lo busca. El navegador deja de calcular el saldo:
+  // pasa a mostrarlo. Esa es la diferencia entre honor system y contabilidad real.
+  function anotarSaldo(plan, saldo){
+    try{
+      if(plan && ['gratis','profesional','estudio'].indexOf(plan) > -1){
+        if(localStorage.getItem('ag_core_plan') !== plan) localStorage.setItem('ag_core_plan', plan);
+      }
+      if(saldo !== null && saldo !== undefined && saldo !== '' && !isNaN(Number(saldo))){
+        localStorage.setItem('ag_core_saldo', JSON.stringify({ saldo: Number(saldo), momento: Date.now() }));
+      }
+      if(typeof renderCred === 'function') renderCred();
+    }catch(e){}
+  }
+
+  // Al abrir, se lee la fila propia. La politica de RLS deja ver solo esa.
+  // De paso, muestra el boton fijo de cuenta: si hay token valido, hay sesion.
+  function sincronizarSaldo(){
+    return tokenVigente().then(function(t){
+      if(!t) return;
+      mostrarChipCuenta();
+      return fetch(SB_URL + '/rest/v1/perfiles?select=plan,saldo', {
+        headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t }
+      }).then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(f){ if(f && f[0]) anotarSaldo(f[0].plan, f[0].saldo); })
+        .catch(function(){});
+    });
+  }
+
+  /* ---------- piezas de formulario compartidas ----------
+     Las usan tanto el portal (ingreso/registro/recuperar) como el panel de cuenta. */
+  function campo(id, tipo, placeholder, autoc){
+    return '<input id="' + id + '" type="' + tipo + '" autocomplete="' + autoc + '" placeholder="' + placeholder + '" ' +
+      'style="width:100%;padding:12px;font-size:16px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;box-sizing:border-box;">';
+  }
+  function boton(id, texto){
+    return '<button id="' + id + '" style="width:100%;padding:12px;font-size:16px;font-weight:600;color:#fff;' +
+      'background:#1a1a1a;border:0;border-radius:8px;cursor:pointer;margin-top:4px;">' + texto + '</button>';
+  }
+  function enlace(id, texto){
+    return '<div style="margin-top:12px;text-align:center;">' +
+      '<a href="#" id="' + id + '" style="font-size:13px;color:#777;text-decoration:underline;">' + texto + '</a></div>';
+  }
+
+  /* ---------- portal ----------
+     Un solo overlay con cuatro vistas: ingreso, registro, recuperar, nueva_clave.
+     Se redibuja el innerHTML de la misma capa al cambiar de vista, no se crean capas
+     nuevas -- asi el resto del candado (fetch, planes) sigue viendo un unico portal. */
+  var portalAbierto = false;
+  function portal(avisoInicial, modoInicial, extra){
+    if(portalAbierto) return;
+    portalAbierto = true;
+    var modo = modoInicial || 'ingreso';
+    var aviso = avisoInicial || '';
+
+    var capa = document.createElement('div');
+    capa.setAttribute('id','comprenderPortal');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fbfaf8;display:flex;' +
+      'align-items:center;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif;';
+    document.body.appendChild(capa);
+
+    function vista(){
+      var titulo, sub, cuerpo;
+      if(modo === 'registro'){
+        titulo = 'Crear cuenta';
+        sub = 'Con tu correo y una contraseña.';
+        cuerpo =
+          campo('cpMail2','email','Correo','username') +
+          campo('cpClave2','password','Contraseña (mínimo 6 caracteres)','new-password') +
+          boton('cpAccion','Crear cuenta') +
+          enlace('cpAIngreso','¿Ya tenés cuenta? Ingresá');
+      } else if(modo === 'recuperar'){
+        titulo = 'Recuperar contraseña';
+        sub = 'Te mandamos un link para elegir una nueva.';
+        cuerpo =
+          campo('cpMail3','email','Correo','username') +
+          boton('cpAccion','Enviar link') +
+          enlace('cpAIngreso','Volver a ingresar');
+      } else if(modo === 'nueva_clave'){
+        titulo = 'Elegí una contraseña nueva';
+        sub = '';
+        cuerpo =
+          campo('cpClave4','password','Contraseña nueva (mínimo 6 caracteres)','new-password') +
+          boton('cpAccion','Guardar');
+      } else {
+        titulo = 'Comprender';
+        sub = 'Ingresá para continuar.';
+        cuerpo =
+          campo('cpMail','email','Correo','username') +
+          campo('cpClave','password','Contraseña','current-password') +
+          boton('cpAccion','Ingresar') +
+          enlace('cpARecuperar','¿Olvidaste tu contraseña?') +
+          enlace('cpARegistro','Crear una cuenta');
+      }
+      return '<div style="width:100%;max-width:360px;">' +
+        '<div style="font-size:19px;font-weight:600;margin-bottom:6px;color:#1a1a1a;">' + titulo + '</div>' +
+        (sub ? '<div style="font-size:14px;color:#666;margin-bottom:22px;">' + sub + '</div>'
+             : '<div style="margin-bottom:22px;"></div>') +
+        cuerpo +
+        '<div id="cpAviso" style="font-size:13px;color:#b4441f;margin-top:12px;min-height:18px;"></div>' +
+      '</div>';
+    }
+
+    function pintar(){
+      capa.innerHTML = vista();
+      var avisoEl = capa.querySelector('#cpAviso');
+      if(aviso) avisoEl.textContent = aviso;
+      aviso = '';
+      cablear(avisoEl);
+    }
+
+    function cablear(avisoEl){
+      var accion = capa.querySelector('#cpAccion');
+      function ocupado(si, texto){
+        accion.disabled = si;
+        if(texto) accion.textContent = texto;
+      }
+
+      if(modo === 'ingreso'){
+        var mail = capa.querySelector('#cpMail'), pass = capa.querySelector('#cpClave');
+        function intentar(){
+          var c = (mail.value||'').trim(), k = pass.value||'';
+          if(!c||!k){ avisoEl.textContent = 'Faltan datos.'; return; }
+          ocupado(true,'Entrando…'); avisoEl.textContent = '';
+          ingresar(c,k).then(function(r){
+            if(r.ok){ portalAbierto=false; capa.remove(); sincronizarSaldo(); }
+            else{ ocupado(false,'Ingresar'); avisoEl.textContent = r.mensaje; }
+          });
+        }
+        accion.addEventListener('click', intentar);
+        pass.addEventListener('keydown', function(e){ if(e.key==='Enter') intentar(); });
+        capa.querySelector('#cpARecuperar').addEventListener('click', function(e){ e.preventDefault(); modo='recuperar'; pintar(); });
+        capa.querySelector('#cpARegistro').addEventListener('click', function(e){ e.preventDefault(); modo='registro'; pintar(); });
+        setTimeout(function(){ try{ mail.focus(); }catch(e){} }, 60);
+
+      } else if(modo === 'registro'){
+        var mail2 = capa.querySelector('#cpMail2'), pass2 = capa.querySelector('#cpClave2');
+        function intentarReg(){
+          var c=(mail2.value||'').trim(), k=pass2.value||'';
+          if(!c||!k){ avisoEl.textContent='Faltan datos.'; return; }
+          if(k.length<6){ avisoEl.textContent='La contraseña necesita al menos 6 caracteres.'; return; }
+          ocupado(true,'Creando…'); avisoEl.textContent = '';
+          registrar(c,k).then(function(r){
+            if(r.ok && r.sesion){ portalAbierto=false; capa.remove(); sincronizarSaldo(); return; }
+            if(r.ok){ modo='ingreso'; aviso='Cuenta creada. Revisá tu correo para confirmarla y después ingresá.'; pintar(); return; }
+            ocupado(false,'Crear cuenta'); avisoEl.textContent = r.mensaje;
+          });
+        }
+        accion.addEventListener('click', intentarReg);
+        pass2.addEventListener('keydown', function(e){ if(e.key==='Enter') intentarReg(); });
+        capa.querySelector('#cpAIngreso').addEventListener('click', function(e){ e.preventDefault(); modo='ingreso'; pintar(); });
+        setTimeout(function(){ try{ mail2.focus(); }catch(e){} }, 60);
+
+      } else if(modo === 'recuperar'){
+        var mail3 = capa.querySelector('#cpMail3');
+        function intentarRec(){
+          var c=(mail3.value||'').trim();
+          if(!c){ avisoEl.textContent='Falta el correo.'; return; }
+          ocupado(true,'Enviando…'); avisoEl.textContent = '';
+          recuperar(c).then(function(){
+            ocupado(false,'Enviar link');
+            avisoEl.textContent = 'Si esa cuenta existe, te llegó un correo con el link.';
+          });
+        }
+        accion.addEventListener('click', intentarRec);
+        mail3.addEventListener('keydown', function(e){ if(e.key==='Enter') intentarRec(); });
+        capa.querySelector('#cpAIngreso').addEventListener('click', function(e){ e.preventDefault(); modo='ingreso'; pintar(); });
+        setTimeout(function(){ try{ mail3.focus(); }catch(e){} }, 60);
+
+      } else if(modo === 'nueva_clave'){
+        var pass4 = capa.querySelector('#cpClave4');
+        function intentarNueva(){
+          var k = pass4.value||'';
+          if(k.length<6){ avisoEl.textContent='La contraseña necesita al menos 6 caracteres.'; return; }
+          ocupado(true,'Guardando…'); avisoEl.textContent = '';
+          cambiarClave(extra.token, k).then(function(r){
+            if(r.ok){
+              guardar({ token: extra.token, refresco: extra.refresco||'', vence: Date.now()+3600000, correo:'' });
+              portalAbierto=false; capa.remove(); sincronizarSaldo();
+            }else{
+              ocupado(false,'Guardar'); avisoEl.textContent = r.mensaje;
+            }
+          });
+        }
+        accion.addEventListener('click', intentarNueva);
+        pass4.addEventListener('keydown', function(e){ if(e.key==='Enter') intentarNueva(); });
+        setTimeout(function(){ try{ pass4.focus(); }catch(e){} }, 60);
+      }
+    }
+
+    pintar();
+  }
+
+  window.cerrarSesionComprender = function(){
+    borrar();
+    location.reload();
+  };
+
+  /* ---------- boton fijo de cuenta + panel ----------
+     El boton aparece solo mientras hay sesion (lo dispara sincronizarSaldo). El panel
+     vive aca por la misma razon que el portal y los planes: es infraestructura, y asi
+     queda disponible en los tres productos sin repetirla. */
+  var chipInsertado = false;
+  function mostrarChipCuenta(){
+    if(chipInsertado || document.getElementById('comprenderChipCuenta')) return;
+    chipInsertado = true;
+    var b = document.createElement('button');
+    b.id = 'comprenderChipCuenta';
+    b.textContent = 'Cuenta';
+    b.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:99990;padding:8px 14px;' +
+      'font-size:13px;font-weight:600;color:#1a1a1a;background:#fff;border:1px solid #ddd;' +
+      'border-radius:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.08);' +
+      'font-family:system-ui,-apple-system,sans-serif;';
+    b.addEventListener('click', mostrarCuenta);
+    document.body.appendChild(b);
+  }
+
+  function botonSecundario(id, texto, peligro){
+    return '<button id="' + id + '" style="width:100%;padding:11px;font-size:14px;font-weight:600;' +
+      'border:1px solid ' + (peligro ? '#e3b3a3' : '#ddd') + ';border-radius:8px;cursor:pointer;' +
+      'background:#fff;color:' + (peligro ? '#b4441f' : '#1a1a1a') + ';margin-bottom:10px;">' + texto + '</button>';
+  }
+
+  var cuentaAbierta = false;
+  function mostrarCuenta(){
+    if(cuentaAbierta) return;
+    cuentaAbierta = true;
+
+    var capa = document.createElement('div');
+    capa.setAttribute('id','comprenderCuenta');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(251,250,248,.97);' +
+      'display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif;';
+    document.body.appendChild(capa);
+
+    var vistaC = 'inicio';
+    var cuentaCorreo = '';
+    var mensajeCuenta = '';
+
+    function cerrar(){ cuentaAbierta = false; capa.remove(); }
+
+    function marco(cuerpoHtml){
+      return '<div style="width:100%;max-width:380px;background:#fff;border:1px solid #e2e0dc;' +
+        'border-radius:14px;padding:24px;position:relative;">' +
+          '<button id="ccCerrar" style="position:absolute;top:14px;right:14px;background:none;' +
+            'border:0;font-size:22px;line-height:1;color:#999;cursor:pointer;">&times;</button>' +
+          '<div style="font-size:17px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">Mi cuenta</div>' +
+          '<div style="font-size:13px;color:#666;margin-bottom:16px;">' + (cuentaCorreo || 'Cargando…') + '</div>' +
+          (mensajeCuenta ? '<div style="font-size:13px;color:#2a7;margin-bottom:14px;">' + mensajeCuenta + '</div>' : '') +
+          cuerpoHtml +
+        '</div>';
+    }
+
+    function pintar(){
+      var cuerpo;
+      if(vistaC === 'clave'){
+        cuerpo =
+          campo('ccClaveActual','password','Contraseña actual','current-password') +
+          campo('ccClaveNueva','password','Contraseña nueva (mínimo 6 caracteres)','new-password') +
+          boton('ccAccion','Guardar') +
+          enlace('ccVolver','Cancelar') +
+          '<div id="ccAviso" style="font-size:13px;color:#b4441f;margin-top:8px;min-height:18px;"></div>';
+      } else if(vistaC === 'eliminar'){
+        cuerpo =
+          '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
+            'Esto borra tu cuenta, tu saldo y tu historial de uso. No se puede deshacer.</div>' +
+          campo('ccConfirmar','text','Escribí ELIMINAR para confirmar','off') +
+          boton('ccAccion','Eliminar mi cuenta') +
+          enlace('ccVolver','Cancelar') +
+          '<div id="ccAviso" style="font-size:13px;color:#b4441f;margin-top:8px;min-height:18px;"></div>';
+      } else {
+        cuerpo =
+          botonSecundario('ccIrClave','Cambiar contraseña') +
+          botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
+          enlace('ccSalir','Cerrar sesión');
+      }
+      mensajeCuenta = '';   // se muestra una sola vez, en el pintado que sigue a la accion
+      capa.innerHTML = marco(cuerpo);
+      capa.querySelector('#ccCerrar').addEventListener('click', cerrar);
+      cablear();
+    }
+
+    function cablear(){
+      if(vistaC === 'inicio'){
+        capa.querySelector('#ccIrClave').addEventListener('click', function(){ vistaC='clave'; pintar(); });
+        capa.querySelector('#ccIrEliminar').addEventListener('click', function(){ vistaC='eliminar'; pintar(); });
+        capa.querySelector('#ccSalir').addEventListener('click', function(e){ e.preventDefault(); window.cerrarSesionComprender(); });
+        return;
+      }
+
+      var avisoEl = capa.querySelector('#ccAviso');
+      var accion = capa.querySelector('#ccAccion');
+      capa.querySelector('#ccVolver').addEventListener('click', function(e){ e.preventDefault(); vistaC='inicio'; pintar(); });
+
+      function ocupado(si, texto){ accion.disabled = si; if(texto) accion.textContent = texto; }
+
+      if(vistaC === 'clave'){
+        var actual = capa.querySelector('#ccClaveActual'), nueva = capa.querySelector('#ccClaveNueva');
+        accion.addEventListener('click', function(){
+          var k1 = actual.value||'', k2 = nueva.value||'';
+          if(!k1||!k2){ avisoEl.textContent='Faltan datos.'; return; }
+          if(k2.length<6){ avisoEl.textContent='La contraseña nueva necesita al menos 6 caracteres.'; return; }
+          ocupado(true,'Guardando…'); avisoEl.textContent='';
+          ingresar(cuentaCorreo, k1).then(function(r){
+            if(!r.ok){ ocupado(false,'Guardar'); avisoEl.textContent = 'Contraseña actual incorrecta.'; return; }
+            var s = leer();
+            cambiarClave(s.token, k2).then(function(r2){
+              if(r2.ok){ mensajeCuenta = 'Contraseña actualizada.'; vistaC='inicio'; pintar(); }
+              else{ ocupado(false,'Guardar'); avisoEl.textContent = r2.mensaje; }
+            });
+          });
+        });
+      } else if(vistaC === 'eliminar'){
+        var confirmar = capa.querySelector('#ccConfirmar');
+        accion.addEventListener('click', function(){
+          if((confirmar.value||'').trim().toUpperCase() !== 'ELIMINAR'){
+            avisoEl.textContent = 'Escribí ELIMINAR, tal cual, para confirmar.'; return;
+          }
+          ocupado(true,'Eliminando…'); avisoEl.textContent='';
+          tokenVigente().then(function(t){
+            if(!t){ avisoEl.textContent='Tu sesión venció. Cerrá esto y volvé a entrar.'; ocupado(false,'Eliminar mi cuenta'); return; }
+            _fetch('/api/eliminar-cuenta', {
+              method:'POST',
+              headers:{ Authorization:'Bearer ' + t }
+            }).then(function(r){
+              if(r.ok){ borrar(); location.reload(); return; }
+              return r.json().catch(function(){ return {}; }).then(function(d){
+                ocupado(false,'Eliminar mi cuenta');
+                avisoEl.textContent = (d && d.error && d.error.message) || 'No se pudo eliminar la cuenta.';
+              });
+            }).catch(function(){
+              ocupado(false,'Eliminar mi cuenta');
+              avisoEl.textContent = 'No se pudo conectar. Revisá tu conexión.';
+            });
+          });
+        });
+      }
+    }
+
+    pintar();   // primer pintado inmediato ("Cargando…"), se repinta solo cuando llega el correo
+    tokenVigente().then(function(t){
+      if(!t) return;
+      obtenerUsuario(t).then(function(u){
+        cuentaCorreo = (u && u.email) || '';
+        if(vistaC === 'inicio') pintar();
+      });
+    });
+  }
+
+  /* ---------- pantalla de planes ----------
+     Vive acá y no en los HTML por la misma razón que la sesión: es infraestructura.
+     Así queda disponible en los tres productos sin repetirla tres veces.
+
+     Los dos planes se muestran SIEMPRE juntos, y la diferencia se dice con todas
+     las letras: Profesional NO incluye los módulos. Alguien que probó Urbanismo y
+     se suscribe a Profesional sin saberlo se sentiría estafado, con razón.
+
+     TEXTOS: el de Estudio es de Javier. El de Profesional es un borrador mío
+     —está marcado— y se cambia acá abajo sin tocar nada más.                    */
+  var PLANES = [
+    { id:'profesional', nombre:'Profesional', precio:'$30.000', creditos:'1.800 créditos por mes',
+      /* BORRADOR — reemplazar por la voz de Javier */
+      lema:'La comprensión conversacional',
+      incluye:['Comprender AI · chat completo','Ficha viva del organismo','Principios y reflexiones'],
+      excluye:['No incluye Urbanismo ni Contextos'],
+      destacado:false },
+    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes',
+      lema:'Suma Urbanismo y Contextos',
+      incluye:['Todo lo de Profesional','Comprender · Urbanismo','Comprender · Contextos','Exportación de informes'],
+      excluye:[],
+      destacado:true }
+  ];
+
+  var planesAbierto = false;
+  window.mostrarPlanes = function(motivo){
+    if(planesAbierto) return;
+    planesAbierto = true;
+
+    var capa = document.createElement('div');
+    capa.setAttribute('id','comprenderPlanes');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(251,250,248,.97);' +
+      'overflow-y:auto;padding:32px 20px;font-family:system-ui,-apple-system,sans-serif;';
+
+    var aviso = '';
+    if(motivo === 'sin_saldo')     aviso = 'Se te terminaron los créditos.';
+    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Pro · Estudio.';
+
+    var tarjetas = PLANES.map(function(p){
+      var items = p.incluye.map(function(t){
+        return '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
+               '<span style="position:absolute;left:0;color:#2a7;">✓</span>' + t + '</li>';
+      }).join('');
+      var no = p.excluye.map(function(t){
+        return '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#b4441f;font-weight:500;">' +
+               '<span style="position:absolute;left:0;">·</span>' + t + '</li>';
+      }).join('');
+      return '<div style="flex:1 1 260px;max-width:330px;background:#fff;border:' +
+        (p.destacado ? '2px solid #1a1a1a' : '1px solid #e2e0dc') +
+        ';border-radius:14px;padding:22px;position:relative;">' +
+        (p.destacado ? '<div style="position:absolute;top:-11px;left:22px;background:#1a1a1a;color:#fff;' +
+          'font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;letter-spacing:.04em;">RECOMENDADO</div>' : '') +
+        '<div style="font-size:17px;font-weight:600;color:#1a1a1a;">' + p.nombre + '</div>' +
+        '<div style="font-size:13px;color:#777;margin-bottom:14px;">' + p.lema + '</div>' +
+        '<div style="font-size:27px;font-weight:600;color:#1a1a1a;">' + p.precio +
+          '<span style="font-size:14px;font-weight:400;color:#888;"> /mes</span></div>' +
+        '<div style="font-size:13px;color:#666;margin-bottom:16px;">' + p.creditos + '</div>' +
+        '<ul style="list-style:none;padding:0;margin:0 0 20px;">' + items + no + '</ul>' +
+        '<button data-plan="' + p.id + '" style="width:100%;padding:11px;font-size:15px;font-weight:600;' +
+          'border:0;border-radius:8px;cursor:pointer;' +
+          (p.destacado ? 'background:#1a1a1a;color:#fff;' : 'background:#f0eeea;color:#1a1a1a;') +
+          '">Suscribirme</button>' +
+        '</div>';
+    }).join('');
+
+    capa.innerHTML =
+      '<div style="max-width:720px;margin:0 auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px;">' +
+          '<div style="font-size:21px;font-weight:600;color:#1a1a1a;">Planes</div>' +
+          '<button id="cpCerrar" style="background:none;border:0;font-size:26px;line-height:1;' +
+            'color:#999;cursor:pointer;padding:0 4px;">&times;</button>' +
+        '</div>' +
+        (aviso ? '<div style="font-size:14px;color:#b4441f;margin-bottom:16px;">' + aviso + '</div>'
+               : '<div style="font-size:14px;color:#666;margin-bottom:16px;">Elegí cómo querés seguir.</div>') +
+        '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;">' + tarjetas + '</div>' +
+        '<div id="cpEstado" style="font-size:13px;color:#b4441f;margin-top:16px;min-height:18px;"></div>' +
+        '<div style="font-size:12px;color:#999;margin-top:20px;line-height:1.5;">' +
+          'Se cobra por Mercado Pago, todos los meses. Podés cancelar cuando quieras: ' +
+          'los créditos del período ya pagado siguen disponibles hasta que termine.' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(capa);
+
+    function cerrar(){ planesAbierto = false; capa.remove(); }
+    capa.querySelector('#cpCerrar').addEventListener('click', cerrar);
+
+    var estado = capa.querySelector('#cpEstado');
+    Array.prototype.forEach.call(capa.querySelectorAll('button[data-plan]'), function(b){
+      b.addEventListener('click', function(){
+        var plan = b.getAttribute('data-plan');
+        b.disabled = true; b.textContent = 'Preparando…'; estado.textContent = '';
+        tokenVigente().then(function(t){
+          if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
+          return _fetch('/api/suscribir', {
+            method:'POST',
+            headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+            body: JSON.stringify({ plan: plan })
+          }).then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
+            .then(function(x){
+              if(x.ok && x.d.url){ location.href = x.d.url; return; }   // al checkout
+              b.disabled = false; b.textContent = 'Suscribirme';
+              estado.textContent = (x.d && x.d.error && x.d.error.message) || 'No se pudo iniciar la suscripción.';
+            });
+        }).catch(function(){
+          b.disabled = false; b.textContent = 'Suscribirme';
+          estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
+        });
+      });
+    });
+  };
+
+  /* ---------- arranque ----------
+     Antes de mirar si hay sesion guardada, se revisa si el navegador volvio con un
+     link de correo (hash con access_token). Si es de recuperacion, se muestra la
+     pantalla de nueva contrasena en vez del portal normal. Cualquier otro hash con
+     token (confirmacion de alta, magic link, invitacion) deja una sesion valida:
+     se guarda y arranca directo, sin pasar por el portal. */
+  function arrancar(){
+    var h = leerHash();
+    if(h && h.type === 'recovery'){
+      limpiarHash();
+      portal('', 'nueva_clave', { token: h.access_token, refresco: h.refresh_token || '' });
+      return;
+    }
+    if(h && h.access_token){
+      guardar({
+        token: h.access_token,
+        refresco: h.refresh_token || '',
+        vence: Date.now() + ((Number(h.expires_in) || 3600) * 1000),
+        correo: ''
+      });
+      limpiarHash();
+      sincronizarSaldo();
+      return;
+    }
+    tokenVigente().then(function(t){
+      if(!t) portal('');
+      else sincronizarSaldo();
+    });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar);
+  else arrancar();
+
+  /* ---------- envoltorio de fetch ---------- */
+  var _fetch = window.fetch;
+  window.fetch = function(recurso, opciones){
+    var url = '';
+    try{ url = String((recurso && recurso.url) ? recurso.url : recurso || ''); }catch(e){}
+    if(url.indexOf('/api/anthropic') === -1) return _fetch.apply(this, arguments);
+
+    var args = arguments;
+    var yo = this;
+    return tokenVigente().then(function(t){
+      if(!t){ portal('Tu sesión venció. Ingresá de nuevo.');
+              return Promise.reject(new Error('sin sesión')); }
+
+      opciones = opciones || {};
+      var h = opciones.headers, plano = {};
+      try{
+        if(h && typeof h.forEach === 'function' && !Array.isArray(h)){ h.forEach(function(v,k){ plano[k]=v; }); }
+        else if(h){ for(var k in h){ if(Object.prototype.hasOwnProperty.call(h,k)) plano[k]=h[k]; } }
+      }catch(e){}
+      plano['Authorization'] = 'Bearer ' + t;
+      try{ plano['x-comprender-modulo'] = (typeof MODULE_ID === 'string' && MODULE_ID) ? MODULE_ID : 'core'; }
+      catch(e){ plano['x-comprender-modulo'] = 'core'; }
+      opciones.headers = plano;
+
+      return _fetch.call(yo, recurso, opciones).then(function(resp){
+        try{
+          var g = resp && resp.headers && resp.headers.get ? resp.headers : null;
+          if(g) anotarSaldo(g.get('x-comprender-plan'), g.get('x-comprender-saldo'));
+        }catch(e){}
+        // 401 del proxy = la sesion no sirve. Se limpia y se vuelve a pedir.
+        if(resp && resp.status === 401){ borrar(); portal('Tu sesión venció. Ingresá de nuevo.'); }
+
+        // 402 sin saldo · 403 plan insuficiente: el contador es el disparador,
+        // la pantalla de planes es el destino. Se abre sola donde hizo falta.
+        if(resp && (resp.status === 402 || resp.status === 403)){
+          try{
+            resp.clone().json().then(function(d){
+              var m = (d && d.error && d.error.codigo) || '';
+              if(m === 'sin_saldo' || m === 'requiere_plan') window.mostrarPlanes(m);
+            }).catch(function(){});
+          }catch(e){}
+        }
+        return resp;
+      });
+    });
+  };
+})();
+</script>
+<script>
 /* --- Candado de acceso v3 · sesion real de usuario (Supabase Auth) ----------------------------
    Reemplaza al candado v2 (clave unica en el navegador). Se inyecta igual: gen_deploy.py lo
    inserta despues del primer <script> de cada fuente.

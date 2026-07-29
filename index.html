@@ -551,9 +551,12 @@ header .spacer{flex:1}
 </div>
 
 <script>
-/* --- Candado de acceso v5 · sesion real de usuario (Supabase Auth) ----------------------------
-   v5 suma registro y recuperacion de contrasena sobre el v4 (sesion + pantalla de planes).
-   Se inyecta igual: gen_deploy.py lo inserta despues del primer <script> de cada fuente.
+/* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
+   v6 suma controles de cuenta sobre el v5 (sesion + planes + registro + recuperacion): ver el
+   correo logueado, cambiar la contraseña estando adentro (pidiendo la actual), cerrar sesión
+   desde un botón real -- antes existía la función pero ningún botón la llamaba en los tres
+   productos -- y eliminar la cuenta propia. Se inyecta igual: gen_deploy.py lo inserta despues
+   del primer <script> de cada fuente.
 
    QUE HACE
      1. Si no hay sesion, muestra un portal con tres caminos: ingresar, crear cuenta, recuperar
@@ -561,10 +564,22 @@ header .spacer{flex:1}
      2. Guarda la sesion y la renueva sola cuando vence.
      3. Agrega el token a toda llamada a /api/anthropic, mas el modulo desde donde se llama.
      4. Lee el saldo del servidor y lo deja donde credEstado() lo encuentra.
-     5. Crea cuenta contra Supabase Auth (alta con email + contrasena). El disparador que ya
-        esta en la base crea la fila de perfiles solo -- este archivo no toca la base directamente.
+     5. Crea cuenta contra Supabase Auth. El disparador que ya esta en la base crea la fila de
+        perfiles solo -- este archivo no toca la base directamente.
      6. Recupera contrasena: pide el link por correo y, cuando el usuario vuelve con ese link,
         muestra la pantalla para elegir una nueva.
+     7. Mientras hay sesion, agrega un boton fijo ("Cuenta") que abre un panel con: el correo
+        logueado, cambiar contraseña (pide la actual, la vuelve a autenticar contra Supabase y
+        recien ahi cambia), cerrar sesión, y eliminar la cuenta (pide escribir una palabra de
+        confirmacion, y llama a /api/eliminar-cuenta -- ver mas abajo).
+
+   ELIMINAR CUENTA · ENDPOINT NUEVO EN EL SERVIDOR
+     Borrar el usuario de Auth necesita la clave de servicio, que nunca viaja al navegador. Este
+     archivo llama a POST /api/eliminar-cuenta con el token de sesion; ese endpoint (entregado
+     aparte, api/eliminar-cuenta.js) valida el token, borra al usuario con la Admin API de
+     Supabase, y borra a mano la fila de perfiles (verificado contra el esquema real el 29/07:
+     perfiles no tiene FK hacia auth.users, asi que nada la borra sola). consumo cascada desde
+     perfiles; pagos conserva el historial con perfil=NULL, a proposito.
 
    REGISTRO Y RECUPERACION · COMO LLEGA EL CORREO
      Via el SMTP de Resend ya configurado en Supabase Auth (dominio mail.comprenderai.com
@@ -572,20 +587,17 @@ header .spacer{flex:1}
      del servidor para que /auth/v1/signup funcione -- si esta apagado, el alta responde
      "Signups not allowed for this instance" y el portal se lo dice al usuario con esas palabras.
      A proposito NO se prende solo desde aca: es una decision de Javier, tomada cuando este
-     probado (ver Continuidad, seccion 9).
+     probado.
 
-   REDIRECT_TO · PENDIENTE DE CONFIGURAR EN SUPABASE
-     El registro y la recuperacion mandan redirect_to = la URL actual (origin + pathname), para
-     que el link del correo devuelva al mismo producto de donde salio el pedido. Supabase exige
-     que esa URL figure en Authentication -> URL Configuration -> Redirect URLs (o un patron que
-     la cubra); si no figura, ignora el redirect_to y manda a la Site URL por defecto. Agregar ahi
-     las tres URLs de produccion (index.html, urbanismo.html, contextos.html bajo
-     app.comprenderai.com) antes de probar el flujo de punta a punta.
+   REDIRECT_TO · YA CONFIGURADO EN SUPABASE (27/07)
+     El registro y la recuperacion mandan redirect_to = la URL actual (origin + pathname). Javier
+     ya agrego las URLs de app.comprenderai.com a Authentication -> URL Configuration -> Redirect
+     URLs -- sin eso, Supabase ignora el redirect_to y manda a la Site URL por defecto.
 
    POR QUE SIN LIBRERIA
      supabase-js resolveria esto, pero traeria una dependencia de CDN a un producto que hoy no
-     tiene ninguna: si el CDN falla, no abre nada. Los endpoints que hacen falta son REST comun
-     y entran en pocas lineas mas. Se sostiene la regla de la casa: HTML monolitico, sin build.
+     tiene ninguna: si el CDN falla, no abre nada. Los endpoints que hacen falta son REST comun.
+     Se sostiene la regla de la casa: HTML monolitico, sin build.
 
    LO QUE VIAJA AL NAVEGADOR
      La URL y la clave publicable son publicas por diseno: no autorizan nada por si solas.
@@ -688,9 +700,17 @@ header .spacer{flex:1}
     }).then(function(r){
       return r.json().then(function(d){ return { ok:r.ok, estado:r.status, datos:d }; });
     }).then(function(r){
-      if(!r.ok) return { ok:false, mensaje:'No se pudo guardar. El link puede haber vencido — pedí uno nuevo.' };
+      if(!r.ok) return { ok:false, mensaje:'No se pudo guardar. Probá de nuevo en un momento.' };
       return { ok:true };
     }).catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor.' }; });
+  }
+
+  /* ---------- datos del usuario logueado ---------- */
+  function obtenerUsuario(token){
+    return fetch(SB_URL + '/auth/v1/user', {
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + token }
+    }).then(function(r){ return r.ok ? r.json() : null; })
+      .catch(function(){ return null; });
   }
 
   /* ---------- link de correo (confirmacion de alta / recuperacion) ----------
@@ -753,15 +773,32 @@ header .spacer{flex:1}
   }
 
   // Al abrir, se lee la fila propia. La politica de RLS deja ver solo esa.
+  // De paso, muestra el boton fijo de cuenta: si hay token valido, hay sesion.
   function sincronizarSaldo(){
     return tokenVigente().then(function(t){
       if(!t) return;
+      mostrarChipCuenta();
       return fetch(SB_URL + '/rest/v1/perfiles?select=plan,saldo', {
         headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t }
       }).then(function(r){ return r.ok ? r.json() : null; })
         .then(function(f){ if(f && f[0]) anotarSaldo(f[0].plan, f[0].saldo); })
         .catch(function(){});
     });
+  }
+
+  /* ---------- piezas de formulario compartidas ----------
+     Las usan tanto el portal (ingreso/registro/recuperar) como el panel de cuenta. */
+  function campo(id, tipo, placeholder, autoc){
+    return '<input id="' + id + '" type="' + tipo + '" autocomplete="' + autoc + '" placeholder="' + placeholder + '" ' +
+      'style="width:100%;padding:12px;font-size:16px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;box-sizing:border-box;">';
+  }
+  function boton(id, texto){
+    return '<button id="' + id + '" style="width:100%;padding:12px;font-size:16px;font-weight:600;color:#fff;' +
+      'background:#1a1a1a;border:0;border-radius:8px;cursor:pointer;margin-top:4px;">' + texto + '</button>';
+  }
+  function enlace(id, texto){
+    return '<div style="margin-top:12px;text-align:center;">' +
+      '<a href="#" id="' + id + '" style="font-size:13px;color:#777;text-decoration:underline;">' + texto + '</a></div>';
   }
 
   /* ---------- portal ----------
@@ -780,19 +817,6 @@ header .spacer{flex:1}
     capa.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fbfaf8;display:flex;' +
       'align-items:center;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif;';
     document.body.appendChild(capa);
-
-    function campo(id, tipo, placeholder, autoc){
-      return '<input id="' + id + '" type="' + tipo + '" autocomplete="' + autoc + '" placeholder="' + placeholder + '" ' +
-        'style="width:100%;padding:12px;font-size:16px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;box-sizing:border-box;">';
-    }
-    function boton(id, texto){
-      return '<button id="' + id + '" style="width:100%;padding:12px;font-size:16px;font-weight:600;color:#fff;' +
-        'background:#1a1a1a;border:0;border-radius:8px;cursor:pointer;margin-top:4px;">' + texto + '</button>';
-    }
-    function enlace(id, texto){
-      return '<div style="margin-top:12px;text-align:center;">' +
-        '<a href="#" id="' + id + '" style="font-size:13px;color:#777;text-decoration:underline;">' + texto + '</a></div>';
-    }
 
     function vista(){
       var titulo, sub, cuerpo;
@@ -930,6 +954,156 @@ header .spacer{flex:1}
     borrar();
     location.reload();
   };
+
+  /* ---------- boton fijo de cuenta + panel ----------
+     El boton aparece solo mientras hay sesion (lo dispara sincronizarSaldo). El panel
+     vive aca por la misma razon que el portal y los planes: es infraestructura, y asi
+     queda disponible en los tres productos sin repetirla. */
+  var chipInsertado = false;
+  function mostrarChipCuenta(){
+    if(chipInsertado || document.getElementById('comprenderChipCuenta')) return;
+    chipInsertado = true;
+    var b = document.createElement('button');
+    b.id = 'comprenderChipCuenta';
+    b.textContent = 'Cuenta';
+    b.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:99990;padding:8px 14px;' +
+      'font-size:13px;font-weight:600;color:#1a1a1a;background:#fff;border:1px solid #ddd;' +
+      'border-radius:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.08);' +
+      'font-family:system-ui,-apple-system,sans-serif;';
+    b.addEventListener('click', mostrarCuenta);
+    document.body.appendChild(b);
+  }
+
+  function botonSecundario(id, texto, peligro){
+    return '<button id="' + id + '" style="width:100%;padding:11px;font-size:14px;font-weight:600;' +
+      'border:1px solid ' + (peligro ? '#e3b3a3' : '#ddd') + ';border-radius:8px;cursor:pointer;' +
+      'background:#fff;color:' + (peligro ? '#b4441f' : '#1a1a1a') + ';margin-bottom:10px;">' + texto + '</button>';
+  }
+
+  var cuentaAbierta = false;
+  function mostrarCuenta(){
+    if(cuentaAbierta) return;
+    cuentaAbierta = true;
+
+    var capa = document.createElement('div');
+    capa.setAttribute('id','comprenderCuenta');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(251,250,248,.97);' +
+      'display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif;';
+    document.body.appendChild(capa);
+
+    var vistaC = 'inicio';
+    var cuentaCorreo = '';
+    var mensajeCuenta = '';
+
+    function cerrar(){ cuentaAbierta = false; capa.remove(); }
+
+    function marco(cuerpoHtml){
+      return '<div style="width:100%;max-width:380px;background:#fff;border:1px solid #e2e0dc;' +
+        'border-radius:14px;padding:24px;position:relative;">' +
+          '<button id="ccCerrar" style="position:absolute;top:14px;right:14px;background:none;' +
+            'border:0;font-size:22px;line-height:1;color:#999;cursor:pointer;">&times;</button>' +
+          '<div style="font-size:17px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">Mi cuenta</div>' +
+          '<div style="font-size:13px;color:#666;margin-bottom:16px;">' + (cuentaCorreo || 'Cargando…') + '</div>' +
+          (mensajeCuenta ? '<div style="font-size:13px;color:#2a7;margin-bottom:14px;">' + mensajeCuenta + '</div>' : '') +
+          cuerpoHtml +
+        '</div>';
+    }
+
+    function pintar(){
+      var cuerpo;
+      if(vistaC === 'clave'){
+        cuerpo =
+          campo('ccClaveActual','password','Contraseña actual','current-password') +
+          campo('ccClaveNueva','password','Contraseña nueva (mínimo 6 caracteres)','new-password') +
+          boton('ccAccion','Guardar') +
+          enlace('ccVolver','Cancelar') +
+          '<div id="ccAviso" style="font-size:13px;color:#b4441f;margin-top:8px;min-height:18px;"></div>';
+      } else if(vistaC === 'eliminar'){
+        cuerpo =
+          '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
+            'Esto borra tu cuenta, tu saldo y tu historial de uso. No se puede deshacer.</div>' +
+          campo('ccConfirmar','text','Escribí ELIMINAR para confirmar','off') +
+          boton('ccAccion','Eliminar mi cuenta') +
+          enlace('ccVolver','Cancelar') +
+          '<div id="ccAviso" style="font-size:13px;color:#b4441f;margin-top:8px;min-height:18px;"></div>';
+      } else {
+        cuerpo =
+          botonSecundario('ccIrClave','Cambiar contraseña') +
+          botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
+          enlace('ccSalir','Cerrar sesión');
+      }
+      mensajeCuenta = '';   // se muestra una sola vez, en el pintado que sigue a la accion
+      capa.innerHTML = marco(cuerpo);
+      capa.querySelector('#ccCerrar').addEventListener('click', cerrar);
+      cablear();
+    }
+
+    function cablear(){
+      if(vistaC === 'inicio'){
+        capa.querySelector('#ccIrClave').addEventListener('click', function(){ vistaC='clave'; pintar(); });
+        capa.querySelector('#ccIrEliminar').addEventListener('click', function(){ vistaC='eliminar'; pintar(); });
+        capa.querySelector('#ccSalir').addEventListener('click', function(e){ e.preventDefault(); window.cerrarSesionComprender(); });
+        return;
+      }
+
+      var avisoEl = capa.querySelector('#ccAviso');
+      var accion = capa.querySelector('#ccAccion');
+      capa.querySelector('#ccVolver').addEventListener('click', function(e){ e.preventDefault(); vistaC='inicio'; pintar(); });
+
+      function ocupado(si, texto){ accion.disabled = si; if(texto) accion.textContent = texto; }
+
+      if(vistaC === 'clave'){
+        var actual = capa.querySelector('#ccClaveActual'), nueva = capa.querySelector('#ccClaveNueva');
+        accion.addEventListener('click', function(){
+          var k1 = actual.value||'', k2 = nueva.value||'';
+          if(!k1||!k2){ avisoEl.textContent='Faltan datos.'; return; }
+          if(k2.length<6){ avisoEl.textContent='La contraseña nueva necesita al menos 6 caracteres.'; return; }
+          ocupado(true,'Guardando…'); avisoEl.textContent='';
+          ingresar(cuentaCorreo, k1).then(function(r){
+            if(!r.ok){ ocupado(false,'Guardar'); avisoEl.textContent = 'Contraseña actual incorrecta.'; return; }
+            var s = leer();
+            cambiarClave(s.token, k2).then(function(r2){
+              if(r2.ok){ mensajeCuenta = 'Contraseña actualizada.'; vistaC='inicio'; pintar(); }
+              else{ ocupado(false,'Guardar'); avisoEl.textContent = r2.mensaje; }
+            });
+          });
+        });
+      } else if(vistaC === 'eliminar'){
+        var confirmar = capa.querySelector('#ccConfirmar');
+        accion.addEventListener('click', function(){
+          if((confirmar.value||'').trim().toUpperCase() !== 'ELIMINAR'){
+            avisoEl.textContent = 'Escribí ELIMINAR, tal cual, para confirmar.'; return;
+          }
+          ocupado(true,'Eliminando…'); avisoEl.textContent='';
+          tokenVigente().then(function(t){
+            if(!t){ avisoEl.textContent='Tu sesión venció. Cerrá esto y volvé a entrar.'; ocupado(false,'Eliminar mi cuenta'); return; }
+            _fetch('/api/eliminar-cuenta', {
+              method:'POST',
+              headers:{ Authorization:'Bearer ' + t }
+            }).then(function(r){
+              if(r.ok){ borrar(); location.reload(); return; }
+              return r.json().catch(function(){ return {}; }).then(function(d){
+                ocupado(false,'Eliminar mi cuenta');
+                avisoEl.textContent = (d && d.error && d.error.message) || 'No se pudo eliminar la cuenta.';
+              });
+            }).catch(function(){
+              ocupado(false,'Eliminar mi cuenta');
+              avisoEl.textContent = 'No se pudo conectar. Revisá tu conexión.';
+            });
+          });
+        });
+      }
+    }
+
+    pintar();   // primer pintado inmediato ("Cargando…"), se repinta solo cuando llega el correo
+    tokenVigente().then(function(t){
+      if(!t) return;
+      obtenerUsuario(t).then(function(u){
+        cuentaCorreo = (u && u.email) || '';
+        if(vistaC === 'inicio') pintar();
+      });
+    });
+  }
 
   /* ---------- pantalla de planes ----------
      Vive acá y no en los HTML por la misma razón que la sesión: es infraestructura.
