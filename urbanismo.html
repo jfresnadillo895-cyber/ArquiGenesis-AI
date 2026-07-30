@@ -216,7 +216,7 @@
   // pasa a mostrarlo. Esa es la diferencia entre honor system y contabilidad real.
   function anotarSaldo(plan, saldo){
     try{
-      if(plan && ['gratis','profesional','estudio'].indexOf(plan) > -1){
+      if(plan && ['gratis','profesional','estudio','magister'].indexOf(plan) > -1){
         if(localStorage.getItem('ag_core_plan') !== plan) localStorage.setItem('ag_core_plan', plan);
       }
       if(saldo !== null && saldo !== undefined && saldo !== '' && !isNaN(Number(saldo))){
@@ -580,7 +580,14 @@
       lema:'Suma Urbanismo y Contextos',
       incluye:['Todo lo de Profesional','Comprender · Urbanismo','Comprender · Contextos','Exportación de informes'],
       excluye:[],
-      destacado:true }
+      destacado:true },
+    { id:'magister', nombre:'Magister', precio:'$160.000', creditos:'9.000 créditos por mes',
+      /* BORRADOR — reemplazar por la voz de Javier. Agregado 29/07: version mensual y
+         autoservicio de lo que era Institucional (organismo sostenido). */
+      lema:'Investigación sostenida sobre un organismo',
+      incluye:['Todo lo de Pro · Estudio','El doble de créditos, para investigaciones largas'],
+      excluye:[],
+      destacado:false }
   ];
 
   var planesAbierto = false;
