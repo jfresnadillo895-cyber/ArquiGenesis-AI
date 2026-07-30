@@ -17,6 +17,20 @@
 // PRECIOS · fijados al dólar BNA venta $1.515 del 22/07/2026
 //   Se revisan a mano cuando el tipo de cambio se despegue. Cambiar acá Y en los
 //   planes ya creados en Mercado Pago (las suscripciones activas mantienen su monto).
+//   Y CAMBIAR TAMBIEN LOS UMBRALES DE api/pago.js — planPorMonto() reconoce el plan
+//   por el monto cobrado, así que un precio nuevo acá sin su umbral allá deja pagos
+//   aprobados sin acreditar (pasó con el precio de prueba de Profesional, 29/07).
+//
+// RESTAURADO 29/07: Profesional vuelve a su precio real. El de prueba ($100) ya
+// cumplió su función — confirmar el circuito con un pago real — y quedarse con él
+// más tiempo solo iba a repetir el problema de acá arriba con cada prueba nueva.
+//
+// MAGISTER · agregado 29/07
+//   La versión mensual y autoservicio de lo que hasta ahora era Institucional
+//   (organismo sostenido, antes solo por trato anual a medida). Institucional
+//   sigue existiendo aparte para los acuerdos grandes o a medida; Magister es
+//   para la persona que ya está en Estudio y necesita sostener una investigación
+//   larga sobre un organismo sin quedarse corta de créditos.
 //
 // VARIABLES DE ENTORNO
 //   MP_ACCESS_TOKEN · SUPABASE_URL · SUPABASE_SECRET_KEY   (ya cargadas)
@@ -25,12 +39,9 @@ const MP = 'https://api.mercadopago.com';
 const VUELTA = 'https://app.comprenderai.com/?suscripcion=ok';
 
 const PLANES = {
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  PRUEBA · 25/07 · Profesional a $100 para verificar el circuito real.
-  //  RESTAURAR A 30000 apenas la prueba pase. Estudio queda en su precio real.
-  //  ═══════════════════════════════════════════════════════════════════════════
-  profesional: { monto: 100, titulo: 'Comprender · Profesional (PRUEBA)' },
-  estudio:     { monto: 80000, titulo: 'Comprender · Estudio' },
+  profesional: { monto: 30000,  titulo: 'Comprender · Profesional' },
+  estudio:     { monto: 80000,  titulo: 'Comprender · Estudio' },
+  magister:    { monto: 160000, titulo: 'Comprender · Magister' },
 };
 
 const registrar = (o) => console.log(JSON.stringify({ evento: 'suscribir', ...o }));

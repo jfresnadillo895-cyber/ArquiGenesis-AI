@@ -27,14 +27,26 @@
 // SIEMPRE RESPONDE 200
 //   Salvo firma invalida. Si devolvemos error, Mercado Pago reintenta en bucle por algo
 //   que no se va a arreglar solo. Los problemas se registran y se miran en los logs.
+//
+// UMBRALES · TIENEN QUE COINCIDIR CON api/suscribir.js
+//   El plan se reconoce por el monto cobrado, no por un id que mande el cliente —
+//   por eso, si suscribir.js cambia un precio (aunque sea temporal, para probar),
+//   este archivo tiene que enterarse tambien. El 29/07 un pago de $100 (precio de
+//   prueba de Profesional) no encontro ningun umbral y quedo sin acreditar: quedo
+//   registrado como "MONTO NO RECONOCIDO" en vez de activar el plan. No repetir:
+//   cualquier precio de prueba que se ponga en suscribir.js necesita su umbral aca,
+//   o mejor, evitar precios de prueba una vez que el circuito ya esta verificado.
 
 import crypto from 'crypto';
 
 const MP = 'https://api.mercadopago.com';
 
-// $30.000 -> profesional · $80.000 -> estudio.  Se compara por el monto cobrado,
-// que es lo unico que Mercado Pago garantiza en todos los tipos de aviso.
+// $30.000 -> profesional · $80.000 -> estudio · $160.000 -> magister.
+// Se compara por el monto cobrado, que es lo unico que Mercado Pago garantiza
+// en todos los tipos de aviso. El orden importa: se recorre de arriba a abajo
+// y gana el primer umbral que el monto alcanza, asi que van de mayor a menor.
 const PLANES = [
+  { plan: 'magister',    minimo: 120000 },
   { plan: 'estudio',     minimo: 60000 },
   { plan: 'profesional', minimo: 20000 },
 ];
