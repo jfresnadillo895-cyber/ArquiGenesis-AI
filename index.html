@@ -3220,13 +3220,16 @@ function cardCreditos(){
   const ta = document.createElement('span'); ta.textContent = 'Disponible ahora';
   const tb = document.createElement('b'); tb.textContent = c.resta;
   tot.appendChild(ta); tot.appendChild(tb); el.cardContent.appendChild(tot);
+  /* D-06 · Se saco el boton "Recargar" de aca (29/07): dependia de window.iniciarPagoRecarga,
+     que no existe en ningun lado del codigo -- tocarlo solo mostraba "Recarga no disponible".
+     RECARGA y credRecargar() quedan en el archivo sin boton que los llame: los usa el
+     autotest C07 mas abajo, que compara el costo por credito de una futura recarga contra
+     el de la suscripcion. Cuando haya una recarga real, esto vuelve a tener boton. */
   const row = document.createElement('div'); row.className='cardrow';
   const b1 = document.createElement('button'); b1.className='btn'; b1.textContent='Cerrar'; b1.onclick = cerrarOverlay;
-  const b3 = document.createElement('button'); b3.className='btn'; b3.textContent='Recargar · ' + RECARGA.precio;
-  b3.onclick = credRecargar;
   const b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Ampliar plan';
   b2.onclick = function(){ cerrarOverlay(); window.mostrarPlanes('ampliar'); };  /* PAGO: flujo real (Mercado Pago), no el simulacro cardAmpliar */
-  row.appendChild(b1); row.appendChild(b3); row.appendChild(b2);
+  row.appendChild(b1); row.appendChild(b2);
   el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
 }
@@ -3242,26 +3245,14 @@ function cardSinCreditos(tipo){
   p1.textContent = 'Te quedan ' + c.resta + ' créditos y ' + nombres[tipo] + ' cuesta ' + (COSTO[tipo]||1) + '.';
   const p2 = document.createElement('p');
   p2.textContent = esGratis
-    ? 'Tus organismos y fichas están intactos — nada se pierde. El paquete de bienvenida se otorga una sola vez: para seguir, elegí un plan o sumá una recarga.'
-    : 'Tus organismos y fichas están intactos — nada se pierde. Podés seguir ahora mismo con una recarga, o esperar a que el crédito se renueve el mes que viene.';
+    ? 'Tus organismos y fichas están intactos — nada se pierde. El paquete de bienvenida se otorga una sola vez: para seguir, elegí un plan.'
+    : 'Tus organismos y fichas están intactos — nada se pierde. Esperá a que el crédito se renueve el mes que viene, o pasá a un plan mayor.';
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(p2);
-
-  // recarga: la salida inmediata (el municipio en medio de una sesión no puede esperar)
-  const bRec = document.createElement('button');
-  bRec.className = 'btn primary';
-  bRec.style.cssText = 'display:block;width:100%;text-align:left;margin-bottom:8px;padding:13px 15px';
-  const r1 = document.createElement('div'); r1.style.cssText='font-weight:700;font-size:13.5px;margin-bottom:2px';
-  r1.textContent = 'Seguir ahora · ' + RECARGA.precio;
-  const r2 = document.createElement('div'); r2.style.cssText='font-size:11.5px;opacity:.8;line-height:1.45';
-  r2.textContent = RECARGA.creditos + ' créditos que se suman a tu saldo, sin cambiar de plan. Ideal para terminar una sesión en curso.';
-  bRec.appendChild(r1); bRec.appendChild(r2);
-  bRec.onclick = credRecargar;
-  el.cardContent.appendChild(bRec);
 
   if(planActual() !== 'estudio'){
     const pAviso = document.createElement('p');
     pAviso.style.cssText = 'font-size:12px;color:var(--faint);margin-bottom:12px';
-    pAviso.textContent = 'Si esto te pasa seguido, un plan mayor te sale más barato por crédito que las recargas.';
+    pAviso.textContent = 'Si esto te pasa seguido, un plan mayor puede convenirte más.';
     el.cardContent.appendChild(pAviso);
   }
 

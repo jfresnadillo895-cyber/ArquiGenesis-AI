@@ -5824,7 +5824,11 @@ const CRED_PLANES = {
   estudio:     { nombre:'Pro · Estudio', creditos: 4500, ventana:'mes' }
 };
 const CRED_COSTO = { diagnostico: 12, proyectivo: 8, refinamiento: 3, campo: 12 };
-const CRED_RECARGA = { creditos: 600, precio: 'USD 19' };   // C-04: sincronizado con el Core
+/* D-06 · Se saco "Recargar" (29/07): era un simulacro que sumaba creditos directo en
+   localStorage sin cobrar nada -- mas grave que el equivalente en el Core (ahi al menos
+   intentaba un pago real, aunque tambien roto). CRED_RECARGA y credRecargar() se sacaron
+   enteros: nada mas los llamaba. Cuando haya una recarga real, se arma desde cero contra
+   el servidor, como el resto de los pagos. */
 
 function credPlan(){ try{ return localStorage.getItem('ag_core_plan') || 'gratis'; }catch(e){ return 'gratis'; } }
 function credClave(p){
@@ -5859,12 +5863,6 @@ function credConsumir(tipo){
   try{ localStorage.setItem('ag_core_cred', JSON.stringify({clave:c.clave, usado:c.usado+(CRED_COSTO[tipo]||1), extra:c.extra})); }catch(e){}
   credRender();
 }
-function credRecargar(){
-  const c = credEstado();
-  try{ localStorage.setItem('ag_core_cred', JSON.stringify({clave:c.clave, usado:c.usado, extra:c.extra+CRED_RECARGA.creditos})); }catch(e){}
-  credRender(); caiCerrar();
-  setTimeout(function(){ caiMensaje('Créditos añadidos', CRED_RECARGA.creditos + ' créditos se sumaron a tu saldo. Podés seguir ahora mismo. (En esta variante de prueba la compra es simulada.)'); }, 100);
-}
 function credRender(){
   const cont = document.getElementById('cai-cred');
   if(!cont) return;
@@ -5895,8 +5893,7 @@ function credTarjeta(){
   }
   const row=document.createElement('div'); row.className='cai-row';
   const b1=document.createElement('button'); b1.className='cai-btn'; b1.textContent='Cerrar'; b1.onclick=caiCerrar;
-  const b2=document.createElement('button'); b2.className='cai-btn pri'; b2.textContent='Recargar · '+CRED_RECARGA.precio; b2.onclick=credRecargar;
-  row.appendChild(b1); row.appendChild(b2); card.appendChild(row);
+  row.appendChild(b1); card.appendChild(row);
   caiAbrir();
 }
 
@@ -5987,10 +5984,10 @@ function credSinCreditos(tipo){
   const p1=document.createElement('p');
   p1.textContent = 'Te quedan ' + c.resta + ' créditos y ' + (nombres[tipo]||'esta operación') + ' cuesta ' + (CRED_COSTO[tipo]||1) + '.';
   const p2=document.createElement('p');
-  p2.textContent = 'Tus diagnósticos están intactos — nada se pierde. Podés seguir ahora con una recarga, o esperar la renovación.';
+  p2.textContent = 'Tus diagnósticos están intactos — nada se pierde. Esperá la renovación, o pasá a un plan mayor.';
   const row=document.createElement('div'); row.className='cai-row';
   const b1=document.createElement('button'); b1.className='cai-btn'; b1.textContent='Esperar'; b1.onclick=caiCerrar;
-  const b2=document.createElement('button'); b2.className='cai-btn pri'; b2.textContent='Seguir ahora · '+CRED_RECARGA.precio; b2.onclick=credRecargar;
+  const b2=document.createElement('button'); b2.className='cai-btn pri'; b2.textContent='Ver planes'; b2.onclick=function(){ caiCerrar(); window.mostrarPlanes('ampliar'); };
   row.appendChild(b1); row.appendChild(b2);
   card.appendChild(h); card.appendChild(p1); card.appendChild(p2); card.appendChild(row);
   caiAbrir();
