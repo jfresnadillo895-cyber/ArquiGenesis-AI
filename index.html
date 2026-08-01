@@ -883,7 +883,7 @@ header .spacer{flex:1}
           if(!c||!k){ avisoEl.textContent = 'Faltan datos.'; return; }
           ocupado(true,'Entrando…'); avisoEl.textContent = '';
           ingresar(c,k).then(function(r){
-            if(r.ok){ portalAbierto=false; capa.remove(); sincronizarSaldo(); }
+            if(r.ok){ portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} } }
             else{ ocupado(false,'Ingresar'); avisoEl.textContent = r.mensaje; }
           });
         }
@@ -901,7 +901,7 @@ header .spacer{flex:1}
           if(k.length<6){ avisoEl.textContent='La contraseña necesita al menos 6 caracteres.'; return; }
           ocupado(true,'Creando…'); avisoEl.textContent = '';
           registrar(c,k).then(function(r){
-            if(r.ok && r.sesion){ portalAbierto=false; capa.remove(); sincronizarSaldo(); return; }
+            if(r.ok && r.sesion){ portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} } return; }
             if(r.ok){ modo='ingreso'; aviso='Cuenta creada. Revisá tu correo para confirmarla y después ingresá.'; pintar(); return; }
             ocupado(false,'Crear cuenta'); avisoEl.textContent = r.mensaje;
           });
@@ -936,7 +936,7 @@ header .spacer{flex:1}
           cambiarClave(extra.token, k).then(function(r){
             if(r.ok){
               guardar({ token: extra.token, refresco: extra.refresco||'', vence: Date.now()+3600000, correo:'' });
-              portalAbierto=false; capa.remove(); sincronizarSaldo();
+              portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
             }else{
               ocupado(false,'Guardar'); avisoEl.textContent = r.mensaje;
             }
@@ -1928,6 +1928,13 @@ function sincronizarOrganismosConServidor(){
     })
     .catch(function(){ /* sin conexion: se sigue trabajando local, se reintenta en el proximo inicio */ });
 }
+/* candado.txt llama a esto despues de un login/registro/recuperacion exitosos DENTRO del
+   portal (sin recargar la pagina). Sin este gancho, en un navegador sin sesion previa
+   (incognito, primera vez) la sincronizacion de arriba corre una sola vez al cargar --
+   antes de que exista sesion -- y falla en silencio; nada la volvia a intentar despues
+   de iniciar sesion. Bug real encontrado el 01/08 al probar en una ventana de incognito. */
+window.alConfirmarSesion = sincronizarOrganismosConServidor;
+
 function fusionarFicha(fichaNueva){
   if(!state.organismo || !fichaNueva) return;
   const o = state.organismo;
