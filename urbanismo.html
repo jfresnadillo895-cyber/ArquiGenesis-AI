@@ -16,7 +16,8 @@
      1. Si no hay sesion, muestra un portal con tres caminos: ingresar, crear cuenta, recuperar
         contrasena. No deja pasar sin sesion.
      2. Guarda la sesion y la renueva sola cuando vence.
-     3. Agrega el token a toda llamada a /api/anthropic, mas el modulo desde donde se llama.
+     3. Agrega el token a toda llamada a /api/anthropic o /api/organismos, mas el modulo
+        desde donde se llama (Corte 0.5, 01/08: sumo /api/organismos al mismo interceptor).
      4. Lee el saldo del servidor y lo deja donde credEstado() lo encuentra.
      5. Crea cuenta contra Supabase Auth. El disparador que ya esta en la base crea la fila de
         perfiles solo -- este archivo no toca la base directamente.
@@ -714,7 +715,8 @@
   window.fetch = function(recurso, opciones){
     var url = '';
     try{ url = String((recurso && recurso.url) ? recurso.url : recurso || ''); }catch(e){}
-    if(url.indexOf('/api/anthropic') === -1) return _fetch.apply(this, arguments);
+    var esApiComprender = url.indexOf('/api/anthropic') > -1 || url.indexOf('/api/organismos') > -1;
+    if(!esApiComprender) return _fetch.apply(this, arguments);
 
     var args = arguments;
     var yo = this;

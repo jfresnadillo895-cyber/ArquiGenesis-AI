@@ -562,7 +562,8 @@ header .spacer{flex:1}
      1. Si no hay sesion, muestra un portal con tres caminos: ingresar, crear cuenta, recuperar
         contrasena. No deja pasar sin sesion.
      2. Guarda la sesion y la renueva sola cuando vence.
-     3. Agrega el token a toda llamada a /api/anthropic, mas el modulo desde donde se llama.
+     3. Agrega el token a toda llamada a /api/anthropic o /api/organismos, mas el modulo
+        desde donde se llama (Corte 0.5, 01/08: sumo /api/organismos al mismo interceptor).
      4. Lee el saldo del servidor y lo deja donde credEstado() lo encuentra.
      5. Crea cuenta contra Supabase Auth. El disparador que ya esta en la base crea la fila de
         perfiles solo -- este archivo no toca la base directamente.
@@ -1260,7 +1261,8 @@ header .spacer{flex:1}
   window.fetch = function(recurso, opciones){
     var url = '';
     try{ url = String((recurso && recurso.url) ? recurso.url : recurso || ''); }catch(e){}
-    if(url.indexOf('/api/anthropic') === -1) return _fetch.apply(this, arguments);
+    var esApiComprender = url.indexOf('/api/anthropic') > -1 || url.indexOf('/api/organismos') > -1;
+    if(!esApiComprender) return _fetch.apply(this, arguments);
 
     var args = arguments;
     var yo = this;
@@ -1843,6 +1845,88 @@ function guardarOrganismo(org){
   const i = list.findIndex(function(o){ return o.id === org.id; });
   if(i > -1) list[i] = org; else list.push(org);
   persistirOrganismos(list);
+  sincronizarOrganismoServidor(org);   // Corte 0.5 -- ademas de local, al servidor
+}
+
+/* ============ Corte 0.5 · persistencia real de organismos (01/08) ============
+   Hasta aca, guardarOrganismo() solo escribia en localStorage: si se borraban los
+   datos del sitio o se cambiaba de dispositivo, el organismo entero desaparecia.
+   Esto agrega, sin sacar nada de lo anterior, un guardado en el servidor via
+   POST /api/organismos. localStorage sigue siendo la respuesta inmediata -- estas
+   llamadas van en segundo plano y si fallan (sin conexion, sesion vencida) no
+   bloquean nada: la copia local ya quedo escrita, que es la unica garantia que
+   existia hasta ahora y sigue estando.
+
+   org._sv guarda { version } de lo ultimo confirmado por el servidor. Viaja
+   pegado al organismo en memoria (no se manda al servidor: se lo saca antes de
+   enviar "datos", asi el servidor no termina guardando su propio numero de
+   version adentro del blob que administra). Sirve para no pisar en silencio una
+   version mas nueva guardada desde otra sesion: si el servidor detecta que
+   version_conocida quedo atras, no aplica el guardado y devuelve conflicto:true
+   con su version real (ver api/organismos.js). Resolverlo con una interfaz para
+   elegir queda para un paso posterior -- por ahora, ante un conflicto, no se
+   pisa nada y el local sigue como estaba. */
+function sincronizarOrganismoServidor(org){
+  if(!org || !org.id) return;
+  var limpio = {};
+  for(var k in org){ if(Object.prototype.hasOwnProperty.call(org,k) && k !== '_sv') limpio[k] = org[k]; }
+  fetch('/api/organismos', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      cliente_id: org.id,
+      nombre: org.nombre || null,
+      estado: 'activo',
+      datos: limpio,
+      version_conocida: (org._sv && org._sv.version) || null
+    })
+  }).then(function(r){ return r.json().then(function(d){ return { ok:r.ok, estado:r.status, datos:d }; }); })
+    .then(function(r){
+      if(r.ok && r.datos && typeof r.datos.version === 'number'){
+        org._sv = { version: r.datos.version };
+        var lista2 = cargarOrganismos();
+        var j = lista2.findIndex(function(o){ return o.id === org.id; });
+        if(j > -1){ lista2[j] = org; persistirOrganismos(lista2); }
+      }
+      // 409 conflicto_version: por ahora no se resuelve solo. No se pisa nada local.
+    })
+    .catch(function(){ /* sin conexion: la copia local ya quedo guardada, se reintenta en el proximo guardado */ });
+}
+
+/* Se corre una vez al iniciar: trae lo que el servidor tenga y el navegador no
+   (por ejemplo, entrar desde otro dispositivo), y sube lo que el navegador tenga
+   y el servidor todavia no (la migracion de lo que ya existia en localStorage
+   antes de este corte, y cualquier guardado que no haya llegado a viajar). No
+   borra ni pisa nada existente en ningun lado -- solo completa lo que falte. */
+function sincronizarOrganismosConServidor(){
+  fetch('/api/organismos')
+    .then(function(r){ return r.json().then(function(d){ return { ok:r.ok, datos:d }; }); })
+    .then(function(r){
+      if(!r.ok || !r.datos || !Array.isArray(r.datos.organismos)) return;
+      var locales = cargarOrganismos();
+      var localesPorId = {};
+      locales.forEach(function(o){ localesPorId[o.id] = o; });
+
+      var remotos = r.datos.organismos;
+      var remotosPorId = {};
+      remotos.forEach(function(row){ if(row.cliente_id) remotosPorId[row.cliente_id] = row; });
+
+      var cambioLocal = false;
+      remotos.forEach(function(row){
+        if(!row.cliente_id || localesPorId[row.cliente_id]) return;
+        var org = row.datos;
+        if(!org || !org.id) return;
+        org._sv = { version: row.version };
+        locales.push(org);
+        cambioLocal = true;
+      });
+      if(cambioLocal){ persistirOrganismos(locales); renderOrgList(); }
+
+      locales.forEach(function(o){
+        if(!remotosPorId[o.id]) sincronizarOrganismoServidor(o);
+      });
+    })
+    .catch(function(){ /* sin conexion: se sigue trabajando local, se reintenta en el proximo inicio */ });
 }
 function fusionarFicha(fichaNueva){
   if(!state.organismo || !fichaNueva) return;
@@ -5284,6 +5368,7 @@ window.addEventListener('hashchange', function(){ if(location.hash === '#pruebas
 renderOrgList();
 renderCred();
 mostrarOnboarding(false);
+sincronizarOrganismosConServidor();   // Corte 0.5
 if(location.hash === '#pruebas') cardBancoPruebas();
 </script>
 </body>
