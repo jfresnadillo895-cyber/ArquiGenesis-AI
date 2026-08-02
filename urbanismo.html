@@ -60,6 +60,9 @@
 (function(){
   var SB_URL = 'https://spavobqrigvbjabwyvbl.supabase.co';
   var SB_KEY = 'sb_publishable_QbvJTscQJ63YjLasQ4p51w_0nLqwm6j';
+  var TERMINOS_URL = 'https://www.comprenderai.com/legal/terminos';
+  var PRIVACIDAD_URL = 'https://www.comprenderai.com/legal/privacidad';
+  var TERMINOS_VERSION = 'v1-2026-08-01';   // subir esto si el texto legal cambia de forma material
   var LLAVE   = 'comprender_sesion';
   var MARGEN  = 60000;   // se renueva un minuto antes de vencer
 
@@ -117,9 +120,11 @@
   }
 
   /* ---------- alta de cuenta ---------- */
-  function registrar(correo, clave){
+  function registrar(correo, clave, consentimiento){
     var destino = location.origin + location.pathname;
-    return auth('signup?redirect_to=' + encodeURIComponent(destino), { email: correo, password: clave })
+    var cuerpo = { email: correo, password: clave };
+    if(consentimiento){ cuerpo.data = consentimiento; }
+    return auth('signup?redirect_to=' + encodeURIComponent(destino), cuerpo)
       .then(function(r){
         if(!r.ok) return { ok:false, mensaje: mensajeRegistro(r) };
         var s = desdeRespuesta(r.datos);
@@ -255,6 +260,12 @@
     return '<div style="margin-top:12px;text-align:center;">' +
       '<a href="#" id="' + id + '" style="font-size:13px;color:#777;text-decoration:underline;">' + texto + '</a></div>';
   }
+  function casilla(id, htmlEtiqueta){
+    return '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:#555;' +
+      'margin-bottom:14px;line-height:1.45;cursor:pointer;">' +
+      '<input id="' + id + '" type="checkbox" style="margin-top:2px;flex-shrink:0;width:15px;height:15px;">' +
+      '<span>' + htmlEtiqueta + '</span></label>';
+  }
 
   /* ---------- portal ----------
      Un solo overlay con cuatro vistas: ingreso, registro, recuperar, nueva_clave.
@@ -281,6 +292,9 @@
         cuerpo =
           campo('cpMail2','email','Correo','username') +
           campo('cpClave2','password','Contraseña (mínimo 6 caracteres)','new-password') +
+          casilla('cpTerminos',
+            'Acepto los <a href="' + TERMINOS_URL + '" target="_blank" rel="noopener" style="color:#1a1a1a;">Términos y Condiciones de Uso</a> ' +
+            'y la <a href="' + PRIVACIDAD_URL + '" target="_blank" rel="noopener" style="color:#1a1a1a;">Política de Privacidad</a>.') +
           boton('cpAccion','Crear cuenta') +
           enlace('cpAIngreso','¿Ya tenés cuenta? Ingresá');
       } else if(modo === 'recuperar'){
@@ -348,13 +362,19 @@
         setTimeout(function(){ try{ mail.focus(); }catch(e){} }, 60);
 
       } else if(modo === 'registro'){
-        var mail2 = capa.querySelector('#cpMail2'), pass2 = capa.querySelector('#cpClave2');
+        var mail2 = capa.querySelector('#cpMail2'), pass2 = capa.querySelector('#cpClave2'), term2 = capa.querySelector('#cpTerminos');
         function intentarReg(){
           var c=(mail2.value||'').trim(), k=pass2.value||'';
           if(!c||!k){ avisoEl.textContent='Faltan datos.'; return; }
           if(k.length<6){ avisoEl.textContent='La contraseña necesita al menos 6 caracteres.'; return; }
+          if(!term2.checked){ avisoEl.textContent='Tenés que aceptar los Términos y la Política de Privacidad para crear una cuenta.'; return; }
           ocupado(true,'Creando…'); avisoEl.textContent = '';
-          registrar(c,k).then(function(r){
+          var consentimiento = {
+            terminos_aceptados: true,
+            terminos_version: TERMINOS_VERSION,
+            terminos_fecha: new Date().toISOString()
+          };
+          registrar(c,k,consentimiento).then(function(r){
             if(r.ok && r.sesion){ portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} } return; }
             if(r.ok){ modo='ingreso'; aviso='Cuenta creada. Revisá tu correo para confirmarla y después ingresá.'; pintar(); return; }
             ocupado(false,'Crear cuenta'); avisoEl.textContent = r.mensaje;
