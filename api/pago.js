@@ -28,34 +28,17 @@
 //   Salvo firma invalida. Si devolvemos error, Mercado Pago reintenta en bucle por algo
 //   que no se va a arreglar solo. Los problemas se registran y se miran en los logs.
 //
-// UMBRALES · TIENEN QUE COINCIDIR CON api/suscribir.js
-//   El plan se reconoce por el monto cobrado, no por un id que mande el cliente —
-//   por eso, si suscribir.js cambia un precio (aunque sea temporal, para probar),
-//   este archivo tiene que enterarse tambien. El 29/07 un pago de $100 (precio de
-//   prueba de Profesional) no encontro ningun umbral y quedo sin acreditar: quedo
-//   registrado como "MONTO NO RECONOCIDO" en vez de activar el plan. No repetir:
-//   cualquier precio de prueba que se ponga en suscribir.js necesita su umbral aca,
-//   o mejor, evitar precios de prueba una vez que el circuito ya esta verificado.
+// UMBRALES · CATALOGO CENTRALIZADO (01/08)
+//   planPorMonto() ya no vive acá: se importa de ./catalogo.js, el mismo archivo que usa
+//   api/suscribir.js para armar el cobro. Antes cada uno tenía su propia copia -- el 29/07
+//   un precio de prueba en suscribir.js sin su umbral correspondiente acá dejó un pago
+//   aprobado sin acreditar (quedaba registrado como "MONTO NO RECONOCIDO"). Con un solo
+//   archivo de por medio, esa desincronización ya no es posible entre estos dos.
 
 import crypto from 'crypto';
+import { planPorMonto } from './catalogo.js';
 
 const MP = 'https://api.mercadopago.com';
-
-// $30.000 -> profesional · $80.000 -> estudio · $160.000 -> magister.
-// Se compara por el monto cobrado, que es lo unico que Mercado Pago garantiza
-// en todos los tipos de aviso. El orden importa: se recorre de arriba a abajo
-// y gana el primer umbral que el monto alcanza, asi que van de mayor a menor.
-const PLANES = [
-  { plan: 'magister',    minimo: 120000 },
-  { plan: 'estudio',     minimo: 60000 },
-  { plan: 'profesional', minimo: 20000 },
-];
-
-function planPorMonto(monto) {
-  const m = Number(monto) || 0;
-  for (const p of PLANES) if (m >= p.minimo) return p.plan;
-  return null;
-}
 
 const registrar = (o) => console.log(JSON.stringify({ evento: 'pago', ...o }));
 

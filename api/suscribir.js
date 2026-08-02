@@ -14,35 +14,21 @@
 //   Ata la suscripción de Mercado Pago con el usuario de Supabase. Sin eso llega
 //   un pago y no sabemos de quién es. api/pago.js lo lee para saber a quién acreditar.
 //
-// PRECIOS · fijados al dólar BNA venta $1.515 del 22/07/2026
-//   Se revisan a mano cuando el tipo de cambio se despegue. Cambiar acá Y en los
-//   planes ya creados en Mercado Pago (las suscripciones activas mantienen su monto).
-//   Y CAMBIAR TAMBIEN LOS UMBRALES DE api/pago.js — planPorMonto() reconoce el plan
-//   por el monto cobrado, así que un precio nuevo acá sin su umbral allá deja pagos
-//   aprobados sin acreditar (pasó con el precio de prueba de Profesional, 29/07).
-//
-// RESTAURADO 29/07: Profesional vuelve a su precio real. El de prueba ($100) ya
-// cumplió su función — confirmar el circuito con un pago real — y quedarse con él
-// más tiempo solo iba a repetir el problema de acá arriba con cada prueba nueva.
-//
-// MAGISTER · agregado 29/07
-//   La versión mensual y autoservicio de lo que hasta ahora era Institucional
-//   (organismo sostenido, antes solo por trato anual a medida). Institucional
-//   sigue existiendo aparte para los acuerdos grandes o a medida; Magister es
-//   para la persona que ya está en Estudio y necesita sostener una investigación
-//   larga sobre un organismo sin quedarse corta de créditos.
+// PRECIOS · CATALOGO CENTRALIZADO (01/08)
+//   Los precios ya no viven acá: se importan de ./catalogo.js, el mismo archivo que usa
+//   api/pago.js para reconocer los pagos. Antes cada uno tenía su propia copia -- el 29/07
+//   un precio de prueba acá sin su umbral correspondiente en pago.js dejó un pago aprobado
+//   sin acreditar. Cambiar un precio ahora es cambiarlo en un solo lugar: catalogo.js.
+//   (Los créditos que se otorgan siguen siendo aparte, en creditos_de() en Postgres --
+//   ver la nota completa en catalogo.js.)
 //
 // VARIABLES DE ENTORNO
 //   MP_ACCESS_TOKEN · SUPABASE_URL · SUPABASE_SECRET_KEY   (ya cargadas)
 
+import { PLANES } from './catalogo.js';
+
 const MP = 'https://api.mercadopago.com';
 const VUELTA = 'https://app.comprenderai.com/?suscripcion=ok';
-
-const PLANES = {
-  profesional: { monto: 30000,  titulo: 'Comprender · Profesional' },
-  estudio:     { monto: 80000,  titulo: 'Comprender · Estudio' },
-  magister:    { monto: 160000, titulo: 'Comprender · Magister' },
-};
 
 const registrar = (o) => console.log(JSON.stringify({ evento: 'suscribir', ...o }));
 
