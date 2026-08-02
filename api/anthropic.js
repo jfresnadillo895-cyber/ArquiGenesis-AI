@@ -182,6 +182,7 @@ export default async function handler(req, res) {
       requiere_plan:      [403, 'Tu plan no incluye este modulo.'],
       modulo_inactivo:    [403, 'Este modulo no esta disponible.'],
       perfil_inexistente: [401, 'No encontramos tu cuenta. Volve a iniciar sesion.'],
+      cuenta_pausada:     [403, 'Tu cuenta esta pausada. Escribinos si crees que es un error.'],
     };
     const [codigo, mensaje] = mapa[motivo] || [403, 'No autorizado.'];
     return res.status(codigo).json({
