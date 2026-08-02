@@ -1,34 +1,35 @@
 // api/anthropic.js — Proxy de produccion de la suite Comprender (Vercel Serverless Function)
 // ---------------------------------------------------------------------------------------------
-// v3 · SESION REAL Y SALDO EN BASE DE DATOS
+// v4 · RESERVA ATOMICA DE CREDITOS (01/08)
 //
-// QUE CAMBIO RESPECTO DE v2
-//   ✔ La identidad ya no es una clave en una variable de entorno: es un usuario
-//     de Supabase Auth. El cliente manda su token en `Authorization: Bearer`.
-//   ✔ El plan ya no sale de una tabla en el codigo: sale de la base.
-//   ✔ El saldo AHORA SE CUENTA. Era lo unico que v2 no podia hacer.
-//   ✔ El control por modulo lo decide la funcion `puede()`, no PLAN_MINIMO_MODULO.
-//   ✘ Se elimino CLAVES_ACCESO / CLAVE_ACCESO. No hay camino de respaldo:
-//     si la base no responde, el proxy falla CERRADO. Ver "FALLA CERRADO".
+// QUE CAMBIO RESPECTO DE v3
+//   ✔ puede() -> reservar(): ya no solo verifica saldo, lo APARTA en el mismo paso, con un
+//     UPDATE atomico (`saldo >= estimado`). Antes, entre verificar y cobrar (que pasaba
+//     recien despues de la respuesta de Anthropic) habia una ventana: dos pedidos
+//     simultaneos de la misma cuenta podian pasar los dos el mismo chequeo de saldo,
+//     ejecutar los dos contra Anthropic (costo real dos veces) y recien ahi competir por
+//     cobrar. Con reservar(), el segundo pedido que ya no alcanza no reserva nada.
+//   ✔ Todo camino de salida despues de reservar libera o liquida la reserva: si Anthropic
+//     responde bien, se cobra el costo real (consumir); si falla la red, si Anthropic
+//     responde mal, o si no hay `usage` utilizable, se devuelve integra (liberar_reserva).
+//     Antes, un fallo de red a Anthropic dejaba el saldo intacto porque nunca se habia
+//     tocado -- ahora que se reserva antes de llamar, ese camino tiene que liberar tambien.
+//
+// ORDEN DE LA LLAMADA
+//   1. Validar el token contra Supabase  →  obtener el id del usuario.
+//   2. reservar(id, modulo)              →  plan, saldo (ya con el estimado descontado),
+//                                            factor, estimado, permitido.
+//   3. Recien entonces llamar a Anthropic.
+//   4a. Si hay resultado utilizable: consumir(id, modulo, tokens, estimado) ajusta lo
+//       reservado contra el costo real -- se devuelve el estimado, se cobra lo real.
+//   4b. Si no (fallo de red, respuesta no-ok, sin `usage`): liberar_reserva(id, estimado)
+//       devuelve integro lo apartado. Una operacion fallida no consume creditos, ahora
+//       tambien en la practica y no solo en la intencion.
 //
 // VARIABLES DE ENTORNO EN VERCEL
 //   ANTHROPIC_API_KEY    sk-ant-...
 //   SUPABASE_URL         https://spavobqrigvbjabwyvbl.supabase.co     (sin barra final)
 //   SUPABASE_SECRET_KEY  sb_secret_...   ← va de Supabase a Vercel, nunca por chat
-//
-//   Las viejas CLAVES_ACCESO y CLAVE_ACCESO se pueden borrar DESPUES de que los
-//   tres HTML manden token. Mientras tanto no molestan: ya no se leen.
-//
-// ORDEN DE LA LLAMADA
-//   1. Validar el token contra Supabase  →  obtener el id del usuario.
-//   2. puede(id, modulo)                 →  plan, saldo, factor, permitido.
-//   3. Recien entonces llamar a Anthropic.
-//   4. consumir(id, modulo, tokens)      →  descontar por consumo REAL.
-//
-//   El paso 4 va despues porque el consumo se conoce despues de la respuesta.
-//   Consecuencia aceptada: el saldo puede quedar levemente negativo, como maximo
-//   lo que cuesta una consulta. Es preferible a cobrar por adelantado un numero
-//   inventado y despues devolver.
 //
 // FALLA CERRADO
 //   Si Supabase no responde, nadie entra. Se devuelve 503 —no 401— para que el
@@ -36,8 +37,7 @@
 //   revocado". Un cliente que paga no tiene que creer que lo echaste.
 //   Causa mas probable de caida, con el volumen actual: el plan gratuito de
 //   Supabase pausa los proyectos con poca actividad en una ventana de 7 dias.
-//   Un proyecto pausado responde 540 a todo. Se evita con una consulta
-//   automatica cada 3 dias (cron de Vercel o GitHub Actions).
+//   Un proyecto pausado responde 540 a todo. Se evita con api/latido.js (cron diario).
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -111,6 +111,27 @@ async function rpc(nombre, cuerpo, secreta) {
   return Array.isArray(r.datos) ? r.datos[0] : r.datos;
 }
 
+// --- Liberar la reserva, con log si ni siquiera eso se pudo -------------------
+// Se usa en todos los caminos de fallo despues de reservar. Best-effort: si esto
+// tambien falla, ya no hay mas red de seguridad que gritar en los logs -- pero no
+// se le devuelve un error distinto al usuario por eso, ya tiene bastante con que
+// la operacion no le salio.
+async function liberarSeguro(usuario, modulo, estimado, secreta, res) {
+  try {
+    const lib = await rpc('liberar_reserva', { p_perfil: usuario, p_estimado: estimado || 0 }, secreta);
+    if (lib && typeof lib.saldo === 'number') {
+      res.setHeader('x-comprender-saldo', String(lib.saldo));
+    }
+  } catch (e) {
+    console.error(JSON.stringify({
+      evento: 'RESERVA_NO_LIBERADA',
+      usuario: String(usuario).slice(0, 8),
+      modulo, estimado,
+      detalle: String((e && e.message) || e),
+    }));
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -135,14 +156,14 @@ export default async function handler(req, res) {
 
   const modulo = String(req.headers['x-comprender-modulo'] || 'core').trim().toLowerCase() || 'core';
 
-  // --- 1 y 2 · Identidad y autorizacion ---
+  // --- 1 y 2 · Identidad y reserva ---
   let usuario, permiso;
   try {
     usuario = await identificar(token, secreta);
     if (!usuario) {
       return res.status(401).json({ error: { message: 'Sesion vencida o invalida. Volve a iniciar sesion.', codigo: 'sesion_invalida' } });
     }
-    permiso = await rpc('puede', { p_perfil: usuario, p_modulo: modulo }, secreta);
+    permiso = await rpc('reservar', { p_perfil: usuario, p_modulo: modulo }, secreta);
   } catch (e) {
     // FALLA CERRADO. 503, no 401: el problema es el servicio, no el usuario.
     console.error(JSON.stringify({ evento: 'base_inalcanzable', detalle: String((e && e.message) || e) }));
@@ -174,11 +195,14 @@ export default async function handler(req, res) {
     });
   }
 
+  // Ya se reservo: este saldo viene con el estimado descontado.
+  const estimado = permiso.estimado || 0;
+
   // El cliente aprende su estado del servidor, no de su propio navegador.
   res.setHeader('x-comprender-plan', String(permiso.plan));
   res.setHeader('x-comprender-saldo', String(permiso.saldo));
   res.setHeader('x-comprender-factor', String(permiso.factor));
-  res.setHeader('x-comprender-estimado', String(permiso.estimado));
+  res.setHeader('x-comprender-estimado', String(estimado));
   res.setHeader('Access-Control-Expose-Headers',
     'x-comprender-plan, x-comprender-saldo, x-comprender-factor, x-comprender-estimado');
 
@@ -186,9 +210,11 @@ export default async function handler(req, res) {
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = null; } }
   if (!body || !Array.isArray(body.messages)) {
+    await liberarSeguro(usuario, modulo, estimado, secreta, res);
     return res.status(400).json({ error: { message: 'Cuerpo invalido: se esperaba { model, max_tokens, messages }.' } });
   }
   if (MODELOS_PERMITIDOS && MODELOS_PERMITIDOS.indexOf(body.model) === -1) {
+    await liberarSeguro(usuario, modulo, estimado, secreta, res);
     return res.status(400).json({ error: { message: 'Modelo no permitido.' } });
   }
   if (typeof body.max_tokens === 'number' && body.max_tokens > MAX_TOKENS_TOPE) {
@@ -209,13 +235,15 @@ export default async function handler(req, res) {
     });
     data = await r.json();
   } catch (e) {
+    // No se pudo ni contactar a Anthropic: la reserva se libera entera, no se
+    // intento nada que haya costado algo.
+    await liberarSeguro(usuario, modulo, estimado, secreta, res);
     return res.status(502).json({
       error: { message: 'No se pudo contactar al proveedor de IA.', detalle: String((e && e.message) || e) },
     });
   }
 
-  // --- 4 · Descontar por consumo REAL ---
-  // Solo si la respuesta fue buena: una consulta que fallo no se cobra.
+  // --- 4 · Liquidar la reserva: cobrar lo real, o devolver todo si no hay resultado ---
   if (r.ok && data && data.usage) {
     const u = data.usage;
     try {
@@ -226,6 +254,7 @@ export default async function handler(req, res) {
         p_salida:          u.output_tokens || 0,
         p_cache_lectura:   u.cache_read_input_tokens || 0,
         p_cache_escritura: u.cache_creation_input_tokens || 0,
+        p_estimado:        estimado,
       }, secreta);
 
       if (cobro) {
@@ -236,7 +265,8 @@ export default async function handler(req, res) {
       }
     } catch (e) {
       // La respuesta ya existe y el usuario la merece: no se le niega por un
-      // fallo de contabilidad. Pero esto es plata sin cobrar y tiene que gritar.
+      // fallo de contabilidad. La reserva ya estaba tomada -- mejor liberarla
+      // entera (best-effort) a dejar el credito retenido sin motivo.
       console.error(JSON.stringify({
         evento: 'COBRO_PERDIDO',
         usuario: String(usuario).slice(0, 8),
@@ -245,7 +275,12 @@ export default async function handler(req, res) {
         salida: u.output_tokens || 0,
         detalle: String((e && e.message) || e),
       }));
+      await liberarSeguro(usuario, modulo, estimado, secreta, res);
     }
+  } else {
+    // Sin resultado utilizable (fallo del modelo, respuesta sin usage, etc.):
+    // se devuelve integra la reserva. Una operacion fallida no consume creditos.
+    await liberarSeguro(usuario, modulo, estimado, secreta, res);
   }
 
   return res.status(r.status).json(data);
