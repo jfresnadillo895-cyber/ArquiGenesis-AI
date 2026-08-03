@@ -58,6 +58,8 @@
   var TERMINOS_VERSION = 'v1-2026-08-01';   // subir esto si el texto legal cambia de forma material
   var LLAVE   = 'comprender_sesion';
   var MARGEN  = 60000;   // se renueva un minuto antes de vencer
+  var LS_STORE = 'comprenderai';   // subdominio de la tienda en Lemon Squeezy (Corte B.6, pago internacional)
+  var perfilId = null;   // uuid de la fila propia en perfiles; lo necesita el checkout de Lemon Squeezy
 
   /* ---------- sesion guardada ---------- */
   function leer(){
@@ -231,10 +233,11 @@
     return tokenVigente().then(function(t){
       if(!t) return;
       mostrarChipCuenta();
-      return fetch(SB_URL + '/rest/v1/perfiles?select=plan,saldo', {
+      mostrarChipBandeja();
+      return fetch(SB_URL + '/rest/v1/perfiles?select=id,plan,saldo', {
         headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t }
       }).then(function(r){ return r.ok ? r.json() : null; })
-        .then(function(f){ if(f && f[0]) anotarSaldo(f[0].plan, f[0].saldo); })
+        .then(function(f){ if(f && f[0]){ perfilId = f[0].id; anotarSaldo(f[0].plan, f[0].saldo); } })
         .catch(function(){});
     });
   }
@@ -573,6 +576,143 @@
     });
   }
 
+  /* ---------- bandeja (Corte B del sistema comunicacional, 03/08) ----------
+     Contador + panel de avisos internos. Vive aca por la misma razon que "Cuenta" y los
+     planes: es infraestructura compartida por los tres productos, no se repite en cada
+     HTML. Lee y marca via api/comm-inbox*.js -- no hay todavia ningun productor real
+     conectado (eso es un corte posterior), asi que puede aparecer vacia; el contador y
+     el panel ya quedan listos para cuando existan avisos de verdad. */
+  function bandejaFetch(ruta, opciones){
+    opciones = opciones || {};
+    return tokenVigente().then(function(t){
+      if(!t) return Promise.reject(new Error('sin sesión'));
+      var headers = opciones.headers || {};
+      headers['Authorization'] = 'Bearer ' + t;
+      headers['content-type'] = 'application/json';
+      opciones.headers = headers;
+      return _fetch(ruta, opciones);
+    });
+  }
+
+  var chipBandejaInsertado = false;
+  function mostrarChipBandeja(){
+    if(chipBandejaInsertado || document.getElementById('comprenderChipBandeja')) return;
+    chipBandejaInsertado = true;
+    var b = document.createElement('button');
+    b.id = 'comprenderChipBandeja';
+    b.setAttribute('aria-label','Avisos');
+    b.innerHTML = 'Avisos <span id="comprenderBandejaContador" style="display:none;margin-left:4px;' +
+      'background:#b4441f;color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700;"></span>';
+    b.style.cssText = 'position:fixed;bottom:16px;right:90px;z-index:99990;padding:8px 14px;' +
+      'font-size:13px;font-weight:600;color:#1a1a1a;background:#fff;border:1px solid #ddd;' +
+      'border-radius:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.08);' +
+      'font-family:system-ui,-apple-system,sans-serif;';
+    b.addEventListener('click', mostrarBandeja);
+    document.body.appendChild(b);
+    actualizarContadorBandeja();
+  }
+
+  function actualizarContadorBandeja(){
+    bandejaFetch('/api/comm-inbox').then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        var span = document.getElementById('comprenderBandejaContador');
+        if(!span) return;
+        var n = (d && typeof d.no_leidas === 'number') ? d.no_leidas : 0;
+        if(n > 0){ span.textContent = String(n); span.style.display = 'inline-block'; }
+        else{ span.style.display = 'none'; }
+      })
+      .catch(function(){});
+  }
+
+  var bandejaAbierta = false;
+  function mostrarBandeja(){
+    if(bandejaAbierta) return;
+    bandejaAbierta = true;
+
+    var capa = document.createElement('div');
+    capa.setAttribute('id','comprenderBandeja');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99996;background:rgba(251,250,248,.97);' +
+      'display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif;';
+    document.body.appendChild(capa);
+
+    function cerrar(){ bandejaAbierta = false; capa.remove(); actualizarContadorBandeja(); }
+
+    function marco(cuerpoHtml){
+      return '<div style="width:100%;max-width:440px;max-height:80vh;overflow-y:auto;background:#fff;' +
+        'border:1px solid #e2e0dc;border-radius:14px;padding:24px;position:relative;">' +
+          '<button id="cbCerrar" aria-label="Cerrar" style="position:absolute;top:14px;right:14px;background:none;' +
+            'border:0;font-size:22px;line-height:1;color:#999;cursor:pointer;">&times;</button>' +
+          '<div style="font-size:17px;font-weight:600;color:#1a1a1a;margin-bottom:16px;">Avisos</div>' +
+          cuerpoHtml +
+        '</div>';
+    }
+
+    function pintarCargando(){
+      capa.innerHTML = marco('<div style="font-size:14px;color:#666;">Cargando…</div>');
+      capa.querySelector('#cbCerrar').addEventListener('click', cerrar);
+    }
+
+    function pintarEntradas(entradas){
+      if(!entradas.length){
+        capa.innerHTML = marco('<div style="font-size:14px;color:#666;">No tenés avisos por ahora.</div>');
+        capa.querySelector('#cbCerrar').addEventListener('click', cerrar);
+        return;
+      }
+      var filas = entradas.map(function(e){
+        var noLeida = !e.leida_en;
+        var titulo = e.vencida ? '<em>Este aviso ya no está disponible.</em>' : (e.titulo || '(sin título)');
+        var resumen = e.vencida ? '' : (e.resumen ? '<div style="font-size:13px;color:#666;margin-top:2px;">' + e.resumen + '</div>' : '');
+        var etiqueta = e.accion_requerida ? '<span style="font-size:11px;font-weight:600;color:#b4441f;margin-left:6px;">· requiere acción</span>' : '';
+        return '<div style="padding:12px 0;border-bottom:1px solid #eee;">' +
+          '<div style="font-size:14px;font-weight:' + (noLeida ? '700' : '500') + ';color:#1a1a1a;">' + titulo + etiqueta + '</div>' +
+          resumen +
+          '<div style="margin-top:8px;display:flex;gap:14px;">' +
+            (noLeida ? '<a href="#" data-leer="' + e.id + '" style="font-size:12px;color:#1a1a1a;text-decoration:underline;">Marcar leída</a>' : '') +
+            '<a href="#" data-archivar="' + e.id + '" style="font-size:12px;color:#888;text-decoration:underline;">Archivar</a>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+      capa.innerHTML = marco(filas);
+      capa.querySelector('#cbCerrar').addEventListener('click', cerrar);
+
+      Array.prototype.forEach.call(capa.querySelectorAll('a[data-leer]'), function(a){
+        a.addEventListener('click', function(e){
+          e.preventDefault();
+          var id = a.getAttribute('data-leer');
+          bandejaFetch('/api/comm-inbox-read', { method:'POST', body: JSON.stringify({ entry_id: id }) })
+            .then(function(){ cargar(); })
+            .catch(function(){});
+        });
+      });
+      Array.prototype.forEach.call(capa.querySelectorAll('a[data-archivar]'), function(a){
+        a.addEventListener('click', function(e){
+          e.preventDefault();
+          var id = a.getAttribute('data-archivar');
+          bandejaFetch('/api/comm-inbox-archive', { method:'POST', body: JSON.stringify({ entry_id: id }) })
+            .then(function(){ cargar(); })
+            .catch(function(){});
+        });
+      });
+    }
+
+    function cargar(){
+      bandejaFetch('/api/comm-inbox').then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){
+          if(!bandejaAbierta) return;
+          pintarEntradas((d && d.entradas) || []);
+          actualizarContadorBandeja();
+        })
+        .catch(function(){
+          if(!bandejaAbierta) return;
+          capa.innerHTML = marco('<div style="font-size:14px;color:#b4441f;">No se pudieron cargar los avisos. Probá de nuevo.</div>');
+          capa.querySelector('#cbCerrar').addEventListener('click', cerrar);
+        });
+    }
+
+    pintarCargando();
+    cargar();
+  }
+
   /* ---------- pantalla de planes ----------
      Vive acá y no en los HTML por la misma razón que la sesión: es infraestructura.
      Así queda disponible en los tres productos sin repetirla tres veces.
@@ -602,18 +742,18 @@
   }
 
   var PLANES = [
-    { id:'profesional', nombre:'Profesional', precio:'$30.000', creditos:'1.800 créditos por mes',
+    { id:'profesional', nombre:'Profesional', precio:'$30.000', creditos:'1.800 créditos por mes', precioUsd:19,
       /* BORRADOR — reemplazar por la voz de Javier */
       lema:'La comprensión conversacional',
       incluye:['Comprender AI · chat completo','Ficha viva del organismo','Principios y reflexiones'],
       excluye:['No incluye Urbanismo ni Contextos'],
       destacado:false },
-    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes',
+    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
       lema:'Suma Urbanismo y Contextos',
       incluye:['Todo lo de Profesional','Comprender · Urbanismo','Comprender · Contextos','Exportación de informes'],
       excluye:[],
       destacado:true },
-    { id:'magister', nombre:'Magister', precio:'$160.000', creditos:'9.000 créditos por mes',
+    { id:'magister', nombre:'Magister', precio:'$160.000', creditos:'9.000 créditos por mes', precioUsd:79,
       /* BORRADOR — reemplazar por la voz de Javier. Agregado 29/07: version mensual y
          autoservicio de lo que era Institucional (organismo sostenido). */
       lema:'Investigación sostenida sobre un organismo',
@@ -661,6 +801,11 @@
           'border:0;border-radius:8px;cursor:pointer;' +
           (p.destacado ? 'background:#1a1a1a;color:#fff;' : 'background:#f0eeea;color:#1a1a1a;') +
           '">Suscribirme</button>' +
+        '<div style="margin-top:8px;text-align:center;">' +
+          '<a href="#" data-ls="' + p.id + '" style="font-size:12px;color:#888;text-decoration:underline;">' +
+            '¿Pagás desde afuera de Argentina? Pagar en ' +
+            '<span data-plan-usd="' + p.id + '">USD ' + (p.precioUsd ? '$' + p.precioUsd : '') + '</span>' +
+          '</a></div>' +
         '</div>';
     }).join('');
 
@@ -677,7 +822,8 @@
         '<div id="cpEstado" style="font-size:13px;color:#b4441f;margin-top:16px;min-height:18px;"></div>' +
         '<div style="font-size:12px;color:#999;margin-top:20px;line-height:1.5;">' +
           'Se cobra por Mercado Pago, todos los meses. Podés cancelar cuando quieras: ' +
-          'los créditos del período ya pagado siguen disponibles hasta que termine.' +
+          'los créditos del período ya pagado siguen disponibles hasta que termine. ' +
+          'Pago internacional en USD a través de Lemon Squeezy, mismo criterio de cancelación.' +
         '</div>' +
       '</div>';
     document.body.appendChild(capa);
@@ -696,6 +842,10 @@
         }
         if(elC && typeof real.creditos === 'number'){
           elC.textContent = real.creditos.toLocaleString('es-AR') + ' créditos por mes';
+        }
+        var elU = capa.querySelector('[data-plan-usd="' + p.id + '"]');
+        if(elU && typeof real.precio_usd === 'number'){
+          elU.textContent = 'USD $' + real.precio_usd;
         }
       });
     });
@@ -723,6 +873,30 @@
         }).catch(function(){
           b.disabled = false; b.textContent = 'Suscribirme';
           estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
+        });
+      });
+    });
+
+    // Pago internacional (Corte B.6): el link no pasa por /api/suscribir -- arma
+    // directo el checkout de Lemon Squeezy con el perfil como dato personalizado,
+    // igual que hoy hace el checkout de Mercado Pago pero sin ida y vuelta al servidor.
+    Array.prototype.forEach.call(capa.querySelectorAll('a[data-ls]'), function(a){
+      a.addEventListener('click', function(e){
+        e.preventDefault();
+        var plan = a.getAttribute('data-ls');
+        var textoOriginal = a.textContent;
+        tokenVigente().then(function(t){
+          if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
+          if(!perfilId){ estado.textContent = 'No se pudo identificar tu cuenta. Probá de nuevo en un momento.'; return; }
+          obtenerCatalogo().then(function(cat){
+            var real = cat && cat[plan];
+            var uuid = real && real.ls_checkout_uuid;
+            if(!uuid){ estado.textContent = 'El pago internacional no está disponible en este momento.'; return; }
+            location.href = 'https://' + LS_STORE + '.lemonsqueezy.com/checkout/buy/' + uuid +
+              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId);
+          }).catch(function(){
+            estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
+          });
         });
       });
     });
