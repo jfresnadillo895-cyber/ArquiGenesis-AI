@@ -23,7 +23,17 @@
 //     { recurso:'events', accion:'reevaluar', event_id }
 //     { recurso:'jobs',   accion:'cancelar'|'retener'|'reanudar',
 //                                              job_id, reason?, version_conocida? }
+//     { recurso:'jobs',   accion:'despachar',  job_id, template_id?, template_version?,
+//                                              variables?, asunto?, contenido_html? }
 //     { recurso:'inbox',  accion:'leer'|'archivar', entry_id }
+//
+// CORTE D — despachar (correo externo controlado)
+//   Envia de verdad, via Brevo, y SOLO a las direcciones de comm_closed_recipients
+//   (entorno de prueba, destinatarios cerrados -- ver CORTE_D_MIGRACION.sql). El contenido
+//   se arma con comm_componer_plantilla (si se manda template_id/template_version) o con
+//   asunto/contenido_html sueltos para pruebas manuales. Un timeout o error de Brevo NO
+//   reintenta solo: el trabajo queda en FAILED_RETRYABLE y hace falta un despachar()
+//   posterior (persona o cron) para volver a intentar -- ver CORTE_D_SISTEMA_COMUNICACIONAL.md.
 //
 // AISLAMIENTO
 //   organization_id nunca lo manda el cliente: se resuelve de la sesion (mismo patron que
@@ -31,6 +41,9 @@
 //
 // VARIABLES DE ENTORNO
 //   SUPABASE_URL / SUPABASE_SECRET_KEY   (ya cargadas)
+//   BREVO_API_KEY                        clave de API de Brevo (Corte D)
+//   BREVO_SENDER_EMAIL                   remitente verificado (default: contacto@comprenderai.com)
+//   BREVO_SENDER_NAME                    nombre del remitente (default: "Comprender AI")
 
 const registrar = (o) => console.log(JSON.stringify({ evento: 'comm', ...o }));
 
@@ -191,6 +204,124 @@ async function jobsTransicionar(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY
   } catch (e) {
     registrar({ error: 'fallo_transicionar', perfil: perfil.slice(0, 8), job_id: jobId, accion, detalle: String((e && e.message) || e) });
     return res.status(503).json({ error: { message: 'No se pudo completar la accion. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+}
+
+// ---------- jobs: despachar (Corte D) ----------
+
+async function jobsDespachar(cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
+  const jobId = cuerpo && cuerpo.job_id;
+  if (!jobId) return res.status(400).json({ error: { message: 'Falta job_id.' } });
+
+  const canal = 'email'; // unico canal de este corte
+  const templateId = cuerpo.template_id ? String(cuerpo.template_id) : null;
+  const templateVersion = Number.isInteger(cuerpo.template_version) ? cuerpo.template_version : null;
+  const variables = (cuerpo.variables && typeof cuerpo.variables === 'object') ? cuerpo.variables : {};
+  let asunto = cuerpo.asunto ? String(cuerpo.asunto) : null;
+  let contenido = cuerpo.contenido_html ? String(cuerpo.contenido_html) : null;
+
+  const BREVO_API_KEY = process.env.BREVO_API_KEY;
+  const SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || 'contacto@comprenderai.com';
+  const SENDER_NAME = process.env.BREVO_SENDER_NAME || 'Comprender AI';
+
+  try {
+    // 1. si el trabajo esta recien creado, se le aplica el portero del Corte C ahora
+    const prep = await rpc('comm_preparar_entrega', { p_job_id: jobId, p_organization_id: perfil, p_canal: canal }, SB_URL, SERVICE_KEY);
+    if (prep && prep.estado === 'no_encontrado') return res.status(404).json({ ok: false, codigo: 'no_encontrado' });
+    if (prep && prep.estado === 'retenido') {
+      registrar({ accion: 'retenido_antes_de_despachar', perfil: perfil.slice(0, 8), job_id: jobId, motivo: prep.motivo });
+      return res.status(200).json({ ok: true, estado: 'retenido', motivo: prep.motivo });
+    }
+
+    // 2. destinatario cerrado configurado para este canal (entorno de prueba: TODO envio
+    // de este corte va a esta direccion fija, no a datos reales de ninguna cuenta)
+    const ruta = '/rest/v1/comm_closed_recipients?canal=eq.' + encodeURIComponent(canal) +
+      '&activo=eq.true&select=email&order=id.asc&limit=1';
+    const destinatarios = await restGet(ruta, SB_URL, SERVICE_KEY);
+    if (!destinatarios.length) return res.status(409).json({ ok: false, codigo: 'sin_destinatario_cerrado_configurado' });
+    const destinatario = destinatarios[0].email;
+
+    // 3. iniciar el intento -- mueve el trabajo a PROCESSING, valida destinatario cerrado
+    // y circuit breaker ANTES de gastar un llamado a Brevo
+    const inicio = await rpc('comm_iniciar_intento_entrega',
+      { p_job_id: jobId, p_organization_id: perfil, p_canal: canal, p_destinatario: destinatario }, SB_URL, SERVICE_KEY);
+    if (!inicio || !inicio.ok) {
+      const codigo = (inicio && inicio.motivo) || 'no_se_pudo_iniciar';
+      registrar({ accion: 'rechazado_antes_de_enviar', perfil: perfil.slice(0, 8), job_id: jobId, motivo: codigo });
+      return res.status(409).json({ ok: false, codigo });
+    }
+    const deliveryAttemptId = inicio.delivery_attempt_id;
+
+    // 4. componer el contenido -- deterministico (misma plantilla + mismas variables
+    // siempre da el mismo resultado, ya probado en el Corte C)
+    if (templateId && templateVersion) {
+      const compuesta = await rpc('comm_componer_plantilla',
+        { p_template_id: templateId, p_version: templateVersion, p_variables: variables }, SB_URL, SERVICE_KEY);
+      if (!compuesta || !compuesta.ok) {
+        const motivo = 'plantilla_invalida: ' + (compuesta ? compuesta.motivo : 'sin_respuesta');
+        await rpc('comm_registrar_envio_fallido', { p_delivery_attempt_id: deliveryAttemptId, p_motivo: motivo }, SB_URL, SERVICE_KEY);
+        return res.status(422).json({ ok: false, codigo: 'plantilla_invalida', motivo: compuesta ? compuesta.motivo : null });
+      }
+      contenido = compuesta.contenido;
+    }
+    if (!contenido) {
+      await rpc('comm_registrar_envio_fallido', { p_delivery_attempt_id: deliveryAttemptId, p_motivo: 'sin_contenido' }, SB_URL, SERVICE_KEY);
+      return res.status(400).json({ ok: false, codigo: 'sin_contenido' });
+    }
+    if (!asunto) asunto = 'Comprender AI';
+
+    if (!BREVO_API_KEY) {
+      await rpc('comm_registrar_envio_fallido', { p_delivery_attempt_id: deliveryAttemptId, p_motivo: 'falta_BREVO_API_KEY' }, SB_URL, SERVICE_KEY);
+      return res.status(500).json({ ok: false, codigo: 'falta_BREVO_API_KEY' });
+    }
+
+    // 5. llamar a Brevo con timeout. Un timeout no dispara un reintento ciego: se
+    // registra como intento fallido y el trabajo queda en FAILED_RETRYABLE -- un
+    // despachar() posterior, explicito, es el unico que vuelve a intentar.
+    const controlador = new AbortController();
+    const corte = setTimeout(() => controlador.abort(), 10000);
+    let respuestaBrevo;
+    try {
+      respuestaBrevo = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({
+          sender: { name: SENDER_NAME, email: SENDER_EMAIL },
+          to: [{ email: destinatario }],
+          subject: asunto,
+          htmlContent: contenido,
+          tags: [deliveryAttemptId],
+        }),
+        signal: controlador.signal,
+      });
+    } catch (e) {
+      clearTimeout(corte);
+      const motivo = (e && e.name === 'AbortError') ? 'timeout_brevo' : ('red: ' + String((e && e.message) || e));
+      const r = await rpc('comm_registrar_envio_fallido', { p_delivery_attempt_id: deliveryAttemptId, p_motivo: motivo }, SB_URL, SERVICE_KEY);
+      registrar({ error: 'fallo_llamar_brevo', perfil: perfil.slice(0, 8), job_id: jobId, motivo });
+      return res.status(502).json({ ok: false, codigo: 'fallo_envio', motivo, estado_job: r ? r.nuevo_estado_job : null });
+    }
+    clearTimeout(corte);
+
+    if (!respuestaBrevo.ok) {
+      const detalle = await respuestaBrevo.text().catch(() => '');
+      const motivo = 'brevo_' + respuestaBrevo.status + ': ' + detalle.slice(0, 200);
+      const r = await rpc('comm_registrar_envio_fallido', { p_delivery_attempt_id: deliveryAttemptId, p_motivo: motivo }, SB_URL, SERVICE_KEY);
+      registrar({ error: 'brevo_rechazo', perfil: perfil.slice(0, 8), job_id: jobId, estado: respuestaBrevo.status });
+      return res.status(502).json({ ok: false, codigo: 'fallo_envio', motivo, estado_job: r ? r.nuevo_estado_job : null });
+    }
+
+    const cuerpoBrevo = await respuestaBrevo.json().catch(() => ({}));
+    await rpc('comm_registrar_envio_realizado',
+      { p_delivery_attempt_id: deliveryAttemptId, p_proveedor_message_id: cuerpoBrevo.messageId || null }, SB_URL, SERVICE_KEY);
+
+    registrar({ accion: 'enviado', perfil: perfil.slice(0, 8), job_id: jobId, delivery_attempt_id: deliveryAttemptId, message_id: cuerpoBrevo.messageId });
+    return res.status(200).json({
+      ok: true, estado: 'enviado', delivery_attempt_id: deliveryAttemptId, proveedor_message_id: cuerpoBrevo.messageId || null,
+    });
+  } catch (e) {
+    registrar({ error: 'fallo_despachar', perfil: perfil.slice(0, 8), job_id: jobId, detalle: String((e && e.message) || e) });
+    return res.status(503).json({ error: { message: 'No se pudo despachar. Volve a intentar.', codigo: 'servicio_no_disponible' } });
   }
 }
 
@@ -385,6 +516,7 @@ export default async function handler(req, res) {
   if (recurso === 'events' && accion === 'ingresar') return eventsIngresar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'events' && accion === 'reevaluar') return eventsReevaluar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'jobs' && ['cancelar', 'retener', 'reanudar'].indexOf(accion) > -1) return jobsTransicionar(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);
+  if (recurso === 'jobs' && accion === 'despachar') return jobsDespachar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'inbox' && ['leer', 'archivar'].indexOf(accion) > -1) return inboxAccion(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'preferences' && accion === 'fijar') return preferencesFijar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'consent' && ['otorgar', 'revocar'].indexOf(accion) > -1) return consentAccion(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);
