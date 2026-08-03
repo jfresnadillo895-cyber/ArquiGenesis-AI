@@ -1136,6 +1136,24 @@ header .spacer{flex:1}
 
      TEXTOS: el de Estudio es de Javier. El de Profesional es un borrador mío
      —está marcado— y se cambia acá abajo sin tocar nada más.                    */
+  // Respaldo instantaneo de precio/creditos para que la pantalla de planes se vea bien
+  // apenas se abre, sin esperar red. api/catalogo.js es la unica fuente de verdad del
+  // NUMERO -- obtenerCatalogo() lo trae abajo y pisa estos valores si responde a tiempo.
+  // El texto de marketing (lema/incluye/excluye) sigue viviendo solo aca.
+  var CATALOGO_CACHE = null;
+  function obtenerCatalogo(){
+    if(CATALOGO_CACHE) return Promise.resolve(CATALOGO_CACHE);
+    return fetch('/api/catalogo').then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        if(!d || !Array.isArray(d.planes)) return null;
+        var m = {};
+        d.planes.forEach(function(p){ m[p.id] = p; });
+        CATALOGO_CACHE = m;
+        return m;
+      })
+      .catch(function(){ return null; });
+  }
+
   var PLANES = [
     { id:'profesional', nombre:'Profesional', precio:'$30.000', creditos:'1.800 créditos por mes',
       /* BORRADOR — reemplazar por la voz de Javier */
@@ -1187,9 +1205,10 @@ header .spacer{flex:1}
           'font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;letter-spacing:.04em;">RECOMENDADO</div>' : '') +
         '<div style="font-size:17px;font-weight:600;color:#1a1a1a;">' + p.nombre + '</div>' +
         '<div style="font-size:13px;color:#777;margin-bottom:14px;">' + p.lema + '</div>' +
-        '<div style="font-size:27px;font-weight:600;color:#1a1a1a;">' + p.precio +
+        '<div style="font-size:27px;font-weight:600;color:#1a1a1a;">' +
+          '<span data-plan-precio="' + p.id + '">' + p.precio + '</span>' +
           '<span style="font-size:14px;font-weight:400;color:#888;"> /mes</span></div>' +
-        '<div style="font-size:13px;color:#666;margin-bottom:16px;">' + p.creditos + '</div>' +
+        '<div data-plan-creditos="' + p.id + '" style="font-size:13px;color:#666;margin-bottom:16px;">' + p.creditos + '</div>' +
         '<ul style="list-style:none;padding:0;margin:0 0 20px;">' + items + no + '</ul>' +
         '<button data-plan="' + p.id + '" style="width:100%;padding:11px;font-size:15px;font-weight:600;' +
           'border:0;border-radius:8px;cursor:pointer;' +
@@ -1215,6 +1234,24 @@ header .spacer{flex:1}
         '</div>' +
       '</div>';
     document.body.appendChild(capa);
+
+    // Se ve instantaneo con el respaldo local; si el catalogo real responde a tiempo,
+    // corrige el precio/creditos en el lugar, sin rearmar la pantalla.
+    obtenerCatalogo().then(function(cat){
+      if(!cat || !planesAbierto) return;
+      PLANES.forEach(function(p){
+        var real = cat[p.id];
+        if(!real) return;
+        var elP = capa.querySelector('[data-plan-precio="' + p.id + '"]');
+        var elC = capa.querySelector('[data-plan-creditos="' + p.id + '"]');
+        if(elP && typeof real.precio_ars === 'number'){
+          elP.textContent = '$' + real.precio_ars.toLocaleString('es-AR');
+        }
+        if(elC && typeof real.creditos === 'number'){
+          elC.textContent = real.creditos.toLocaleString('es-AR') + ' créditos por mes';
+        }
+      });
+    });
 
     function cerrar(){ planesAbierto = false; capa.remove(); }
     capa.querySelector('#cpCerrar').addEventListener('click', cerrar);
@@ -2868,7 +2905,14 @@ const PLANES = {
                  desc:'Comprender AI completo, sin tope diario: bolsa mensual de créditos para conversar, construir organismos y generar informes. No incluye los módulos especializados.' },
   estudio:     { nombre:'Pro · Estudio', creditos: 4500, ventana:'mes',  precio:'USD 49/mes',
                  anual:'USD 490/año (2 meses sin cargo)',
-                 desc:'Todo lo de Profesional y además habilita los módulos especializados — Comprender Urbanismo y Comprender Contextos — con lectura territorial completa, campo de fuerzas y PDF de presentación.' }
+                 desc:'Todo lo de Profesional y además habilita los módulos especializados — Comprender Urbanismo y Comprender Contextos — con lectura territorial completa, campo de fuerzas y PDF de presentación.' },
+  /* 03/08: faltaba por completo -- un suscriptor Magister caia en PLANES.gratis (50 creditos,
+     ventana 'unica') aca, aunque el saldo real del servidor ya fuera el correcto (9000/mes).
+     precio/anual/desc no se leen en ningun lado del archivo (confirmado por busqueda) -- se
+     completan solo para no dejar esta entrada con menos campos que sus hermanas. */
+  magister:    { nombre:'Magister',      creditos: 9000, ventana:'mes',  precio:'USD 79/mes',
+                 anual:'USD 790/año (2 meses sin cargo)',
+                 desc:'Todo lo de Pro · Estudio, con el doble de créditos para investigaciones sostenidas sobre un organismo.' }
 };
 
 // Paquete de recarga: salvavidas puntual, sin compromiso. Deliberadamente algo más caro
