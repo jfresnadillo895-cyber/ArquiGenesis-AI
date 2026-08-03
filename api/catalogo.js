@@ -104,6 +104,8 @@ export default async function handler(req, res) {
     nombre: p.nombre,
     precio_ars: p.monto,
     creditos: p.creditos,
+    precio_usd: p.ls_precio_usd,           // Corte B.6 -- para el link "Pagar en USD"
+    ls_checkout_uuid: p.ls_checkout_uuid,  // idem -- arma el link de checkout de Lemon Squeezy
   }));
   res.setHeader('Cache-Control', 'public, max-age=300');
   return res.status(200).json({ planes: publico });
