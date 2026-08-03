@@ -63,26 +63,21 @@
 //
 // SIEMPRE RESPONDE 200 (salvo firma invalida) -- mismo motivo que pago.js: devolver error hace
 // que Lemon Squeezy reintente en bucle algo que no se va a arreglar solo.
+//
+// FORMATO DE FUNCION: "Web standard" (Request/Response), no (req,res) como el resto de api/*.js
+//   Se probo primero con el (req,res) clasico + `config.api.bodyParser=false`, pensado para leer
+//   el cuerpo crudo a mano (imprescindible para el HMAC: hay que hashear los bytes exactos que
+//   mando Lemon Squeezy, no una version ya interpretada). En la prueba real (03/08) la firma
+//   nunca coincidio -- la documentacion actual de Vercel ya no describe esa via para /api y en
+//   cambio recomienda `await request.text()` sobre un Request estandar para este caso puntual.
+//   Por eso ESTE archivo exporta `POST(request)` en vez de `export default function(req,res)`;
+//   es la unica excepcion en el proyecto, y es asi porque este es el unico endpoint que necesita
+//   el cuerpo crudo byte a byte para verificar una firma.
 
 import crypto from 'crypto';
 import { planPorVariante } from './catalogo.js';
 
 const LS_API = 'https://api.lemonsqueezy.com/v1';
-
-// Vercel: hay que desactivar el parseo automatico del cuerpo para poder calcular el HMAC
-// sobre los bytes exactos que mando Lemon Squeezy. Si se deja que Vercel lo parsee primero,
-// la firma nunca va a coincidir -- el hash se calcula sobre el string crudo, no sobre el
-// objeto ya interpretado.
-export const config = { api: { bodyParser: false } };
-
-function leerCrudo(req) {
-  return new Promise((resolve, reject) => {
-    let datos = '';
-    req.on('data', (trozo) => { datos += trozo; });
-    req.on('end', () => resolve(datos));
-    req.on('error', reject);
-  });
-}
 
 const registrar = (o) => console.log(JSON.stringify({ evento: 'lemonsqueezy', ...o }));
 
@@ -119,22 +114,19 @@ async function rpc(nombre, cuerpo) {
   return Array.isArray(d) ? d[0] : d;
 }
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: 'Metodo no permitido.' });
-  }
-
+export async function POST(request) {
   const apiKey = process.env.LEMONSQUEEZY_API_KEY;
   const secreto = process.env.LEMONSQUEEZY_WEBHOOK_SECRET;
 
-  const crudo = await leerCrudo(req);
-  const cabeceraFirma = String(req.headers['x-signature'] || '');
+  // request.text() da los bytes exactos del cuerpo -- imprescindible para que el HMAC
+  // calculado aca coincida con el que mando Lemon Squeezy. Ver nota de cabecera del archivo.
+  const crudo = await request.text();
+  const cabeceraFirma = request.headers.get('x-signature') || '';
 
   const ok = firmaValida(crudo, cabeceraFirma, secreto);
   if (ok === false) {
-    registrar({ error: 'FIRMA INVALIDA', ip: req.headers['x-forwarded-for'] || '' });
-    return res.status(401).json({ error: 'Firma invalida.' });
+    registrar({ error: 'FIRMA INVALIDA', ip: request.headers.get('x-forwarded-for') || '' });
+    return Response.json({ error: 'Firma invalida.' }, { status: 401 });
   }
   if (ok === null) {
     registrar({ aviso: 'SIN LEMONSQUEEZY_WEBHOOK_SECRET — notificacion sin verificar' });
@@ -143,7 +135,7 @@ export default async function handler(req, res) {
   let cuerpo;
   try { cuerpo = JSON.parse(crudo); } catch (e) {
     registrar({ error: 'cuerpo no es JSON valido' });
-    return res.status(200).json({ ok: true });
+    return Response.json({ ok: true });
   }
 
   const evento = String((cuerpo.meta && cuerpo.meta.event_name) || '');
@@ -153,13 +145,13 @@ export default async function handler(req, res) {
 
   registrar({ accion: 'recibido', evento: evento || '(sin evento)', tipoDato, idDato, tienePerfil: !!perfil });
 
-  if (!evento) { registrar({ aviso: 'sin event_name' }); return res.status(200).json({ ok: true }); }
+  if (!evento) { registrar({ aviso: 'sin event_name' }); return Response.json({ ok: true }); }
 
   if (!perfil) {
     // Sin custom_data.perfil no hay forma de saber a que cuenta corresponde -- mismo
     // criterio que "PAGO SIN external_reference" en pago.js: se registra, no se procesa.
     registrar({ error: 'WEBHOOK SIN perfil (custom_data)', evento, idDato });
-    return res.status(200).json({ ok: true });
+    return Response.json({ ok: true });
   }
 
   try {
@@ -187,7 +179,7 @@ export default async function handler(req, res) {
         // payment_success o payment_recovered: renovacion exitosa, se vuelve a acreditar.
         if (!plan) {
           registrar({ error: 'VARIANTE NO RECONOCIDA', variant_id: sub.variant_id, perfil: String(perfil).slice(0, 8) });
-          return res.status(200).json({ ok: true });
+          return Response.json({ ok: true });
         }
         const r = await rpc('activar', {
           p_perfil: perfil, p_plan: plan,
@@ -199,7 +191,7 @@ export default async function handler(req, res) {
           plan, saldo: r?.saldo, invoiceId, evento,
         });
       }
-      return res.status(200).json({ ok: true });
+      return Response.json({ ok: true });
     }
 
     if (esEventoSuscripcion) {
@@ -211,7 +203,7 @@ export default async function handler(req, res) {
       if (evento === 'subscription_created') {
         if (!plan) {
           registrar({ error: 'VARIANTE NO RECONOCIDA', variant_id: sub.variant_id, perfil: String(perfil).slice(0, 8) });
-          return res.status(200).json({ ok: true });
+          return Response.json({ ok: true });
         }
         const r = await rpc('activar', {
           p_perfil: perfil, p_plan: plan,
@@ -241,16 +233,16 @@ export default async function handler(req, res) {
         // subscription_updated y cualquier otro: catch-all informativo, sin accion.
         registrar({ accion: 'suscripcion_estado_sin_accion', evento, estado: sub.status, perfil: String(perfil).slice(0, 8) });
       }
-      return res.status(200).json({ ok: true });
+      return Response.json({ ok: true });
     }
 
     // order_refunded, subscription_payment_refunded, license_key_*, etc.: se registran para
     // revision manual. Ver "LO QUE FALTA" en la cabecera del archivo.
     registrar({ aviso: 'evento sin manejo automatico todavia', evento, perfil: String(perfil).slice(0, 8) });
-    return res.status(200).json({ ok: true });
+    return Response.json({ ok: true });
 
   } catch (e) {
     registrar({ error: 'FALLO PROCESANDO', evento, detalle: String((e && e.message) || e) });
-    return res.status(200).json({ ok: false });
+    return Response.json({ ok: false });
   }
 }
