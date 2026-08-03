@@ -35,31 +35,19 @@
 //   subscription_resumed            -> reanudar() -- se deshizo una cancelacion antes de ends_at
 //   subscription_expired            -> no se toca nada aca: se deja que caducar() (cron diario)
 //                                       la baje a gratis, igual tolerancia que Mercado Pago hoy
-//   subscription_updated, order_*, subscription_payment_refunded, license_key_*
-//                                    -> se registran pero no accionan (ver "LO QUE FALTA")
-//
-// LO QUE FALTA (a proposito, mismo alcance que el adaptador de Mercado Pago hoy)
-//   No hay manejo de reembolso/contracargo todavia (order_refunded, subscription_payment_
-//   refunded): se registran en el log para revision manual. pago.js tampoco lo tiene resuelto
-//   para Mercado Pago -- es la misma brecha en los dos adaptadores, no una carencia nueva de
-//   este. Cuando se resuelva, deberia resolverse para ambos con la misma funcion interna.
+//   order_refunded, subscription_payment_refunded -> reembolsar() -- baja a gratis de una
+//                                       (03/08). Decision de Javier: no calcular cuanto credito
+//                                       ya se consumio, bajar directo y el se ocupa de avisarle
+//                                       a la persona. Misma funcion que usa pago.js -- un
+//                                       reembolso se trata igual sin importar la pasarela.
+//   subscription_updated, license_key_*
+//                                    -> se registran pero no accionan (informativo, sin regla
+//                                       de negocio que dependa de ellos por ahora)
 //
 // VARIABLES DE ENTORNO EN VERCEL (nuevas)
 //   LEMONSQUEEZY_API_KEY          token de API (Settings -> API en el dashboard de LS)
 //   LEMONSQUEEZY_WEBHOOK_SECRET   el secreto que elijas al crear el webhook en LS
 //   SUPABASE_URL / SUPABASE_SECRET_KEY   (ya cargadas, se reusan)
-//
-// LO QUE FALTA COMPLETAR ANTES DE QUE ESTO FUNCIONE DE VERDAD
-//   1. Crear los 3 productos/variantes en Lemon Squeezy (Profesional/Estudio/Magister) y
-//      completar `ls_variant_id` en catalogo.js con los ids reales.
-//   2. Configurar el webhook en el dashboard de Lemon Squeezy apuntando a
-//      https://app.comprenderai.com/api/lemonsqueezy, eventos: subscription_created,
-//      subscription_updated, subscription_cancelled, subscription_resumed,
-//      subscription_expired, subscription_paused, subscription_unpaused,
-//      subscription_payment_success, subscription_payment_failed,
-//      subscription_payment_recovered, subscription_payment_refunded, order_refunded.
-//   3. El boton "Suscribirme" para el mercado internacional todavia no esta armado -- depende
-//      de los variant_id del punto 1. Queda para el proximo paso, ya con esos datos.
 //
 // SIEMPRE RESPONDE 200 (salvo firma invalida) -- mismo motivo que pago.js: devolver error hace
 // que Lemon Squeezy reintente en bucle algo que no se va a arreglar solo.
@@ -161,6 +149,26 @@ export async function POST(request) {
     const esEventoPago = evento === 'subscription_payment_success'
                       || evento === 'subscription_payment_failed'
                       || evento === 'subscription_payment_recovered';
+    const esEventoReembolso = evento === 'order_refunded' || evento === 'subscription_payment_refunded';
+
+    if (esEventoReembolso) {
+      // Mismo criterio que pago.js: bajar a gratis de una, sin intentar calcular cuanto
+      // credito ya se consumio. p_pago_externo es best-effort para marcar el renglon de
+      // pagos que corresponda -- si no encuentra ninguno (por ejemplo, un order_refunded
+      // sobre el pago inicial, que quedo registrado bajo la suscripcion y no bajo la orden)
+      // no pasa nada grave: lo que importa de verdad es que la cuenta baje, y eso no depende
+      // de encontrar ese renglon.
+      const r = await rpc('reembolsar', {
+        p_perfil: perfil,
+        p_pago_externo: 'ls_' + tipoDato + '_' + idDato,
+        p_bruto: cuerpo,
+      });
+      registrar({
+        accion: 'reembolsado', perfil: String(perfil).slice(0, 8), evento,
+        plan_previo: r?.plan_previo, saldo_previo: r?.saldo_previo,
+      });
+      return Response.json({ ok: true });
+    }
 
     if (esEventoPago) {
       // Estos webhooks traen un Subscription Invoice, no la Subscription en si -- hay que
@@ -247,8 +255,8 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
-    // order_refunded, subscription_payment_refunded, license_key_*, etc.: se registran para
-    // revision manual. Ver "LO QUE FALTA" en la cabecera del archivo.
+    // license_key_* y cualquier otro evento no listado arriba: informativo, sin regla de
+    // negocio que dependa de ellos por ahora.
     registrar({ aviso: 'evento sin manejo automatico todavia', evento, perfil: String(perfil).slice(0, 8) });
     return Response.json({ ok: true });
 

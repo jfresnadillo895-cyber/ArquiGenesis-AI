@@ -134,7 +134,7 @@ export default async function handler(req, res) {
 
   try {
     // --- 2 · Preguntarle a Mercado Pago que paso de verdad ---
-    let suscripcionId = null, monto = null, moneda = 'ARS', aprobado = false, rechazado = false, bruto = null;
+    let suscripcionId = null, monto = null, moneda = 'ARS', aprobado = false, rechazado = false, reembolsado = false, bruto = null;
 
     if (tipo === 'subscription_authorized_payment' || tipo === 'authorized_payment') {
       const a = await mpGet('/authorized_payments/' + id, token);
@@ -150,8 +150,9 @@ export default async function handler(req, res) {
       suscripcionId = p.metadata?.preapproval_id || null;
       monto = p.transaction_amount;
       moneda = p.currency_id || 'ARS';
-      aprobado  = p.status === 'approved';
-      rechazado = p.status === 'rejected';
+      aprobado    = p.status === 'approved';
+      rechazado   = p.status === 'rejected';
+      reembolsado = p.status === 'refunded' || p.status === 'charged_back';
 
     } else if (tipo === 'subscription_preapproval' || tipo === 'preapproval') {
       const s = await mpGet('/preapproval/' + id, token);
@@ -217,6 +218,19 @@ export default async function handler(req, res) {
     } else if (rechazado) {
       const r = await rpc('marcar_gracia', { p_perfil: perfil, p_dias: 5 });
       registrar({ accion: 'gracia', perfil: String(perfil).slice(0, 8), vence: r?.vence });
+
+    } else if (reembolsado) {
+      // Reembolso o contracargo (Corte B.6+, 03/08): baja a gratis de una, sin intentar
+      // calcular cuanto del credito ya se consumio -- activar() reemplaza el saldo entero,
+      // asi que no hay forma de descontar "solo la parte reembolsada" con precision. Javier
+      // se ocupa de escribirle a la persona por fuera de esto. Misma funcion que usa el
+      // adaptador de Lemon Squeezy, para que un reembolso se trate igual sin importar la
+      // pasarela (parte de §7.1: ninguna regla comercial depende de una pasarela puntual).
+      const r = await rpc('reembolsar', { p_perfil: perfil, p_pago_externo: String(id), p_bruto: bruto });
+      registrar({
+        accion: 'reembolsado', perfil: String(perfil).slice(0, 8),
+        plan_previo: r?.plan_previo, saldo_previo: r?.saldo_previo,
+      });
 
     } else {
       registrar({ accion: 'pendiente', tipo, id });
