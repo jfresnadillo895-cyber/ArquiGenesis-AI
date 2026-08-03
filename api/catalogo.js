@@ -34,6 +34,7 @@ export const PLANES = {
     monto: 30000,      // ARS, lo que se cobra
     umbral: 20000,     // ARS, minimo para reconocer este plan en un webhook
     creditos: 1800,    // informativo -- la fuente real es creditos_de() en Postgres
+    ls_variant_id: null,   // COMPLETAR (03/08): id de variante en Lemon Squeezy
   },
   estudio: {
     id: 'estudio',
@@ -42,6 +43,7 @@ export const PLANES = {
     monto: 80000,
     umbral: 60000,
     creditos: 4500,
+    ls_variant_id: null,   // COMPLETAR (03/08)
   },
   magister: {
     id: 'magister',
@@ -50,8 +52,21 @@ export const PLANES = {
     monto: 160000,
     umbral: 120000,
     creditos: 9000,
+    ls_variant_id: null,   // COMPLETAR (03/08)
   },
 };
+
+// Reconoce el plan por la variante de Lemon Squeezy -- el equivalente de
+// planPorMonto() para el adaptador internacional (api/lemonsqueezy.js).
+// Cada variante corresponde a un plan y no cambia; no hace falta ordenar
+// por umbral como con el monto de Mercado Pago.
+export function planPorVariante(variantId) {
+  const v = String(variantId);
+  for (const p of Object.values(PLANES)) {
+    if (p.ls_variant_id != null && String(p.ls_variant_id) === v) return p.id;
+  }
+  return null;
+}
 
 // Reconoce el plan por el monto cobrado -- es lo unico que Mercado Pago garantiza en
 // todos los tipos de aviso. Se ordena de mayor a menor umbral y gana el primero que
