@@ -175,8 +175,19 @@ export async function POST(request) {
       if (evento === 'subscription_payment_failed') {
         const r = await rpc('marcar_gracia', { p_perfil: perfil, p_dias: 5 });
         registrar({ accion: 'gracia', perfil: String(perfil).slice(0, 8), vence: r?.vence, subId });
+
+      } else if (cuerpo.data.attributes.billing_reason === 'initial') {
+        // El alta manda subscription_created Y subscription_payment_success juntos para el
+        // mismo primer pago (confirmado en prueba real, 03/08). subscription_created ya
+        // acredita ese primer ciclo -- si tambien se acredita aca se duplica el movimiento
+        // en el libro mayor (sin duplicar credito real, porque activar() reemplaza el saldo,
+        // pero es ruido que no corresponde). Se distingue con billing_reason, que Lemon
+        // Squeezy manda en la propia factura: 'initial' es el alta, cualquier otro valor
+        // ('renewal', etc.) es un ciclo nuevo de verdad.
+        registrar({ accion: 'pago_inicial_ya_cubierto_por_subscription_created', perfil: String(perfil).slice(0, 8), subId });
+
       } else {
-        // payment_success o payment_recovered: renovacion exitosa, se vuelve a acreditar.
+        // payment_success o payment_recovered de una renovacion real: se acredita el ciclo.
         if (!plan) {
           registrar({ error: 'VARIANTE NO RECONOCIDA', variant_id: sub.variant_id, perfil: String(perfil).slice(0, 8) });
           return Response.json({ ok: true });
