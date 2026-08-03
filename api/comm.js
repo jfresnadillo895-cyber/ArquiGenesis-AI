@@ -257,6 +257,86 @@ async function inboxAccion(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
   }
 }
 
+// ---------- preferences ----------
+
+async function preferencesGet(req, res, perfil, SB_URL, SERVICE_KEY) {
+  const purposeId = String(req.query.purpose_id || '').trim();
+  const canal = String(req.query.canal || '').trim();
+  if (!purposeId || !canal) return res.status(400).json({ error: { message: 'Faltan purpose_id o canal.' } });
+
+  try {
+    const r = await rpc('comm_obtener_preferencia', { p_organization_id: perfil, p_purpose_id: purposeId, p_canal: canal }, SB_URL, SERVICE_KEY);
+    return res.status(200).json({
+      existe: r ? r.existe : false,
+      suscrito: r ? r.suscrito : true,
+      frecuencia_maxima_dia: r ? r.frecuencia_maxima_dia : null,
+      horario_silencio_desde: r ? r.horario_silencio_desde : null,
+      horario_silencio_hasta: r ? r.horario_silencio_hasta : null,
+      zona_horaria: r ? r.zona_horaria : null,
+    });
+  } catch (e) {
+    registrar({ error: 'fallo_obtener_preferencia', perfil: perfil.slice(0, 8), detalle: String((e && e.message) || e) });
+    return res.status(503).json({ error: { message: 'No se pudo consultar. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+}
+
+async function preferencesFijar(cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
+  const purposeId = cuerpo.purpose_id ? String(cuerpo.purpose_id) : null;
+  const canal = cuerpo.canal ? String(cuerpo.canal) : null;
+  if (!purposeId || !canal) return res.status(400).json({ error: { message: 'Faltan purpose_id o canal.' } });
+  const suscrito = cuerpo.suscrito !== false;
+  const frecuencia = Number.isInteger(cuerpo.frecuencia_maxima_dia) ? cuerpo.frecuencia_maxima_dia : null;
+  const horarioDesde = cuerpo.horario_silencio_desde || null;
+  const horarioHasta = cuerpo.horario_silencio_hasta || null;
+  const zonaHoraria = cuerpo.zona_horaria ? String(cuerpo.zona_horaria) : 'America/Argentina/Buenos_Aires';
+
+  try {
+    const r = await rpc('comm_fijar_preferencia', {
+      p_organization_id: perfil, p_purpose_id: purposeId, p_canal: canal, p_suscrito: suscrito,
+      p_frecuencia_maxima_dia: frecuencia, p_horario_silencio_desde: horarioDesde,
+      p_horario_silencio_hasta: horarioHasta, p_zona_horaria: zonaHoraria,
+    }, SB_URL, SERVICE_KEY);
+    registrar({ accion: 'preferencia_fijada', perfil: perfil.slice(0, 8), purpose_id: purposeId, canal });
+    return res.status(200).json({ ok: true, id: r ? r.id : null, actualizado_en: r ? r.actualizado_en : null });
+  } catch (e) {
+    registrar({ error: 'fallo_fijar_preferencia', perfil: perfil.slice(0, 8), detalle: String((e && e.message) || e) });
+    return res.status(503).json({ error: { message: 'No se pudo guardar. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+}
+
+// ---------- consent ----------
+
+async function consentGet(req, res, perfil, SB_URL, SERVICE_KEY) {
+  const purposeId = String(req.query.purpose_id || '').trim();
+  const canal = String(req.query.canal || '').trim();
+  if (!purposeId || !canal) return res.status(400).json({ error: { message: 'Faltan purpose_id o canal.' } });
+  try {
+    const vigente = await rpc('comm_consentimiento_vigente', { p_organization_id: perfil, p_purpose_id: purposeId, p_canal: canal }, SB_URL, SERVICE_KEY);
+    return res.status(200).json({ vigente: !!vigente });
+  } catch (e) {
+    registrar({ error: 'fallo_consultar_consentimiento', perfil: perfil.slice(0, 8), detalle: String((e && e.message) || e) });
+    return res.status(503).json({ error: { message: 'No se pudo consultar. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+}
+
+async function consentAccion(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
+  const purposeId = cuerpo.purpose_id ? String(cuerpo.purpose_id) : null;
+  const canal = cuerpo.canal ? String(cuerpo.canal) : null;
+  if (!purposeId || !canal) return res.status(400).json({ error: { message: 'Faltan purpose_id o canal.' } });
+
+  const nombreRpc = accion === 'otorgar' ? 'comm_otorgar_consentimiento' : accion === 'revocar' ? 'comm_revocar_consentimiento' : null;
+  if (!nombreRpc) return res.status(400).json({ error: { message: 'Accion invalida para consent.' } });
+
+  try {
+    const r = await rpc(nombreRpc, { p_organization_id: perfil, p_purpose_id: purposeId, p_canal: canal, p_actor: 'user:' + perfil }, SB_URL, SERVICE_KEY);
+    registrar({ accion: 'consentimiento_' + accion, perfil: perfil.slice(0, 8), purpose_id: purposeId, canal });
+    return res.status(200).json({ ok: true, otorgado_en: r ? r.otorgado_en : undefined, revocado_en: r ? r.revocado_en : undefined });
+  } catch (e) {
+    registrar({ error: 'fallo_consent_accion', perfil: perfil.slice(0, 8), accion, detalle: String((e && e.message) || e) });
+    return res.status(503).json({ error: { message: 'No se pudo completar la accion. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+}
+
 // ---------- handler ----------
 
 export default async function handler(req, res) {
@@ -289,7 +369,9 @@ export default async function handler(req, res) {
     if (recurso === 'events') return eventsGet(req, res, perfil, SB_URL, SERVICE_KEY);
     if (recurso === 'jobs') return jobsGet(req, res, perfil, SB_URL, SERVICE_KEY);
     if (recurso === 'inbox') return inboxGet(req, res, perfil, SB_URL, SERVICE_KEY);
-    return res.status(400).json({ error: { message: 'Falta o es invalido el parametro recurso (events|jobs|inbox).' } });
+    if (recurso === 'preferences') return preferencesGet(req, res, perfil, SB_URL, SERVICE_KEY);
+    if (recurso === 'consent') return consentGet(req, res, perfil, SB_URL, SERVICE_KEY);
+    return res.status(400).json({ error: { message: 'Falta o es invalido el parametro recurso (events|jobs|inbox|preferences|consent).' } });
   }
 
   // POST
@@ -304,6 +386,8 @@ export default async function handler(req, res) {
   if (recurso === 'events' && accion === 'reevaluar') return eventsReevaluar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'jobs' && ['cancelar', 'retener', 'reanudar'].indexOf(accion) > -1) return jobsTransicionar(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'inbox' && ['leer', 'archivar'].indexOf(accion) > -1) return inboxAccion(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);
+  if (recurso === 'preferences' && accion === 'fijar') return preferencesFijar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
+  if (recurso === 'consent' && ['otorgar', 'revocar'].indexOf(accion) > -1) return consentAccion(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);
 
   return res.status(400).json({ error: { message: 'Combinacion de recurso/accion invalida.' } });
 }
