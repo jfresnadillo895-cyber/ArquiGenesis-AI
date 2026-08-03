@@ -4,8 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprender · Urbanismo — versión profesional</title>
-<script>
-/* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
+<script>/* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
    v6 suma controles de cuenta sobre el v5 (sesion + planes + registro + recuperacion): ver el
    correo logueado, cambiar la contraseña estando adentro (pidiendo la actual), cerrar sesión
    desde un botón real -- antes existía la función pero ningún botón la llamaba en los tres
@@ -240,6 +239,7 @@
     return tokenVigente().then(function(t){
       if(!t) return;
       mostrarChipCuenta();
+      mostrarChipBandeja();
       return fetch(SB_URL + '/rest/v1/perfiles?select=id,plan,saldo', {
         headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t }
       }).then(function(r){ return r.ok ? r.json() : null; })
@@ -582,6 +582,143 @@
     });
   }
 
+  /* ---------- bandeja (Corte B del sistema comunicacional, 03/08) ----------
+     Contador + panel de avisos internos. Vive aca por la misma razon que "Cuenta" y los
+     planes: es infraestructura compartida por los tres productos, no se repite en cada
+     HTML. Lee y marca via api/comm.js (recurso=inbox) -- no hay todavia ningun productor real
+     conectado (eso es un corte posterior), asi que puede aparecer vacia; el contador y
+     el panel ya quedan listos para cuando existan avisos de verdad. */
+  function bandejaFetch(ruta, opciones){
+    opciones = opciones || {};
+    return tokenVigente().then(function(t){
+      if(!t) return Promise.reject(new Error('sin sesión'));
+      var headers = opciones.headers || {};
+      headers['Authorization'] = 'Bearer ' + t;
+      headers['content-type'] = 'application/json';
+      opciones.headers = headers;
+      return _fetch(ruta, opciones);
+    });
+  }
+
+  var chipBandejaInsertado = false;
+  function mostrarChipBandeja(){
+    if(chipBandejaInsertado || document.getElementById('comprenderChipBandeja')) return;
+    chipBandejaInsertado = true;
+    var b = document.createElement('button');
+    b.id = 'comprenderChipBandeja';
+    b.setAttribute('aria-label','Avisos');
+    b.innerHTML = 'Avisos <span id="comprenderBandejaContador" style="display:none;margin-left:4px;' +
+      'background:#b4441f;color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700;"></span>';
+    b.style.cssText = 'position:fixed;bottom:16px;right:90px;z-index:99990;padding:8px 14px;' +
+      'font-size:13px;font-weight:600;color:#1a1a1a;background:#fff;border:1px solid #ddd;' +
+      'border-radius:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.08);' +
+      'font-family:system-ui,-apple-system,sans-serif;';
+    b.addEventListener('click', mostrarBandeja);
+    document.body.appendChild(b);
+    actualizarContadorBandeja();
+  }
+
+  function actualizarContadorBandeja(){
+    bandejaFetch('/api/comm?recurso=inbox').then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        var span = document.getElementById('comprenderBandejaContador');
+        if(!span) return;
+        var n = (d && typeof d.no_leidas === 'number') ? d.no_leidas : 0;
+        if(n > 0){ span.textContent = String(n); span.style.display = 'inline-block'; }
+        else{ span.style.display = 'none'; }
+      })
+      .catch(function(){});
+  }
+
+  var bandejaAbierta = false;
+  function mostrarBandeja(){
+    if(bandejaAbierta) return;
+    bandejaAbierta = true;
+
+    var capa = document.createElement('div');
+    capa.setAttribute('id','comprenderBandeja');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99996;background:rgba(251,250,248,.97);' +
+      'display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif;';
+    document.body.appendChild(capa);
+
+    function cerrar(){ bandejaAbierta = false; capa.remove(); actualizarContadorBandeja(); }
+
+    function marco(cuerpoHtml){
+      return '<div style="width:100%;max-width:440px;max-height:80vh;overflow-y:auto;background:#fff;' +
+        'border:1px solid #e2e0dc;border-radius:14px;padding:24px;position:relative;">' +
+          '<button id="cbCerrar" aria-label="Cerrar" style="position:absolute;top:14px;right:14px;background:none;' +
+            'border:0;font-size:22px;line-height:1;color:#999;cursor:pointer;">&times;</button>' +
+          '<div style="font-size:17px;font-weight:600;color:#1a1a1a;margin-bottom:16px;">Avisos</div>' +
+          cuerpoHtml +
+        '</div>';
+    }
+
+    function pintarCargando(){
+      capa.innerHTML = marco('<div style="font-size:14px;color:#666;">Cargando…</div>');
+      capa.querySelector('#cbCerrar').addEventListener('click', cerrar);
+    }
+
+    function pintarEntradas(entradas){
+      if(!entradas.length){
+        capa.innerHTML = marco('<div style="font-size:14px;color:#666;">No tenés avisos por ahora.</div>');
+        capa.querySelector('#cbCerrar').addEventListener('click', cerrar);
+        return;
+      }
+      var filas = entradas.map(function(e){
+        var noLeida = !e.leida_en;
+        var titulo = e.vencida ? '<em>Este aviso ya no está disponible.</em>' : (e.titulo || '(sin título)');
+        var resumen = e.vencida ? '' : (e.resumen ? '<div style="font-size:13px;color:#666;margin-top:2px;">' + e.resumen + '</div>' : '');
+        var etiqueta = e.accion_requerida ? '<span style="font-size:11px;font-weight:600;color:#b4441f;margin-left:6px;">· requiere acción</span>' : '';
+        return '<div style="padding:12px 0;border-bottom:1px solid #eee;">' +
+          '<div style="font-size:14px;font-weight:' + (noLeida ? '700' : '500') + ';color:#1a1a1a;">' + titulo + etiqueta + '</div>' +
+          resumen +
+          '<div style="margin-top:8px;display:flex;gap:14px;">' +
+            (noLeida ? '<a href="#" data-leer="' + e.id + '" style="font-size:12px;color:#1a1a1a;text-decoration:underline;">Marcar leída</a>' : '') +
+            '<a href="#" data-archivar="' + e.id + '" style="font-size:12px;color:#888;text-decoration:underline;">Archivar</a>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+      capa.innerHTML = marco(filas);
+      capa.querySelector('#cbCerrar').addEventListener('click', cerrar);
+
+      Array.prototype.forEach.call(capa.querySelectorAll('a[data-leer]'), function(a){
+        a.addEventListener('click', function(e){
+          e.preventDefault();
+          var id = a.getAttribute('data-leer');
+          bandejaFetch('/api/comm', { method:'POST', body: JSON.stringify({ recurso:'inbox', accion:'leer', entry_id: id }) })
+            .then(function(){ cargar(); })
+            .catch(function(){});
+        });
+      });
+      Array.prototype.forEach.call(capa.querySelectorAll('a[data-archivar]'), function(a){
+        a.addEventListener('click', function(e){
+          e.preventDefault();
+          var id = a.getAttribute('data-archivar');
+          bandejaFetch('/api/comm', { method:'POST', body: JSON.stringify({ recurso:'inbox', accion:'archivar', entry_id: id }) })
+            .then(function(){ cargar(); })
+            .catch(function(){});
+        });
+      });
+    }
+
+    function cargar(){
+      bandejaFetch('/api/comm?recurso=inbox').then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){
+          if(!bandejaAbierta) return;
+          pintarEntradas((d && d.entradas) || []);
+          actualizarContadorBandeja();
+        })
+        .catch(function(){
+          if(!bandejaAbierta) return;
+          capa.innerHTML = marco('<div style="font-size:14px;color:#b4441f;">No se pudieron cargar los avisos. Probá de nuevo.</div>');
+          capa.querySelector('#cbCerrar').addEventListener('click', cerrar);
+        });
+    }
+
+    pintarCargando();
+    cargar();
+  }
+
   /* ---------- pantalla de planes ----------
      Vive acá y no en los HTML por la misma razón que la sesión: es infraestructura.
      Así queda disponible en los tres productos sin repetirla tres veces.
@@ -853,6 +990,7 @@
 })();
 </script>
 <script>
+
 /* --- Punto de inyeccion del candado -----------------------------------------------------
    gen_deploy.py inserta candado.txt inmediatamente despues de este <script>.
    Este bloque queda vacio a proposito: la sesion es infraestructura de despliegue,
