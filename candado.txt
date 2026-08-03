@@ -579,7 +579,7 @@
   /* ---------- bandeja (Corte B del sistema comunicacional, 03/08) ----------
      Contador + panel de avisos internos. Vive aca por la misma razon que "Cuenta" y los
      planes: es infraestructura compartida por los tres productos, no se repite en cada
-     HTML. Lee y marca via api/comm-inbox*.js -- no hay todavia ningun productor real
+     HTML. Lee y marca via api/comm.js (recurso=inbox) -- no hay todavia ningun productor real
      conectado (eso es un corte posterior), asi que puede aparecer vacia; el contador y
      el panel ya quedan listos para cuando existan avisos de verdad. */
   function bandejaFetch(ruta, opciones){
@@ -613,7 +613,7 @@
   }
 
   function actualizarContadorBandeja(){
-    bandejaFetch('/api/comm-inbox').then(function(r){ return r.ok ? r.json() : null; })
+    bandejaFetch('/api/comm?recurso=inbox').then(function(r){ return r.ok ? r.json() : null; })
       .then(function(d){
         var span = document.getElementById('comprenderBandejaContador');
         if(!span) return;
@@ -679,7 +679,7 @@
         a.addEventListener('click', function(e){
           e.preventDefault();
           var id = a.getAttribute('data-leer');
-          bandejaFetch('/api/comm-inbox-read', { method:'POST', body: JSON.stringify({ entry_id: id }) })
+          bandejaFetch('/api/comm', { method:'POST', body: JSON.stringify({ recurso:'inbox', accion:'leer', entry_id: id }) })
             .then(function(){ cargar(); })
             .catch(function(){});
         });
@@ -688,7 +688,7 @@
         a.addEventListener('click', function(e){
           e.preventDefault();
           var id = a.getAttribute('data-archivar');
-          bandejaFetch('/api/comm-inbox-archive', { method:'POST', body: JSON.stringify({ entry_id: id }) })
+          bandejaFetch('/api/comm', { method:'POST', body: JSON.stringify({ recurso:'inbox', accion:'archivar', entry_id: id }) })
             .then(function(){ cargar(); })
             .catch(function(){});
         });
@@ -696,7 +696,7 @@
     }
 
     function cargar(){
-      bandejaFetch('/api/comm-inbox').then(function(r){ return r.ok ? r.json() : null; })
+      bandejaFetch('/api/comm?recurso=inbox').then(function(r){ return r.ok ? r.json() : null; })
         .then(function(d){
           if(!bandejaAbierta) return;
           pintarEntradas((d && d.entradas) || []);
