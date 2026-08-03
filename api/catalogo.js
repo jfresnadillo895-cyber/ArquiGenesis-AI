@@ -34,7 +34,8 @@ export const PLANES = {
     monto: 30000,      // ARS, lo que se cobra
     umbral: 20000,     // ARS, minimo para reconocer este plan en un webhook
     creditos: 1800,    // informativo -- la fuente real es creditos_de() en Postgres
-    ls_variant_id: 1977811,   // Lemon Squeezy, cargado 03/08
+    ls_variant_id: 1977811,   // Lemon Squeezy, cargado 03/08 -- para RECONOCER el plan en el webhook
+    ls_checkout_uuid: '533faf86-65c8-46d5-ad7f-bd1b16287e93',   // para ARMAR el link de checkout (distinto del variant_id)
     ls_precio_usd: 19,        // USD/mes, mercado internacional (Corte B.6)
   },
   estudio: {
@@ -45,6 +46,7 @@ export const PLANES = {
     umbral: 60000,
     creditos: 4500,
     ls_variant_id: 1977954,
+    ls_checkout_uuid: '69919784-a22e-40d4-81ff-55c5e661885b',
     ls_precio_usd: 49,
   },
   magister: {
@@ -55,9 +57,20 @@ export const PLANES = {
     umbral: 120000,
     creditos: 9000,
     ls_variant_id: 1977959,
+    ls_checkout_uuid: '7ac80877-1dfb-4ccd-b52c-162956f064d7',
     ls_precio_usd: 79,
   },
 };
+
+// Arma el link de checkout de Lemon Squeezy para un plan, con el perfil como dato
+// personalizado -- es lo que va a usar el futuro boton "Suscribirme" internacional.
+export function checkoutLemonSqueezy(planId, perfilId) {
+  const p = PLANES[planId];
+  if (!p || !p.ls_checkout_uuid) return null;
+  return 'https://' + LS_STORE + '.lemonsqueezy.com/checkout/buy/' + p.ls_checkout_uuid +
+    '?checkout[custom][perfil]=' + encodeURIComponent(perfilId);
+}
+const LS_STORE = 'comprenderai';   // subdominio de la tienda en Lemon Squeezy
 
 // Reconoce el plan por la variante de Lemon Squeezy -- el equivalente de
 // planPorMonto() para el adaptador internacional (api/lemonsqueezy.js).
