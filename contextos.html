@@ -453,6 +453,8 @@ header header .cai-ham{flex-shrink:0}
   var TERMINOS_VERSION = 'v1-2026-08-01';   // subir esto si el texto legal cambia de forma material
   var LLAVE   = 'comprender_sesion';
   var MARGEN  = 60000;   // se renueva un minuto antes de vencer
+  var LS_STORE = 'comprenderai';   // subdominio de la tienda en Lemon Squeezy (Corte B.6, pago internacional)
+  var perfilId = null;   // uuid de la fila propia en perfiles; lo necesita el checkout de Lemon Squeezy
 
   /* ---------- sesion guardada ---------- */
   function leer(){
@@ -626,10 +628,10 @@ header header .cai-ham{flex-shrink:0}
     return tokenVigente().then(function(t){
       if(!t) return;
       mostrarChipCuenta();
-      return fetch(SB_URL + '/rest/v1/perfiles?select=plan,saldo', {
+      return fetch(SB_URL + '/rest/v1/perfiles?select=id,plan,saldo', {
         headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t }
       }).then(function(r){ return r.ok ? r.json() : null; })
-        .then(function(f){ if(f && f[0]) anotarSaldo(f[0].plan, f[0].saldo); })
+        .then(function(f){ if(f && f[0]){ perfilId = f[0].id; anotarSaldo(f[0].plan, f[0].saldo); } })
         .catch(function(){});
     });
   }
@@ -997,18 +999,18 @@ header header .cai-ham{flex-shrink:0}
   }
 
   var PLANES = [
-    { id:'profesional', nombre:'Profesional', precio:'$30.000', creditos:'1.800 créditos por mes',
+    { id:'profesional', nombre:'Profesional', precio:'$30.000', creditos:'1.800 créditos por mes', precioUsd:19,
       /* BORRADOR — reemplazar por la voz de Javier */
       lema:'La comprensión conversacional',
       incluye:['Comprender AI · chat completo','Ficha viva del organismo','Principios y reflexiones'],
       excluye:['No incluye Urbanismo ni Contextos'],
       destacado:false },
-    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes',
+    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
       lema:'Suma Urbanismo y Contextos',
       incluye:['Todo lo de Profesional','Comprender · Urbanismo','Comprender · Contextos','Exportación de informes'],
       excluye:[],
       destacado:true },
-    { id:'magister', nombre:'Magister', precio:'$160.000', creditos:'9.000 créditos por mes',
+    { id:'magister', nombre:'Magister', precio:'$160.000', creditos:'9.000 créditos por mes', precioUsd:79,
       /* BORRADOR — reemplazar por la voz de Javier. Agregado 29/07: version mensual y
          autoservicio de lo que era Institucional (organismo sostenido). */
       lema:'Investigación sostenida sobre un organismo',
@@ -1056,6 +1058,11 @@ header header .cai-ham{flex-shrink:0}
           'border:0;border-radius:8px;cursor:pointer;' +
           (p.destacado ? 'background:#1a1a1a;color:#fff;' : 'background:#f0eeea;color:#1a1a1a;') +
           '">Suscribirme</button>' +
+        '<div style="margin-top:8px;text-align:center;">' +
+          '<a href="#" data-ls="' + p.id + '" style="font-size:12px;color:#888;text-decoration:underline;">' +
+            '¿Pagás desde afuera de Argentina? Pagar en ' +
+            '<span data-plan-usd="' + p.id + '">USD ' + (p.precioUsd ? '$' + p.precioUsd : '') + '</span>' +
+          '</a></div>' +
         '</div>';
     }).join('');
 
@@ -1072,7 +1079,8 @@ header header .cai-ham{flex-shrink:0}
         '<div id="cpEstado" style="font-size:13px;color:#b4441f;margin-top:16px;min-height:18px;"></div>' +
         '<div style="font-size:12px;color:#999;margin-top:20px;line-height:1.5;">' +
           'Se cobra por Mercado Pago, todos los meses. Podés cancelar cuando quieras: ' +
-          'los créditos del período ya pagado siguen disponibles hasta que termine.' +
+          'los créditos del período ya pagado siguen disponibles hasta que termine. ' +
+          'Pago internacional en USD a través de Lemon Squeezy, mismo criterio de cancelación.' +
         '</div>' +
       '</div>';
     document.body.appendChild(capa);
@@ -1091,6 +1099,10 @@ header header .cai-ham{flex-shrink:0}
         }
         if(elC && typeof real.creditos === 'number'){
           elC.textContent = real.creditos.toLocaleString('es-AR') + ' créditos por mes';
+        }
+        var elU = capa.querySelector('[data-plan-usd="' + p.id + '"]');
+        if(elU && typeof real.precio_usd === 'number'){
+          elU.textContent = 'USD $' + real.precio_usd;
         }
       });
     });
@@ -1118,6 +1130,30 @@ header header .cai-ham{flex-shrink:0}
         }).catch(function(){
           b.disabled = false; b.textContent = 'Suscribirme';
           estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
+        });
+      });
+    });
+
+    // Pago internacional (Corte B.6): el link no pasa por /api/suscribir -- arma
+    // directo el checkout de Lemon Squeezy con el perfil como dato personalizado,
+    // igual que hoy hace el checkout de Mercado Pago pero sin ida y vuelta al servidor.
+    Array.prototype.forEach.call(capa.querySelectorAll('a[data-ls]'), function(a){
+      a.addEventListener('click', function(e){
+        e.preventDefault();
+        var plan = a.getAttribute('data-ls');
+        var textoOriginal = a.textContent;
+        tokenVigente().then(function(t){
+          if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
+          if(!perfilId){ estado.textContent = 'No se pudo identificar tu cuenta. Probá de nuevo en un momento.'; return; }
+          obtenerCatalogo().then(function(cat){
+            var real = cat && cat[plan];
+            var uuid = real && real.ls_checkout_uuid;
+            if(!uuid){ estado.textContent = 'El pago internacional no está disponible en este momento.'; return; }
+            location.href = 'https://' + LS_STORE + '.lemonsqueezy.com/checkout/buy/' + uuid +
+              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId);
+          }).catch(function(){
+            estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
+          });
         });
       });
     });
