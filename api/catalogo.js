@@ -34,7 +34,8 @@ export const PLANES = {
     monto: 30000,      // ARS, lo que se cobra
     umbral: 20000,     // ARS, minimo para reconocer este plan en un webhook
     creditos: 1800,    // informativo -- la fuente real es creditos_de() en Postgres
-    ls_variant_id: null,   // COMPLETAR (03/08): id de variante en Lemon Squeezy
+    ls_variant_id: 1977811,   // Lemon Squeezy, cargado 03/08
+    ls_precio_usd: 19,        // USD/mes, mercado internacional (Corte B.6)
   },
   estudio: {
     id: 'estudio',
@@ -43,7 +44,8 @@ export const PLANES = {
     monto: 80000,
     umbral: 60000,
     creditos: 4500,
-    ls_variant_id: null,   // COMPLETAR (03/08)
+    ls_variant_id: 1977954,
+    ls_precio_usd: 49,
   },
   magister: {
     id: 'magister',
@@ -52,7 +54,8 @@ export const PLANES = {
     monto: 160000,
     umbral: 120000,
     creditos: 9000,
-    ls_variant_id: null,   // COMPLETAR (03/08)
+    ls_variant_id: 1977959,
+    ls_precio_usd: 79,
   },
 };
 
