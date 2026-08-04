@@ -99,7 +99,18 @@ export default async function handler(req, res) {
   const tags = Array.isArray(cuerpo.tags) ? cuerpo.tags : (cuerpo.tag ? [cuerpo.tag] : []);
   const deliveryAttemptIdSugerido = tags.length ? String(tags[0]) : null;
 
-  const tsEvent = cuerpo.ts_event || cuerpo.date || null;
+  // Brevo manda "ts_event" (y "ts"/"ts_epoch") como timestamp Unix en SEGUNDOS -- un numero
+  // entero, no un texto de fecha. Pasarselo tal cual a una columna timestamptz de Postgres
+  // rompe con "date/time field value out of range" (encontrado en la primera prueba real,
+  // 03/08): Postgres intenta interpretar "1785801974" como una fecha literal, no como epoch.
+  // "date" si es un texto de fecha ya formateado por Brevo -- ese se puede pasar directo.
+  let tsEvent = null;
+  if (cuerpo.ts_event != null) {
+    const n = Number(cuerpo.ts_event);
+    tsEvent = Number.isFinite(n) ? new Date(n * 1000).toISOString() : null;
+  } else if (cuerpo.date) {
+    tsEvent = String(cuerpo.date);
+  }
 
   registrar({
     accion: 'recibido', evento, message_id: proveedorMessageId,
