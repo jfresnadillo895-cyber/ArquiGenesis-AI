@@ -274,6 +274,12 @@ async function jobsDespachar(cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
   const BREVO_API_KEY = process.env.BREVO_API_KEY;
   const SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || 'contacto@comprenderai.com';
   const SENDER_NAME = process.env.BREVO_SENDER_NAME || 'Comprender AI';
+  // Corte G: si quien reciba este correo le da "Responder", tiene que volver a un
+  // buzon que Brevo pueda parsear (el subdominio con MX propios -- ver CORTE_G_
+  // SISTEMA_COMUNICACIONAL.md), no al remitente normal. Sin BREVO_REPLYTO_EMAIL
+  // configurada, se sigue mandando igual pero sin replyTo -- las respuestas
+  // volverian al remitente comun, donde nadie las procesa.
+  const REPLY_TO_EMAIL = process.env.BREVO_REPLYTO_EMAIL || null;
 
   try {
     // 1. si el trabajo esta recien creado, se le aplica el portero del Corte C ahora
@@ -342,6 +348,7 @@ async function jobsDespachar(cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
           subject: asunto,
           htmlContent: contenido,
           tags: [deliveryAttemptId],
+          ...(REPLY_TO_EMAIL ? { replyTo: { email: REPLY_TO_EMAIL } } : {}),
         }),
         signal: controlador.signal,
       });
@@ -519,6 +526,88 @@ async function consentAccion(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
   }
 }
 
+// ---------- respuestas (Corte G) ----------
+// Un hilo (comm_reply_threads) agrupa todas las respuestas a un mismo trabajo original.
+// Solo se listan/tocan aca los hilos con organization_id = perfil -- los de remitente
+// desconocido (organization_id NULL) nunca aparecen: eso es exactamente la regla de
+// aceptacion "respuestas se vinculan sin asociar remitentes desconocidos". Revisarlos
+// queda por SQL directo (ver CORTE_G_SISTEMA_COMUNICACIONAL.md).
+
+async function respuestasGet(req, res, perfil, SB_URL, SERVICE_KEY) {
+  const threadId = String(req.query.thread_id || '').trim();
+  try {
+    if (threadId) {
+      const rutaHilo = '/rest/v1/comm_reply_threads?id=eq.' + encodeURIComponent(threadId) +
+        '&organization_id=eq.' + encodeURIComponent(perfil) +
+        '&select=id,job_id,estado,categoria,vence_en,cerrado_en,reabierto_en,creado,actualizado';
+      const hilos = await restGet(rutaHilo, SB_URL, SERVICE_KEY);
+      if (!hilos.length) return res.status(404).json({ error: { message: 'No encontrado.', codigo: 'no_encontrado' } });
+
+      const rutaRespuestas = '/rest/v1/comm_replies?thread_id=eq.' + encodeURIComponent(threadId) +
+        '&select=id,remitente_email,asunto,cuerpo_texto,cuerpo_html,recibido&order=recibido.asc';
+      const respuestas = await restGet(rutaRespuestas, SB_URL, SERVICE_KEY);
+      return res.status(200).json({ hilo: hilos[0], respuestas });
+    }
+
+    const rutaLista = '/rest/v1/comm_reply_threads?organization_id=eq.' + encodeURIComponent(perfil) +
+      '&select=id,job_id,estado,categoria,vence_en,creado,actualizado&order=actualizado.desc';
+    const hilos = await restGet(rutaLista, SB_URL, SERVICE_KEY);
+    return res.status(200).json({ hilos });
+  } catch (e) {
+    registrar({ error: 'fallo_listar_respuestas', perfil: perfil.slice(0, 8), detalle: String((e && e.message) || e) });
+    return res.status(503).json({ error: { message: 'No se pudo consultar. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+}
+
+async function respuestasClasificar(cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
+  const threadId = cuerpo.thread_id ? String(cuerpo.thread_id) : null;
+  const categoria = cuerpo.categoria ? String(cuerpo.categoria) : null;
+  if (!threadId || !categoria) return res.status(400).json({ error: { message: 'Faltan thread_id o categoria.' } });
+  try {
+    const r = await rpc('comm_clasificar_hilo', { p_thread_id: threadId, p_organization_id: perfil, p_categoria: categoria }, SB_URL, SERVICE_KEY);
+    if (!r || !r.ok) return res.status(404).json({ ok: false, codigo: r ? r.motivo : 'no_encontrado' });
+    registrar({ accion: 'hilo_clasificado', perfil: perfil.slice(0, 8), thread_id: threadId, categoria });
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    registrar({ error: 'fallo_clasificar_hilo', perfil: perfil.slice(0, 8), detalle: String((e && e.message) || e) });
+    return res.status(503).json({ error: { message: 'No se pudo completar la accion. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+}
+
+async function respuestasFijarEstado(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
+  const threadId = cuerpo.thread_id ? String(cuerpo.thread_id) : null;
+  if (!threadId) return res.status(400).json({ error: { message: 'Falta thread_id.' } });
+  const hacia = accion === 'cerrar' ? 'CERRADO' : 'ABIERTO';
+  try {
+    const r = await rpc('comm_fijar_estado_hilo', { p_thread_id: threadId, p_organization_id: perfil, p_hacia: hacia }, SB_URL, SERVICE_KEY);
+    if (!r || !r.ok) return res.status(404).json({ ok: false, codigo: r ? r.motivo : 'no_encontrado' });
+    registrar({ accion: 'hilo_' + accion, perfil: perfil.slice(0, 8), thread_id: threadId });
+    return res.status(200).json({ ok: true, estado: r.estado });
+  } catch (e) {
+    registrar({ error: 'fallo_fijar_estado_hilo', perfil: perfil.slice(0, 8), detalle: String((e && e.message) || e) });
+    return res.status(503).json({ error: { message: 'No se pudo completar la accion. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+}
+
+async function respuestasCrearTarea(cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
+  const replyId = cuerpo.reply_id ? String(cuerpo.reply_id) : null;
+  const titulo = cuerpo.titulo ? String(cuerpo.titulo) : null;
+  if (!replyId || !titulo) return res.status(400).json({ error: { message: 'Faltan reply_id o titulo.' } });
+  const resumen = cuerpo.resumen != null ? String(cuerpo.resumen) : null;
+  const venceEn = cuerpo.vence_en || null;
+  try {
+    const r = await rpc('comm_crear_tarea_desde_respuesta', {
+      p_reply_id: replyId, p_organization_id: perfil, p_titulo: titulo, p_resumen: resumen, p_vence_en: venceEn,
+    }, SB_URL, SERVICE_KEY);
+    if (!r || !r.ok) return res.status(404).json({ ok: false, codigo: r ? r.motivo : 'no_encontrado' });
+    registrar({ accion: 'tarea_creada_desde_respuesta', perfil: perfil.slice(0, 8), reply_id: replyId, entry_id: r.entry_id });
+    return res.status(200).json({ ok: true, entry_id: r.entry_id });
+  } catch (e) {
+    registrar({ error: 'fallo_crear_tarea_desde_respuesta', perfil: perfil.slice(0, 8), detalle: String((e && e.message) || e) });
+    return res.status(503).json({ error: { message: 'No se pudo completar la accion. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+}
+
 // ---------- handler ----------
 
 export default async function handler(req, res) {
@@ -553,7 +642,8 @@ export default async function handler(req, res) {
     if (recurso === 'inbox') return inboxGet(req, res, perfil, SB_URL, SERVICE_KEY);
     if (recurso === 'preferences') return preferencesGet(req, res, perfil, SB_URL, SERVICE_KEY);
     if (recurso === 'consent') return consentGet(req, res, perfil, SB_URL, SERVICE_KEY);
-    return res.status(400).json({ error: { message: 'Falta o es invalido el parametro recurso (events|jobs|inbox|preferences|consent).' } });
+    if (recurso === 'respuestas') return respuestasGet(req, res, perfil, SB_URL, SERVICE_KEY);
+    return res.status(400).json({ error: { message: 'Falta o es invalido el parametro recurso (events|jobs|inbox|preferences|consent|respuestas).' } });
   }
 
   // POST
@@ -572,6 +662,9 @@ export default async function handler(req, res) {
   if (recurso === 'inbox' && ['leer', 'archivar'].indexOf(accion) > -1) return inboxAccion(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'preferences' && accion === 'fijar') return preferencesFijar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'consent' && ['otorgar', 'revocar'].indexOf(accion) > -1) return consentAccion(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);
+  if (recurso === 'respuestas' && accion === 'clasificar') return respuestasClasificar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
+  if (recurso === 'respuestas' && ['cerrar', 'reabrir'].indexOf(accion) > -1) return respuestasFijarEstado(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);
+  if (recurso === 'respuestas' && accion === 'crear_tarea') return respuestasCrearTarea(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
 
   return res.status(400).json({ error: { message: 'Combinacion de recurso/accion invalida.' } });
 }

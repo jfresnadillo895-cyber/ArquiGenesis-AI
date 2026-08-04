@@ -35,6 +35,17 @@
 // VARIABLES DE ENTORNO
 //   SUPABASE_URL / SUPABASE_SECRET_KEY   (ya cargadas)
 //   BREVO_WEBHOOK_SECRET                 el valor que va en ?token= de la URL configurada en Brevo
+//
+// CORTE G — RESPUESTAS ENTRANTES (misma URL, mismo token, payload distinto)
+//   El webhook de eventos transaccionales (arriba) manda un objeto plano con "event".
+//   El webhook de "inbound parsing" de Brevo (respuestas por correo) manda, en cambio,
+//   un objeto con un array "items" -- cada item es un correo entrante completo (From, To,
+//   Subject, RawTextBody, RawHtmlBody, InReplyTo, MessageId, etc). Se distinguen por eso,
+//   sin necesitar dos URLs ni un archivo aparte: si no hay "event", se busca "items".
+//   Documentacion real usada para los nombres de campo: developers.brevo.com/docs/
+//   inbound-parse-webhooks. Requiere un subdominio con MX propios apuntando a Brevo --
+//   ver CORTE_G_SISTEMA_COMUNICACIONAL.md para los pasos exactos; sin esa configuracion
+//   de DNS, Brevo nunca llega a mandar este tipo de payload.
 
 import crypto from 'crypto';
 
@@ -49,6 +60,58 @@ async function rpc(nombre, cuerpo, url, secreta) {
   if (!r.ok) throw new Error('rpc ' + nombre + ' devolvio ' + r.status + ' ' + (await r.text()).slice(0, 300));
   const d = await r.json();
   return Array.isArray(d) ? d[0] : d;
+}
+
+// Corte G: procesa cada correo entrante del array "items" que manda el webhook de
+// inbound parsing. Un solo POST de Brevo puede traer mas de uno -- se procesan todos
+// antes de responder, y un fallo en uno no corta a los demas (mismo espiritu de
+// "siempre responde 200" del resto de este archivo: no es culpa de Brevo).
+async function procesarRespuestasEntrantes(items, SB_URL, SERVICE_KEY, res) {
+  let procesados = 0;
+  let fallidos = 0;
+
+  for (const item of items) {
+    try {
+      // "From"/"To"/"Cc"/"ReplyTo" son objetos {Name, Address} segun la documentacion de
+      // Brevo (developers.brevo.com/docs/inbound-parse-webhooks) -- no un string plano.
+      const remitenteEmail = item.From && item.From.Address ? String(item.From.Address).toLowerCase() : null;
+      const asunto = item.Subject != null ? String(item.Subject) : null;
+      const textoPlano = item.RawTextBody != null ? String(item.RawTextBody) : (item.ExtractedMarkdownMessage != null ? String(item.ExtractedMarkdownMessage) : null);
+      const html = item.RawHtmlBody != null ? String(item.RawHtmlBody) : null;
+      const inReplyTo = item.InReplyTo != null ? String(item.InReplyTo) : null;
+
+      let mensajeId = item.MessageId != null ? String(item.MessageId) : '';
+      if (!mensajeId) {
+        // mismo respaldo que ya existe para los webhooks de eventos: hash estable del
+        // item completo, nunca null, nunca colisiona entre payloads distintos.
+        mensajeId = 'hash_' + crypto.createHash('sha256').update(JSON.stringify(item)).digest('hex');
+      }
+
+      registrar({ accion: 'respuesta_recibida', remitente: remitenteEmail, in_reply_to: inReplyTo, message_id: mensajeId });
+
+      const r = await rpc('comm_registrar_respuesta_entrante', {
+        p_proveedor: 'brevo',
+        p_proveedor_message_id: mensajeId,
+        p_in_reply_to: inReplyTo,
+        p_remitente_email: remitenteEmail,
+        p_asunto: asunto,
+        p_cuerpo_texto: textoPlano,
+        p_cuerpo_html: html,
+        p_payload: item,
+      }, SB_URL, SERVICE_KEY);
+
+      registrar({
+        accion: 'respuesta_procesada', duplicado: r ? r.duplicado : null,
+        thread_id: r ? r.thread_id : null, remitente_desconocido: r ? r.remitente_desconocido : null,
+      });
+      procesados++;
+    } catch (e) {
+      fallidos++;
+      registrar({ error: 'FALLO PROCESANDO RESPUESTA ENTRANTE', detalle: String((e && e.message) || e) });
+    }
+  }
+
+  return res.status(200).json({ ok: true, procesados, fallidos }); // 200 igual, misma razon de siempre
 }
 
 export default async function handler(req, res) {
@@ -84,7 +147,12 @@ export default async function handler(req, res) {
 
   const evento = String(cuerpo.event || '');
   if (!evento) {
-    registrar({ aviso: 'sin event' });
+    // Corte G: sin "event", puede ser un webhook de respuestas entrantes (inbound
+    // parsing) en vez de uno de eventos de entrega -- se distingue por "items".
+    if (Array.isArray(cuerpo.items)) {
+      return procesarRespuestasEntrantes(cuerpo.items, SB_URL, SERVICE_KEY, res);
+    }
+    registrar({ aviso: 'sin event ni items -- payload desconocido' });
     return res.status(200).json({ ok: true });
   }
 
