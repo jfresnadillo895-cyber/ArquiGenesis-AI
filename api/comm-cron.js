@@ -17,13 +17,21 @@
 //   destinatario) -- es lo que hace que "programacion persistente" funcione sin que nadie
 //   tenga que volver a pedirlo a mano.
 //
-// QUE NO HACE (a proposito)
-//   No dispara envios nuevos. "Despachar" un trabajo (recurso=jobs, accion=despachar en
-//   api/comm.js) sigue siendo una accion explicita, bajo demanda. El barrido de Corte E
-//   solo decide si un trabajo YA PUEDE avanzar a READY -- nunca lo manda por Brevo. Ese
-//   limite es a proposito: automatizar el envio en si mismo, no solo la evaluacion de
-//   si corresponde, queda para cuando el plan de Vercel permita mas de una corrida de
-//   cron por dia (ver nota del Corte D sobre el limite de frecuencia de Hobby).
+// QUE NO HACE (a proposito) — sigue valiendo para los primeros cuatro pasos
+//   Los pasos 1 a 4 (vencidos, barrido, inciertos, abandonados) no disparan envios nuevos:
+//   solo deciden si un trabajo YA PUEDE avanzar a READY, nunca lo mandan por Brevo. Ese
+//   limite es a proposito para el barrido GENERAL, que puede tocar cualquier finalidad y
+//   cualquier volumen: automatizar ese envio en si mismo queda para cuando el plan de
+//   Vercel permita mas de una corrida de cron por dia (ver nota del Corte D).
+//
+// EXCEPCION — PASO 5 (Corte I): organismos pendientes SI envia de verdad
+//   A diferencia de los otros cuatro, este paso llama a emitirYEnviarCorreo() y manda
+//   correo real via Brevo. Se acepta la excepcion porque el volumen es acotado (un aviso
+//   por organismo inactivo, como mucho dos por ciclo) y porque una corrida diaria alcanza
+//   de sobra para este caso puntual -- no es la misma situacion que motivo dejar el
+//   despacho general fuera de este archivo. La proteccion de fondo (comm_closed_recipients,
+//   Corte D) sigue intacta: mientras un destinatario real no este en esa lista, el envio se
+//   rechaza solo, sin llegar a Brevo.
 //
 // LIMITE DEL PLAN HOBBY DE VERCEL
 //   Igual que api/latido.js: una corrida por dia como maximo. Para reconciliar timeouts de
@@ -34,6 +42,8 @@
 //   1. Este archivo en api/comm-cron.js
 //   2. La entrada correspondiente en vercel.json (`/api/comm-cron`, corrida diaria)
 //   3. Opcional pero recomendado: la misma variable CRON_SECRET que ya usa api/latido.js
+
+import { emitirYEnviarCorreo, obtenerEmailUsuario } from '../lib/comm-emitir.js';
 
 const registrar = (o) => console.log(JSON.stringify({ evento: 'comm_cron', ...o }));
 
@@ -98,6 +108,56 @@ export default async function handler(req, res) {
   } catch (e) {
     huboError = true;
     resultado.error_recuperar = String((e && e.message) || e);
+  }
+
+  // 5. Corte I — organismos pendientes: el unico paso de este archivo que SI dispara
+  //    un envio real (los otros cuatro solo reconcilian estado). Se aisla fila por fila:
+  //    que un organismo falle (email no resuelto, Brevo caido, lo que sea) no puede
+  //    tirar abajo la reconciliacion de los otros cuatro pasos ni el resto de la lista.
+  try {
+    const candidatos = await rpc('comm_detectar_organismos_pendientes', url, clave);
+    const lista = Array.isArray(candidatos) ? candidatos : [];
+    let enviados = 0, omitidos = 0, fallidos = 0;
+
+    for (const fila of lista) {
+      try {
+        const email = await obtenerEmailUsuario(fila.perfil, url, clave);
+        if (!email) { omitidos++; continue; }
+
+        // ficha.proximos viaja como string "item 1;;item 2" (ver nota de formato en
+        // CORTE_I_MIGRACION.sql) -- se separa aca, no antes, para que el resto del
+        // recorrido (payload, dedup en comm_events) siga guardando el string tal cual.
+        const items = (typeof fila.proximos === 'string' ? fila.proximos : '')
+          .split(';;').map((t) => t.trim()).filter(Boolean);
+        if (!items.length) { omitidos++; continue; }
+
+        const nombreOrg = fila.nombre || 'tu organismo';
+        const lineas = items.map((t) => '<li>' + String(t) + '</li>').join('');
+        const asunto = `"${nombreOrg}" quedó con algo pendiente`;
+        const contenido =
+          '<p>Hola,</p>' +
+          `<p>Tu organismo <strong>${nombreOrg}</strong> quedó con esto sin resolver:</p>` +
+          `<ul>${lineas}</ul>` +
+          '<p><a href="https://app.comprenderai.com">Volver a Comprender AI</a></p>';
+
+        const r = await emitirYEnviarCorreo({
+          SB_URL: url, SERVICE_KEY: clave,
+          organizationId: fila.perfil, purposeId: 'organismo_pendiente', type: 'organismo.pendiente',
+          producer: 'organismos_pendientes',
+          payload: { organismo_id: fila.organismo_id, proximos: fila.proximos },
+          destinatario: email, asunto, contenidoHtml: contenido,
+        });
+        if (r && r.enviado) enviados++; else omitidos++;
+      } catch (eFila) {
+        fallidos++;
+        registrar({ error: 'fallo_fila_organismo_pendiente', organismo_id: fila && fila.organismo_id, detalle: String((eFila && eFila.message) || eFila) });
+      }
+    }
+
+    resultado.organismos_pendientes = { candidatos: lista.length, enviados, omitidos, fallidos };
+  } catch (e) {
+    huboError = true;
+    resultado.error_organismos_pendientes = String((e && e.message) || e);
   }
 
   console.log(JSON.stringify(resultado));
