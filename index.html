@@ -69,6 +69,7 @@ header .spacer{flex:1}
   border:1px solid var(--line);transition:all .2s;
 }
 .hbtn:hover{color:var(--text);border-color:var(--accent)}
+.hicon{padding:7px 9px;display:inline-flex;align-items:center}
 #btnPrincipios{display:none}
 /* C-06: el menú también en escritorio. Antes sólo existía en móvil, y todo lo
    que vive adentro (créditos, consumo, propuestas, módulos) era inalcanzable. */
@@ -87,6 +88,21 @@ header .spacer{flex:1}
   border-radius:9px;transition:background .15s;
 }
 .mitem:hover{background:var(--panel2)}
+
+/* ---------- menú de módulos (Urbanismo, Contextos y los que vayan sumándose) ----------
+   Separado del menú hamburguesa a pedido de Javier (04/08): antes vivían mezclados con
+   items administrativos (Ayuda, Consumo real, etc.) y quedaban poco visibles. Se
+   posiciona con JS (no con un right/top fijo como #menu) porque #btnModulos no siempre
+   está en el mismo lugar del header entre escritorio y mobile -- así el panel siempre
+   cae justo debajo del ícono que lo abrió, sin romper la línea del header. */
+#modulosMenu{
+  position:fixed;z-index:60;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  padding:6px;min-width:200px;box-shadow:0 12px 34px rgba(28,42,58,.16);
+  display:none;flex-direction:column;
+}
+#modulosMenu.open{display:flex}
+#modulosMenu .vacio{padding:11px 14px;font-size:12.5px;color:var(--faint)}
 
 /* ---------- welcome ---------- */
 #welcome{
@@ -484,9 +500,18 @@ header .spacer{flex:1}
       <button class="hbtn" id="btnGuardar" style="display:none">Guardar sesión</button>
       <button class="hbtn" id="btnNueva" style="display:none">Nueva</button>
       <button class="hbtn" id="btnAcerca">Ayuda</button>
+      <button class="hbtn hicon" id="btnModulos" title="Módulos">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+          <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+          <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+          <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+        </svg>
+      </button>
       <button class="hbtn" id="btnMenu">☰</button>
     </header>
     <div id="menu"></div>
+    <div id="modulosMenu"></div>
 
     <div id="welcome">
       <svg class="toro-hero" viewBox="0 0 40 40" aria-hidden="true">
@@ -1870,7 +1895,8 @@ const el = {
   overlay: $('overlay'), cardContent: $('cardContent'),
   orgchip: $('orgchip'), orgname: $('orgname'), btnFicha: $('btnFicha'),
   orglist: $('orglist'), btnOrgNuevo: $('btnOrgNuevo'),
-  menu: $('menu'), btnMenu: $('btnMenu')
+  menu: $('menu'), btnMenu: $('btnMenu'),
+  modulosMenu: $('modulosMenu'), btnModulos: $('btnModulos')
 };
 
 const FAM_LABEL = { espacio: 'Espacio', energia: 'Energía', trans: 'Transformación' };
@@ -5026,11 +5052,6 @@ function construirMenu(){
     items.push(['Guardar sesión', function(){ ofrecerGuardado(null); }]);
     items.push(['Nueva sesión', nuevaSesion]);
   }
-  modulosDisponibles().forEach(function(id){
-    var m = ACCESO_MODULOS[id];
-    items.push([m.nombre + (moduloHabilitado(id) ? ' →' : ' · Estudio'),
-                function(){ abrirModulo(id); }]);
-  });
   items.push(['El ciclo de comprensión', mostrarCiclo]);
   items.push(['Comprensión disponible', cardCreditos]);
   items.push(['Consumo real', cardConsumo]);
@@ -5052,6 +5073,7 @@ function construirMenu(){
 }
 el.btnMenu.addEventListener('click', function(e){
   e.stopPropagation();
+  el.modulosMenu.classList.remove('open');
   if(el.menu.classList.contains('open')){ el.menu.classList.remove('open'); return; }
   construirMenu();
   el.menu.classList.add('open');
@@ -5059,6 +5081,51 @@ el.btnMenu.addEventListener('click', function(e){
 document.addEventListener('click', function(e){
   if(el.menu.classList.contains('open') && !el.menu.contains(e.target) && e.target !== el.btnMenu){
     el.menu.classList.remove('open');
+  }
+});
+
+/* ================= menú de módulos (Urbanismo, Contextos y los que se agreguen) =================
+   Separado del menú hamburguesa a pedido de Javier (04/08) para que sean mas visibles.
+   Se construye de la misma fuente que ya usaba el menú hamburguesa (ACCESO_MODULOS /
+   modulosDisponibles) -- un módulo nuevo que agregue su "archivo" en ACCESO_MODULOS
+   aparece acá solo, sin tocar este bloque. */
+function construirModulosMenu(){
+  el.modulosMenu.innerHTML = '';
+  const ids = modulosDisponibles();
+  if(!ids.length){
+    const v = document.createElement('div'); v.className = 'vacio';
+    v.textContent = 'Todavía no hay módulos disponibles.';
+    el.modulosMenu.appendChild(v);
+    return;
+  }
+  ids.forEach(function(id){
+    const m = ACCESO_MODULOS[id];
+    const b = document.createElement('button');
+    b.className = 'mitem';
+    b.textContent = m.nombre + (moduloHabilitado(id) ? ' →' : ' · Estudio');
+    b.addEventListener('click', function(){
+      el.modulosMenu.classList.remove('open');
+      abrirModulo(id);
+    });
+    el.modulosMenu.appendChild(b);
+  });
+}
+el.btnModulos.addEventListener('click', function(e){
+  e.stopPropagation();
+  el.menu.classList.remove('open');
+  if(el.modulosMenu.classList.contains('open')){ el.modulosMenu.classList.remove('open'); return; }
+  construirModulosMenu();
+  // Posicion calculada en JS (no un right/top fijo como #menu): #btnModulos no esta
+  // en el mismo lugar del header entre escritorio y mobile, y asi el panel siempre
+  // cae debajo del icono real, sin depender de adivinar un offset por breakpoint.
+  const r = el.btnModulos.getBoundingClientRect();
+  el.modulosMenu.style.top = (r.bottom + 8) + 'px';
+  el.modulosMenu.style.right = (window.innerWidth - r.right) + 'px';
+  el.modulosMenu.classList.add('open');
+});
+document.addEventListener('click', function(e){
+  if(el.modulosMenu.classList.contains('open') && !el.modulosMenu.contains(e.target) && e.target !== el.btnModulos && !el.btnModulos.contains(e.target)){
+    el.modulosMenu.classList.remove('open');
   }
 });
 
