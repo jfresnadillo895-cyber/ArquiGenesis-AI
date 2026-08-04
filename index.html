@@ -1859,7 +1859,7 @@ Si el contexto incluye un bloque ORGANISMO ACTIVO, operás en Modo Organismo: no
 - MARCADOR DE FICHA: cuando la síntesis del caso cambie de manera sustantiva (tensión raíz nueva, diagnóstico actualizado, próximo paso distinto), emití al INICIO, junto a los demás marcadores, una sola línea:
 [[FICHA:FUNCION=verbo|MODO=M0x|TENSIONES=tensión activa 1; tensión activa 2|DIAGNOSTICO=una línea|PROXIMO=una línea|PROXIMOS=ítem pendiente 1;;ítem pendiente 2]]
 Todos los campos en lenguaje llano, sin códigos internos, EXCEPTO MODO: ahí va el código neutro del modo dominante (M01–M09) que corresponde a la tensión raíz identificada. Es un identificador de contrato, interno, que NUNCA se muestra al usuario. Emitila también siempre que cierres sesión con [[DESTILADO]].
-PROXIMOS es distinto de PROXIMO: mientras PROXIMO es una línea de síntesis para que vos mismo retomes el hilo, PROXIMOS son 1 a 3 ítems cortos y nombrados (no un párrafo), pensados para mostrarse tal cual a la persona como lo que quedó abierto. Separá cada ítem con ";;". Emitilo SOLO cuando haya tensiones o pasos concretos sin resolver — si el caso cerró redondo, no lo emitas.
+PROXIMOS es distinto de PROXIMO: mientras PROXIMO es una línea de síntesis para que vos mismo retomes el hilo, PROXIMOS son 1 a 3 ítems cortos y nombrados (no un párrafo), pensados para mostrarse tal cual a la persona como lo que sigue. Cada ítem empieza con un verbo en infinitivo y describe una acción concreta que la persona puede tomar (ej.: "Definir qué resultado querés alcanzar", "Revisar por qué el problema sigue repitiéndose") — nunca una descripción abstracta de la tensión ni lenguaje de deuda o error ("sin resolver", "pendiente de"). Separá cada ítem con ";;". Emitilo SOLO cuando haya pasos concretos que la persona pueda tomar — si el caso cerró redondo, no lo emitas.
 - CICLO DE PARADIGMA: si la ficha incluye un proyectivo vigente y el usuario lo está trabajando en el chat para definir cómo intervenir, ayudalo a construir un paradigma de intervención: una formulación de 1 a 3 líneas que ordene la acción (qué priorizar, desde qué criterio, hacia qué estado). Cuando el paradigma tome forma clara y el usuario lo confirme o lo dé por bueno, emití al inicio, junto a los demás marcadores:
 [[PARADIGMA:texto del paradigma en 1-3 líneas]]
 Ese paradigma queda en la ficha y alimenta la próxima lectura territorial. No lo emitas antes de que el usuario lo valide.`;
@@ -2288,6 +2288,7 @@ function sincronizarOrganismosConServidor(){
       locales.forEach(function(o){
         if(!remotosPorId[o.id]) sincronizarOrganismoServidor(o);
       });
+      intentarAbrirOrganismoDesdeURL();   // Corte I: por si el organismo recien llego del servidor
     })
     .catch(function(){ /* sin conexion: se sigue trabajando local, se reintenta en el proximo inicio */ });
 }
@@ -4926,6 +4927,27 @@ function restaurarBorrador(o){
   return true;
 }
 
+/* ---- Corte I: abrir directo desde el link del correo diferido (?organismo=<id>) ----
+   Se llama dos veces a proposito: al iniciar (cubre el caso comun, el mismo navegador
+   donde ya hay sesion y el organismo esta en localStorage) y de nuevo al terminar
+   sincronizarOrganismosConServidor() (cubre abrir el link desde un dispositivo nuevo,
+   donde el organismo recien llega del servidor). La bandera evita abrirlo dos veces. */
+var _orgDesdeURLIntentado = false;
+function intentarAbrirOrganismoDesdeURL(){
+  if(_orgDesdeURLIntentado) return;
+  try{
+    var params = new URLSearchParams(location.search);
+    var id = params.get('organismo');
+    if(!id) return;
+    var org = cargarOrganismos().find(function(o){ return o.id === id; });
+    if(org){
+      _orgDesdeURLIntentado = true;
+      abrirOrganismo(org);
+      try{ history.replaceState(null, '', location.pathname); }catch(e){}
+    }
+  }catch(e){}
+}
+
 function abrirOrganismo(org){
   // invalidar cualquier respuesta en vuelo de la sesión anterior
   state.epoch++;
@@ -5870,6 +5892,7 @@ renderOrgList();
 renderCred();
 mostrarOnboarding(false);
 sincronizarOrganismosConServidor();   // Corte 0.5
+intentarAbrirOrganismoDesdeURL();     // Corte I: caso comun, ya esta en localStorage
 if(location.hash === '#pruebas') cardBancoPruebas();
 </script>
 </body>
