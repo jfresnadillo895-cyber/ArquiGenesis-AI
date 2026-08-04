@@ -1135,24 +1135,27 @@ header header .cai-ham{flex-shrink:0}
       .catch(function(){ return null; });
   }
 
+  // Textos definitivos (catálogo comercial vigente, 04/08). Profesional YA incluye
+  // Urbanismo y Contextos -- a proposito no hay ningun "excluye" para ese plan (antes
+  // decia lo contrario, era un error real, no solo de redaccion).
   var PLANES = [
     { id:'profesional', nombre:'Profesional', precio:'$30.000', creditos:'1.800 créditos por mes', precioUsd:19,
-      /* BORRADOR — reemplazar por la voz de Javier */
-      lema:'La comprensión conversacional',
-      incluye:['Comprender AI · chat completo','Ficha viva del organismo','Principios y reflexiones'],
-      excluye:['No incluye Urbanismo ni Contextos'],
+      lema:'Para comprender y desarrollar organismos con capacidades profesionales',
+      incluye:['Chat completo de Comprender AI','Ficha viva y memoria funcional','Comprender Urbanismo','Comprender Contextos'],
+      excluye:[],
+      boton:'Elegir Profesional',
       destacado:false },
     { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
-      lema:'Suma Urbanismo y Contextos',
-      incluye:['Todo lo de Profesional','Comprender · Urbanismo','Comprender · Contextos','Exportación de informes'],
+      lema:'Para estudios y prácticas profesionales con mayor escala',
+      incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
       excluye:[],
+      boton:'Elegir Pro · Estudio',
       destacado:true },
     { id:'magister', nombre:'Magister', precio:'$160.000', creditos:'9.000 créditos por mes', precioUsd:79,
-      /* BORRADOR — reemplazar por la voz de Javier. Agregado 29/07: version mensual y
-         autoservicio de lo que era Institucional (organismo sostenido). */
-      lema:'Investigación sostenida sobre un organismo',
-      incluye:['Todo lo de Pro · Estudio','El doble de créditos, para investigaciones largas'],
+      lema:'Para investigaciones extensas, profundas y sostenidas',
+      incluye:['Todo lo incluido en Pro · Estudio','Mayor capacidad para procesos prolongados','Continuidad sobre organismos complejos','Memoria, trazabilidad y exploración relacional intensivas'],
       excluye:[],
+      boton:'Elegir Magister',
       destacado:false }
   ];
 
@@ -1171,6 +1174,9 @@ header header .cai-ham{flex-shrink:0}
     if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Pro · Estudio.';
 
     var tarjetas = PLANES.map(function(p){
+      var creditosItem = '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
+             '<span style="position:absolute;left:0;color:#2a7;">✓</span>' +
+             '<span data-plan-creditos="' + p.id + '">' + p.creditos + '</span></li>';
       var items = p.incluye.map(function(t){
         return '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
                '<span style="position:absolute;left:0;color:#2a7;">✓</span>' + t + '</li>';
@@ -1189,12 +1195,11 @@ header header .cai-ham{flex-shrink:0}
         '<div style="font-size:27px;font-weight:600;color:#1a1a1a;">' +
           '<span data-plan-precio="' + p.id + '">' + p.precio + '</span>' +
           '<span style="font-size:14px;font-weight:400;color:#888;"> /mes</span></div>' +
-        '<div data-plan-creditos="' + p.id + '" style="font-size:13px;color:#666;margin-bottom:16px;">' + p.creditos + '</div>' +
-        '<ul style="list-style:none;padding:0;margin:0 0 20px;">' + items + no + '</ul>' +
+        '<ul style="list-style:none;padding:0;margin:14px 0 20px;">' + creditosItem + items + no + '</ul>' +
         '<button data-plan="' + p.id + '" style="width:100%;padding:11px;font-size:15px;font-weight:600;' +
           'border:0;border-radius:8px;cursor:pointer;' +
           (p.destacado ? 'background:#1a1a1a;color:#fff;' : 'background:#f0eeea;color:#1a1a1a;') +
-          '">Suscribirme</button>' +
+          '">' + p.boton + '</button>' +
         '<div style="margin-top:8px;text-align:center;">' +
           '<a href="#" data-ls="' + p.id + '" style="font-size:12px;color:#888;text-decoration:underline;">' +
             '¿Pagás desde afuera de Argentina? Pagar en ' +
@@ -1251,6 +1256,7 @@ header header .cai-ham{flex-shrink:0}
     Array.prototype.forEach.call(capa.querySelectorAll('button[data-plan]'), function(b){
       b.addEventListener('click', function(){
         var plan = b.getAttribute('data-plan');
+        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Pro · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
         b.disabled = true; b.textContent = 'Preparando…'; estado.textContent = '';
         tokenVigente().then(function(t){
           if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
@@ -1261,11 +1267,11 @@ header header .cai-ham{flex-shrink:0}
           }).then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
             .then(function(x){
               if(x.ok && x.d.url){ location.href = x.d.url; return; }   // al checkout
-              b.disabled = false; b.textContent = 'Suscribirme';
+              b.disabled = false; b.textContent = textoOriginal;
               estado.textContent = (x.d && x.d.error && x.d.error.message) || 'No se pudo iniciar la suscripción.';
             });
         }).catch(function(){
-          b.disabled = false; b.textContent = 'Suscribirme';
+          b.disabled = false; b.textContent = textoOriginal;
           estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
         });
       });
