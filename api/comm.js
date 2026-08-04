@@ -25,7 +25,14 @@
 //                                              job_id, reason?, version_conocida? }
 //     { recurso:'jobs',   accion:'despachar',  job_id, template_id?, template_version?,
 //                                              variables?, asunto?, contenido_html? }
+//     { recurso:'jobs',   accion:'programar',  job_id, not_before?, prioridad?, depende_de_job_id? }
 //     { recurso:'inbox',  accion:'leer'|'archivar', entry_id }
+//
+// CORTE E — programar (programacion y recuperacion)
+//   Fija notBefore/prioridad/dependencia sobre un trabajo recien creado (estado
+//   CREATED). El "portero" (comm_preparar_entrega) es quien de verdad hace
+//   cumplir todo eso -- esta accion solo guarda la intencion. Ver
+//   CORTE_E_SISTEMA_COMUNICACIONAL.md.
 //
 // CORTE D — despachar (correo externo controlado)
 //   Envia de verdad, via Brevo, y SOLO a las direcciones de comm_closed_recipients
@@ -116,6 +123,20 @@ async function eventsIngresar(cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
     if (r && r.estado === 'cuarentena') {
       return res.status(422).json({ ok: false, estado: 'cuarentena', motivo: r.motivo, event_id: eventId });
     }
+
+    // Corte E: solo un acontecimiento REALMENTE nuevo cuenta para la deteccion de
+    // bucles -- "repetido" (idempotente) no es una rafaga nueva, no se cuenta.
+    if (r && r.estado === 'registrado' && purposeId) {
+      try {
+        const bucle = await rpc('comm_contener_si_hay_bucle', { p_organization_id: perfil, p_purpose_id: purposeId }, SB_URL, SERVICE_KEY);
+        if (bucle && bucle.bucle_detectado) {
+          registrar({ aviso: 'BUCLE DETECTADO -- cuenta suspendida', perfil: perfil.slice(0, 8), purpose_id: purposeId, conteo: bucle.conteo });
+        }
+      } catch (e) {
+        registrar({ error: 'fallo_verificar_bucle', perfil: perfil.slice(0, 8), detalle: String((e && e.message) || e) });
+      }
+    }
+
     return res.status(200).json({ ok: true, estado: r ? r.estado : null, event_id: eventId });
   } catch (e) {
     registrar({ error: 'fallo_ingresar', perfil: perfil.slice(0, 8), event_id: eventId, detalle: String((e && e.message) || e) });
@@ -159,7 +180,7 @@ async function jobsGet(req, res, perfil, SB_URL, SERVICE_KEY) {
   try {
     const rutaJob = '/rest/v1/comm_jobs?id=eq.' + encodeURIComponent(jobId) +
       '&organization_id=eq.' + encodeURIComponent(perfil) +
-      '&select=id,decision_id,event_id,state,not_before,expires_at,version,creado,actualizado';
+      '&select=id,decision_id,event_id,state,not_before,prioridad,depende_de_job_id,expires_at,version,creado,actualizado';
     const jobs = await restGet(rutaJob, SB_URL, SERVICE_KEY);
     if (!jobs.length) return res.status(404).json({ error: { message: 'No encontrado.', codigo: 'no_encontrado' } });
 
@@ -172,6 +193,36 @@ async function jobsGet(req, res, perfil, SB_URL, SERVICE_KEY) {
   } catch (e) {
     registrar({ error: 'fallo_consultar_job', perfil: perfil.slice(0, 8), job_id: jobId, detalle: String((e && e.message) || e) });
     return res.status(503).json({ error: { message: 'No se pudo consultar. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+}
+
+// ---------- jobs: programar (Corte E) ----------
+
+async function jobsProgramar(cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
+  const jobId = cuerpo && cuerpo.job_id;
+  if (!jobId) return res.status(400).json({ error: { message: 'Falta job_id.' } });
+
+  const notBefore = cuerpo.not_before || null;
+  const prioridad = Number.isInteger(cuerpo.prioridad) ? cuerpo.prioridad : 1;
+  const dependeDeJobId = cuerpo.depende_de_job_id || null;
+
+  try {
+    const r = await rpc('comm_programar_job', {
+      p_job_id: jobId, p_organization_id: perfil,
+      p_not_before: notBefore, p_prioridad: prioridad, p_depende_de_job_id: dependeDeJobId,
+    }, SB_URL, SERVICE_KEY);
+
+    registrar({ accion: r && r.ok ? 'programado' : 'rechazado', perfil: perfil.slice(0, 8), job_id: jobId, motivo: r ? r.motivo : null });
+
+    if (!r || !r.ok) {
+      const codigo = (r && r.motivo) || 'no_se_pudo_programar';
+      const status = codigo === 'no_encontrado_o_no_autorizado' ? 403 : 409;
+      return res.status(status).json({ ok: false, codigo });
+    }
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    registrar({ error: 'fallo_programar', perfil: perfil.slice(0, 8), job_id: jobId, detalle: String((e && e.message) || e) });
+    return res.status(503).json({ error: { message: 'No se pudo programar. Volve a intentar.', codigo: 'servicio_no_disponible' } });
   }
 }
 
@@ -517,6 +568,7 @@ export default async function handler(req, res) {
   if (recurso === 'events' && accion === 'reevaluar') return eventsReevaluar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'jobs' && ['cancelar', 'retener', 'reanudar'].indexOf(accion) > -1) return jobsTransicionar(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'jobs' && accion === 'despachar') return jobsDespachar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
+  if (recurso === 'jobs' && accion === 'programar') return jobsProgramar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'inbox' && ['leer', 'archivar'].indexOf(accion) > -1) return inboxAccion(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'preferences' && accion === 'fijar') return preferencesFijar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'consent' && ['otorgar', 'revocar'].indexOf(accion) > -1) return consentAccion(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);

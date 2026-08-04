@@ -12,11 +12,18 @@
 //   que el intento de entrega quede marcado "incierto" (silencio del proveedor) en vez de
 //   quedar para siempre en "enviando"/"enviado" sin ninguna explicacion.
 //
+//   Corte E agrego comm_barrer_programados(): reintenta CREATED/HELD cuyo notBefore ya
+//   llego (o que estaban esperando una dependencia, una suspension, o la presion del
+//   destinatario) -- es lo que hace que "programacion persistente" funcione sin que nadie
+//   tenga que volver a pedirlo a mano.
+//
 // QUE NO HACE (a proposito)
 //   No dispara envios nuevos. "Despachar" un trabajo (recurso=jobs, accion=despachar en
-//   api/comm.js) es una accion explicita, bajo demanda -- programar envios automaticos es
-//   scope del Corte E ("programacion"), no de este cron. Este archivo solo reconcilia lo
-//   que ya se intento, no inicia nada.
+//   api/comm.js) sigue siendo una accion explicita, bajo demanda. El barrido de Corte E
+//   solo decide si un trabajo YA PUEDE avanzar a READY -- nunca lo manda por Brevo. Ese
+//   limite es a proposito: automatizar el envio en si mismo, no solo la evaluacion de
+//   si corresponde, queda para cuando el plan de Vercel permita mas de una corrida de
+//   cron por dia (ver nota del Corte D sobre el limite de frecuencia de Hobby).
 //
 // LIMITE DEL PLAN HOBBY DE VERCEL
 //   Igual que api/latido.js: una corrida por dia como maximo. Para reconciliar timeouts de
@@ -58,8 +65,27 @@ export default async function handler(req, res) {
   const resultado = { evento: 'comm_cron' };
   let huboError = false;
 
-  // orden importa: se marca "incierto" el motivo ANTES de que comm_recuperar_abandonados()
-  // mueva el trabajo, para que quede registrado que fue timeout y no un rebote/error real.
+  // orden importa en las cuatro:
+  //  1. expirar vencidos ANTES de barrer -- un trabajo vencido no tiene que
+  //     re-evaluarse como si siguiera vigente (Corte E: "vencidos no se recuperan").
+  //  2. barrer programados -- reintenta CREATED/HELD cuyo notBefore ya llego.
+  //  3. marcar inciertos ANTES de recuperar abandonados -- para que el intento de
+  //     entrega quede con el motivo correcto (timeout, no rebote/error real).
+  //  4. recuperar abandonados -- Corte A, mueve el trabajo a FAILED_RETRYABLE.
+  try {
+    resultado.trabajos_vencidos = await rpc('comm_expirar_vencidos', url, clave);
+  } catch (e) {
+    huboError = true;
+    resultado.error_vencidos = String((e && e.message) || e);
+  }
+
+  try {
+    resultado.trabajos_barridos = await rpc('comm_barrer_programados', url, clave);
+  } catch (e) {
+    huboError = true;
+    resultado.error_barrido = String((e && e.message) || e);
+  }
+
   try {
     resultado.intentos_marcados_inciertos = await rpc('comm_marcar_intentos_inciertos_por_abandono', url, clave);
   } catch (e) {
@@ -72,13 +98,6 @@ export default async function handler(req, res) {
   } catch (e) {
     huboError = true;
     resultado.error_recuperar = String((e && e.message) || e);
-  }
-
-  try {
-    resultado.trabajos_vencidos = await rpc('comm_expirar_vencidos', url, clave);
-  } catch (e) {
-    huboError = true;
-    resultado.error_vencidos = String((e && e.message) || e);
   }
 
   console.log(JSON.stringify(resultado));
