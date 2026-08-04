@@ -505,8 +505,10 @@ header .spacer{flex:1}
       <div class="entradas">
         <button class="entrada" data-q="Mi negocio vende, pero no sé si realmente es rentable.">Mi negocio vende, pero no sé si realmente es rentable.</button>
         <button class="entrada" data-q="Mi proyecto está trabado y no logro descubrir por qué.">Mi proyecto está trabado y no logro descubrir por qué.</button>
-        <button class="entrada extra" data-q="Las soluciones que antes funcionaban dejaron de funcionar y no entiendo qué cambió.">Algo que antes funcionaba dejó de hacerlo.</button>
-        <button class="entrada extra" data-q="Mi ciudad crece rápido pero se siente cada vez más desordenada.">Algo crece, pero se está desordenando.</button>
+        <button class="entrada extra" data-q="Tengo dos opciones y no sé cuál me conviene más.">Tengo dos opciones y no sé cuál me conviene más.</button>
+        <button class="entrada extra" data-q="Mi equipo trabaja mucho, pero los mismos problemas se repiten.">Mi equipo trabaja mucho, pero los mismos problemas se repiten.</button>
+        <button class="entrada extra" data-q="Mi barrio está creciendo, pero cada vez funciona peor.">Mi barrio está creciendo, pero cada vez funciona peor.</button>
+        <button class="entrada extra" data-q="Quiero mejorar una situación sin provocar nuevos problemas.">Quiero mejorar una situación sin provocar nuevos problemas.</button>
       </div>
       <button class="orgtool" id="btnMasEjemplos" style="margin:8px 0 0">Ver más ejemplos</button>
 
@@ -4980,8 +4982,16 @@ document.querySelectorAll('.entrada').forEach(function(b){
   b.addEventListener('click', function(){ enviar(b.dataset.q); });
 });
 document.getElementById('btnMasEjemplos').addEventListener('click', function(){
-  document.querySelectorAll('.entrada.extra').forEach(function(b){ b.style.display = ''; });
-  this.style.display = 'none';
+  // Bug corregido: b.style.display = '' borra el estilo inline, pero la regla CSS
+  // ".entrada.extra{display:none}" seguia ganando (la clase no se toca). Ahora se
+  // fuerza un valor inline explicito, que si le gana a la clase -- y el toggle es
+  // bidireccional (antes solo mostraba, nunca volvia a ocultar).
+  var abierto = this.dataset.abierto === '1';
+  document.querySelectorAll('.entrada.extra').forEach(function(b){
+    b.style.display = abierto ? 'none' : 'block';
+  });
+  this.dataset.abierto = abierto ? '0' : '1';
+  this.textContent = abierto ? 'Ver más ejemplos' : 'Ver menos ejemplos';
 });
 document.getElementById('btnVerTodos').addEventListener('click', function(){
   orgVerTodosAbierto = true;
