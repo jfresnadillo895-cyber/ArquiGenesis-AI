@@ -95,6 +95,13 @@ export default async function handler(req, res) {
     // payloads distintos, pero SI colisiona (a proposito) si Brevo reentrega bytes identicos.
     eventoId = 'hash_' + crypto.createHash('sha256').update(JSON.stringify(cuerpo)).digest('hex');
   }
+  // Brevo reusa el MISMO "id" para todos los eventos de un mismo envio (confirmado en la
+  // prueba real, 03/08: "unique_opened" y "delivered" del mismo mensaje llegaron con
+  // identico cuerpo.id). Sin esto, la clave de idempotencia (proveedor+evento_id) trataba
+  // al segundo evento como si fuera un reintento del primero y lo descartaba sin
+  // procesarlo -- por eso "delivered" nunca actualizaba el trabajo. Se agrega el tipo de
+  // evento a la clave para distinguir avisos distintos del mismo envio.
+  eventoId = evento + ':' + eventoId;
 
   const tags = Array.isArray(cuerpo.tags) ? cuerpo.tags : (cuerpo.tag ? [cuerpo.tag] : []);
   const deliveryAttemptIdSugerido = tags.length ? String(tags[0]) : null;
