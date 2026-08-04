@@ -234,6 +234,7 @@
       if(!t) return;
       mostrarChipCuenta();
       mostrarChipBandeja();
+      mostrarFooterMovil();
       return fetch(SB_URL + '/rest/v1/perfiles?select=id,plan,saldo', {
         headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t }
       }).then(function(r){ return r.ok ? r.json() : null; })
@@ -615,13 +616,87 @@
   function actualizarContadorBandeja(){
     bandejaFetch('/api/comm?recurso=inbox').then(function(r){ return r.ok ? r.json() : null; })
       .then(function(d){
-        var span = document.getElementById('comprenderBandejaContador');
-        if(!span) return;
         var n = (d && typeof d.no_leidas === 'number') ? d.no_leidas : 0;
-        if(n > 0){ span.textContent = String(n); span.style.display = 'inline-block'; }
-        else{ span.style.display = 'none'; }
+        var span = document.getElementById('comprenderBandejaContador');
+        if(span){
+          if(n > 0){ span.textContent = String(n); span.style.display = 'inline-block'; }
+          else{ span.style.display = 'none'; }
+        }
+        var span2 = document.getElementById('comprenderFooterBandejaContador');
+        if(span2){
+          if(n > 0){ span2.textContent = String(n); span2.style.display = 'inline-block'; }
+          else{ span2.style.display = 'none'; }
+        }
       })
       .catch(function(){});
+  }
+
+  /* ---------- footer movil unificado (Avisos, Cuenta, Principios, Ayuda) ----------
+     Se arma solo en paginas que tienen #composer (hoy, el Core): ahi es donde el header
+     angosto de movil no alcanza para todo, y donde las chips flotantes de Cuenta/Avisos
+     competian por el mismo rincon que el compositor. En Urbanismo y Contextos no hay
+     #composer, asi que esto no se activa y las chips flotantes siguen exactamente igual
+     que antes: cero riesgo para esos dos productos.
+     Principios y Ayuda son especificos de cada pagina (paneles/funciones que candado.txt
+     no conoce), asi que se enganchan via window.comprenderAbrirPrincipios /
+     window.comprenderMostrarAyuda -- si la pagina no los define, esos dos botones no
+     se dibujan y el footer queda con Avisos + Cuenta. */
+  var footerMovilInsertado = false;
+  function mostrarFooterMovil(){
+    if(footerMovilInsertado || document.getElementById('comprenderFooterMovil')) return;
+    if(!document.getElementById('composer')) return;
+    footerMovilInsertado = true;
+
+    var css = document.createElement('style');
+    css.textContent =
+      '@media(max-width:840px){' +
+        '#comprenderChipCuenta,#comprenderChipBandeja{display:none!important}' +
+        '#composer{padding-bottom:calc(16px + env(safe-area-inset-bottom) + 60px)!important}' +
+        '#comprenderFooterMovil{display:flex!important}' +
+      '}';
+    document.head.appendChild(css);
+
+    function icono(path){
+      return '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
+    }
+    var ICN = {
+      avisos: icono('<path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 01-3.46 0"></path>'),
+      cuenta: icono('<circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 4-6 8-6s8 2 8 6"></path>'),
+      principios: icono('<path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h10"></path>'),
+      ayuda: icono('<circle cx="12" cy="12" r="9"></circle><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 1.7-2.5 3.5"></path><path d="M12 17h.01"></path>')
+    };
+
+    var botones = [
+      { id:'ffAvisos', icn:ICN.avisos, txt:'Avisos', on:function(){ mostrarBandeja(); } },
+      { id:'ffCuenta', icn:ICN.cuenta, txt:'Cuenta', on:function(){ mostrarCuenta(); } },
+      { id:'ffPrincipios', icn:ICN.principios, txt:'Principios', hook:'comprenderAbrirPrincipios', on:function(){ if(window.comprenderAbrirPrincipios) window.comprenderAbrirPrincipios(); } },
+      { id:'ffAyuda', icn:ICN.ayuda, txt:'Ayuda', hook:'comprenderMostrarAyuda', on:function(){ if(window.comprenderMostrarAyuda) window.comprenderMostrarAyuda(); } }
+    ];
+
+    var barra = document.createElement('div');
+    barra.id = 'comprenderFooterMovil';
+    barra.style.cssText = 'display:none;position:fixed;left:0;right:0;bottom:0;z-index:99991;' +
+      'background:#fff;border-top:1px solid #ddd;padding:6px 4px calc(4px + env(safe-area-inset-bottom));' +
+      'align-items:stretch;justify-content:space-around;font-family:system-ui,-apple-system,sans-serif;';
+
+    for(var i=0;i<botones.length;i++){
+      var d = botones[i];
+      if(d.hook && !window[d.hook]) continue;
+      var b = document.createElement('button');
+      b.id = d.id;
+      b.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;' +
+        'padding:6px 2px;font-size:10.5px;font-weight:600;color:#1a1a1a;background:none;border:none;' +
+        'cursor:pointer;position:relative;';
+      var badge = (d.id === 'ffAvisos') ?
+        ' <span id="comprenderFooterBandejaContador" style="display:none;position:absolute;top:2px;' +
+        'right:22%;background:#b4441f;color:#fff;border-radius:10px;padding:0 5px;font-size:10px;font-weight:700;">' +
+        '</span>' : '';
+      b.innerHTML = d.icn + badge + '<span>' + d.txt + '</span>';
+      b.addEventListener('click', d.on);
+      barra.appendChild(b);
+    }
+    document.body.appendChild(barra);
   }
 
   var bandejaAbierta = false;
