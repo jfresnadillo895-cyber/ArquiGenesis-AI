@@ -26,6 +26,8 @@
 // VARIABLES DE ENTORNO
 //   SUPABASE_URL / SUPABASE_SECRET_KEY   (ya cargadas, las usan los demas api/*.js)
 
+import { emitirYNotificar } from '../lib/comm-emitir.js';
+
 const registrar = (o) => console.log(JSON.stringify({ evento: 'organismos', ...o }));
 
 async function identificar(token, url, secreta) {
@@ -136,6 +138,22 @@ export default async function handler(req, res) {
     }
 
     registrar({ accion: 'guardado', perfil: perfil.slice(0, 8), cliente_id: clienteId, version: r ? r.version : null });
+
+    // Corte F: aviso real SOLO la primera vez que este organismo existe (version===1).
+    // Los autoguardados posteriores (ediciones) son version>1 y no generan un aviso
+    // nuevo -- decision explicita con Javier (04/08) para no llenar la bandeja de
+    // ruido en cada autoguardado. Aislado y esperado (await), misma razon que en
+    // api/pago.js: no dejar esto como "fire and forget".
+    if (r && r.version === 1 && estado === 'activo') {
+      await emitirYNotificar({
+        SB_URL, SERVICE_KEY,
+        organizationId: perfil, purposeId: 'organismo_disponible', type: 'organismo.disponible',
+        producer: 'organismos', payload: { organismo_id: r.id, nombre: nombre || null },
+        titulo: 'Tu análisis está disponible',
+        resumen: nombre ? `"${nombre}" ya está guardado.` : 'Tu nuevo análisis ya está guardado.',
+      });
+    }
+
     return res.status(200).json({ ok: true, id: r.id, version: r.version });
 
   } catch (e) {

@@ -64,6 +64,7 @@
 
 import crypto from 'crypto';
 import { planPorVariante } from './catalogo.js';
+import { emitirYNotificar } from '../lib/comm-emitir.js';
 
 const LS_API = 'https://api.lemonsqueezy.com/v1';
 
@@ -209,6 +210,16 @@ export async function POST(request) {
           accion: r?.repetido ? 'repetido' : 'activado', perfil: String(perfil).slice(0, 8),
           plan, saldo: r?.saldo, invoiceId, evento,
         });
+
+        // Corte F: mismo aviso que Mercado Pago, misma finalidad -- 'plan_activado' no
+        // depende de la pasarela. Aislado y esperado (await) antes de responder, ver
+        // la nota en api/pago.js sobre por que no se deja como "fire and forget".
+        await emitirYNotificar({
+          SB_URL: process.env.SUPABASE_URL, SERVICE_KEY: process.env.SUPABASE_SECRET_KEY,
+          organizationId: perfil, purposeId: 'plan_activado', type: 'plan.activado',
+          producer: 'pago_lemonsqueezy', payload: { plan, dias: 30 },
+          titulo: 'Tu plan quedó activo', resumen: `Tu plan ${plan} está activo.`,
+        });
       }
       return Response.json({ ok: true });
     }
@@ -230,6 +241,13 @@ export async function POST(request) {
           p_monto: null, p_moneda: 'USD', p_dias: 30, p_bruto: cuerpo,
         });
         registrar({ accion: r?.repetido ? 'repetido' : 'activado', perfil: String(perfil).slice(0, 8), plan, saldo: r?.saldo });
+
+        await emitirYNotificar({
+          SB_URL: process.env.SUPABASE_URL, SERVICE_KEY: process.env.SUPABASE_SECRET_KEY,
+          organizationId: perfil, purposeId: 'plan_activado', type: 'plan.activado',
+          producer: 'pago_lemonsqueezy', payload: { plan, dias: 30 },
+          titulo: 'Tu plan quedó activo', resumen: `Tu plan ${plan} está activo.`,
+        });
 
       } else if (evento === 'subscription_cancelled') {
         const r = await rpc('cancelar', { p_perfil: perfil });

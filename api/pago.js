@@ -37,6 +37,7 @@
 
 import crypto from 'crypto';
 import { planPorMonto } from './catalogo.js';
+import { emitirYNotificar } from '../lib/comm-emitir.js';
 
 const MP = 'https://api.mercadopago.com';
 
@@ -213,6 +214,19 @@ export default async function handler(req, res) {
       registrar({
         accion: r?.repetido ? 'repetido' : 'activado',
         perfil: String(perfil).slice(0, 8), plan, monto, saldo: r?.saldo,
+      });
+
+      // Corte F: aviso real por la bandeja interna -- "plan_activado" es la misma
+      // finalidad sin importar la pasarela (Mercado Pago o Lemon Squeezy). Aislado
+      // (emitirYNotificar nunca lanza) -- si esto falla, el pago YA se acredito
+      // arriba, nada se deshace por esto. Se espera (await) antes de responder:
+      // en una funcion serverless, lo que no se espera puede cortarse a mitad de
+      // camino en cuanto el handler termina -- "fire and forget" no es seguro aca.
+      await emitirYNotificar({
+        SB_URL: process.env.SUPABASE_URL, SERVICE_KEY: process.env.SUPABASE_SECRET_KEY,
+        organizationId: perfil, purposeId: 'plan_activado', type: 'plan.activado',
+        producer: 'pago_mercadopago', payload: { plan, dias: 30 },
+        titulo: 'Tu plan quedó activo', resumen: `Tu plan ${plan} está activo.`,
       });
 
     } else if (rechazado) {
