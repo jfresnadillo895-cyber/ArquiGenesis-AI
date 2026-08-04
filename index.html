@@ -111,6 +111,8 @@ header .spacer{flex:1}
 }
 .entrada:hover{border-color:var(--accent);color:var(--text);transform:translateY(-1px);box-shadow:0 4px 14px rgba(46,90,135,.10)}
 .entrada b{display:block;color:var(--text);font-weight:600;font-size:13px;margin-bottom:3px;letter-spacing:.02em}
+.entrada.extra{display:none}
+.ejemplos-titulo{font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;margin-bottom:10px;width:100%;max-width:560px;text-align:left}
 
 /* ---------- chat ---------- */
 #chat{flex:1;overflow-y:auto;padding:26px 20px 10px;display:none}
@@ -190,9 +192,9 @@ header .spacer{flex:1}
 }
 #input::placeholder{color:var(--faint)}
 #send{
-  width:34px;height:34px;border-radius:10px;background:var(--accent);color:#FFFFFF;
-  display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;
-  transition:opacity .2s;
+  min-width:34px;height:36px;padding:0 16px;border-radius:10px;background:var(--accent);color:#FFFFFF;
+  display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0;
+  white-space:nowrap;transition:opacity .2s;
 }
 #send:disabled{opacity:.3;cursor:default}
 
@@ -283,6 +285,7 @@ header .spacer{flex:1}
   color:var(--faint);padding:6px 0;transition:color .15s;
 }
 .orgtool:hover{color:var(--dim)}
+.orgexplic{font-size:11.5px;color:var(--faint);margin-top:8px;line-height:1.5}
 #orgchip{display:none;align-items:center;gap:7px;font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.08em;color:var(--dim);border:1px solid var(--line);border-radius:20px;padding:4px 12px;max-width:220px;overflow:hidden}
 #orgchip b{color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .field{margin-bottom:14px}
@@ -480,7 +483,7 @@ header .spacer{flex:1}
       <button class="hbtn" id="btnPromover" style="display:none">→ Organismo</button>
       <button class="hbtn" id="btnGuardar" style="display:none">Guardar sesión</button>
       <button class="hbtn" id="btnNueva" style="display:none">Nueva</button>
-      <button class="hbtn" id="btnAcerca">?</button>
+      <button class="hbtn" id="btnAcerca">Ayuda</button>
       <button class="hbtn" id="btnMenu">☰</button>
     </header>
     <div id="menu"></div>
@@ -497,31 +500,34 @@ header .spacer{flex:1}
         </g>
       </svg>
       <h1>¿Qué querés comprender hoy?</h1>
-      <p class="lema">Inteligencia artificial para aprender a comprender.<br><b>Descubrí relaciones. Comprendé sistemas.</b></p>
+      <p class="lema">Contanos una situación, problema, proyecto o decisión.</p>
+      <p class="ejemplos-titulo">O probá con un ejemplo</p>
       <div class="entradas">
-        <button class="entrada" data-q="Algo en mi proyecto se mueve mucho pero no avanza, y no sé por qué."><b>Movimiento sin avance</b>Algo se mueve mucho pero no avanza.</button>
-        <button class="entrada" data-q="Hay dos partes de mi organización que deberían trabajar juntas y viven aisladas."><b>Partes aisladas</b>Lo que debería trabajar junto vive separado.</button>
-        <button class="entrada" data-q="Las soluciones que antes funcionaban dejaron de funcionar y no entiendo qué cambió."><b>Lo que ya no funciona</b>Lo que antes servía dejó de servir.</button>
-        <button class="entrada" data-q="Mi ciudad crece rápido pero se siente cada vez más desordenada."><b>Crecimiento desordenado</b>Crece, pero se desordena.</button>
+        <button class="entrada" data-q="Mi negocio vende, pero no sé si realmente es rentable.">Mi negocio vende, pero no sé si realmente es rentable.</button>
+        <button class="entrada" data-q="Mi proyecto está trabado y no logro descubrir por qué.">Mi proyecto está trabado y no logro descubrir por qué.</button>
+        <button class="entrada extra" data-q="Las soluciones que antes funcionaban dejaron de funcionar y no entiendo qué cambió.">Algo que antes funcionaba dejó de hacerlo.</button>
+        <button class="entrada extra" data-q="Mi ciudad crece rápido pero se siente cada vez más desordenada.">Algo crece, pero se está desordenando.</button>
+      </div>
+      <button class="orgtool" id="btnMasEjemplos" style="margin:8px 0 0">Ver más ejemplos</button>
+
+      <div class="orgsec" id="orgsec">
+        <h4 id="orgsecTitulo">Continuar donde lo dejaste</h4>
+        <div class="orglist" id="orglist"></div>
+        <button class="orgtool" id="btnVerTodos" style="display:none;margin-top:8px">Ver todos</button>
       </div>
       <div class="orgsec">
-        <h4>Organismos incorporados</h4>
-        <div class="orglist" id="orglist"></div>
-        <button class="orgnew" id="btnOrgNuevo"><b>+ Incorporar un organismo</b>Un territorio, una empresa o un proyecto para comprender en el tiempo.</button>
-        <div class="orgtools">
-          <button class="orgtool" id="btnExportar">Exportar respaldo</button>
-          <button class="orgtool" id="btnImportar">Importar respaldo</button>
-          <input type="file" id="fileImport" accept=".json,application/json" style="display:none">
-        </div>
+        <button class="orgnew" id="btnOrgNuevo"><b>+ Guardar un nuevo tema</b>Puede ser un negocio, un proyecto, un territorio o cualquier situación que quieras seguir comprendiendo.</button>
+        <p class="orgexplic" id="orgInvitacion" style="display:none">Todavía no guardaste ningún tema. Guardá el primero cuando quieras seguir un análisis en el tiempo.</p>
+        <p class="orgexplic">En Comprender AI los llamamos organismos porque pueden cambiar y evolucionar con el tiempo.</p>
       </div>
-      <p style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.2em;color:var(--faint);margin-top:34px;text-transform:uppercase">Producto de Arquigénesis</p>
+      <input type="file" id="fileImport" accept=".json,application/json" style="display:none">
     </div>
 
     <div id="chat"><div class="stream" id="stream"></div></div>
     <div id="composer">
       <div class="cwrap">
-        <textarea id="input" rows="1" placeholder="Nombrá el fenómeno, la situación o lo que no anda…"></textarea>
-        <button id="send" title="Enviar">→</button>
+        <textarea id="input" rows="1" placeholder="Escribí acá qué está pasando…"></textarea>
+        <button id="send" title="Comenzar">Comenzar</button>
       </div>
     </div>
   </div>
@@ -1954,6 +1960,7 @@ function startChat(){
   state.started = true;
   el.welcome.style.display = 'none';
   el.chat.style.display = 'block';
+  el.send.textContent = '→'; el.send.title = 'Enviar';
   el.btnGuardar.style.display = 'inline-block';
   if(!state.organismo) document.getElementById('btnPromover').style.display = 'inline-block';
   el.btnNueva.style.display = 'inline-block';
@@ -3539,7 +3546,7 @@ function renderCred(){
   const cont = document.getElementById('cred');
   const pct = c.total ? Math.round((c.resta / c.total) * 100) : 0;
   document.getElementById('credBarra').style.width = pct + '%';
-  document.getElementById('credTxt').textContent = c.resta + '/' + c.total;
+  document.getElementById('credTxt').textContent = c.resta.toLocaleString('es-AR') + ' créditos disponibles';
   cont.classList.toggle('bajo', pct <= 25 && pct > 0);
   cont.classList.toggle('agotado', c.resta === 0);
 }
@@ -4539,28 +4546,41 @@ function nuevaSesion(){
   resetHilo(null);
   el.chat.style.display = 'none';
   el.welcome.style.display = 'flex';
+  el.send.textContent = 'Comenzar'; el.send.title = 'Comenzar';
   el.btnGuardar.style.display = 'none';
   document.getElementById('btnPromover').style.display = 'none';
   el.btnNueva.style.display = 'none';
   el.orgchip.style.display = 'none';
   el.btnFicha.style.display = 'none';
-  el.input.placeholder = 'Nombrá el fenómeno, la situación o lo que no anda…';
+  el.input.placeholder = 'Escribí acá qué está pasando…';
   renderOrgList();
 }
 
 /* ================= organismos: interfaz ================= */
+var ORG_LIMITE_INICIAL = 3;
+var orgVerTodosAbierto = false;   // variable de UI aparte de "state" a proposito -- state se usa para la sesion, esto es solo un toggle visual
 function renderOrgList(){
   const list = cargarOrganismos();
   el.orglist.innerHTML = '';
+  const orgsec = document.getElementById('orgsec');
+  const invitacion = document.getElementById('orgInvitacion');
+  const btnVerTodos = document.getElementById('btnVerTodos');
+
   if(!list.length){
-    const v = document.createElement('div');
-    v.className = 'vacio';
-    v.textContent = 'Todavía no incorporaste organismos. Un organismo se comprende progresivamente: la ficha viva conserva su evolución entre sesiones.';
-    el.orglist.appendChild(v);
+    // C-10: sin temas guardados, "Continuar donde lo dejaste" no tiene sentido -- se
+    // oculta la seccion entera y se muestra una invitacion chica junto a "Guardar un
+    // nuevo tema" en su lugar (no un mensaje vacio adentro de la lista).
+    orgsec.style.display = 'none';
+    invitacion.style.display = '';
     return;
   }
+  orgsec.style.display = '';
+  invitacion.style.display = 'none';
+
   list.sort(function(a,b){ return (b.actualizado||'').localeCompare(a.actualizado||''); });
-  for(const org of list){
+  const mostrar = orgVerTodosAbierto ? list : list.slice(0, ORG_LIMITE_INICIAL);
+
+  for(const org of mostrar){
     const b = document.createElement('button');
     b.className = 'orgitem';
     const left = document.createElement('span');
@@ -4569,7 +4589,11 @@ function renderOrgList(){
     tp.textContent = org.tipo + (org.campo_de ? (function(){ const pd = cargarOrganismos().find(function(x){return x.id===org.campo_de;}); return pd ? (' · en ' + pd.nombre) : ''; })() : '');
     left.appendChild(nm); left.appendChild(tp);
     const st = document.createElement('span'); st.className='ostado';
-    st.textContent = (org.ficha && org.ficha.proximo) ? org.ficha.proximo : 'sin lectura todavía';
+    // C-07: "sin lectura todavía" (fijo) -> "Listo para comenzar". Cuando SI hay lectura
+    // previa, se deja el contenido real de org.ficha.proximo tal cual -- es informacion
+    // real del motor, no un estado inventado; reemplazarlo por una etiqueta generica
+    // seria perder informacion, no aclararla.
+    st.textContent = (org.ficha && org.ficha.proximo) ? org.ficha.proximo : 'Listo para comenzar';
     b.appendChild(left); b.appendChild(st);
     const fich = document.createElement('span');
     fich.className = 'ofich'; fich.textContent = '···'; fich.title = 'Ver ficha';
@@ -4577,6 +4601,12 @@ function renderOrgList(){
     b.appendChild(fich);
     b.addEventListener('click', function(){ abrirOrganismo(org); });
     el.orglist.appendChild(b);
+  }
+
+  if(list.length > ORG_LIMITE_INICIAL && !orgVerTodosAbierto){
+    btnVerTodos.style.display = '';
+  }else{
+    btnVerTodos.style.display = 'none';
   }
 }
 
@@ -4679,6 +4709,8 @@ function cardIncorporar(){
   el.cardContent.innerHTML = '';
   const h = document.createElement('h3'); h.textContent = 'Incorporar un organismo';
   const p1 = document.createElement('p'); p1.textContent = 'Una ciudad, una empresa, un proyecto, una especie, una investigación: cualquier entidad organizada que quieras comprender progresivamente.';
+  const pExp = document.createElement('p'); pExp.textContent = 'A este tema guardado lo llamaremos organismo.';
+  pExp.style.cssText = 'font-size:11.5px;color:var(--faint);margin-top:-8px';
   const f1 = document.createElement('div'); f1.className = 'field';
   const l1 = document.createElement('label'); l1.textContent = 'Nombre del organismo';
   const inp = document.createElement('input'); inp.type='text'; inp.placeholder='Ej.: Trenque Lauquen, Estudio XYZ, Tesis doctoral…'; inp.maxLength = 80;
@@ -4717,7 +4749,7 @@ function cardIncorporar(){
     }
   };
   row.appendChild(b1); row.appendChild(b2);
-  el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
+  el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(pExp);
   el.cardContent.appendChild(f1); el.cardContent.appendChild(f2); el.cardContent.appendChild(f3); el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
   setTimeout(function(){ inp.focus(); }, 60);
@@ -4947,6 +4979,14 @@ el.input.addEventListener('input', autoGrow);
 document.querySelectorAll('.entrada').forEach(function(b){
   b.addEventListener('click', function(){ enviar(b.dataset.q); });
 });
+document.getElementById('btnMasEjemplos').addEventListener('click', function(){
+  document.querySelectorAll('.entrada.extra').forEach(function(b){ b.style.display = ''; });
+  this.style.display = 'none';
+});
+document.getElementById('btnVerTodos').addEventListener('click', function(){
+  orgVerTodosAbierto = true;
+  renderOrgList();
+});
 
 el.btnGuardar.addEventListener('click', function(){ ofrecerGuardado(null); });
 el.btnNueva.addEventListener('click', nuevaSesion);
@@ -4961,8 +5001,6 @@ document.addEventListener('click', function(e){
 el.btnOrgNuevo.addEventListener('click', cardIncorporar);
 document.getElementById('btnPromover').addEventListener('click', promoverAOrganismo);
 el.btnFicha.addEventListener('click', mostrarFicha);
-$('btnExportar').addEventListener('click', function(){ exportarDatos(); });
-$('btnImportar').addEventListener('click', function(){ cardImportar(); });
 $('fileImport').addEventListener('change', function(e){
   if(e.target.files && e.target.files[0]){ importarDatos(e.target.files[0]); e.target.value = ''; }
 });
@@ -4986,6 +5024,8 @@ function construirMenu(){
   items.push(['El ciclo de comprensión', mostrarCiclo]);
   items.push(['Comprensión disponible', cardCreditos]);
   items.push(['Consumo real', cardConsumo]);
+  items.push(['Exportar respaldo', exportarDatos]);
+  items.push(['Importar respaldo', cardImportar]);
   items.push(['Ayuda', mostrarAyuda]);
   items.push(['Tu opinión', cardOpinion]);
   items.push(['Acerca de', mostrarAcerca]);
