@@ -1274,23 +1274,38 @@ header header .cai-ham{flex-shrink:0}
     // Pago internacional (Corte B.6): el link no pasa por /api/suscribir -- arma
     // directo el checkout de Lemon Squeezy con el perfil como dato personalizado,
     // igual que hoy hace el checkout de Mercado Pago pero sin ida y vuelta al servidor.
+    //
+    // Pendiente resuelto (04/08): antes navegaba la pestaña actual con location.href
+    // -- el usuario quedaba atrapado en la pagina de Lemon Squeezy, sin boton para
+    // volver al chat. Ahora se abre en una pestaña NUEVA: cerrarla (o simplemente
+    // volver a la de siempre) es "cerrar el pago", sin agregar ninguna dependencia de
+    // CDN (se sostiene la regla de la casa -- ver la nota de arriba sobre supabase-js;
+    // el overlay oficial de Lemon Squeezy exige cargar su propio lemon.js). La pestaña
+    // se abre en blanco de forma SINCRONICA, dentro del click, para que el navegador
+    // no la bloquee como popup -- recien despues, cuando la URL esta lista (tras dos
+    // llamadas async), se le asigna el destino real.
     Array.prototype.forEach.call(capa.querySelectorAll('a[data-ls]'), function(a){
       a.addEventListener('click', function(e){
         e.preventDefault();
         var plan = a.getAttribute('data-ls');
-        var textoOriginal = a.textContent;
+        var pestana = window.open('', '_blank');
         tokenVigente().then(function(t){
-          if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
-          if(!perfilId){ estado.textContent = 'No se pudo identificar tu cuenta. Probá de nuevo en un momento.'; return; }
+          if(!t){ if(pestana) pestana.close(); cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
+          if(!perfilId){ if(pestana) pestana.close(); estado.textContent = 'No se pudo identificar tu cuenta. Probá de nuevo en un momento.'; return; }
           obtenerCatalogo().then(function(cat){
             var real = cat && cat[plan];
             var uuid = real && real.ls_checkout_uuid;
-            if(!uuid){ estado.textContent = 'El pago internacional no está disponible en este momento.'; return; }
-            location.href = 'https://' + LS_STORE + '.lemonsqueezy.com/checkout/buy/' + uuid +
+            if(!uuid){ if(pestana) pestana.close(); estado.textContent = 'El pago internacional no está disponible en este momento.'; return; }
+            var url = 'https://' + LS_STORE + '.lemonsqueezy.com/checkout/buy/' + uuid +
               '?checkout[custom][perfil]=' + encodeURIComponent(perfilId);
+            if(pestana){ pestana.location.href = url; } else { location.href = url; }   // pestaña bloqueada -- se cae al comportamiento de antes
           }).catch(function(){
+            if(pestana) pestana.close();
             estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
           });
+        }).catch(function(){
+          if(pestana) pestana.close();
+          estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
         });
       });
     });
