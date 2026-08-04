@@ -33,6 +33,14 @@
 //   Corte D) sigue intacta: mientras un destinatario real no este en esa lista, el envio se
 //   rechaza solo, sin llegar a Brevo.
 //
+// PASO 6 (Corte J): horizonte de continuidad -- misma excepcion, tono distinto
+//   Un organismo que ya completo una etapa (tiene al menos un hito) se GRADUA de la via
+//   "pendiente" del paso 5 (ver CORTE_J_MIGRACION.sql, seccion 3: comm_detectar_organismos_
+//   pendientes() excluye desde ahora cualquier organismo con hitos) -- de ahi en mas solo
+//   puede recibir este otro aviso, nunca el de "quedo pendiente". Un solo envio, nunca un
+//   segundo: reconocer un cierre es distinto de recordar una deuda, y repetirlo lo convierte
+//   en presion -- exactamente lo que Javier pidio evitar (04/08).
+//
 // LIMITE DEL PLAN HOBBY DE VERCEL
 //   Igual que api/latido.js: una corrida por dia como maximo. Para reconciliar timeouts de
 //   arrendamiento (5 minutos, ver comm_transicionar_job) alcanza sobrado -- lo que importa es
@@ -164,6 +172,67 @@ export default async function handler(req, res) {
   } catch (e) {
     huboError = true;
     resultado.error_organismos_pendientes = String((e && e.message) || e);
+  }
+
+  // 6. Corte J — horizonte de continuidad: mismo patron de aislamiento fila por fila
+  //    que el paso 5. Tono de reconocimiento, no de urgencia -- ver nota arriba.
+  try {
+    const candidatos = await rpc('comm_detectar_horizontes_pendientes', url, clave);
+    const lista = Array.isArray(candidatos) ? candidatos : [];
+    let enviados = 0, omitidos = 0, fallidos = 0;
+
+    for (const fila of lista) {
+      try {
+        const email = await obtenerEmailUsuario(fila.perfil, url, clave);
+        if (!email) { omitidos++; continue; }
+
+        // fila.horizonte viaja como el objeto jsonb tal cual lo guarda index.html
+        // (aplicarPropuesta) -- no se reinterpreta aca, solo se lee.
+        const h = fila.horizonte && typeof fila.horizonte === 'object' ? fila.horizonte : {};
+        if (!h.observar && !h.pregunta) { omitidos++; continue; }
+
+        const nombreOrg = fila.nombre || 'tu organismo';
+        const etapa = fila.etapa || 'una etapa';
+        const linkOrganismo = 'https://app.comprenderai.com/?organismo=' + encodeURIComponent(fila.organismo_id);
+
+        // Tono de reconocimiento (no de deuda ni urgencia): primero el cierre, despues
+        // la invitacion a lo que se abrio -- nunca mezclados, igual que en la UI
+        // (cardCierreEtapa antes de cardHorizonte). El horizonte se muestra completo
+        // (decision de Javier: gratis la comprension, el plan paga la profundizacion),
+        // asi que el correo no recorta preguntas detras de un paywall.
+        const puntos = [];
+        if (h.observar) puntos.push('<li><strong>Qué observar:</strong> ' + String(h.observar) + '</li>');
+        if (h.pregunta) puntos.push('<li><strong>Nueva pregunta:</strong> ' + String(h.pregunta) + '</li>');
+        if (h.relacion) puntos.push('<li><strong>Relación a profundizar:</strong> ' + String(h.relacion) + '</li>');
+
+        const asunto = `Tu análisis de "${nombreOrg}" completó una etapa`;
+        const contenido =
+          '<p>Hola,</p>' +
+          `<p>Tu análisis de <strong>${nombreOrg}</strong> llegó a un cierre: completaste "${etapa}".</p>` +
+          '<p>A partir de ahí se abrió esto para seguir mirando:</p>' +
+          `<ul>${puntos.join('')}</ul>` +
+          '<p>Podés verlo completo cuando quieras. Nada se pierde ni se vence.</p>' +
+          `<p><a href="${linkOrganismo}">Ver qué sigue</a></p>` +
+          '<p style="color:#888;font-size:12px">Comprender AI<br>Producto de ARQUIGÉNESIS</p>';
+
+        const r = await emitirYEnviarCorreo({
+          SB_URL: url, SERVICE_KEY: clave,
+          organizationId: fila.perfil, purposeId: 'organismo_horizonte', type: 'organismo.horizonte',
+          producer: 'organismos_horizonte',
+          payload: { organismo_id: fila.organismo_id, etapa: fila.etapa },
+          destinatario: email, asunto, contenidoHtml: contenido,
+        });
+        if (r && r.enviado) enviados++; else omitidos++;
+      } catch (eFila) {
+        fallidos++;
+        registrar({ error: 'fallo_fila_organismo_horizonte', organismo_id: fila && fila.organismo_id, detalle: String((eFila && eFila.message) || eFila) });
+      }
+    }
+
+    resultado.organismos_horizonte = { candidatos: lista.length, enviados, omitidos, fallidos };
+  } catch (e) {
+    huboError = true;
+    resultado.error_organismos_horizonte = String((e && e.message) || e);
   }
 
   console.log(JSON.stringify(resultado));
