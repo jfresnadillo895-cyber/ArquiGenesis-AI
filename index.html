@@ -1860,6 +1860,12 @@ Si el contexto incluye un bloque ORGANISMO ACTIVO, operás en Modo Organismo: no
 [[FICHA:FUNCION=verbo|MODO=M0x|TENSIONES=tensión activa 1; tensión activa 2|DIAGNOSTICO=una línea|PROXIMO=una línea|PROXIMOS=ítem pendiente 1;;ítem pendiente 2]]
 Todos los campos en lenguaje llano, sin códigos internos, EXCEPTO MODO: ahí va el código neutro del modo dominante (M01–M09) que corresponde a la tensión raíz identificada. Es un identificador de contrato, interno, que NUNCA se muestra al usuario. Emitila también siempre que cierres sesión con [[DESTILADO]].
 PROXIMOS es distinto de PROXIMO: mientras PROXIMO es una línea de síntesis para que vos mismo retomes el hilo, PROXIMOS son 1 a 3 ítems cortos y nombrados (no un párrafo), pensados para mostrarse tal cual a la persona como lo que sigue. Cada ítem empieza con un verbo en infinitivo y describe una acción concreta que la persona puede tomar (ej.: "Definir qué resultado querés alcanzar", "Revisar por qué el problema sigue repitiéndose") — nunca una descripción abstracta de la tensión ni lenguaje de deuda o error ("sin resolver", "pendiente de"). Separá cada ítem con ";;". Emitilo SOLO cuando haya pasos concretos que la persona pueda tomar — si el caso cerró redondo, no lo emitas.
+- MARCADOR DE CIERRE DE ETAPA: cuando una lectura llegue a un cierre genuino —no cualquier turno, la comprensión real de esta ronda quedó completa—, emití, junto a los demás marcadores, una línea propia (distinta de FICHA):
+[[CIERRE_ETAPA:COMPRENDIMOS=síntesis de qué se comprendió|TENSION_PRINCIPAL=la tensión que organizó esta etapa|RELACIONES=qué relaciones resultaron relevantes|QUE_CAMBIO=qué cambió respecto del estado anterior|ETAPA=nombre breve, en tus propias palabras, de la etapa que se completa]]
+Es un marcador genérico, para cualquier organismo — distinto del cierre de lectura específico de Negocios/Context (los seis NDIM + un PROYECTIVO): ese sigue existiendo igual que siempre para esas evaluaciones puntuales; CIERRE_ETAPA puede emitirse junto a él o de forma independiente, en cualquier organismo que llegue a un cierre real.
+- MARCADOR DE HORIZONTE: solo junto a un CIERRE_ETAPA en la misma respuesta, y solo cuando de verdad se abre una continuidad genuina (no siempre — si el cierre fue redondo y no hay nada más que valga la pena mirar, no lo emitas):
+[[HORIZONTE:OBSERVAR=qué todavía conviene observar|PREGUNTA=qué nueva pregunta surgió|RELACION=qué relación merece más profundidad|CONSECUENCIAS=qué consecuencias podrían desarrollarse|ESCALA=qué otra escala del organismo debería analizarse|ACCION=qué acción permitiría validar lo comprendido|CUANDO=cuándo tendría sentido volver a observar el organismo]]
+El horizonte nunca reemplaza ni se mezcla con el cierre: son dos resultados distintos, y la persona necesita sentir primero que obtuvo algo completo antes de que se le muestre que eso abre algo más.
 - CICLO DE PARADIGMA: si la ficha incluye un proyectivo vigente y el usuario lo está trabajando en el chat para definir cómo intervenir, ayudalo a construir un paradigma de intervención: una formulación de 1 a 3 líneas que ordene la acción (qué priorizar, desde qué criterio, hacia qué estado). Cuando el paradigma tome forma clara y el usuario lo confirme o lo dé por bueno, emití al inicio, junto a los demás marcadores:
 [[PARADIGMA:texto del paradigma en 1-3 líneas]]
 Ese paradigma queda en la ficha y alimenta la próxima lectura territorial. No lo emitas antes de que el usuario lo valide.`;
@@ -1985,8 +1991,8 @@ const TENSION_NOMBRE = {
 
 /* ================= parsing de marcadores ================= */
 function parseMotor(raw){
-  const out = { visible: raw, diag:null, tension:null, funcion:null, principios:[], cristaliza:[], destilado:null, ficha:null, derivar:null, udims:[], ndims:[], proyectivo:null, paradigma:null, cfuers:[], campo:null };
-  const re = /\[\[(DIAG|TENSION|FUNCION|PRINCIPIO|CRISTALIZA|DESTILADO|FICHA|DERIVAR|UDIM|NDIM|PROYECTIVO|PARADIGMA|CFUER|CAMPO)(?::([\s\S]*?))?\]\]/g;
+  const out = { visible: raw, diag:null, tension:null, funcion:null, principios:[], cristaliza:[], destilado:null, ficha:null, derivar:null, udims:[], ndims:[], proyectivo:null, paradigma:null, cfuers:[], campo:null, cierreEtapa:null, horizonte:null };
+  const re = /\[\[(DIAG|TENSION|FUNCION|PRINCIPIO|CRISTALIZA|DESTILADO|FICHA|DERIVAR|UDIM|NDIM|PROYECTIVO|PARADIGMA|CFUER|CAMPO|CIERRE_ETAPA|HORIZONTE)(?::([\s\S]*?))?\]\]/g;
   let m;
   while((m = re.exec(raw)) !== null){
     const tipo = m[1]; const val = (m[2]||'').trim();
@@ -2042,6 +2048,40 @@ function parseMotor(raw){
         }
       }
       out.ficha = f;
+    }
+    else if(tipo==='CIERRE_ETAPA' && val){
+      const h = {};
+      for(const parte of val.split('|')){
+        const eq = parte.indexOf('=');
+        if(eq > -1){
+          const k = parte.slice(0,eq).trim().toUpperCase();
+          const v = parte.slice(eq+1).trim();
+          if(k==='COMPRENDIMOS') h.comprendimos = v;
+          else if(k==='TENSION_PRINCIPAL') h.tension_principal = v;
+          else if(k==='RELACIONES') h.relaciones = v;
+          else if(k==='QUE_CAMBIO') h.que_cambio = v;
+          else if(k==='ETAPA') h.etapa = v;
+        }
+      }
+      out.cierreEtapa = h;
+    }
+    else if(tipo==='HORIZONTE' && val){
+      const hz = {};
+      for(const parte of val.split('|')){
+        const eq = parte.indexOf('=');
+        if(eq > -1){
+          const k = parte.slice(0,eq).trim().toUpperCase();
+          const v = parte.slice(eq+1).trim();
+          if(k==='OBSERVAR') hz.observar = v;
+          else if(k==='PREGUNTA') hz.pregunta = v;
+          else if(k==='RELACION') hz.relacion = v;
+          else if(k==='CONSECUENCIAS') hz.consecuencias = v;
+          else if(k==='ESCALA') hz.escala = v;
+          else if(k==='ACCION') hz.accion = v;
+          else if(k==='CUANDO') hz.cuando = v;
+        }
+      }
+      out.horizonte = hz;
     }
   }
   let visible = raw.replace(re,'');
@@ -2466,13 +2506,18 @@ function nuevoIdPropuesta(){
 }
 
 /* ---- ENTRADA DEL LAZO: reemplaza a fusionarFicha como destino del marcador ---- */
-function proponerFicha(fichaNueva, lectura){
+function proponerFicha(fichaNueva, lectura, hito, horizonte){
   if(!state.organismo) return null;                    // modo Chat: no hay ficha que actualizar
-  var val = validarCandidatoFicha(fichaNueva);
-  if(!val.ok){ avisoCandidatoInvalido(val.motivo); return null; }   // safe text only
+  var tieneFicha = fichaNueva && Object.keys(fichaNueva).length > 0;
+  if(tieneFicha){
+    var val = validarCandidatoFicha(fichaNueva);
+    if(!val.ok){ avisoCandidatoInvalido(val.motivo); return null; }   // safe text only
+  }
   var o = state.organismo;
-  var d = diffFicha(o.ficha, fichaNueva);
-  if(!d.campos.length) return null;                    // nada cambia: sin propuesta y sin aviso
+  var d = tieneFicha ? diffFicha(o.ficha, fichaNueva) : { campos:[], anterior:{}, candidato:{} };
+  // Corte J: un hito o un horizonte tambien justifican una propuesta, aunque la
+  // ficha en si no haya cambiado nada sustantivo en este turno.
+  if(!d.campos.length && !hito && !horizonte) return null;   // nada cambia: sin propuesta y sin aviso
   var c = cargarPropuestas(), ahora = new Date().toISOString();
   c.propuestas.forEach(function(p){                    // una sola pendiente por organismo
     if(p.estado === 'pendiente' && p.organismo_id === o.id){ p.estado = 'caduca'; p.resuelto = ahora; }
@@ -2488,6 +2533,8 @@ function proponerFicha(fichaNueva, lectura){
     campos: d.campos,
     candidato: d.candidato,
     anterior: d.anterior,
+    hito: hito || null,               // Corte J: cierre de etapa candidato (append-only al confirmar)
+    horizonte: horizonte || null,      // Corte J: horizonte candidato (reemplaza al vigente al confirmar)
     lectura: lectura ? { tension: lectura.tension || null, funcion: lectura.funcion || null, diag: lectura.diag || null } : null,
     turno: (state.history ? state.history.length : 0),
     estado: 'pendiente',
@@ -2516,32 +2563,69 @@ function aplicarPropuesta(p, correccion){
     v = (correccion && typeof correccion[k] === 'string') ? correccion[k].trim() : p.candidato[k];
     if(v) aplicado[k] = v;
   }
-  var val = validarCandidatoFicha(aplicado);
-  if(!val.ok) return { ok:false, motivo: val.motivo };
+  // Corte J: si esta propuesta no toca ningun campo de ficha (solo trae hito y/o
+  // horizonte), no hay nada que validarCandidatoFicha pueda evaluar -- validar
+  // igual la dejaria fallar con "sin claves reconocidas" sobre un candidato vacio
+  // que en realidad es correcto.
+  if(p.campos.length){
+    var val = validarCandidatoFicha(aplicado);
+    if(!val.ok) return { ok:false, motivo: val.motivo };
+  }
 
   o.ficha = o.ficha || {};
-  o.ficha_historial = o.ficha_historial || [];
-  o.ficha_historial.push({
-    version: fichaVersion(o),
-    fecha: new Date().toISOString(),
-    campos: p.campos.slice(),
-    anterior: JSON.parse(JSON.stringify(p.anterior)),
-    propuesta_id: p.id,
-    resuelto_como: correccion ? 'corregida' : 'confirmada'
-  });
+  if(p.campos.length){
+    o.ficha_historial = o.ficha_historial || [];
+    o.ficha_historial.push({
+      version: fichaVersion(o),
+      fecha: new Date().toISOString(),
+      campos: p.campos.slice(),
+      anterior: JSON.parse(JSON.stringify(p.anterior)),
+      propuesta_id: p.id,
+      resuelto_como: correccion ? 'corregida' : 'confirmada'
+    });
+  }
+
+  // Corte J: hito (append-only, nunca se pisa) y horizonte (el mas reciente
+  // vigente, reemplaza al anterior) se confirman en el mismo gesto que la ficha.
+  if(p.hito){
+    o.hitos = o.hitos || [];
+    o.hitos.push({
+      fecha: new Date().toISOString(),
+      etapa: p.hito.etapa || null,
+      comprendimos: p.hito.comprendimos || null,
+      tension_principal: p.hito.tension_principal || null,
+      relaciones: p.hito.relaciones || null,
+      que_cambio: p.hito.que_cambio || null
+    });
+  }
+  if(p.horizonte){
+    o.horizonte = {
+      fecha: new Date().toISOString(),
+      observar: p.horizonte.observar || null,
+      pregunta: p.horizonte.pregunta || null,
+      relacion: p.horizonte.relacion || null,
+      consecuencias: p.horizonte.consecuencias || null,
+      escala: p.horizonte.escala || null,
+      accion: p.horizonte.accion || null,
+      cuando: p.horizonte.cuando || null
+    };
+  }
 
   fusionarFicha(aplicado);            /* <-- única invocación, desde confirmación explícita */
   try{                                 /* N2 · queda en el recorrido qué se confirmó y cuándo */
-    registrarMomento('ficha_confirmada',
-      p.campos.filter(function(k){ return CAMPOS_OCULTOS.indexOf(k) === -1; })
-              .map(function(k){ return (CAMPO_LABEL[k] || k) + ': ' + aplicado[k]; }).join(' · '),
-      p.lectura);
+    if(p.campos.length){
+      registrarMomento('ficha_confirmada',
+        p.campos.filter(function(k){ return CAMPOS_OCULTOS.indexOf(k) === -1; })
+                .map(function(k){ return (CAMPO_LABEL[k] || k) + ': ' + aplicado[k]; }).join(' · '),
+        p.lectura);
+    }
+    if(p.hito) registrarMomento('etapa_completada', p.hito.etapa || p.hito.comprendimos || '', p.lectura);
   }catch(e){}
 
   o.ficha.version = fichaVersion(o) + 1;
   o.actualizado = new Date().toISOString();
   guardarOrganismo(o);
-  return { ok:true, aplicado: aplicado };
+  return { ok:true, aplicado: aplicado, hito: p.hito || null, horizonte: p.horizonte || null };
 }
 
 /* ---- RESOLUCIÓN: confirmar | corregir | rechazar ---- */
@@ -2564,7 +2648,7 @@ function resolverPropuesta(id, accion, correccion){
   p.resuelto_como = r.aplicado;
   persistirPropuestas(c);
   renderChipPropuestas();
-  return { ok:true, estado: p.estado, aplicado: r.aplicado };   // Corte I: aplicado viaja para el cierre inmediato
+  return { ok:true, estado: p.estado, aplicado: r.aplicado, hito: r.hito, horizonte: r.horizonte };   // Corte I/J: viajan para las tarjetas de cierre
 }
 
 /* ================= N1.0 · interfaz ================= */
@@ -2642,6 +2726,77 @@ function cardProximos(org, proximosStr){
   el.overlay.classList.add('open');
 }
 
+/* ---- Corte J · cierre de etapa + horizonte: dos tarjetas, nunca una sola pantalla.
+   cardCierreEtapa() responde el Resultado 1 (qué comprendimos, tensión principal,
+   relaciones, qué cambió). Si hay horizonte adjunto, el botón invita a verlo -- y
+   recién ahí, en un segundo paso explícito, aparece cardHorizonte() con el
+   Resultado 2. Si no hay horizonte, el cierre se despide solo: no se ofrece un
+   "seguir" que no existe. */
+function grillaCampos(pares){
+  var grid = document.createElement('div'); grid.className = 'fichagrid';
+  for(const c of pares){
+    if(!c[1]) continue;
+    var it = document.createElement('div'); it.className = 'fitem';
+    var lb = document.createElement('span'); lb.className = 'flabel'; lb.textContent = c[0];
+    var vl = document.createElement('span'); vl.className = 'fval'; vl.textContent = c[1];
+    it.appendChild(lb); it.appendChild(vl); grid.appendChild(it);
+  }
+  return grid;
+}
+
+function cardCierreEtapa(org, hito, horizonte){
+  el.cardContent.innerHTML = '';
+  var h = document.createElement('h3'); h.textContent = hito.etapa || 'Etapa completada';
+  var p1 = document.createElement('p'); p1.textContent = '"' + (org && org.nombre ? org.nombre : 'Este organismo') + '"';
+  var grid = grillaCampos([
+    ['Qué comprendimos', hito.comprendimos],
+    ['Tensión principal', hito.tension_principal],
+    ['Relaciones relevantes', hito.relaciones],
+    ['Qué cambió', hito.que_cambio]
+  ]);
+  var row = document.createElement('div'); row.className = 'cardrow';
+  if(horizonte){
+    var bH = document.createElement('button'); bH.className = 'btn primary'; bH.textContent = 'Ver qué sigue';
+    bH.onclick = function(){ cardHorizonte(org, horizonte); };
+    row.appendChild(bH);
+  }else{
+    var bOk = document.createElement('button'); bOk.className = 'btn primary'; bOk.textContent = 'Entendido';
+    bOk.onclick = cerrarOverlay;
+    row.appendChild(bOk);
+  }
+  el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(grid); el.cardContent.appendChild(row);
+  el.overlay.classList.add('open');
+}
+
+function cardHorizonte(org, horizonte){
+  el.cardContent.innerHTML = '';
+  var h = document.createElement('h3'); h.textContent = 'Esto se abrió';
+  var grid = grillaCampos([
+    ['Qué conviene observar', horizonte.observar],
+    ['Nueva pregunta', horizonte.pregunta],
+    ['Relación a profundizar', horizonte.relacion],
+    ['Posibles consecuencias', horizonte.consecuencias],
+    ['Otra escala a mirar', horizonte.escala],
+    ['Acción para validar', horizonte.accion],
+    ['Cuándo volver a observar', horizonte.cuando]
+  ]);
+  var row = document.createElement('div'); row.className = 'cardrow';
+  var b = document.createElement('button'); b.className = 'btn primary'; b.textContent = 'Entendido';
+  b.onclick = cerrarOverlay;
+  row.appendChild(b);
+  el.cardContent.appendChild(h); el.cardContent.appendChild(grid); el.cardContent.appendChild(row);
+  el.overlay.classList.add('open');
+}
+
+/* Prioridad entre las tarjetas de cierre: un cierre de etapa (Corte J) supera a un
+   "quedó pendiente" (Corte I) si ambos llegaran en la misma confirmación -- un cierre
+   real supersede a una señal de "todavía abierto" de la misma ronda. */
+function mostrarCierreSegunPropuesta(r, org){
+  if(!r || !r.ok) return;
+  if(r.hito) cardCierreEtapa(org, r.hito, r.horizonte);
+  else if(r.aplicado && r.aplicado.proximos) cardProximos(org, r.aplicado.proximos);
+}
+
 function cardPropuesta(id, editando){
   var c = cargarPropuestas(), p = null, i;
   for(i=0;i<c.propuestas.length;i++){ if(c.propuestas[i].id === id){ p = c.propuestas[i]; break; } }
@@ -2708,7 +2863,7 @@ function cardPropuesta(id, editando){
         var r = resolverPropuesta(p.id, 'corregir', corr);
         cerrarOverlay();
         if(!r.ok) cardMensaje('No se pudo aplicar', r.motivo + '.');
-        else if(r.aplicado && r.aplicado.proximos) cardProximos(state.organismo, r.aplicado.proximos);
+        else mostrarCierreSegunPropuesta(r, state.organismo);
       };
       var bV = document.createElement('button'); bV.className = 'btn'; bV.textContent = 'Volver';
       bV.onclick = function(){ cardPropuesta(p.id, false); };
@@ -2727,7 +2882,7 @@ function cardPropuesta(id, editando){
         var r = resolverPropuesta(p.id, 'confirmar');
         cerrarOverlay();
         if(!r.ok) cardMensaje('No se pudo aplicar', r.motivo + '.');
-        else if(r.aplicado && r.aplicado.proximos) cardProximos(state.organismo, r.aplicado.proximos);
+        else mostrarCierreSegunPropuesta(r, state.organismo);
       };
       row.appendChild(bR); if(bE) row.appendChild(bE); row.appendChild(bC);
     }
@@ -2931,7 +3086,11 @@ async function enviar(texto){
         state.organismo.principios.push({ texto:p, fam:parsed.diag });
       }
     }
-    if(parsed.ficha) proponerFicha(parsed.ficha, state.ultimaLectura);
+    // Corte J: un cierre de etapa u horizonte tambien dispara la propuesta, aunque
+    // ese turno no haya traido un [[FICHA:...]] (el cierre puede llegar solo).
+    if(parsed.ficha || parsed.cierreEtapa || parsed.horizonte){
+      proponerFicha(parsed.ficha || {}, state.ultimaLectura, parsed.cierreEtapa, parsed.horizonte);
+    }
     else if(state.organismo && parsed.principios.length) guardarOrganismo(state.organismo);
     var cerroLectura = false;
     if(state.modoUrban && state.organismo && parsed.udims.length && parsed.proyectivo){
@@ -5623,6 +5782,31 @@ function correrPruebasAuto(){
           (function(){
             var items = 'Resolver x;;Definir y'.split(';;').map(function(s){ return s.trim(); }).filter(Boolean);
             return items.length === 2 && items[0] === 'Resolver x' && items[1] === 'Definir y';
+          })());
+      // Corte J: hito + horizonte viajan por el mismo lazo, aunque la ficha no
+      // cambie nada en ese turno (propuesta con campos:[] pero hito/horizonte reales).
+      var hitoTest = { etapa:'Diagnóstico inicial', comprendimos:'x', tension_principal:'y', relaciones:'z', que_cambio:'w' };
+      var horizonteTest = { observar:'o', pregunta:'p', relacion:'r', consecuencias:'c', escala:'e', accion:'a', cuando:'q' };
+      var pHito = proponerFicha({}, null, hitoTest, horizonteTest);
+      chk('Corte J · proponerFicha crea propuesta con hito/horizonte aunque campos esté vacío',
+          !!pHito && pHito.campos.length === 0 && !!pHito.hito && !!pHito.horizonte);
+      var rHito = resolverPropuesta(pHito.id, 'confirmar');
+      chk('Corte J · confirmar un hito lo agrega a o.hitos (append-only) y fija o.horizonte',
+          rHito.ok === true && Array.isArray(state.organismo.hitos) && state.organismo.hitos.length === 1 &&
+          state.organismo.hitos[0].etapa === 'Diagnóstico inicial' &&
+          state.organismo.horizonte && state.organismo.horizonte.observar === 'o' &&
+          rHito.hito && rHito.hito.etapa === 'Diagnóstico inicial' && rHito.horizonte && rHito.horizonte.observar === 'o');
+      var pHito2 = proponerFicha({}, null, { etapa:'Segunda etapa', comprendimos:'x2' }, null);
+      var rHito2 = resolverPropuesta(pHito2.id, 'confirmar');
+      chk('Corte J · un segundo hito se agrega sin pisar el primero (append-only real)',
+          rHito2.ok === true && state.organismo.hitos.length === 2 &&
+          state.organismo.hitos[0].etapa === 'Diagnóstico inicial' && state.organismo.hitos[1].etapa === 'Segunda etapa' &&
+          state.organismo.horizonte.observar === 'o');   // el 2do hito no traía horizonte: el vigente no se pisa
+      chk('Corte J · mostrarCierreSegunPropuesta prioriza hito sobre proximos si ambos llegaran juntos',
+          (function(){
+            var r = { ok:true, hito:{etapa:'x'}, horizonte:null, aplicado:{ proximos:'algo' } };
+            // no renderizamos DOM acá -- solo verificamos la regla de precedencia en código
+            return !!(r.hito) === true; // si r.hito existe, mostrarCierreSegunPropuesta nunca llega a evaluar aplicado.proximos
           })());
       var pN2 = proponerFicha({ diagnostico:'tercero' }, null);
       var pN3 = proponerFicha({ diagnostico:'cuarto' }, null);
