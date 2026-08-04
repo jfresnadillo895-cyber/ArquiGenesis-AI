@@ -131,14 +131,20 @@ export default async function handler(req, res) {
           .split(';;').map((t) => t.trim()).filter(Boolean);
         if (!items.length) { omitidos++; continue; }
 
+        // Copy revisado con Javier (05/08): evitar lenguaje de deuda/error ("sin resolver"),
+        // orientar a continuar, y el boton lleva directo al organismo puntual -- no al
+        // panel general -- via el deep link que index.html ya sabe leer (?organismo=<id>).
         const nombreOrg = fila.nombre || 'tu organismo';
         const lineas = items.map((t) => '<li>' + String(t) + '</li>').join('');
-        const asunto = `"${nombreOrg}" quedó con algo pendiente`;
+        const asunto = `Tu análisis de "${nombreOrg}" quedó pendiente`;
+        const linkOrganismo = 'https://app.comprenderai.com/?organismo=' + encodeURIComponent(fila.organismo_id);
         const contenido =
           '<p>Hola,</p>' +
-          `<p>Tu organismo <strong>${nombreOrg}</strong> quedó con esto sin resolver:</p>` +
+          `<p>Tu análisis de <strong>${nombreOrg}</strong> quedó pendiente. Estos son los puntos que todavía necesitan atención:</p>` +
           `<ul>${lineas}</ul>` +
-          '<p><a href="https://app.comprenderai.com">Volver a Comprender AI</a></p>';
+          '<p>Podés retomarlo cuando quieras. Todo lo que avanzaste sigue guardado.</p>' +
+          `<p><a href="${linkOrganismo}">Continuar el análisis</a></p>` +
+          '<p style="color:#888;font-size:12px">Comprender AI<br>Producto de ARQUIGÉNESIS</p>';
 
         const r = await emitirYEnviarCorreo({
           SB_URL: url, SERVICE_KEY: clave,
