@@ -102,6 +102,27 @@ async function accionCancelarBaja(id, SB_URL, SERVICE_KEY, res) {
     res.status(502).json({ error: { message: 'No se pudo cancelar la eliminación.', codigo: 'fallo_cancelar' } });
     return;
   }
+
+  // Cierre técnico legal, Corte V (bloque 2): programar y ejecutar la eliminación ya tenían
+  // confirmación por correo desde el Corte P -- revocar no tenía ninguna. Best-effort, aislado
+  // (mismo criterio que el resto de emitirYEnviarCorreo en este archivo).
+  try {
+    const email = await obtenerEmailUsuario(id, SB_URL, SERVICE_KEY);
+    if (email) {
+      await emitirYEnviarCorreo({
+        SB_URL, SERVICE_KEY, organizationId: id, purposeId: 'cuenta_baja_cancelada', type: 'cuenta.baja_cancelada',
+        producer: 'cuenta', payload: {},
+        destinatario: email, asunto: 'Cancelamos la eliminación de tu cuenta de Comprender AI',
+        contenidoHtml:
+          '<p>Hola,</p>' +
+          '<p>Confirmamos que cancelamos la eliminación programada de tu cuenta. Tu cuenta sigue activa con normalidad.</p>' +
+          '<p style="color:#888;font-size:12px">Comprender AI<br>Producto de ARQUIGÉNESIS</p>',
+      });
+    }
+  } catch (e) {
+    // aislado a proposito -- ver la nota de arriba.
+  }
+
   res.status(200).json({ ok: true });
 }
 
