@@ -1007,23 +1007,53 @@
     capa.querySelector('#cpCerrar').addEventListener('click', cerrar);
 
     var estado = capa.querySelector('#cpEstado');
+
+    // Encargo 115 AG, Corte M (05/08): si ya hay una suscripcion paga activa, elegir OTRO
+    // plan ya no arma una suscripcion nueva en paralelo (ese era el riesgo real que motivo
+    // el freno original acá) -- ahora llama a /api/cambiar-plan, que cambia la suscripcion
+    // EXISTENTE (sube ya, o programa la baja para cuando termine el ciclo pagado). Sirve
+    // para los dos botones (Mercado Pago y Lemon Squeezy) por igual: /api/cambiar-plan
+    // reconoce solo la pasarela del lado del servidor, asi que ninguno de los dos necesita
+    // saber cual es -- ver lib/pasarela.js.
+    function llamarCambiarPlan(plan, b, textoOriginal){
+      b.disabled = true; b.textContent = 'Aplicando…'; estado.textContent = '';
+      tokenVigente().then(function(t){
+        if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
+        return _fetch('/api/cambiar-plan', {
+          method:'POST',
+          headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+          body: JSON.stringify({ plan: plan })
+        }).then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
+          .then(function(x){
+            b.disabled = false; b.textContent = textoOriginal;
+            if(!x.ok){
+              estado.textContent = (x.d && x.d.error && x.d.error.message) || 'No se pudo cambiar de plan.';
+              return;
+            }
+            var nombrePlan = (PLANES.filter(function(p){ return p.id === plan; })[0] || {}).nombre || plan;
+            if(x.d.aplicado === 'inmediato'){
+              estado.textContent = 'Listo, ya tenés el plan ' + nombrePlan + ' activo.';
+            } else if(x.d.aplicado === 'facturando_diferencia'){
+              estado.textContent = x.d.mensaje || 'Estamos procesando el cambio de plan.';
+            } else if(x.d.aplicado === 'programado'){
+              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
+              estado.textContent = 'Vas a pasar al plan ' + nombrePlan + ' el ' + fecha + '. Tu plan actual sigue activo hasta esa fecha.';
+            } else {
+              estado.textContent = 'Cambio de plan registrado.';
+            }
+            sincronizarSaldo();
+          });
+      }).catch(function(){
+        b.disabled = false; b.textContent = textoOriginal;
+        estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
+      });
+    }
+
     Array.prototype.forEach.call(capa.querySelectorAll('button[data-plan]'), function(b){
       b.addEventListener('click', function(){
         var plan = b.getAttribute('data-plan');
         var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Comprender · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
-        // Encargo 115 AG (05/08): todavia no existe un cambio de plan de verdad (subir/bajar
-        // sobre la MISMA suscripcion) -- api/suscribir.js siempre arma una suscripcion NUEVA en
-        // Mercado Pago. Sin este freno, alguien que ya paga un plan y elige otro terminaria con
-        // DOS suscripciones activas cobrando en paralelo, y perfiles.suscripcion (una sola
-        // columna) se pisaria con la mas nueva -- la vieja quedaria huerfana, cobrando sola,
-        // invisible para el sistema (ni eliminar-cuenta.js la encontraria para cancelarla). Este
-        // freno del lado del cliente es solo UX (evita el viaje al servidor); la funcion real
-        // esta del lado de api/suscribir.js, que rechaza esto mismo aunque este bloqueo no
-        // corriera. Se saca el dia que el cambio de plan real este construido.
-        if(perfilSuscripcionActiva){
-          estado.textContent = 'Ya tenés un plan pago activo. Para cambiar de plan escribinos a contacto@comprenderai.com mientras terminamos el cambio directo.';
-          return;
-        }
+        if(perfilSuscripcionActiva){ llamarCambiarPlan(plan, b, textoOriginal); return; }
         b.disabled = true; b.textContent = 'Preparando…'; estado.textContent = '';
         tokenVigente().then(function(t){
           if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
@@ -1061,16 +1091,12 @@
       a.addEventListener('click', function(e){
         e.preventDefault();
         var plan = a.getAttribute('data-ls');
-        // Encargo 115 AG (05/08): mismo freno que el boton de Mercado Pago (ver la nota completa
-        // ahi arriba) -- y ACA es el UNICO freno que existe: este link arma el checkout
-        // directo en el cliente, sin pasar por ningun endpoint propio, asi que no hay defensa
-        // de servidor detras (a diferencia de api/suscribir.js). Mientras no exista el cambio
-        // de plan real, bloquear ESTE click es la unica forma de evitar una segunda suscripcion
-        // en paralelo por la via internacional.
-        if(perfilSuscripcionActiva){
-          estado.textContent = 'Ya tenés un plan pago activo. Para cambiar de plan escribinos a contacto@comprenderai.com mientras terminamos el cambio directo.';
-          return;
-        }
+        // Encargo 115 AG, Corte M (05/08): si ya hay suscripcion activa no hace falta abrir
+        // ningun checkout nuevo -- /api/cambiar-plan reconoce la pasarela sola (lib/pasarela.js)
+        // y si resulta ser Lemon Squeezy, cambia la suscripcion EXISTENTE por API (PATCH), sin
+        // que el usuario tenga que volver a pasar por el checkout hospedado. Mismo camino que
+        // el boton de Mercado Pago -- ver llamarCambiarPlan más arriba.
+        if(perfilSuscripcionActiva){ llamarCambiarPlan(plan, a, a.textContent); return; }
         var pestana = window.open('', '_blank');
         tokenVigente().then(function(t){
           if(!t){ if(pestana) pestana.close(); cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
