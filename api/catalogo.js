@@ -40,7 +40,7 @@ export const PLANES = {
   },
   estudio: {
     id: 'estudio',
-    nombre: 'Pro · Estudio',
+    nombre: 'Comprender · Estudio',
     titulo: 'Comprender · Estudio',
     monto: 80000,
     umbral: 60000,
