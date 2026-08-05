@@ -5239,14 +5239,37 @@ function mostrarFichaDe(o){
 }
 
 function eliminarOrganismo(id){
-  const list = cargarOrganismos().filter(function(o){ return o.id !== id; });
-  persistirOrganismos(list);
-  cerrarOverlay();
-  if(state.organismo && state.organismo.id === id){
-    nuevaSesion(); // el organismo activo dejó de existir: volver al inicio
-  }else{
-    renderOrgList();
-  }
+  // Corte K (05/08): antes, esto solo tocaba localStorage -- el organismo seguia
+  // existiendo en el servidor para siempre, aunque la pantalla dijera que se habia
+  // borrado. Ahora se borra primero del lado del servidor (DELETE /api/organismos,
+  // ver api/organismos.js) y solo se toca lo local si el servidor confirmo el borrado.
+  // Si el servidor no contesta bien, NO se borra nada local -- es preferible que el
+  // organismo siga apareciendo (y el usuario pueda reintentar) a que la pantalla le
+  // mienta sobre algo que en realidad sigue guardado.
+  fetch('/api/organismos?cliente_id=' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function(r){ return r.ok; })
+    .catch(function(){ return false; })
+    .then(function(ok){
+      if(!ok){
+        el.cardContent.innerHTML = '';
+        const h = document.createElement('h3'); h.textContent = 'No se pudo eliminar';
+        const p = document.createElement('p'); p.textContent = 'No se pudo confirmar el borrado con el servidor. Probá de nuevo en un momento.';
+        const row = document.createElement('div'); row.className = 'cardrow';
+        const b = document.createElement('button'); b.className = 'btn primary'; b.textContent = 'Entendido';
+        b.onclick = cerrarOverlay;
+        row.appendChild(b);
+        el.cardContent.appendChild(h); el.cardContent.appendChild(p); el.cardContent.appendChild(row);
+        return;
+      }
+      const list = cargarOrganismos().filter(function(o){ return o.id !== id; });
+      persistirOrganismos(list);
+      cerrarOverlay();
+      if(state.organismo && state.organismo.id === id){
+        nuevaSesion(); // el organismo activo dejó de existir: volver al inicio
+      }else{
+        renderOrgList();
+      }
+    });
 }
 
 function mostrarAcerca(){
