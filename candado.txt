@@ -64,6 +64,8 @@
   var LS_STORE = 'comprenderai';   // subdominio de la tienda en Lemon Squeezy (Corte B.6, pago internacional)
   var perfilId = null;   // uuid de la fila propia en perfiles; lo necesita el checkout de Lemon Squeezy
   var perfilBajaProgramada = null;   // Corte L: fecha ISO si hay una eliminacion de cuenta en curso, o null
+  var perfilSuscripcionActiva = false;   // Encargo 115 AG (05/08): true si ya hay un plan pago en curso --
+                                          // ver la nota junto al bloqueo del boton "Elegir <plan>" mas abajo
 
   /* ---------- sesion guardada ---------- */
   function leer(){
@@ -239,10 +241,19 @@
       mostrarChipCuenta();
       mostrarChipBandeja();
       mostrarFooterMovil();
-      return fetch(SB_URL + '/rest/v1/perfiles?select=id,plan,saldo,baja_programada', {
+      return fetch(SB_URL + '/rest/v1/perfiles?select=id,plan,saldo,baja_programada,suscripcion,estado', {
         headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t }
       }).then(function(r){ return r.ok ? r.json() : null; })
-        .then(function(f){ if(f && f[0]){ perfilId = f[0].id; perfilBajaProgramada = f[0].baja_programada || null; anotarSaldo(f[0].plan, f[0].saldo); } })
+        .then(function(f){ if(f && f[0]){
+          perfilId = f[0].id;
+          perfilBajaProgramada = f[0].baja_programada || null;
+          // Encargo 115 AG (05/08): mientras no exista un cambio de plan de verdad (ver
+          // api/suscribir.js), un plan pago con suscripcion activa/en gracia se trata como
+          // "ya suscripto" -- el boton de elegir otro plan se bloquea en vez de dejar crear
+          // una segunda suscripcion en paralelo (ver nota completa junto al bloqueo).
+          perfilSuscripcionActiva = !!f[0].suscripcion && (f[0].estado === 'activo' || f[0].estado === 'gracia') && f[0].plan !== 'gratis';
+          anotarSaldo(f[0].plan, f[0].saldo);
+        } })
         .catch(function(){});
     });
   }
@@ -888,15 +899,15 @@
       excluye:[],
       boton:'Elegir Profesional',
       destacado:false },
-    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
+    { id:'estudio', nombre:'Comprender · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
       lema:'Para estudios y prácticas profesionales con mayor escala',
       incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
       excluye:[],
-      boton:'Elegir Pro · Estudio',
+      boton:'Elegir Comprender · Estudio',
       destacado:true },
     { id:'magister', nombre:'Magister', precio:'$160.000', creditos:'9.000 créditos por mes', precioUsd:79,
       lema:'Para investigaciones extensas, profundas y sostenidas',
-      incluye:['Todo lo incluido en Pro · Estudio','Mayor capacidad para procesos prolongados','Continuidad sobre organismos complejos','Memoria, trazabilidad y exploración relacional intensivas'],
+      incluye:['Todo lo incluido en Comprender · Estudio','Mayor capacidad para procesos prolongados','Continuidad sobre organismos complejos','Memoria, trazabilidad y exploración relacional intensivas'],
       excluye:[],
       boton:'Elegir Magister',
       destacado:false }
@@ -914,7 +925,7 @@
 
     var aviso = '';
     if(motivo === 'sin_saldo')     aviso = 'Se te terminaron los créditos.';
-    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Pro · Estudio.';
+    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Comprender · Estudio.';
 
     var tarjetas = PLANES.map(function(p){
       var creditosItem = '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
@@ -999,7 +1010,20 @@
     Array.prototype.forEach.call(capa.querySelectorAll('button[data-plan]'), function(b){
       b.addEventListener('click', function(){
         var plan = b.getAttribute('data-plan');
-        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Pro · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
+        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Comprender · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
+        // Encargo 115 AG (05/08): todavia no existe un cambio de plan de verdad (subir/bajar
+        // sobre la MISMA suscripcion) -- api/suscribir.js siempre arma una suscripcion NUEVA en
+        // Mercado Pago. Sin este freno, alguien que ya paga un plan y elige otro terminaria con
+        // DOS suscripciones activas cobrando en paralelo, y perfiles.suscripcion (una sola
+        // columna) se pisaria con la mas nueva -- la vieja quedaria huerfana, cobrando sola,
+        // invisible para el sistema (ni eliminar-cuenta.js la encontraria para cancelarla). Este
+        // freno del lado del cliente es solo UX (evita el viaje al servidor); la funcion real
+        // esta del lado de api/suscribir.js, que rechaza esto mismo aunque este bloqueo no
+        // corriera. Se saca el dia que el cambio de plan real este construido.
+        if(perfilSuscripcionActiva){
+          estado.textContent = 'Ya tenés un plan pago activo. Para cambiar de plan escribinos a contacto@comprenderai.com mientras terminamos el cambio directo.';
+          return;
+        }
         b.disabled = true; b.textContent = 'Preparando…'; estado.textContent = '';
         tokenVigente().then(function(t){
           if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
@@ -1037,6 +1061,16 @@
       a.addEventListener('click', function(e){
         e.preventDefault();
         var plan = a.getAttribute('data-ls');
+        // Encargo 115 AG (05/08): mismo freno que el boton de Mercado Pago (ver la nota completa
+        // ahi arriba) -- y ACA es el UNICO freno que existe: este link arma el checkout
+        // directo en el cliente, sin pasar por ningun endpoint propio, asi que no hay defensa
+        // de servidor detras (a diferencia de api/suscribir.js). Mientras no exista el cambio
+        // de plan real, bloquear ESTE click es la unica forma de evitar una segunda suscripcion
+        // en paralelo por la via internacional.
+        if(perfilSuscripcionActiva){
+          estado.textContent = 'Ya tenés un plan pago activo. Para cambiar de plan escribinos a contacto@comprenderai.com mientras terminamos el cambio directo.';
+          return;
+        }
         var pestana = window.open('', '_blank');
         tokenVigente().then(function(t){
           if(!t){ if(pestana) pestana.close(); cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
