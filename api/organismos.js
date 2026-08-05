@@ -1,10 +1,17 @@
 // api/organismos.js — Persistencia de organismos ligada a la cuenta (Corte 0.5)
 // ---------------------------------------------------------------------------------------------
 // QUE HACE
-//   GET  → lista los organismos del usuario en sesion (activos y archivados).
-//   POST → guarda uno (crea si es nuevo, actualiza si ya existe) usando cliente_id para
-//          reconocerlo sin duplicar. Si alguien mas ya guardo una version mas nueva,
-//          NO la pisa: devuelve conflicto:true con la version real del servidor.
+//   GET    → lista los organismos del usuario en sesion (activos y archivados).
+//   POST   → guarda uno (crea si es nuevo, actualiza si ya existe) usando cliente_id para
+//            reconocerlo sin duplicar. Si alguien mas ya guardo una version mas nueva,
+//            NO la pisa: devuelve conflicto:true con la version real del servidor.
+//   DELETE → borra un organismo puntual (?cliente_id=...) de verdad, del lado del servidor.
+//            Corte K (05/08): antes de esto, "eliminar organismo" en index.html solo borraba
+//            de localStorage -- el organismo seguia existiendo en Supabase para siempre. Eso
+//            le mentia al usuario sobre lo que acababa de pasar (ver Resolucion de Criterio
+//            Legal, punto 3). Este metodo cierra ese hueco: el DELETE esta acotado al perfil
+//            de la sesion (WHERE perfil=eq.<perfil> AND cliente_id=eq.<id>), nunca a un id
+//            suelto -- nadie puede borrar el organismo de otra cuenta con esto.
 //
 // POR QUE cliente_id
 //   Es el id que el organismo ya tiene hoy en localStorage (ag_core_organismos). Usarlo tal
@@ -58,8 +65,8 @@ async function rpc(nombre, cuerpo, url, secreta) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    res.setHeader('Allow', 'GET, POST');
+  if (req.method !== 'GET' && req.method !== 'POST' && req.method !== 'DELETE') {
+    res.setHeader('Allow', 'GET, POST, DELETE');
     return res.status(405).json({ error: { message: 'Metodo no permitido.' } });
   }
 
@@ -101,6 +108,28 @@ export default async function handler(req, res) {
     } catch (e) {
       registrar({ error: 'fallo_listar', perfil: perfil.slice(0, 8), detalle: String((e && e.message) || e) });
       return res.status(503).json({ error: { message: 'No se pudieron traer los organismos. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+    }
+  }
+
+  // --- DELETE: borrar un organismo puntual, de verdad ---
+  if (req.method === 'DELETE') {
+    const clienteId = String((req.query && req.query.cliente_id) || '').trim();
+    if (!clienteId) {
+      return res.status(400).json({ error: { message: 'Falta cliente_id.' } });
+    }
+    try {
+      const ruta = '/rest/v1/organismos?perfil=eq.' + perfil + '&cliente_id=eq.' + encodeURIComponent(clienteId);
+      const r = await fetch(SB_URL + ruta, {
+        method: 'DELETE',
+        headers: { apikey: SERVICE_KEY, Authorization: 'Bearer ' + SERVICE_KEY, Prefer: 'return=representation' },
+      });
+      if (!r.ok) throw new Error('borrar devolvio ' + r.status);
+      const borrados = await r.json().catch(() => []);
+      registrar({ accion: 'borrado', perfil: perfil.slice(0, 8), cliente_id: clienteId, encontrado: Array.isArray(borrados) && borrados.length > 0 });
+      return res.status(200).json({ ok: true, encontrado: Array.isArray(borrados) && borrados.length > 0 });
+    } catch (e) {
+      registrar({ error: 'fallo_borrar', perfil: perfil.slice(0, 8), cliente_id: clienteId, detalle: String((e && e.message) || e) });
+      return res.status(503).json({ error: { message: 'No se pudo borrar. Volve a intentar.', codigo: 'servicio_no_disponible' } });
     }
   }
 
