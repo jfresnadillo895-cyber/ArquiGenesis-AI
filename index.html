@@ -1413,15 +1413,15 @@ header .spacer{flex:1}
       excluye:[],
       boton:'Elegir Profesional',
       destacado:false },
-    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
+    { id:'estudio', nombre:'Comprender · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
       lema:'Para estudios y prácticas profesionales con mayor escala',
       incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
       excluye:[],
-      boton:'Elegir Pro · Estudio',
+      boton:'Elegir Comprender · Estudio',
       destacado:true },
     { id:'magister', nombre:'Magister', precio:'$160.000', creditos:'9.000 créditos por mes', precioUsd:79,
       lema:'Para investigaciones extensas, profundas y sostenidas',
-      incluye:['Todo lo incluido en Pro · Estudio','Mayor capacidad para procesos prolongados','Continuidad sobre organismos complejos','Memoria, trazabilidad y exploración relacional intensivas'],
+      incluye:['Todo lo incluido en Comprender · Estudio','Mayor capacidad para procesos prolongados','Continuidad sobre organismos complejos','Memoria, trazabilidad y exploración relacional intensivas'],
       excluye:[],
       boton:'Elegir Magister',
       destacado:false }
@@ -1439,7 +1439,7 @@ header .spacer{flex:1}
 
     var aviso = '';
     if(motivo === 'sin_saldo')     aviso = 'Se te terminaron los créditos.';
-    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Pro · Estudio.';
+    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Comprender · Estudio.';
 
     var tarjetas = PLANES.map(function(p){
       var creditosItem = '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
@@ -1524,7 +1524,7 @@ header .spacer{flex:1}
     Array.prototype.forEach.call(capa.querySelectorAll('button[data-plan]'), function(b){
       b.addEventListener('click', function(){
         var plan = b.getAttribute('data-plan');
-        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Pro · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
+        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Comprender · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
         b.disabled = true; b.textContent = 'Preparando…'; estado.textContent = '';
         tokenVigente().then(function(t){
           if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
@@ -3395,7 +3395,7 @@ const PLANES = {
   profesional: { nombre:'Profesional',   creditos: 1800, ventana:'mes',  precio:'USD 19/mes',
                  anual:'USD 190/año (2 meses sin cargo)',
                  desc:'Comprender AI completo, sin tope diario: bolsa mensual de créditos para conversar, construir organismos y generar informes. No incluye los módulos especializados.' },
-  estudio:     { nombre:'Pro · Estudio', creditos: 4500, ventana:'mes',  precio:'USD 49/mes',
+  estudio:     { nombre:'Comprender · Estudio', creditos: 4500, ventana:'mes',  precio:'USD 49/mes',
                  anual:'USD 490/año (2 meses sin cargo)',
                  desc:'Todo lo de Profesional y además habilita los módulos especializados — Comprender Urbanismo y Comprender Contextos — con lectura territorial completa, campo de fuerzas y PDF de presentación.' },
   /* 03/08: faltaba por completo -- un suscriptor Magister caia en PLANES.gratis (50 creditos,
@@ -3404,7 +3404,7 @@ const PLANES = {
      completan solo para no dejar esta entrada con menos campos que sus hermanas. */
   magister:    { nombre:'Magister',      creditos: 9000, ventana:'mes',  precio:'USD 79/mes',
                  anual:'USD 790/año (2 meses sin cargo)',
-                 desc:'Todo lo de Pro · Estudio, con el doble de créditos para investigaciones sostenidas sobre un organismo.' }
+                 desc:'Todo lo de Comprender · Estudio, con el doble de créditos para investigaciones sostenidas sobre un organismo.' }
 };
 
 // Paquete de recarga: salvavidas puntual, sin compromiso. Deliberadamente algo más caro

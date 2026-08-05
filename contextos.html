@@ -1223,15 +1223,15 @@ header header .cai-ham{flex-shrink:0}
       excluye:[],
       boton:'Elegir Profesional',
       destacado:false },
-    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
+    { id:'estudio', nombre:'Comprender · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
       lema:'Para estudios y prácticas profesionales con mayor escala',
       incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
       excluye:[],
-      boton:'Elegir Pro · Estudio',
+      boton:'Elegir Comprender · Estudio',
       destacado:true },
     { id:'magister', nombre:'Magister', precio:'$160.000', creditos:'9.000 créditos por mes', precioUsd:79,
       lema:'Para investigaciones extensas, profundas y sostenidas',
-      incluye:['Todo lo incluido en Pro · Estudio','Mayor capacidad para procesos prolongados','Continuidad sobre organismos complejos','Memoria, trazabilidad y exploración relacional intensivas'],
+      incluye:['Todo lo incluido en Comprender · Estudio','Mayor capacidad para procesos prolongados','Continuidad sobre organismos complejos','Memoria, trazabilidad y exploración relacional intensivas'],
       excluye:[],
       boton:'Elegir Magister',
       destacado:false }
@@ -1249,7 +1249,7 @@ header header .cai-ham{flex-shrink:0}
 
     var aviso = '';
     if(motivo === 'sin_saldo')     aviso = 'Se te terminaron los créditos.';
-    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Pro · Estudio.';
+    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Comprender · Estudio.';
 
     var tarjetas = PLANES.map(function(p){
       var creditosItem = '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
@@ -1334,7 +1334,7 @@ header header .cai-ham{flex-shrink:0}
     Array.prototype.forEach.call(capa.querySelectorAll('button[data-plan]'), function(b){
       b.addEventListener('click', function(){
         var plan = b.getAttribute('data-plan');
-        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Pro · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
+        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Comprender · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
         b.disabled = true; b.textContent = 'Preparando…'; estado.textContent = '';
         tokenVigente().then(function(t){
           if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
@@ -2982,7 +2982,7 @@ function caiToggle(boton){
 const CRED_PLANES = {
   gratis:      { nombre:'Gratis',        creditos: 50,   ventana:'unica' },
   profesional: { nombre:'Profesional',   creditos: 1800, ventana:'mes' },
-  estudio:     { nombre:'Pro · Estudio', creditos: 4500, ventana:'mes' },
+  estudio:     { nombre:'Comprender · Estudio', creditos: 4500, ventana:'mes' },
   magister:    { nombre:'Magister',      creditos: 9000, ventana:'mes' }   /* 03/08: faltaba -- un suscriptor Magister caia en 'gratis' aca */
 };
 const CRED_COSTO = { diagnostico: 12, proyectivo: 8, refinamiento: 3, campo: 12 };
