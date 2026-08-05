@@ -646,7 +646,9 @@ header .spacer{flex:1}
   var SB_KEY = 'sb_publishable_QbvJTscQJ63YjLasQ4p51w_0nLqwm6j';
   var TERMINOS_URL = 'https://www.comprenderai.com/legal/terminos';
   var PRIVACIDAD_URL = 'https://www.comprenderai.com/legal/privacidad';
-  var TERMINOS_VERSION = 'v1-2026-08-01';   // subir esto si el texto legal cambia de forma material
+  var TERMINOS_VERSION = 'v1-2026-08-01';     // subir esto si el texto de los Terminos cambia de forma material
+  var PRIVACIDAD_VERSION = 'v1-2026-08-01';   // Cierre tecnico legal (05/08): independiente de TERMINOS_VERSION --
+                                               // subir esta si el texto de la Politica de Privacidad cambia sola
   var LLAVE   = 'comprender_sesion';
   var MARGEN  = 60000;   // se renueva un minuto antes de vencer
   var LS_STORE = 'comprenderai';   // subdominio de la tienda en Lemon Squeezy (Corte B.6, pago internacional)
@@ -960,6 +962,9 @@ header .spacer{flex:1}
           var consentimiento = {
             terminos_aceptados: true,
             terminos_version: TERMINOS_VERSION,
+            privacidad_aceptada: true,
+            privacidad_version: PRIVACIDAD_VERSION,
+            origen: 'registro_web',
             terminos_fecha: new Date().toISOString()
           };
           registrar(c,k,consentimiento).then(function(r){
