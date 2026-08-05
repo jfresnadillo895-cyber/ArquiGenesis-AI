@@ -71,14 +71,18 @@
 
 import { emitirYEnviarCorreo, obtenerEmailUsuario } from '../lib/comm-emitir.js';
 import { eliminarCuentaCompleta } from '../lib/cuenta.js';
+import { pasarelaDe } from '../lib/pasarela.js';
+import { PLANES } from './catalogo.js';
 
 const registrar = (o) => console.log(JSON.stringify({ evento: 'comm_cron', ...o }));
 
-async function rpc(nombre, url, clave) {
+async function rpc(nombre, url, clave, parametros) {
   const r = await fetch(url + '/rest/v1/rpc/' + nombre, {
     method: 'POST',
     headers: { apikey: clave, Authorization: 'Bearer ' + clave, 'content-type': 'application/json' },
-    body: '{}',
+    body: JSON.stringify(parametros || {}),   // Corte M: parametros opcional -- todas las
+                                               // llamadas anteriores seguian mandando '{}' via
+                                               // el default, ningun llamador existente cambia
   });
   if (!r.ok) throw new Error(nombre + ' devolvio ' + r.status + ' ' + (await r.text()).slice(0, 200));
   return r.json();
@@ -350,6 +354,74 @@ export default async function handler(req, res) {
   } catch (e) {
     huboError = true;
     resultado.error_conversaciones_limpiadas = String((e && e.message) || e);
+  }
+
+  // 10. Corte M — aplicar downgrades de plan ya vencidos (Encargo 115 AG, bloque 4.2).
+  //     api/cambiar-plan.js solo ANOTA perfiles.plan_pendiente cuando el pedido es bajar de
+  //     plan -- no toca la pasarela en ese momento (la baja no debe retirar de inmediato
+  //     prestaciones ya pagadas). Este paso es el que de verdad la aplica, el dia que vence
+  //     se cumple: actualiza el monto/variante en la pasarela para que el PROXIMO cobro ya
+  //     sea el del plan nuevo, y acredita el plan nuevo en la base en el mismo momento --
+  //     sin esperar a que un webhook de renovacion llegue (podria no coincidir exacto con
+  //     nuestro `vence`), mismo criterio que el credito inmediato del upgrade.
+  try {
+    const candidatos = await rpc('comm_detectar_downgrades_vencidos', url, clave);
+    const lista = Array.isArray(candidatos) ? candidatos : [];
+    let aplicados = 0, fallidos = 0;
+
+    for (const fila of lista) {
+      try {
+        const planNuevo = PLANES[fila.plan_pendiente];
+        if (!planNuevo) { fallidos++; registrar({ error: 'downgrade_plan_pendiente_invalido', perfil: fila.perfil, plan_pendiente: fila.plan_pendiente }); continue; }
+
+        const pasarela = await pasarelaDe(fila.perfil, url, clave);
+        if (!pasarela) { fallidos++; registrar({ error: 'downgrade_pasarela_no_reconocida', perfil: fila.perfil }); continue; }
+
+        if (pasarela === 'mercadopago') {
+          const token = process.env.MP_ACCESS_TOKEN;
+          if (!token) throw new Error('falta MP_ACCESS_TOKEN');
+          const rPut = await fetch('https://api.mercadopago.com/preapproval/' + fila.suscripcion, {
+            method: 'PUT',
+            headers: { Authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+            body: JSON.stringify({ reason: planNuevo.titulo, auto_recurring: { transaction_amount: planNuevo.monto } }),
+          });
+          if (!rPut.ok) throw new Error('mercadopago PUT preapproval devolvio ' + rPut.status);
+        } else {
+          const apiKey = process.env.LEMONSQUEEZY_API_KEY;
+          if (!apiKey) throw new Error('falta LEMONSQUEEZY_API_KEY');
+          if (!planNuevo.ls_variant_id) throw new Error('plan sin ls_variant_id: ' + fila.plan_pendiente);
+          const rPatch = await fetch('https://api.lemonsqueezy.com/v1/subscriptions/' + fila.suscripcion, {
+            method: 'PATCH',
+            headers: {
+              Accept: 'application/vnd.api+json', 'Content-Type': 'application/vnd.api+json',
+              Authorization: 'Bearer ' + apiKey,
+            },
+            body: JSON.stringify({
+              data: {
+                type: 'subscriptions', id: String(fila.suscripcion),
+                // invoice_immediately:false a proposito -- el downgrade no debe generar un
+                // cobro extra hoy, el cambio de monto rige desde la proxima factura sola.
+                attributes: { variant_id: planNuevo.ls_variant_id, invoice_immediately: false },
+              },
+            }),
+          });
+          if (!rPatch.ok) throw new Error('lemonsqueezy PATCH subscription devolvio ' + rPatch.status);
+        }
+
+        await rpc('cambiar_plan_credito_inmediato', url, clave, {
+          p_perfil: fila.perfil, p_plan_nuevo: fila.plan_pendiente, p_direccion: 'downgrade', p_pasarela: pasarela,
+        });
+        aplicados++;
+      } catch (eFila) {
+        fallidos++;
+        registrar({ error: 'fallo_fila_downgrade', perfil: fila && fila.perfil, detalle: String((eFila && eFila.message) || eFila) });
+      }
+    }
+
+    resultado.downgrades_aplicados = { candidatos: lista.length, aplicados, fallidos };
+  } catch (e) {
+    huboError = true;
+    resultado.error_downgrades = String((e && e.message) || e);
   }
 
   console.log(JSON.stringify(resultado));

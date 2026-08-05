@@ -80,6 +80,42 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: { message: 'Plan invalido.' } });
   }
 
+  // --- Freno contra suscripciones duplicadas (Encargo 115 AG, 05/08) ---
+  //   Este endpoint SIEMPRE armaba una preapproval nueva en Mercado Pago, sin mirar si
+  //   perfiles.suscripcion ya tenia una suscripcion paga en curso. Eso todavia no es un
+  //   cambio de plan real (subir/bajar sobre la MISMA suscripcion, con prorrateo) -- es
+  //   una SEGUNDA suscripcion corriendo en paralelo con la primera. `perfiles.suscripcion`
+  //   es una sola columna de texto: en cuanto la segunda se acredita, pisa la referencia a
+  //   la primera, que sigue cobrando sola, invisible para el sistema (ni eliminar-cuenta.js
+  //   la encuentra para cancelarla). Hasta que el cambio de plan real este construido, se
+  //   rechaza acá cualquier intento con una suscripcion paga ya activa/en gracia -- el
+  //   freno del lado del cliente (candado.txt) es solo UX; este es el que de verdad protege.
+  try {
+    const sbUrl = String(process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+    const rPerfil = await fetch(
+      sbUrl + '/rest/v1/perfiles?id=eq.' + usuario.id + '&select=plan,suscripcion,estado',
+      { headers: { apikey: process.env.SUPABASE_SECRET_KEY, Authorization: 'Bearer ' + process.env.SUPABASE_SECRET_KEY } }
+    );
+    const filas = rPerfil.ok ? await rPerfil.json().catch(() => []) : [];
+    const actual = filas && filas[0];
+    const yaSuscripto = !!(actual && actual.suscripcion && actual.plan !== 'gratis' &&
+      (actual.estado === 'activo' || actual.estado === 'gracia'));
+    if (yaSuscripto) {
+      registrar({ accion: 'rechazado_ya_suscripto', perfil: usuario.id.slice(0, 8), plan_actual: actual.plan, plan_pedido: pedido });
+      return res.status(409).json({
+        error: {
+          message: 'Ya tenés un plan pago activo. Para cambiar de plan escribinos a contacto@comprenderai.com mientras terminamos el cambio directo.',
+          codigo: 'ya_suscripto',
+        },
+      });
+    }
+  } catch (e) {
+    // Best-effort: si esta verificacion falla (Supabase caido, etc.), no se bloquea el alta
+    // de una cuenta que hoy no tiene ninguna suscripcion sospechada -- se registra y se sigue,
+    // el mismo criterio de "solo el paso mas consecuente bloquea" que ya rige en lib/cuenta.js.
+    registrar({ aviso: 'no se pudo verificar suscripcion existente, se continua', detalle: String((e && e.message) || e) });
+  }
+
   // --- Crear la suscripción ---
   // Sobre payer_email: lo sacamos el 24/07 porque con credenciales de prueba, si
   // el correo coincidía con la cuenta que cobra, el checkout se trababa. Pero el
