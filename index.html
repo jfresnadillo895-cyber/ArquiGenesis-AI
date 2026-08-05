@@ -603,15 +603,19 @@ header .spacer{flex:1}
      7. Mientras hay sesion, agrega un boton fijo ("Cuenta") que abre un panel con: el correo
         logueado, cambiar contraseña (pide la actual, la vuelve a autenticar contra Supabase y
         recien ahi cambia), cerrar sesión, y eliminar la cuenta (pide escribir una palabra de
-        confirmacion, y llama a /api/eliminar-cuenta -- ver mas abajo).
+        confirmacion, y llama a /api/cuenta (accion:'eliminar') -- ver mas abajo).
 
    ELIMINAR CUENTA · ENDPOINT NUEVO EN EL SERVIDOR
      Borrar el usuario de Auth necesita la clave de servicio, que nunca viaja al navegador. Este
-     archivo llama a POST /api/eliminar-cuenta con el token de sesion; ese endpoint (entregado
-     aparte, api/eliminar-cuenta.js) valida el token. Corte L (05/08): ya no borra al instante --
-     programa perfiles.baja_programada = ahora+7 dias; el borrado real (lib/cuenta.js) lo ejecuta
-     el cron cuando ese plazo se cumple, o api/cancelar-baja.js revierte el pedido si el usuario
-     se arrepiente antes. CORRECCION (05/08, contra lo que decia esta nota desde el 29/07):
+     archivo llama a POST /api/cuenta (accion:'eliminar') con el token de sesion; ese endpoint
+     (entregado aparte, api/cuenta.js -- unifica lo que hasta el 05/08 eran tres archivos
+     separados: eliminar-cuenta.js, cancelar-baja.js, cancelar-downgrade.js, por el limite de
+     12 Funciones Serverless de Vercel, ver la nota completa en su cabecera) valida el token.
+     Corte L (05/08): ya no borra al instante -- programa perfiles.baja_programada = ahora+7
+     dias; el borrado real (lib/cuenta.js) lo ejecuta el cron cuando ese plazo se cumple, o
+     POST /api/cuenta (accion:'cancelar_baja') revierte el pedido si el usuario se arrepiente
+     antes -- aunque esta pagina en particular no tiene UI para cancelar la baja (solo
+     candado.txt la tiene). CORRECCION (05/08, contra lo que decia esta nota desde el 29/07):
      perfiles.id SI tiene FK real hacia auth.users (perfiles_id_fkey, ON DELETE CASCADE,
      confirmado en vivo) -- borrar el usuario de Auth borra la fila de perfiles solo. consumo
      cascada desde perfiles; pagos conserva el historial con perfil=NULL, a proposito.
@@ -1136,9 +1140,13 @@ header .spacer{flex:1}
           ocupado(true,'Eliminando…'); avisoEl.textContent='';
           tokenVigente().then(function(t){
             if(!t){ avisoEl.textContent='Tu sesión venció. Cerrá esto y volvé a entrar.'; ocupado(false,'Eliminar mi cuenta'); return; }
-            _fetch('/api/eliminar-cuenta', {
+            // Corte U (Cierre tecnico legal, 05/08): /api/eliminar-cuenta ya no existe -- se
+            // unifico en /api/cuenta (accion en el body) desde el Corte M (05/08). Esta pagina
+            // habia quedado con la llamada vieja -- bug real en vivo, corregido aca.
+            _fetch('/api/cuenta', {
               method:'POST',
-              headers:{ Authorization:'Bearer ' + t }
+              headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+              body: JSON.stringify({ accion:'eliminar' })
             }).then(function(r){
               if(r.ok){ borrar(); location.reload(); return; }
               return r.json().catch(function(){ return {}; }).then(function(d){
