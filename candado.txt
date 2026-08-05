@@ -60,6 +60,7 @@
   var MARGEN  = 60000;   // se renueva un minuto antes de vencer
   var LS_STORE = 'comprenderai';   // subdominio de la tienda en Lemon Squeezy (Corte B.6, pago internacional)
   var perfilId = null;   // uuid de la fila propia en perfiles; lo necesita el checkout de Lemon Squeezy
+  var perfilBajaProgramada = null;   // Corte L: fecha ISO si hay una eliminacion de cuenta en curso, o null
 
   /* ---------- sesion guardada ---------- */
   function leer(){
@@ -235,10 +236,10 @@
       mostrarChipCuenta();
       mostrarChipBandeja();
       mostrarFooterMovil();
-      return fetch(SB_URL + '/rest/v1/perfiles?select=id,plan,saldo', {
+      return fetch(SB_URL + '/rest/v1/perfiles?select=id,plan,saldo,baja_programada', {
         headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t }
       }).then(function(r){ return r.ok ? r.json() : null; })
-        .then(function(f){ if(f && f[0]){ perfilId = f[0].id; anotarSaldo(f[0].plan, f[0].saldo); } })
+        .then(function(f){ if(f && f[0]){ perfilId = f[0].id; perfilBajaProgramada = f[0].baja_programada || null; anotarSaldo(f[0].plan, f[0].saldo); } })
         .catch(function(){});
     });
   }
@@ -493,11 +494,24 @@
       } else if(vistaC === 'eliminar'){
         cuerpo =
           '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
-            'Esto borra tu cuenta, tu saldo y tu historial de uso. No se puede deshacer.</div>' +
+            'Al confirmar, tu cuenta queda programada para eliminarse en 7 días. Podés cancelar el pedido en cualquier momento antes de esa fecha, desde este mismo panel.</div>' +
           campo('ccConfirmar','text','Escribí ELIMINAR para confirmar','off') +
           boton('ccAccion','Eliminar mi cuenta') +
           enlace('ccVolver','Cancelar') +
           '<div id="ccAviso" style="font-size:13px;color:#b4441f;margin-top:8px;min-height:18px;"></div>';
+      } else if(perfilBajaProgramada){
+        // Corte L: hay una eliminacion en curso -- el panel deja de ofrecer "Eliminar cuenta"
+        // y en cambio muestra el plazo y la opcion de arrepentirse.
+        var fechaBaja = '';
+        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }); }
+        catch(e){ fechaBaja = perfilBajaProgramada; }
+        cuerpo =
+          '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
+            'Tu cuenta está programada para eliminarse el ' + fechaBaja + '. Hasta entonces podés seguir usándola con normalidad.</div>' +
+          botonSecundario('ccCancelarBaja','Cancelar eliminación', true) +
+          botonSecundario('ccIrClave','Cambiar contraseña') +
+          enlace('ccSalir','Cerrar sesión') +
+          '<div id="ccAviso" style="font-size:13px;color:#2a7;margin-top:8px;min-height:18px;"></div>';
       } else {
         cuerpo =
           botonSecundario('ccIrClave','Cambiar contraseña') +
@@ -512,9 +526,44 @@
 
     function cablear(){
       if(vistaC === 'inicio'){
-        capa.querySelector('#ccIrClave').addEventListener('click', function(){ vistaC='clave'; pintar(); });
-        capa.querySelector('#ccIrEliminar').addEventListener('click', function(){ vistaC='eliminar'; pintar(); });
-        capa.querySelector('#ccSalir').addEventListener('click', function(e){ e.preventDefault(); window.cerrarSesionComprender(); });
+        var irClave = capa.querySelector('#ccIrClave');
+        if(irClave) irClave.addEventListener('click', function(){ vistaC='clave'; pintar(); });
+        var irEliminar = capa.querySelector('#ccIrEliminar');
+        if(irEliminar) irEliminar.addEventListener('click', function(){ vistaC='eliminar'; pintar(); });
+        var salir = capa.querySelector('#ccSalir');
+        if(salir) salir.addEventListener('click', function(e){ e.preventDefault(); window.cerrarSesionComprender(); });
+
+        // Corte L: solo existe cuando perfilBajaProgramada esta seteado (ver pintar()).
+        var cancelarBaja = capa.querySelector('#ccCancelarBaja');
+        if(cancelarBaja){
+          cancelarBaja.addEventListener('click', function(){
+            var avisoEl2 = capa.querySelector('#ccAviso');
+            cancelarBaja.disabled = true; cancelarBaja.textContent = 'Cancelando…';
+            tokenVigente().then(function(t){
+              if(!t){
+                if(avisoEl2) avisoEl2.textContent = 'Tu sesión venció. Cerrá esto y volvé a entrar.';
+                cancelarBaja.disabled = false; cancelarBaja.textContent = 'Cancelar eliminación';
+                return;
+              }
+              _fetch('/api/cancelar-baja', { method:'POST', headers:{ Authorization:'Bearer ' + t } })
+                .then(function(r){
+                  if(r.ok){
+                    perfilBajaProgramada = null;
+                    mensajeCuenta = 'Listo, tu cuenta ya no está programada para eliminarse.';
+                    pintar();
+                    return;
+                  }
+                  return r.json().catch(function(){ return {}; }).then(function(d){
+                    cancelarBaja.disabled = false; cancelarBaja.textContent = 'Cancelar eliminación';
+                    if(avisoEl2) avisoEl2.textContent = (d && d.error && d.error.message) || 'No se pudo cancelar.';
+                  });
+                }).catch(function(){
+                  cancelarBaja.disabled = false; cancelarBaja.textContent = 'Cancelar eliminación';
+                  if(avisoEl2) avisoEl2.textContent = 'No se pudo conectar. Revisá tu conexión.';
+                });
+            });
+          });
+        }
         return;
       }
 
@@ -553,7 +602,17 @@
               method:'POST',
               headers:{ Authorization:'Bearer ' + t }
             }).then(function(r){
-              if(r.ok){ borrar(); location.reload(); return; }
+              if(r.ok){
+                // Corte L: ya no borra al instante -- queda programada. Se sigue con la
+                // sesion abierta (el usuario puede seguir usando la cuenta hasta la fecha,
+                // o arrepentirse desde este mismo panel).
+                return r.json().catch(function(){ return {}; }).then(function(d){
+                  perfilBajaProgramada = (d && d.baja_programada) || null;
+                  mensajeCuenta = 'Listo, tu cuenta quedó programada para eliminarse en 7 días. Podés cancelarlo cuando quieras desde este panel.';
+                  vistaC = 'inicio';
+                  pintar();
+                });
+              }
               return r.json().catch(function(){ return {}; }).then(function(d){
                 ocupado(false,'Eliminar mi cuenta');
                 avisoEl.textContent = (d && d.error && d.error.message) || 'No se pudo eliminar la cuenta.';
