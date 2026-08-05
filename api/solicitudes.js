@@ -78,7 +78,11 @@
 //   STAFF_API_KEY                         (NUEVA -- Javier tiene que cargarla en Vercel;
 //                                          sin ella, GET/PATCH devuelven 401 siempre)
 
-const TIPOS = ['arrepentimiento', 'baja_servicio'];
+// 'supresion_datos' agregado en el bloque 4.4 del encargo (Corte O, 05/08): a diferencia de
+// 'eliminar cuenta' (api/cuenta.js, automatica a los 7 dias), un pedido de supresion de datos
+// (Ley 25.326 art. 16) puede tener excepciones/obligaciones de conservacion que hace falta
+// analizar ANTES de ejecutar nada -- por eso entra por esta cola en vez del flujo automatico.
+const TIPOS = ['arrepentimiento', 'baja_servicio', 'supresion_datos'];
 const ESTADOS = ['recibido', 'en_validacion', 'ejecutado', 'rechazado', 'requiere_intervencion'];
 
 const registrar = (o) => console.log(JSON.stringify({ evento: 'solicitudes_legales', ...o }));
