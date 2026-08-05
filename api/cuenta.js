@@ -23,6 +23,8 @@
 //
 // Variables de entorno: SUPABASE_URL, SUPABASE_SECRET_KEY (ya cargadas)
 
+import { emitirYEnviarCorreo, obtenerEmailUsuario } from '../lib/comm-emitir.js';
+
 const SIETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function identificarUsuario(SB_URL, SERVICE_KEY, token) {
@@ -54,6 +56,30 @@ async function accionEliminar(id, SB_URL, SERVICE_KEY, res) {
     res.status(502).json({ error: { message: 'No se pudo programar la eliminación de la cuenta.', codigo: 'fallo_programar' } });
     return;
   }
+
+  // Corte P (Encargo 115 AG, bloque 4.5): §10 "Constancia" de los Términos promete confirmar
+  // por correo al PROGRAMAR la eliminación, con la fecha. Best-effort -- si el correo falla,
+  // la baja ya quedó programada igual (emitirYEnviarCorreo nunca lanza, ver lib/comm-emitir.js).
+  try {
+    const email = await obtenerEmailUsuario(id, SB_URL, SERVICE_KEY);
+    if (email) {
+      const fecha = new Date(bajaProgramada).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
+      await emitirYEnviarCorreo({
+        SB_URL, SERVICE_KEY, organizationId: id, purposeId: 'cuenta_baja_programada', type: 'cuenta.baja_programada',
+        producer: 'cuenta', payload: { baja_programada: bajaProgramada },
+        destinatario: email, asunto: 'Tu cuenta de Comprender AI va a eliminarse el ' + fecha,
+        contenidoHtml:
+          '<p>Hola,</p>' +
+          '<p>Programamos la eliminación de tu cuenta para el <strong>' + fecha + '</strong>. ' +
+          'Hasta ese momento, tu cuenta sigue funcionando con normalidad.</p>' +
+          '<p>Si te arrepentís, podés cancelar esto en cualquier momento antes de esa fecha, desde el panel de tu cuenta.</p>' +
+          '<p style="color:#888;font-size:12px">Comprender AI<br>Producto de ARQUIGÉNESIS</p>',
+      });
+    }
+  } catch (e) {
+    // aislado a proposito -- ver el comentario de arriba.
+  }
+
   res.status(200).json({ ok: true, baja_programada: bajaProgramada });
 }
 
