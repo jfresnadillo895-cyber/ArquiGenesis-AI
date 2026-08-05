@@ -41,6 +41,24 @@
 //   segundo: reconocer un cierre es distinto de recordar una deuda, y repetirlo lo convierte
 //   en presion -- exactamente lo que Javier pidio evitar (04/08).
 //
+// PASO 7 (Corte L): ejecutar bajas de cuenta ya programadas
+//   api/eliminar-cuenta.js ya no borra al instante: marca perfiles.baja_programada = ahora+7
+//   dias (periodo de seguridad, §7.4 del Compendio). Este paso busca las que ya vencieron sin
+//   haberse revocado (api/cancelar-baja.js) y ejecuta el borrado real con eliminarCuentaCompleta
+//   (lib/cuenta.js) -- la misma logica de cinco pasos que uso el Corte K, ahora compartida.
+//
+// PASO 8 (Corte L): avisos y baja por 24 meses de inactividad
+//   comm_detectar_cuentas_inactivas() (CORTE_L_MIGRACION.sql) devuelve, por cuenta, que accion
+//   corresponde: 'aviso_30' o 'aviso_7' (mandar el correo real, mismo mecanismo de siempre) o
+//   'eliminar' (ya se avisaron las dos veces y se cumplieron los 24 meses: ejecutar el borrado
+//   real, igual que el paso 7). Acotado a plan='gratis' -- ver la nota de alcance en la cabecera
+//   de CORTE_L_MIGRACION.sql: una cuenta que sigue pagando no se borra por "inactividad".
+//
+// PASO 9 (Corte L): limpieza de conversacion vencida (12 meses)
+//   limpiar_conversaciones_vencidas() borra SOLO datos.borrador (la conversacion cruda) de los
+//   organismos sin actividad hace mas de 12 meses -- la ficha, los principios, los hitos y el
+//   horizonte (la memoria destilada) no se tocan. No dispara ningun correo, es sola limpieza.
+//
 // LIMITE DEL PLAN HOBBY DE VERCEL
 //   Igual que api/latido.js: una corrida por dia como maximo. Para reconciliar timeouts de
 //   arrendamiento (5 minutos, ver comm_transicionar_job) alcanza sobrado -- lo que importa es
@@ -52,6 +70,7 @@
 //   3. Opcional pero recomendado: la misma variable CRON_SECRET que ya usa api/latido.js
 
 import { emitirYEnviarCorreo, obtenerEmailUsuario } from '../lib/comm-emitir.js';
+import { eliminarCuentaCompleta } from '../lib/cuenta.js';
 
 const registrar = (o) => console.log(JSON.stringify({ evento: 'comm_cron', ...o }));
 
@@ -63,6 +82,17 @@ async function rpc(nombre, url, clave) {
   });
   if (!r.ok) throw new Error(nombre + ' devolvio ' + r.status + ' ' + (await r.text()).slice(0, 200));
   return r.json();
+}
+
+// Corte L: el cron no tiene el token de nadie -- resuelve el email por Admin API a partir
+// del id, para poder sacarlo de comm_closed_recipients (paso 5 de eliminarCuentaCompleta).
+async function emailPorId(id, url, clave) {
+  const r = await fetch(url + '/auth/v1/admin/users/' + id, {
+    headers: { apikey: clave, Authorization: 'Bearer ' + clave },
+  });
+  if (!r.ok) return null;
+  const d = await r.json().catch(() => null);
+  return d && d.email ? d.email : null;
 }
 
 export default async function handler(req, res) {
@@ -233,6 +263,93 @@ export default async function handler(req, res) {
   } catch (e) {
     huboError = true;
     resultado.error_organismos_horizonte = String((e && e.message) || e);
+  }
+
+  // 7. Corte L — ejecutar bajas de cuenta ya programadas (periodo de 7 dias cumplido).
+  try {
+    const rVencidas = await fetch(
+      url + '/rest/v1/perfiles?baja_programada=not.is.null&baja_programada=lte.' +
+        encodeURIComponent(new Date().toISOString()) + '&select=id',
+      { headers: { apikey: clave, Authorization: 'Bearer ' + clave } }
+    );
+    if (!rVencidas.ok) throw new Error('listar bajas_programadas devolvio ' + rVencidas.status);
+    const lista = await rVencidas.json();
+    let ejecutadas = 0, fallidas = 0;
+
+    for (const fila of lista) {
+      try {
+        const email = await emailPorId(fila.id, url, clave);
+        const r = await eliminarCuentaCompleta({ id: fila.id, email, SB_URL: url, SERVICE_KEY: clave });
+        if (r.ok) ejecutadas++; else { fallidas++; registrar({ error: 'fallo_baja_programada', perfil: fila.id, motivo: r.motivo }); }
+      } catch (eFila) {
+        fallidas++;
+        registrar({ error: 'fallo_fila_baja_programada', perfil: fila && fila.id, detalle: String((eFila && eFila.message) || eFila) });
+      }
+    }
+
+    resultado.bajas_programadas = { candidatos: lista.length, ejecutadas, fallidas };
+  } catch (e) {
+    huboError = true;
+    resultado.error_bajas_programadas = String((e && e.message) || e);
+  }
+
+  // 8. Corte L — cuentas inactivas: avisos a los 30/7 dias antes de los 24 meses, y la
+  //    eliminacion real cuando ya se avisaron las dos veces y el plazo se cumplio.
+  try {
+    const candidatos = await rpc('comm_detectar_cuentas_inactivas', url, clave);
+    const lista = Array.isArray(candidatos) ? candidatos : [];
+    let avisos = 0, eliminadas = 0, omitidos = 0, fallidos = 0;
+
+    for (const fila of lista) {
+      try {
+        if (fila.accion === 'eliminar') {
+          const email = await emailPorId(fila.perfil, url, clave);
+          const r = await eliminarCuentaCompleta({ id: fila.perfil, email, SB_URL: url, SERVICE_KEY: clave });
+          if (r.ok) eliminadas++; else { fallidos++; registrar({ error: 'fallo_eliminar_cuenta_inactiva', perfil: fila.perfil, motivo: r.motivo }); }
+          continue;
+        }
+
+        // aviso_30 / aviso_7: correo real, mismo mecanismo que organismos_pendientes/horizonte.
+        const email = await obtenerEmailUsuario(fila.perfil, url, clave);
+        if (!email) { omitidos++; continue; }
+
+        const esUltimoAviso = fila.accion === 'aviso_7';
+        const asunto = esUltimoAviso
+          ? 'Tu cuenta de Comprender AI se elimina en 7 días por inactividad'
+          : 'Tu cuenta de Comprender AI lleva mucho tiempo inactiva';
+        const contenido =
+          '<p>Hola,</p>' +
+          `<p>Tu cuenta no tuvo actividad en casi dos años. ${esUltimoAviso ? 'En 7 días' : 'En 30 días'}, si seguís sin volver, se eliminará junto con los organismos guardados.</p>` +
+          '<p>Para conservarla alcanza con ingresar y usarla con normalidad.</p>' +
+          '<p><a href="https://app.comprenderai.com/">Ingresar a Comprender AI</a></p>' +
+          '<p style="color:#888;font-size:12px">Comprender AI<br>Producto de ARQUIGÉNESIS</p>';
+
+        const r = await emitirYEnviarCorreo({
+          SB_URL: url, SERVICE_KEY: clave,
+          organizationId: fila.perfil, purposeId: 'cuenta_inactiva_aviso', type: 'cuenta.inactiva_aviso',
+          producer: 'cuentas_inactivas',
+          payload: { tipo: fila.accion },
+          destinatario: email, asunto, contenidoHtml: contenido,
+        });
+        if (r && r.enviado) avisos++; else omitidos++;
+      } catch (eFila) {
+        fallidos++;
+        registrar({ error: 'fallo_fila_cuenta_inactiva', perfil: fila && fila.perfil, detalle: String((eFila && eFila.message) || eFila) });
+      }
+    }
+
+    resultado.cuentas_inactivas = { candidatos: lista.length, avisos, eliminadas, omitidos, fallidos };
+  } catch (e) {
+    huboError = true;
+    resultado.error_cuentas_inactivas = String((e && e.message) || e);
+  }
+
+  // 9. Corte L — limpieza de conversacion vencida (12 meses). No dispara correo, es limpieza pura.
+  try {
+    resultado.conversaciones_limpiadas = await rpc('limpiar_conversaciones_vencidas', url, clave);
+  } catch (e) {
+    huboError = true;
+    resultado.error_conversaciones_limpiadas = String((e && e.message) || e);
   }
 
   console.log(JSON.stringify(resultado));
