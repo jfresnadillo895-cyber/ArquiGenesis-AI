@@ -424,6 +424,29 @@ export default async function handler(req, res) {
     resultado.error_downgrades = String((e && e.message) || e);
   }
 
+  // 11. Corte W — limpieza de solicitudes_legales_intentos vencidos (90 dias). La migracion
+  //     del Corte W (05/08) ya creo limpiar_intentos_solicitudes_vencidos() y decia en su
+  //     comentario que se iba a conectar aca -- nunca se agrego el llamado. Se agrega ahora,
+  //     de paso, al tocar este archivo para el Corte X (mismo criterio de aislamiento que el
+  //     resto: no dispara correo, no puede tirar abajo nada mas).
+  try {
+    resultado.intentos_solicitudes_limpiados = await rpc('limpiar_intentos_solicitudes_vencidos', url, clave);
+  } catch (e) {
+    huboError = true;
+    resultado.error_intentos_solicitudes_limpiados = String((e && e.message) || e);
+  }
+
+  // 12. Corte X — limpieza de comm_events vencidos segun la politica de retencion por
+  //     categoria (evidencia legal: 5 anios: decision de Javier 05/08 -- telemetria
+  //     operativa: 180 dias -- pruebas internas: 30 dias). No dispara correo, es limpieza
+  //     pura. Ver CORTE_X_POLITICA_COMM_EVENTS.md.
+  try {
+    resultado.comm_events_limpiados = await rpc('limpiar_comm_events_vencidos', url, clave);
+  } catch (e) {
+    huboError = true;
+    resultado.error_comm_events_limpiados = String((e && e.message) || e);
+  }
+
   console.log(JSON.stringify(resultado));
   return res.status(huboError ? 503 : 200).json(resultado);
 }
