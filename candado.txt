@@ -19,15 +19,18 @@
      7. Mientras hay sesion, agrega un boton fijo ("Cuenta") que abre un panel con: el correo
         logueado, cambiar contraseña (pide la actual, la vuelve a autenticar contra Supabase y
         recien ahi cambia), cerrar sesión, y eliminar la cuenta (pide escribir una palabra de
-        confirmacion, y llama a /api/eliminar-cuenta -- ver mas abajo).
+        confirmacion, y llama a /api/cuenta (accion:'eliminar') -- ver mas abajo).
 
    ELIMINAR CUENTA · ENDPOINT NUEVO EN EL SERVIDOR
      Borrar el usuario de Auth necesita la clave de servicio, que nunca viaja al navegador. Este
-     archivo llama a POST /api/eliminar-cuenta con el token de sesion; ese endpoint (entregado
-     aparte, api/eliminar-cuenta.js) valida el token. Corte L (05/08): ya no borra al instante --
-     programa perfiles.baja_programada = ahora+7 dias; el borrado real (lib/cuenta.js) lo ejecuta
-     el cron cuando ese plazo se cumple, o api/cancelar-baja.js revierte el pedido si el usuario
-     se arrepiente antes. CORRECCION (05/08, contra lo que decia esta nota desde el 29/07):
+     archivo llama a POST /api/cuenta (accion:'eliminar') con el token de sesion; ese endpoint
+     (entregado aparte, api/cuenta.js -- unifica lo que hasta el 05/08 eran tres archivos
+     separados: eliminar-cuenta.js, cancelar-baja.js, cancelar-downgrade.js, por el limite de
+     12 Funciones Serverless de Vercel, ver la nota completa en su cabecera) valida el token.
+     Corte L (05/08): ya no borra al instante -- programa perfiles.baja_programada = ahora+7
+     dias; el borrado real (lib/cuenta.js) lo ejecuta el cron cuando ese plazo se cumple, o
+     POST /api/cuenta (accion:'cancelar_baja') revierte el pedido si el usuario se arrepiente
+     antes. CORRECCION (05/08, contra lo que decia esta nota desde el 29/07):
      perfiles.id SI tiene FK real hacia auth.users (perfiles_id_fkey, ON DELETE CASCADE,
      confirmado en vivo) -- borrar el usuario de Auth borra la fila de perfiles solo. consumo
      cascada desde perfiles; pagos conserva el historial con perfil=NULL, a proposito.
@@ -559,7 +562,14 @@
                 cancelarBaja.disabled = false; cancelarBaja.textContent = 'Cancelar eliminación';
                 return;
               }
-              _fetch('/api/cancelar-baja', { method:'POST', headers:{ Authorization:'Bearer ' + t } })
+              // Corte M (05/08): /api/cancelar-baja se unifico en /api/cuenta (accion en el
+              // body) por el limite de 12 Funciones Serverless de Vercel -- ver la nota en
+              // la cabecera de api/cuenta.js.
+              _fetch('/api/cuenta', {
+                method:'POST',
+                headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+                body: JSON.stringify({ accion:'cancelar_baja' })
+              })
                 .then(function(r){
                   if(r.ok){
                     perfilBajaProgramada = null;
@@ -612,9 +622,14 @@
           ocupado(true,'Eliminando…'); avisoEl.textContent='';
           tokenVigente().then(function(t){
             if(!t){ avisoEl.textContent='Tu sesión venció. Cerrá esto y volvé a entrar.'; ocupado(false,'Eliminar mi cuenta'); return; }
-            _fetch('/api/eliminar-cuenta', {
+            // Corte M (05/08): /api/eliminar-cuenta se unifico en /api/cuenta (accion en el
+            // body) por el limite de 12 Funciones Serverless de Vercel -- ver la nota en la
+            // cabecera de api/cuenta.js. 'eliminar' es default si no se manda body, pero se
+            // manda explicito igual, por claridad.
+            _fetch('/api/cuenta', {
               method:'POST',
-              headers:{ Authorization:'Bearer ' + t }
+              headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+              body: JSON.stringify({ accion:'eliminar' })
             }).then(function(r){
               if(r.ok){
                 // Corte L: ya no borra al instante -- queda programada. Se sigue con la
@@ -1010,16 +1025,19 @@
 
     // Encargo 115 AG, Corte M (05/08): si ya hay una suscripcion paga activa, elegir OTRO
     // plan ya no arma una suscripcion nueva en paralelo (ese era el riesgo real que motivo
-    // el freno original acá) -- ahora llama a /api/cambiar-plan, que cambia la suscripcion
-    // EXISTENTE (sube ya, o programa la baja para cuando termine el ciclo pagado). Sirve
-    // para los dos botones (Mercado Pago y Lemon Squeezy) por igual: /api/cambiar-plan
-    // reconoce solo la pasarela del lado del servidor, asi que ninguno de los dos necesita
-    // saber cual es -- ver lib/pasarela.js.
+    // el freno original acá) -- ahora llama a /api/suscribir, que MIRA el estado real de la
+    // cuenta y decide sola si es alta nueva o cambio de plan sobre la suscripcion EXISTENTE
+    // (sube ya, o programa la baja para cuando termine el ciclo pagado). Sirve para los dos
+    // botones (Mercado Pago y Lemon Squeezy) por igual: reconoce la pasarela del lado del
+    // servidor, asi que ninguno de los dos necesita saber cual es -- ver lib/pasarela.js.
+    // (Hasta el 05/08 esto vivia en un endpoint aparte, /api/cambiar-plan -- se unificaron
+    // en el mismo archivo por el limite de 12 Funciones Serverless del plan Hobby de Vercel,
+    // ver la nota completa en la cabecera de api/suscribir.js.)
     function llamarCambiarPlan(plan, b, textoOriginal){
       b.disabled = true; b.textContent = 'Aplicando…'; estado.textContent = '';
       tokenVigente().then(function(t){
         if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
-        return _fetch('/api/cambiar-plan', {
+        return _fetch('/api/suscribir', {
           method:'POST',
           headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
           body: JSON.stringify({ plan: plan })
@@ -1092,7 +1110,7 @@
         e.preventDefault();
         var plan = a.getAttribute('data-ls');
         // Encargo 115 AG, Corte M (05/08): si ya hay suscripcion activa no hace falta abrir
-        // ningun checkout nuevo -- /api/cambiar-plan reconoce la pasarela sola (lib/pasarela.js)
+        // ningun checkout nuevo -- /api/suscribir reconoce la pasarela sola (lib/pasarela.js)
         // y si resulta ser Lemon Squeezy, cambia la suscripcion EXISTENTE por API (PATCH), sin
         // que el usuario tenga que volver a pasar por el checkout hospedado. Mismo camino que
         // el boton de Mercado Pago -- ver llamarCambiarPlan más arriba.
