@@ -418,10 +418,13 @@ header header .cai-ham{flex-shrink:0}
    ELIMINAR CUENTA · ENDPOINT NUEVO EN EL SERVIDOR
      Borrar el usuario de Auth necesita la clave de servicio, que nunca viaja al navegador. Este
      archivo llama a POST /api/eliminar-cuenta con el token de sesion; ese endpoint (entregado
-     aparte, api/eliminar-cuenta.js) valida el token, borra al usuario con la Admin API de
-     Supabase, y borra a mano la fila de perfiles (verificado contra el esquema real el 29/07:
-     perfiles no tiene FK hacia auth.users, asi que nada la borra sola). consumo cascada desde
-     perfiles; pagos conserva el historial con perfil=NULL, a proposito.
+     aparte, api/eliminar-cuenta.js) valida el token. Corte L (05/08): ya no borra al instante --
+     programa perfiles.baja_programada = ahora+7 dias; el borrado real (lib/cuenta.js) lo ejecuta
+     el cron cuando ese plazo se cumple, o api/cancelar-baja.js revierte el pedido si el usuario
+     se arrepiente antes. CORRECCION (05/08, contra lo que decia esta nota desde el 29/07):
+     perfiles.id SI tiene FK real hacia auth.users (perfiles_id_fkey, ON DELETE CASCADE,
+     confirmado en vivo) -- borrar el usuario de Auth borra la fila de perfiles solo. consumo
+     cascada desde perfiles; pagos conserva el historial con perfil=NULL, a proposito.
 
    REGISTRO Y RECUPERACION · COMO LLEGA EL CORREO
      Via el SMTP de Resend ya configurado en Supabase Auth (dominio mail.comprenderai.com
