@@ -61,14 +61,18 @@
   var SB_KEY = 'sb_publishable_QbvJTscQJ63YjLasQ4p51w_0nLqwm6j';
   var TERMINOS_URL = 'https://www.comprenderai.com/legal/terminos';
   var PRIVACIDAD_URL = 'https://www.comprenderai.com/legal/privacidad';
-  var TERMINOS_VERSION = 'v1-2026-08-01';   // subir esto si el texto legal cambia de forma material
+  var TERMINOS_VERSION = 'v1-2026-08-01';     // subir esto si el texto de los Terminos cambia de forma material
+  var PRIVACIDAD_VERSION = 'v1-2026-08-01';   // Cierre tecnico legal (05/08): independiente de TERMINOS_VERSION --
+                                               // subir esta si el texto de la Politica de Privacidad cambia sola,
+                                               // sin tocar el de los Terminos (y viceversa)
   var LLAVE   = 'comprender_sesion';
   var MARGEN  = 60000;   // se renueva un minuto antes de vencer
   var LS_STORE = 'comprenderai';   // subdominio de la tienda en Lemon Squeezy (Corte B.6, pago internacional)
   var perfilId = null;   // uuid de la fila propia en perfiles; lo necesita el checkout de Lemon Squeezy
   var perfilBajaProgramada = null;   // Corte L: fecha ISO si hay una eliminacion de cuenta en curso, o null
-  var perfilSuscripcionActiva = false;   // Encargo 115 AG (05/08): true si ya hay un plan pago en curso --
-                                          // ver la nota junto al bloqueo del boton "Elegir <plan>" mas abajo
+  var perfilSuscripcionActiva = false;   // Encargo 115 AG, Corte M (05/08): true si ya hay un plan pago en curso --
+                                          // el boton "Elegir <plan>" NO bloquea en ese caso, enruta a llamarCambiarPlan()
+                                          // en vez de armar una suscripcion nueva en paralelo (ver esa funcion mas abajo)
 
   /* ---------- sesion guardada ---------- */
   function leer(){
@@ -156,6 +160,20 @@
       .catch(function(){ return { ok:false }; });
   }
 
+  // Cierre tecnico legal, Corte AC (08/08): canjea el token_hash (llega por query string, no
+  // dispara nada solo con cargar la pagina) por una sesion real -- recien cuando esta funcion
+  // se llama de verdad (o sea, cuando el usuario hizo clic en "Guardar" con su contrasena
+  // nueva) se consume el link de un solo uso contra Supabase. Antes el link apuntaba directo
+  // a Supabase (#access_token en el hash) y un simple GET ya lo gastaba -- eso es lo que
+  // probablemente consumia Gmail solo, escaneando el correo por seguridad, antes de que el
+  // usuario llegara a hacer clic de verdad.
+  function verificarRecuperacion(tokenHash){
+    return auth('verify', { type: 'recovery', token_hash: tokenHash }).then(function(r){
+      if(!r.ok) return null;
+      return desdeRespuesta(r.datos);
+    }).catch(function(){ return null; });
+  }
+
   function cambiarClave(token, clave){
     return fetch(SB_URL + '/auth/v1/user', {
       method: 'PUT',
@@ -194,6 +212,22 @@
   }
   function limpiarHash(){
     try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){}
+  }
+
+  // Cierre tecnico legal, Corte AC (08/08): el link de recuperacion de contrasena ahora apunta
+  // a esta misma pagina (query string: ?type=recovery&token_hash=...), no directo a Supabase.
+  // Cargar la pagina con esto en la URL NO consume el link -- recien lo hace
+  // verificarRecuperacion(), llamada desde el clic real de "Guardar" en la pantalla de nueva
+  // contrasena. El resto de los links de correo (alta, invitacion) siguen igual, por el hash.
+  function leerQueryRecovery(){
+    try{
+      var p = new URLSearchParams(location.search);
+      if(p.get('type') === 'recovery' && p.get('token_hash')) return p.get('token_hash');
+    }catch(e){}
+    return null;
+  }
+  function limpiarQuery(){
+    try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){}
   }
 
   var renovando = null;
@@ -250,10 +284,10 @@
         .then(function(f){ if(f && f[0]){
           perfilId = f[0].id;
           perfilBajaProgramada = f[0].baja_programada || null;
-          // Encargo 115 AG (05/08): mientras no exista un cambio de plan de verdad (ver
-          // api/suscribir.js), un plan pago con suscripcion activa/en gracia se trata como
-          // "ya suscripto" -- el boton de elegir otro plan se bloquea en vez de dejar crear
-          // una segunda suscripcion en paralelo (ver nota completa junto al bloqueo).
+          // Encargo 115 AG, Corte M (05/08): un plan pago con suscripcion activa/en gracia se
+          // trata como "ya suscripto" -- el boton de elegir otro plan enruta a llamarCambiarPlan()
+          // (sube de inmediato, o programa la baja para el fin del ciclo) en vez de dejar crear
+          // una segunda suscripcion en paralelo. Ver api/suscribir.js para la logica real.
           perfilSuscripcionActiva = !!f[0].suscripcion && (f[0].estado === 'activo' || f[0].estado === 'gracia') && f[0].plan !== 'gratis';
           anotarSaldo(f[0].plan, f[0].saldo);
         } })
@@ -387,6 +421,9 @@
           var consentimiento = {
             terminos_aceptados: true,
             terminos_version: TERMINOS_VERSION,
+            privacidad_aceptada: true,
+            privacidad_version: PRIVACIDAD_VERSION,
+            origen: 'registro_web',
             terminos_fecha: new Date().toISOString()
           };
           registrar(c,k,consentimiento).then(function(r){
@@ -422,13 +459,26 @@
           var k = pass4.value||'';
           if(k.length<6){ avisoEl.textContent='La contraseña necesita al menos 6 caracteres.'; return; }
           ocupado(true,'Guardando…'); avisoEl.textContent = '';
-          cambiarClave(extra.token, k).then(function(r){
-            if(r.ok){
-              guardar({ token: extra.token, refresco: extra.refresco||'', vence: Date.now()+3600000, correo:'' });
-              portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
-            }else{
-              ocupado(false,'Guardar'); avisoEl.textContent = r.mensaje;
+          // extra.token: viene del hash viejo (alta/invitacion, sigue igual). extra.token_hash:
+          // viene del link de recuperacion nuevo -- recien se canjea por una sesion en este
+          // clic real, nunca al cargar la pagina (ver verificarRecuperacion arriba).
+          var listo = extra.token
+            ? Promise.resolve({ token: extra.token, refresco: extra.refresco || '' })
+            : verificarRecuperacion(extra.token_hash);
+          listo.then(function(sesion){
+            if(!sesion){
+              ocupado(false,'Guardar');
+              avisoEl.textContent = 'El link venció o ya se usó. Pedí uno nuevo desde "¿Olvidaste tu contraseña?".';
+              return;
             }
+            cambiarClave(sesion.token, k).then(function(r){
+              if(r.ok){
+                guardar({ token: sesion.token, refresco: sesion.refresco||'', vence: Date.now()+3600000, correo:'' });
+                portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
+              }else{
+                ocupado(false,'Guardar'); avisoEl.textContent = r.mensaje;
+              }
+            });
           });
         }
         accion.addEventListener('click', intentarNueva);
@@ -1143,14 +1193,31 @@
      link de correo (hash con access_token). Si es de recuperacion, se muestra la
      pantalla de nueva contrasena en vez del portal normal. Cualquier otro hash con
      token (confirmacion de alta, magic link, invitacion) deja una sesion valida:
-     se guarda y arranca directo, sin pasar por el portal. */
-  function arrancar(){
+     se guarda y arranca directo, sin pasar por el portal.
+
+     Corte AD (09/08): la deteccion de recuperacion (query ?type=recovery o hash
+     #access_token...&type=recovery) se saca de arrancar() y corre ACA MISMO, sincronica
+     e inmediata -- no puede esperar a DOMContentLoaded. El segundo <script> de cada
+     pagina real (index/urbanismo/contextos) dispara su propio fetch de arranque
+     (/api/organismos) apenas se parsea; sin sesion guardada, tokenVigente() resuelve casi
+     instantaneo (sin red, ver mas arriba) y ese fetch le ganaba la carrera al portal de
+     recuperacion -- se terminaba mostrando "Tu sesion vencio" tapando la pantalla de
+     "Elegi una contraseña nueva" (confirmado en vivo con diagnostico en sessionStorage:
+     el 401 llegaba unos milisegundos antes que arrancar(), que estaba esperando
+     DOMContentLoaded). document.body ya existe en este punto (este script esta adentro
+     de <body>), asi que portal() puede llamarse ya mismo. */
+  var _recuperacionInicial = (function(){
+    var th = leerQueryRecovery();
+    if(th){ limpiarQuery(); return { token_hash: th }; }
     var h = leerHash();
-    if(h && h.type === 'recovery'){
-      limpiarHash();
-      portal('', 'nueva_clave', { token: h.access_token, refresco: h.refresh_token || '' });
-      return;
-    }
+    if(h && h.type === 'recovery'){ limpiarHash(); return { token: h.access_token, refresco: h.refresh_token || '' }; }
+    return null;
+  })();
+  if(_recuperacionInicial) portal('', 'nueva_clave', _recuperacionInicial);
+
+  function arrancar(){
+    if(_recuperacionInicial) return;
+    var h = leerHash();
     if(h && h.access_token){
       guardar({
         token: h.access_token,

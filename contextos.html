@@ -1531,20 +1531,31 @@ header header .cai-ham{flex-shrink:0}
      link de correo (hash con access_token). Si es de recuperacion, se muestra la
      pantalla de nueva contrasena en vez del portal normal. Cualquier otro hash con
      token (confirmacion de alta, magic link, invitacion) deja una sesion valida:
-     se guarda y arranca directo, sin pasar por el portal. */
-  function arrancar(){
+     se guarda y arranca directo, sin pasar por el portal.
+
+     Corte AD (09/08): la deteccion de recuperacion (query ?type=recovery o hash
+     #access_token...&type=recovery) se saca de arrancar() y corre ACA MISMO, sincronica
+     e inmediata -- no puede esperar a DOMContentLoaded. El segundo <script> de esta
+     pagina dispara su propio fetch de arranque (/api/organismos) apenas se parsea; sin
+     sesion guardada, tokenVigente() resuelve casi instantaneo (sin red, ver mas arriba)
+     y ese fetch le ganaba la carrera al portal de recuperacion -- se terminaba mostrando
+     "Tu sesion vencio" tapando la pantalla de "Elegi una contraseña nueva" (confirmado
+     en vivo con diagnostico en sessionStorage: el 401 llegaba unos milisegundos antes
+     que arrancar(), que estaba esperando DOMContentLoaded). document.body ya existe en
+     este punto (este script esta adentro de <body>), asi que portal() puede llamarse ya
+     mismo. */
+  var _recuperacionInicial = (function(){
     var th = leerQueryRecovery();
-    if(th){
-      limpiarQuery();
-      portal('', 'nueva_clave', { token_hash: th });
-      return;
-    }
+    if(th){ limpiarQuery(); return { token_hash: th }; }
     var h = leerHash();
-    if(h && h.type === 'recovery'){
-      limpiarHash();
-      portal('', 'nueva_clave', { token: h.access_token, refresco: h.refresh_token || '' });
-      return;
-    }
+    if(h && h.type === 'recovery'){ limpiarHash(); return { token: h.access_token, refresco: h.refresh_token || '' }; }
+    return null;
+  })();
+  if(_recuperacionInicial) portal('', 'nueva_clave', _recuperacionInicial);
+
+  function arrancar(){
+    if(_recuperacionInicial) return;
+    var h = leerHash();
     if(h && h.access_token){
       guardar({
         token: h.access_token,
