@@ -169,6 +169,20 @@
       .catch(function(){ return { ok:false }; });
   }
 
+  // Cierre tecnico legal, Corte AC (08/08): canjea el token_hash (llega por query string, no
+  // dispara nada solo con cargar la pagina) por una sesion real -- recien cuando esta funcion
+  // se llama de verdad (o sea, cuando el usuario hizo clic en "Guardar" con su contrasena
+  // nueva) se consume el link de un solo uso contra Supabase. Antes el link apuntaba directo
+  // a Supabase (#access_token en el hash) y un simple GET ya lo gastaba -- eso es lo que
+  // probablemente consumia Gmail solo, escaneando el correo por seguridad, antes de que el
+  // usuario llegara a hacer clic de verdad.
+  function verificarRecuperacion(tokenHash){
+    return auth('verify', { type: 'recovery', token_hash: tokenHash }).then(function(r){
+      if(!r.ok) return null;
+      return desdeRespuesta(r.datos);
+    }).catch(function(){ return null; });
+  }
+
   function cambiarClave(token, clave){
     return fetch(SB_URL + '/auth/v1/user', {
       method: 'PUT',
@@ -207,6 +221,22 @@
   }
   function limpiarHash(){
     try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){}
+  }
+
+  // Cierre tecnico legal, Corte AC (08/08): el link de recuperacion de contrasena ahora apunta
+  // a esta misma pagina (query string: ?type=recovery&token_hash=...), no directo a Supabase.
+  // Cargar la pagina con esto en la URL NO consume el link -- recien lo hace
+  // verificarRecuperacion(), llamada desde el clic real de "Guardar" en la pantalla de nueva
+  // contrasena. El resto de los links de correo (alta, invitacion) siguen igual, por el hash.
+  function leerQueryRecovery(){
+    try{
+      var p = new URLSearchParams(location.search);
+      if(p.get('type') === 'recovery' && p.get('token_hash')) return p.get('token_hash');
+    }catch(e){}
+    return null;
+  }
+  function limpiarQuery(){
+    try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){}
   }
 
   var renovando = null;
@@ -434,13 +464,26 @@
           var k = pass4.value||'';
           if(k.length<6){ avisoEl.textContent='La contraseña necesita al menos 6 caracteres.'; return; }
           ocupado(true,'Guardando…'); avisoEl.textContent = '';
-          cambiarClave(extra.token, k).then(function(r){
-            if(r.ok){
-              guardar({ token: extra.token, refresco: extra.refresco||'', vence: Date.now()+3600000, correo:'' });
-              portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
-            }else{
-              ocupado(false,'Guardar'); avisoEl.textContent = r.mensaje;
+          // extra.token: viene del hash viejo (alta/invitacion, sigue igual). extra.token_hash:
+          // viene del link de recuperacion nuevo -- recien se canjea por una sesion en este
+          // clic real, nunca al cargar la pagina (ver verificarRecuperacion arriba).
+          var listo = extra.token
+            ? Promise.resolve({ token: extra.token, refresco: extra.refresco || '' })
+            : verificarRecuperacion(extra.token_hash);
+          listo.then(function(sesion){
+            if(!sesion){
+              ocupado(false,'Guardar');
+              avisoEl.textContent = 'El link venció o ya se usó. Pedí uno nuevo desde "¿Olvidaste tu contraseña?".';
+              return;
             }
+            cambiarClave(sesion.token, k).then(function(r){
+              if(r.ok){
+                guardar({ token: sesion.token, refresco: sesion.refresco||'', vence: Date.now()+3600000, correo:'' });
+                portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
+              }else{
+                ocupado(false,'Guardar'); avisoEl.textContent = r.mensaje;
+              }
+            });
           });
         }
         accion.addEventListener('click', intentarNueva);
@@ -1102,6 +1145,12 @@
      token (confirmacion de alta, magic link, invitacion) deja una sesion valida:
      se guarda y arranca directo, sin pasar por el portal. */
   function arrancar(){
+    var th = leerQueryRecovery();
+    if(th){
+      limpiarQuery();
+      portal('', 'nueva_clave', { token_hash: th });
+      return;
+    }
     var h = leerHash();
     if(h && h.type === 'recovery'){
       limpiarHash();
