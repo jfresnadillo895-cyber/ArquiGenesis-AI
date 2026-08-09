@@ -1727,6 +1727,7 @@ header .spacer{flex:1}
      se guarda y arranca directo, sin pasar por el portal. */
   function arrancar(){
     var th = leerQueryRecovery();
+    try{ console.log('[diag-reset] th=', th, 'search=', location.search, 'readyState=', document.readyState); }catch(e){}
     if(th){
       limpiarQuery();
       portal('', 'nueva_clave', { token_hash: th });
@@ -1768,7 +1769,8 @@ header .spacer{flex:1}
     var args = arguments;
     var yo = this;
     return tokenVigente().then(function(t){
-      if(!t){ portal('Tu sesión venció. Ingresá de nuevo.');
+      if(!t){ try{ console.log('[diag-reset] fetch-401 portal() disparado, url=', url, 'portalAbierto antes=', portalAbierto); }catch(e){}
+              portal('Tu sesión venció. Ingresá de nuevo.');
               return Promise.reject(new Error('sin sesión')); }
 
       opciones = opciones || {};
