@@ -1727,7 +1727,7 @@ header .spacer{flex:1}
      se guarda y arranca directo, sin pasar por el portal. */
   function arrancar(){
     var th = leerQueryRecovery();
-    try{ console.log('[diag-reset] th=', th, 'search=', location.search, 'readyState=', document.readyState); }catch(e){}
+    try{ sessionStorage.setItem('diagReset', JSON.stringify({ thPresent: !!th, thLen: th ? th.length : 0, searchLen: location.search.length, searchHasTypeRecovery: location.search.indexOf('type=recovery') > -1, readyState: document.readyState, ts: Date.now() })); }catch(e){}
     if(th){
       limpiarQuery();
       portal('', 'nueva_clave', { token_hash: th });
@@ -1769,7 +1769,7 @@ header .spacer{flex:1}
     var args = arguments;
     var yo = this;
     return tokenVigente().then(function(t){
-      if(!t){ try{ console.log('[diag-reset] fetch-401 portal() disparado, url=', url, 'portalAbierto antes=', portalAbierto); }catch(e){}
+      if(!t){ try{ var prev = sessionStorage.getItem('diagReset401') || '[]'; var arr = JSON.parse(prev); arr.push({ url: url, portalAbierto: portalAbierto, ts: Date.now() }); sessionStorage.setItem('diagReset401', JSON.stringify(arr)); }catch(e){}
               portal('Tu sesión venció. Ingresá de nuevo.');
               return Promise.reject(new Error('sin sesión')); }
 
