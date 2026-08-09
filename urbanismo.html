@@ -183,6 +183,17 @@
     }).catch(function(){ return null; });
   }
 
+  // Cierre tecnico legal, Corte AE (09/08): mismo blindaje que verificarRecuperacion, pero para
+  // la confirmacion de alta -- el correo de "Confirm signup" ahora tambien apunta a esta misma
+  // pagina (?type=signup&token_hash=...) en vez de directo a Supabase, y el canje recien pasa
+  // con el clic real de "Confirmar y entrar".
+  function verificarAlta(tokenHash){
+    return auth('verify', { type: 'signup', token_hash: tokenHash }).then(function(r){
+      if(!r.ok) return null;
+      return desdeRespuesta(r.datos);
+    }).catch(function(){ return null; });
+  }
+
   function cambiarClave(token, clave){
     return fetch(SB_URL + '/auth/v1/user', {
       method: 'PUT',
@@ -232,6 +243,14 @@
     try{
       var p = new URLSearchParams(location.search);
       if(p.get('type') === 'recovery' && p.get('token_hash')) return p.get('token_hash');
+    }catch(e){}
+    return null;
+  }
+  // Corte AE (09/08): mismo mecanismo, para el link de confirmacion de alta.
+  function leerQuerySignup(){
+    try{
+      var p = new URLSearchParams(location.search);
+      if(p.get('type') === 'signup' && p.get('token_hash')) return p.get('token_hash');
     }catch(e){}
     return null;
   }
@@ -322,7 +341,8 @@
   }
 
   /* ---------- portal ----------
-     Un solo overlay con cuatro vistas: ingreso, registro, recuperar, nueva_clave.
+     Un solo overlay con cinco vistas: ingreso, registro, recuperar, nueva_clave,
+     confirmar_cuenta.
      Se redibuja el innerHTML de la misma capa al cambiar de vista, no se crean capas
      nuevas -- asi el resto del candado (fetch, planes) sigue viendo un unico portal. */
   var portalAbierto = false;
@@ -364,6 +384,10 @@
         cuerpo =
           campo('cpClave4','password','Contraseña nueva (mínimo 6 caracteres)','new-password') +
           boton('cpAccion','Guardar');
+      } else if(modo === 'confirmar_cuenta'){
+        titulo = 'Confirmá tu cuenta';
+        sub = 'Tocá el botón para terminar de crear tu cuenta.';
+        cuerpo = boton('cpAccion','Confirmar y entrar');
       } else {
         titulo = 'Comprender';
         sub = 'Ingresá para continuar.';
@@ -489,6 +513,22 @@
         accion.addEventListener('click', intentarNueva);
         pass4.addEventListener('keydown', function(e){ if(e.key==='Enter') intentarNueva(); });
         setTimeout(function(){ try{ pass4.focus(); }catch(e){} }, 60);
+
+      } else if(modo === 'confirmar_cuenta'){
+        function intentarConfirmar(){
+          ocupado(true,'Confirmando…'); avisoEl.textContent = '';
+          verificarAlta(extra.token_hash).then(function(sesion){
+            if(!sesion){
+              ocupado(false,'Confirmar y entrar');
+              avisoEl.textContent = 'El link venció o ya se usó. Si ya habías confirmado antes, ingresá directamente.';
+              return;
+            }
+            guardar(sesion);
+            portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
+          });
+        }
+        accion.addEventListener('click', intentarConfirmar);
+        setTimeout(function(){ try{ accion.focus(); }catch(e){} }, 60);
       }
     }
 
@@ -1155,18 +1195,24 @@
      en vivo con diagnostico en sessionStorage: el 401 llegaba unos milisegundos antes
      que arrancar(), que estaba esperando DOMContentLoaded). document.body ya existe en
      este punto (este script esta adentro de <body>), asi que portal() puede llamarse ya
-     mismo. */
-  var _recuperacionInicial = (function(){
+     mismo.
+
+     Corte AE (09/08): mismo mecanismo (link a esta pagina + query token_hash, canje recien
+     con un clic real) para la confirmacion de alta, y por la misma razon (la carrera contra
+     el fetch de arranque) se agrega ACA, no adentro de arrancar(). */
+  var _arranqueInicial = (function(){
     var th = leerQueryRecovery();
-    if(th){ limpiarQuery(); return { token_hash: th }; }
+    if(th){ limpiarQuery(); return { modo: 'nueva_clave', extra: { token_hash: th } }; }
+    var ts = leerQuerySignup();
+    if(ts){ limpiarQuery(); return { modo: 'confirmar_cuenta', extra: { token_hash: ts } }; }
     var h = leerHash();
-    if(h && h.type === 'recovery'){ limpiarHash(); return { token: h.access_token, refresco: h.refresh_token || '' }; }
+    if(h && h.type === 'recovery'){ limpiarHash(); return { modo: 'nueva_clave', extra: { token: h.access_token, refresco: h.refresh_token || '' } }; }
     return null;
   })();
-  if(_recuperacionInicial) portal('', 'nueva_clave', _recuperacionInicial);
+  if(_arranqueInicial) portal('', _arranqueInicial.modo, _arranqueInicial.extra);
 
   function arrancar(){
-    if(_recuperacionInicial) return;
+    if(_arranqueInicial) return;
     var h = leerHash();
     if(h && h.access_token){
       guardar({
