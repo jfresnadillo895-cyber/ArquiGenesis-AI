@@ -1778,8 +1778,7 @@ header .spacer{flex:1}
     var args = arguments;
     var yo = this;
     return tokenVigente().then(function(t){
-      if(!t){ try{ var prev = sessionStorage.getItem('diagReset401') || '[]'; var arr = JSON.parse(prev); arr.push({ url: url, portalAbierto: portalAbierto, ts: Date.now() }); sessionStorage.setItem('diagReset401', JSON.stringify(arr)); }catch(e){}
-              portal('Tu sesión venció. Ingresá de nuevo.');
+      if(!t){ portal('Tu sesión venció. Ingresá de nuevo.');
               return Promise.reject(new Error('sin sesión')); }
 
       opciones = opciones || {};
