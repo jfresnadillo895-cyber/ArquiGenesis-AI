@@ -4173,17 +4173,18 @@ function cardSinCreditos(tipo){
 
 const ONB = [
   { h:'Comprender AI no es un chatbot.',
-    p:['No entrega información: entrega comprensión que se vuelve capacidad.',
-       'Ante lo que traés, busca la tensión que lo organiza por debajo de los síntomas — y devuelve criterio utilizable.'] },
-  { h:'Un organismo es algo que querés comprender en el tiempo.',
-    p:['Una ciudad, una empresa, un proyecto, una investigación. Cualquier entidad organizada.',
-       'Su ficha viva conserva qué está en juego, qué tensiones siguen activas y qué ordena el próximo paso. Podés cerrar y retomar meses después: el organismo continúa donde quedó.'] },
-  { h:'Y todo esto es un ciclo.',
-    p:['Comprendés, diagnosticás, construís un paradigma de intervención, y volvés a leer — cada vuelta comprende más que la anterior.',
-       'Podés ver el ciclo completo en cualquier momento desde Ayuda.'] },
-  { h:'Empezá por lo que no anda.',
-    p:['No necesitás vocabulario técnico ni datos ordenados. Contá el problema como lo vivís.',
-       'El motor hace el resto: comprende, y si el tema lo amerita, te ofrece las lecturas especializadas.'] }
+    p:['No se limita a entregar información: construye una comprensión que podés utilizar.',
+       'Ante lo que traés, busca la tensión que organiza la situación por debajo de los síntomas y devuelve un criterio para actuar.'] },
+  { h:'Un organismo es algo que querés comprender a través del tiempo.',
+    p:['Puede ser una ciudad, una empresa, un proyecto, una investigación o cualquier situación con identidad propia.',
+       'Su ficha viva conserva qué está en juego, qué tensiones permanecen activas y qué puede orientar el próximo paso. Así podés retomarlo más adelante sin empezar de cero.'] },
+  { h:'Y todo esto forma un ciclo.',
+    p:['Comprendés, diagnosticás, construís un paradigma de intervención y volvés a observar.',
+       'Cada nueva vuelta parte de la comprensión acumulada y permite reconocer qué se confirmó, qué cambió y qué necesita evolucionar.',
+       'Podés consultar el ciclo completo cuando quieras desde Ayuda.'] },
+  { h:'Empezá por lo que no está funcionando.',
+    p:['No necesitás vocabulario técnico ni información perfectamente ordenada. Contá la situación como la vivís.',
+       'Comprender AI te ayuda a organizarla y, cuando corresponde, te ofrece lecturas especializadas.'] }
 ];
 let onbIdx = 0;
 
@@ -4203,15 +4204,19 @@ function renderOnb(){
   const pts = document.createElement('div'); pts.className = 'onb-puntos';
   for(let i=0;i<ONB.length;i++){ const d = document.createElement('i'); if(i===onbIdx) d.className='on'; pts.appendChild(d); }
   nav.appendChild(pts);
-  const skip = document.createElement('button'); skip.className='btn'; skip.textContent='Saltear';
-  skip.onclick = cerrarOnb;
+  const esUltimo = onbIdx === ONB.length-1;
+  if(!esUltimo){
+    const skip = document.createElement('button'); skip.className='btn'; skip.textContent='Saltear';
+    skip.onclick = cerrarOnb;
+    nav.appendChild(skip);
+  }
   const next = document.createElement('button'); next.className='btn primary';
-  next.textContent = (onbIdx === ONB.length-1) ? 'Empezar' : 'Siguiente';
+  next.textContent = esUltimo ? 'Empezar' : 'Siguiente';
   next.onclick = function(){
-    if(onbIdx === ONB.length-1){ cerrarOnb(); }
+    if(esUltimo){ cerrarOnb(); }
     else { onbIdx++; renderOnb(); }
   };
-  nav.appendChild(skip); nav.appendChild(next);
+  nav.appendChild(next);
   c.appendChild(nav);
 }
 function cerrarOnb(){
