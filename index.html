@@ -5914,6 +5914,26 @@ function construirTuEspacioConfig(){
   tit.textContent = 'Configuración y ayuda';
   tit.style.cssText = "font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;padding:10px 14px 4px;";
   cfg.appendChild(tit);
+  // "Instalar la app" (10/08): solo aparece si el navegador ya avisó (beforeinstallprompt,
+  // ver más abajo en el archivo) que la instalación real está disponible -- en iOS/Safari
+  // ese evento no existe nunca, así que ahí este botón no se dibuja. Primero en la lista a
+  // propósito: es una acción puntual (desaparece sola una vez instalada), conviene que se
+  // note mientras está.
+  if(deferredInstallPrompt){
+    const bi = document.createElement('button');
+    bi.className = 'mitem';
+    bi.textContent = 'Instalar la app';
+    bi.style.color = 'var(--accent)';
+    bi.style.fontWeight = '600';
+    bi.addEventListener('click', function(){
+      cerrarTuEspacio();
+      const prompt = deferredInstallPrompt;
+      if(!prompt) return;
+      deferredInstallPrompt = null;
+      prompt.prompt();
+    });
+    cfg.appendChild(bi);
+  }
   const items = [];
   items.push(['El ciclo de comprensión', mostrarCiclo]);
   items.push(['Exportar respaldo', exportarDatos]);
@@ -6678,6 +6698,25 @@ function cardBancoPruebas(){
 window.correrPruebas = function(){ return correrPruebasAuto(); };
 document.addEventListener('keydown', function(e){ if(e.ctrlKey && e.altKey && (e.key === 'p' || e.key === 'P')){ e.preventDefault(); cardBancoPruebas(); } });
 window.addEventListener('hashchange', function(){ if(location.hash === '#pruebas') cardBancoPruebas(); });
+
+/* ================= PWA · instalar la app (10/08) =================
+   Registra el service worker mínimo (sw.js, sin caché -- ver su propio comentario) y
+   escucha "beforeinstallprompt": Chrome dispara ese evento cuando la página cumple los
+   requisitos de instalación (manifest válido + service worker con fetch), y hay que guardar
+   el evento para poder mostrar el diálogo nativo más tarde, con un toque del usuario -- no
+   se puede disparar solo, tiene que venir de un click real. construirTuEspacioConfig() lee
+   deferredInstallPrompt cada vez que se abre "Tu espacio" y agrega el botón "Instalar la
+   app" solo si hay una instalación real disponible (en iOS/Safari este evento no existe
+   nunca, así que ahí el botón simplemente no aparece). */
+var deferredInstallPrompt = null;
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(function(){});
+}
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+window.addEventListener('appinstalled', function(){ deferredInstallPrompt = null; });
 
 /* ================= init ================= */
 renderOrgList();
