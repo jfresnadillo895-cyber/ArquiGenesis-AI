@@ -1475,11 +1475,14 @@ header .spacer{flex:1}
       ayuda: icono('<circle cx="12" cy="12" r="9"></circle><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 1.7-2.5 3.5"></path><path d="M12 17h.01"></path>')
     };
 
+    // Reorganización de navegación, etapa 1c (09/08): "Ayuda" se saca de acá -- quedaba
+    // repetida con la que ya tiene Tu espacio (barra lateral), que también está
+    // disponible en mobile. ICN.ayuda queda sin usar a propósito (por si se revierte
+    // esto), no se borra.
     var botones = [
       { id:'ffAvisos', icn:ICN.avisos, txt:'Avisos', on:function(){ mostrarBandeja(); } },
       { id:'ffCuenta', icn:ICN.cuenta, txt:'Cuenta', on:function(){ mostrarCuenta(); } },
-      { id:'ffPrincipios', icn:ICN.principios, txt:'Principios', hook:'comprenderAbrirPrincipios', on:function(){ if(window.comprenderAbrirPrincipios) window.comprenderAbrirPrincipios(); } },
-      { id:'ffAyuda', icn:ICN.ayuda, txt:'Ayuda', hook:'comprenderMostrarAyuda', on:function(){ if(window.comprenderMostrarAyuda) window.comprenderMostrarAyuda(); } }
+      { id:'ffPrincipios', icn:ICN.principios, txt:'Principios', hook:'comprenderAbrirPrincipios', on:function(){ if(window.comprenderAbrirPrincipios) window.comprenderAbrirPrincipios(); } }
     ];
 
     var barra = document.createElement('div');
@@ -5667,9 +5670,21 @@ function construirTuEspacioConfig(){
   // "Convertir en organismo" (= botón "→ Organismo") y "Guardar sesión" (= botón del
   // mismo nombre) ya tienen su lugar fijo en el header cuando corresponden -- estar
   // acá también los duplicaba. "Propuestas" se queda: no tiene botón propio en ningún
-  // otro lado.
+  // otro lado, así que va aparte, sin agrupar bajo "Configuración y ayuda".
+  if(state.organismo){
+    const bp = document.createElement('button');
+    bp.className = 'mitem';
+    bp.textContent = 'Propuestas';
+    bp.addEventListener('click', function(){ cerrarTuEspacio(); cardPropuestas(); });
+    cfg.appendChild(bp);
+  }
+  // Etapa 1c (09/08): agrupados bajo un título, a pedido de Javier -- eran seis ítems
+  // sueltos, uno abajo del otro, sin ninguna jerarquía visual.
+  const tit = document.createElement('h4');
+  tit.textContent = 'Configuración y ayuda';
+  tit.style.cssText = "font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;padding:10px 14px 4px;";
+  cfg.appendChild(tit);
   const items = [];
-  if(state.organismo) items.push(['Propuestas', cardPropuestas]);
   items.push(['El ciclo de comprensión', mostrarCiclo]);
   items.push(['Consumo real', cardConsumo]);
   items.push(['Exportar respaldo', exportarDatos]);
