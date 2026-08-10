@@ -642,8 +642,9 @@ header .spacer{flex:1}
      1. Si no hay sesion, muestra un portal con tres caminos: ingresar, crear cuenta, recuperar
         contrasena. No deja pasar sin sesion.
      2. Guarda la sesion y la renueva sola cuando vence.
-     3. Agrega el token a toda llamada a /api/anthropic o /api/organismos, mas el modulo
-        desde donde se llama (Corte 0.5, 01/08: sumo /api/organismos al mismo interceptor).
+     3. Agrega el token a toda llamada a /api/anthropic, /api/organismos o /api/comm, mas el
+        modulo desde donde se llama (Corte 0.5, 01/08: sumo /api/organismos al mismo
+        interceptor; 10/08: sumo /api/comm para que "Tu opinión" pueda avisar por correo).
      4. Lee el saldo del servidor y lo deja donde credEstado() lo encuentra.
      5. Crea cuenta contra Supabase Auth. El disparador que ya esta en la base crea la fila de
         perfiles solo -- este archivo no toca la base directamente.
@@ -1870,7 +1871,7 @@ header .spacer{flex:1}
   window.fetch = function(recurso, opciones){
     var url = '';
     try{ url = String((recurso && recurso.url) ? recurso.url : recurso || ''); }catch(e){}
-    var esApiComprender = url.indexOf('/api/anthropic') > -1 || url.indexOf('/api/organismos') > -1;
+    var esApiComprender = url.indexOf('/api/anthropic') > -1 || url.indexOf('/api/organismos') > -1 || url.indexOf('/api/comm') > -1;
     if(!esApiComprender) return _fetch.apply(this, arguments);
 
     var args = arguments;
@@ -4382,56 +4383,76 @@ function mostrarCiclo(){
   el.overlay.classList.add('open');
 }
 
+/* construirOpinionContenido (10/08): reescrito a pedido de Javier -- el cuadro viejo era solo
+   apariencia, "Enviar" guardaba el mensaje en localStorage y nunca salía de ahí (el texto de
+   cierre "en producción llega directamente a nosotros" no era cierto, esa parte nunca se había
+   construido). Ahora llama de verdad a POST /api/comm (recurso:'opinion', accion:'enviar'),
+   que guarda en la tabla `opiniones` (respaldo permanente en Supabase) y avisa por correo a
+   contacto@comprenderai.com reusando el sistema de comunicaciones ya existente -- ver
+   MIGRACION_TU_OPINION.sql y api/comm.js. Privacidad, a pedido de Javier: no se manda ficha,
+   conversación, diagnóstico ni nombre de organismo -- solo la categoría elegida y el texto
+   escrito. Por eso también se sacó el campo de correo (no estaba en su pedido y hubiera sido
+   otro dato personal fuera de "categoría + texto libre + lo mínimo necesario"); el email de
+   quien escribe, si hace falta identificarlo, ya lo resuelve el servidor a partir de la sesión
+   iniciada, sin que el cliente lo transmita. Ya no dice "Lo leemos todo" (promesa operativa
+   difícil de garantizar, tal como pidió Javier). Error: no cierra el panel ni borra lo escrito
+   -- se muestra un aviso inline y el botón vuelve a estar disponible. */
 function construirOpinionContenido(cont, incluirCancelar){
   const p1 = document.createElement('p');
-  p1.textContent = 'Comprender AI mejora con el uso real. Contanos qué funcionó, qué no, o qué te gustaría que hiciera. Lo leemos todo.';
-  cont.appendChild(p1);
+  p1.textContent = 'Comprender AI mejora con el uso real.';
+  const p1b = document.createElement('p');
+  p1b.textContent = 'Contanos qué te resultó útil, qué no funcionó como esperabas o qué te gustaría poder hacer. Tus comentarios nos ayudan a decidir qué mejorar.';
+  cont.appendChild(p1); cont.appendChild(p1b);
 
   const f1 = document.createElement('div'); f1.className='field';
   const l1 = document.createElement('label'); l1.textContent = '¿Sobre qué querés escribirnos?';
   const sel = document.createElement('select');
-  for(const t of ['Una idea o sugerencia','Algo no funcionó como esperaba','La comprensión que devolvió no fue útil','Sobre precios y planes','Otra cosa']){
+  for(const t of ['Algo funcionó bien','Encontré un problema','Me gustaría una nueva función']){
     const op = document.createElement('option'); op.value=t; op.textContent=t; sel.appendChild(op);
   }
   f1.appendChild(l1); f1.appendChild(sel);
 
   const f2 = document.createElement('div'); f2.className='field';
-  const l2 = document.createElement('label'); l2.textContent = 'Tu mensaje';
+  const l2 = document.createElement('label'); l2.textContent = 'Contanos un poco más';
   const ta = document.createElement('textarea');
   ta.style.cssText = 'width:100%;height:120px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);font-size:13.5px;line-height:1.5;padding:10px 12px;resize:vertical;outline:none;font-family:inherit';
   f2.appendChild(l2); f2.appendChild(ta);
 
-  const f3 = document.createElement('div'); f3.className='field';
-  const l3 = document.createElement('label'); l3.textContent = 'Tu correo (opcional, si querés respuesta)';
-  const inp = document.createElement('input'); inp.type='email'; inp.placeholder='nombre@correo.com';
-  f3.appendChild(l3); f3.appendChild(inp);
+  cont.appendChild(f1); cont.appendChild(f2);
 
-  cont.appendChild(f1); cont.appendChild(f2); cont.appendChild(f3);
+  const aviso = document.createElement('div');
+  aviso.style.cssText = 'font-size:13px;color:#b4441f;margin-top:10px;min-height:0';
+  cont.appendChild(aviso);
 
   const row = document.createElement('div'); row.className='cardrow';
   if(incluirCancelar){
     const b1 = document.createElement('button'); b1.className='btn'; b1.textContent='Cancelar'; b1.onclick = cerrarOverlay;
     row.appendChild(b1);
   }
-  const b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Enviar';
+  const b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Enviar mi opinión';
   b2.onclick = function(){
     const texto = ta.value.trim();
     if(!texto){ ta.focus(); return; }
-    const op = {
-      fecha: new Date().toISOString(),
-      tema: sel.value,
-      mensaje: texto,
-      correo: inp.value.trim() || null,
-      producto: 'Comprender AI',
-      contexto: state.organismo ? ('organismo: ' + state.organismo.tipo) : 'chat'
-    };
-    try{
-      const list = JSON.parse(localStorage.getItem('ag_core_opiniones') || '[]');
-      list.push(op);
-      localStorage.setItem('ag_core_opiniones', JSON.stringify(list));
-    }catch(e){}
-    cerrarOverlay();
-    cardMensaje('Gracias', 'Tu mensaje quedó registrado. En esta variante de prueba se guarda en el dispositivo; en producción llega directamente a nosotros.');
+    aviso.textContent = '';
+    b2.disabled = true; b2.textContent = 'Enviando…';
+    fetch('/api/comm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ recurso: 'opinion', accion: 'enviar', categoria: sel.value, mensaje: texto })
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(d){ return { ok: r.ok, d: d }; });
+    }).then(function(res){
+      if(!res.ok || !res.d || res.d.ok !== true){
+        aviso.textContent = (res.d && res.d.error && res.d.error.message) || 'No se pudo enviar. Volvé a intentar.';
+        b2.disabled = false; b2.textContent = 'Enviar mi opinión';
+        return;
+      }
+      cerrarOverlay();
+      cardMensaje('Gracias', 'Tu opinión quedó registrada. La leemos para decidir qué mejorar.');
+    }).catch(function(){
+      aviso.textContent = 'No se pudo enviar. Revisá tu conexión e intentá de nuevo.';
+      b2.disabled = false; b2.textContent = 'Enviar mi opinión';
+    });
   };
   row.appendChild(b2);
   cont.appendChild(row);
