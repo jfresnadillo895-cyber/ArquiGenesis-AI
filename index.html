@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Comprender AI · ArquiGénesis</title>
+<!-- 10/08: PWA -- para que "Agregar a inicio" instale esta app (en vez de que quede
+     instalado comprenderai.com, la web, que es lo que generaba la barra de navegador
+     encima del header al saltar de un dominio a otro). manifest.json + los íconos viven
+     en la raíz, junto a este archivo -- Vercel los sirve como estáticos, sin tocar
+     vercel.json (no hay rewrites que puedan interceptarlos). -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#2E5A87">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="/favicon-16.png" sizes="16x16" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Comprender AI">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
