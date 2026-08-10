@@ -215,11 +215,19 @@ header header .cai-ham{flex-shrink:0}
 </head>
 <body>
 
+<div id="teFondo"></div>
+<div id="tuEspacio">
+  <div id="teTop">Comprender AI</div>
+  <div id="teConfig"></div>
+</div>
+<div id="modulosMenu"></div>
+
 <header>
   <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Contextos</b></div><div class="cai-baja">Versión profesional</div></div></div>
   <span style="flex:1"></span>
-  <button id="cai-cred" onclick="credTarjeta()" title="Comprensión disponible"><span class="cred-b"><i class="cred-i"></i></span><span class="cred-t">—</span></button>
-    <button class="cai-ham" onclick="caiToggle(this)" title="Menú">☰</button>
+  <button id="cai-cred" onclick="credTarjeta()" title="Tus créditos"><span class="cred-b"><i class="cred-i"></i></span><span class="cred-t">—</span></button>
+    <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
+    <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
 </header>
 
 <main>
@@ -936,10 +944,11 @@ header header .cai-ham{flex-shrink:0}
   function mostrarChipCuenta(){
     if(chipInsertado || document.getElementById('comprenderChipCuenta')) return;
     chipInsertado = true;
-    // 10/08: en el Core (index.html, la unica pagina con #composer) "Cuenta" paso a vivir
-    // en la barra lateral "Tu espacio" -- no hace falta ademas el chip flotante ahi. En
-    // Urbanismo y Contextos (sin esa barra) el chip sigue exactamente igual que antes.
-    if(document.getElementById('composer')) return;
+    // 10/08: "Cuenta" vive en el panel "Tu espacio" en los tres productos (index.html,
+    // urbanismo.html, contextos.html) -- no hace falta ademas el chip flotante donde ese
+    // panel ya existe. Antes el corte era #composer (solo el Core); ahora los tres tienen
+    // panel, asi que el chip flotante queda retirado en los tres.
+    if(document.getElementById('tuEspacio')) return;
     var b = document.createElement('button');
     b.id = 'comprenderChipCuenta';
     b.textContent = 'Cuenta';
@@ -1021,7 +1030,7 @@ header header .cai-ham{flex-shrink:0}
         // Core (index.html) sí; en Urbanismo/Contextos no (tienen su propio medidor, sin
         // tocar), así que ahí este botón simplemente no se dibuja.
         cuerpo =
-          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Comprensión disponible') : '') +
+          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tus créditos') : '') +
           botonSecundario('ccIrClave','Cambiar contraseña') +
           botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
           enlace('ccSalir','Cerrar sesión');
@@ -1177,10 +1186,11 @@ header header .cai-ham{flex-shrink:0}
   function mostrarChipBandeja(){
     if(chipBandejaInsertado || document.getElementById('comprenderChipBandeja')) return;
     chipBandejaInsertado = true;
-    // 10/08: mismo criterio que mostrarChipCuenta -- en el Core (index.html) "Avisos" paso
-    // a vivir en "Tu espacio", asi que el chip flotante no hace falta ahi. actualizarContadorBandeja()
-    // sigue llamandose siempre: ahora tambien actualiza el contador dentro de la barra lateral.
-    if(!document.getElementById('composer')){
+    // 10/08: mismo criterio que mostrarChipCuenta -- "Avisos" vive en el panel "Tu espacio"
+    // en los tres productos, asi que el chip flotante no hace falta donde ese panel ya
+    // existe. actualizarContadorBandeja() sigue llamandose siempre: ahora tambien actualiza
+    // el contador dentro del panel (mismo id, comprenderTeBandejaContador, en los tres).
+    if(!document.getElementById('tuEspacio')){
       var b = document.createElement('button');
       b.id = 'comprenderChipBandeja';
       b.setAttribute('aria-label','Avisos');
@@ -3036,6 +3046,27 @@ function caiEstilos(){
   .cai-ham{background:none;border:1px solid #E2DFD8;color:#5C6B7D;border-radius:9px;padding:6px 11px;
     font-size:15px;cursor:pointer;line-height:1;flex-shrink:0;font-family:inherit}
   .cai-ham:hover{border-color:#2E5A87;color:#2E5A87}
+
+  /* ---------- Tu espacio (10/08) -- mismo formato visual que index.html, sin lista de
+     organismos (Contextos no tiene ese concepto: se abre suelto desde el Core, no queda
+     atado a ningun organismo). Junta lo que antes vivia en el dropdown #cai-menu (Ciclo,
+     Ayuda, Tu opinion, Acerca de) + Avisos/Cuenta (antes chips flotantes, candado.txt). ---- */
+  #teFondo{position:fixed;inset:0;background:rgba(28,42,58,.28);z-index:99992;display:none}
+  #teFondo.open{display:block}
+  #tuEspacio{position:fixed;top:0;left:0;bottom:0;width:300px;max-width:86vw;background:#FFF;
+    border-right:1px solid #E2DFD8;box-shadow:0 12px 34px rgba(28,42,58,.16);z-index:99993;
+    display:flex;flex-direction:column;transform:translateX(-100%);transition:transform .22s ease}
+  #tuEspacio.open{transform:none}
+  #teTop{padding:16px 16px 12px;border-bottom:1px solid #E2DFD8;font-size:15px;font-weight:600;color:#1C2A3A}
+  #teConfig{padding:6px;flex:1;overflow-y:auto;display:flex;flex-direction:column}
+  @media (prefers-reduced-motion:reduce){ #tuEspacio{transition:none} }
+
+  /* ---------- menú de módulos (10/08) -- mismo botón de 4 cuadraditos que index.html, en
+     vez de las filas de texto que antes vivian mezcladas en #cai-menu. */
+  #modulosMenu{position:fixed;z-index:9050;background:#FFF;border:1px solid #E2DFD8;border-radius:14px;
+    padding:6px;min-width:200px;box-shadow:0 12px 34px rgba(28,42,58,.16);display:none;flex-direction:column}
+  #modulosMenu.open{display:flex}
+  #modulosMenu .vacio{padding:11px 14px;font-size:12.5px;color:#8a8a8a}
   `;
   document.head.appendChild(st);
 }
@@ -3218,6 +3249,98 @@ function caiToggle(boton){
   setTimeout(function(){ menu.classList.add('open'); }, 0);
 }
 
+/* ================= Tu espacio + menú de módulos (10/08) =================
+   Mismo formato visual que index.html (el Core), a pedido de Javier -- reemplaza al
+   dropdown chico #cai-menu de arriba (que queda definido pero sin ningún botón que lo
+   llame; se deja tal cual, sin romper nada, siguiendo el mismo criterio que ya se usó
+   con construirMenu() en el Core). Esta página no tiene lista de organismos (Contextos
+   se abre suelto desde el Core, no queda atado a ninguno -- ver candado.txt/ag_marco_pendiente),
+   así que "Tu espacio" acá es solo la sección administrativa: Ciclo, Ayuda, Tu opinión,
+   Acerca de, Avisos y Cuenta (estas dos últimas ya no viven como chip flotante -- ver el
+   cambio correspondiente en candado.txt, mismo criterio que se usó para el Core). */
+function abrirTuEspacio(){
+  construirTuEspacioConfig();
+  document.getElementById('teFondo').classList.add('open');
+  document.getElementById('tuEspacio').classList.add('open');
+}
+function cerrarTuEspacio(){
+  document.getElementById('teFondo').classList.remove('open');
+  document.getElementById('tuEspacio').classList.remove('open');
+}
+function tuEspacioToggle(){
+  if(document.getElementById('tuEspacio').classList.contains('open')){ cerrarTuEspacio(); return; }
+  abrirTuEspacio();
+}
+document.getElementById('teFondo').addEventListener('click', cerrarTuEspacio);
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape' && document.getElementById('tuEspacio').classList.contains('open')) cerrarTuEspacio();
+});
+function construirTuEspacioConfig(){
+  const cfg = document.getElementById('teConfig');
+  cfg.innerHTML = '';
+  const items = [
+    ['El ciclo de comprensión', caiCiclo],
+    ['Ayuda', caiAyuda],
+    ['Tu opinión', caiOpinion],
+    ['Acerca de', caiAcerca]
+  ];
+  items.forEach(function(it){
+    const b = document.createElement('button');
+    b.className = 'cai-item';
+    b.textContent = it[0];
+    b.addEventListener('click', function(){ cerrarTuEspacio(); it[1](); });
+    cfg.appendChild(b);
+  });
+  const bAvisos = document.createElement('button');
+  bAvisos.className = 'cai-item';
+  bAvisos.innerHTML = 'Avisos <span id="comprenderTeBandejaContador" style="display:none;margin-left:4px;background:#b4441f;color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700;"></span>';
+  bAvisos.addEventListener('click', function(){ cerrarTuEspacio(); if(window.mostrarBandejaComprender) window.mostrarBandejaComprender(); });
+  cfg.appendChild(bAvisos);
+  const bCuenta = document.createElement('button');
+  bCuenta.className = 'cai-item';
+  bCuenta.textContent = 'Cuenta';
+  bCuenta.addEventListener('click', function(){ cerrarTuEspacio(); if(window.mostrarCuentaComprender) window.mostrarCuentaComprender(); });
+  cfg.appendChild(bCuenta);
+  if(window.actualizarContadorBandejaComprender) window.actualizarContadorBandejaComprender();
+}
+
+/* Botón de 4 cuadraditos: mismo criterio que index.html (construirModulosMenu), reusando
+   caiNavItems() -- ya arma "Comprender AI →" + el resto de los módulos disponibles,
+   excluyendo el actual, con el mismo caiIrA()/moduloBloqueado() de siempre. */
+function construirModulosMenu(){
+  const menu = document.getElementById('modulosMenu');
+  menu.innerHTML = '';
+  const items = caiNavItems();
+  if(!items.length){
+    const v = document.createElement('div'); v.className = 'vacio';
+    v.textContent = 'Todavía no hay más módulos disponibles.';
+    menu.appendChild(v);
+    return;
+  }
+  items.forEach(function(it){
+    const b = document.createElement('button');
+    b.className = 'cai-item';
+    b.textContent = it[0];
+    b.addEventListener('click', function(){ menu.classList.remove('open'); it[1](); });
+    menu.appendChild(b);
+  });
+}
+function abrirModulosMenu(boton){
+  const menu = document.getElementById('modulosMenu');
+  if(menu.classList.contains('open')){ menu.classList.remove('open'); return; }
+  construirModulosMenu();
+  const r = boton.getBoundingClientRect();
+  menu.style.top = (r.bottom + 8) + 'px';
+  menu.style.right = Math.max(10, window.innerWidth - r.right) + 'px';
+  menu.classList.add('open');
+}
+document.addEventListener('click', function(e){
+  const menu = document.getElementById('modulosMenu');
+  if(menu.classList.contains('open') && !menu.contains(e.target) && !e.target.closest('.cai-ham')){
+    menu.classList.remove('open');
+  }
+});
+
 
 /* ===== Medidor de comprensión disponible (créditos) ===== */
 /* C-04 · configuración de créditos sincronizada con el Core (v1-5).
@@ -3284,7 +3407,7 @@ function credRender(){
 function credTarjeta(){
   const c = credEstado();
   const card = caiOverlay(); card.innerHTML='';
-  const h=document.createElement('h3'); h.textContent='Comprensión disponible';
+  const h=document.createElement('h3'); h.textContent='Tus créditos';
   const p=document.createElement('p');
   p.textContent = 'Plan ' + c.plan.nombre + ' · ' + c.resta + ' de ' + c.total + ' créditos' +
     (c.extra ? ' (incluye ' + c.extra + ' de recarga)' : '') + ', se renuevan cada ' + c.renueva + '.';

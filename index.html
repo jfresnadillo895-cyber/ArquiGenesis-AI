@@ -1202,10 +1202,11 @@ header .spacer{flex:1}
   function mostrarChipCuenta(){
     if(chipInsertado || document.getElementById('comprenderChipCuenta')) return;
     chipInsertado = true;
-    // 10/08: en el Core (index.html, la unica pagina con #composer) "Cuenta" paso a vivir
-    // en la barra lateral "Tu espacio" -- no hace falta ademas el chip flotante ahi. En
-    // Urbanismo y Contextos (sin esa barra) el chip sigue exactamente igual que antes.
-    if(document.getElementById('composer')) return;
+    // 10/08: "Cuenta" vive en el panel "Tu espacio" en los tres productos (index.html,
+    // urbanismo.html, contextos.html) -- no hace falta ademas el chip flotante donde ese
+    // panel ya existe. Antes el corte era #composer (solo el Core); ahora los tres tienen
+    // panel, asi que el chip flotante queda retirado en los tres.
+    if(document.getElementById('tuEspacio')) return;
     var b = document.createElement('button');
     b.id = 'comprenderChipCuenta';
     b.textContent = 'Cuenta';
@@ -1287,7 +1288,7 @@ header .spacer{flex:1}
         // Core (index.html) sí; en Urbanismo/Contextos no (tienen su propio medidor, sin
         // tocar), así que ahí este botón simplemente no se dibuja.
         cuerpo =
-          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Comprensión disponible') : '') +
+          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tus créditos') : '') +
           botonSecundario('ccIrClave','Cambiar contraseña') +
           botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
           enlace('ccSalir','Cerrar sesión');
@@ -1446,10 +1447,11 @@ header .spacer{flex:1}
   function mostrarChipBandeja(){
     if(chipBandejaInsertado || document.getElementById('comprenderChipBandeja')) return;
     chipBandejaInsertado = true;
-    // 10/08: mismo criterio que mostrarChipCuenta -- en el Core (index.html) "Avisos" paso
-    // a vivir en "Tu espacio", asi que el chip flotante no hace falta ahi. actualizarContadorBandeja()
-    // sigue llamandose siempre: ahora tambien actualiza el contador dentro de la barra lateral.
-    if(!document.getElementById('composer')){
+    // 10/08: mismo criterio que mostrarChipCuenta -- "Avisos" vive en el panel "Tu espacio"
+    // en los tres productos, asi que el chip flotante no hace falta donde ese panel ya
+    // existe. actualizarContadorBandeja() sigue llamandose siempre: ahora tambien actualiza
+    // el contador dentro del panel (mismo id, comprenderTeBandejaContador, en los tres).
+    if(!document.getElementById('tuEspacio')){
       var b = document.createElement('button');
       b.id = 'comprenderChipBandeja';
       b.setAttribute('aria-label','Avisos');
@@ -4159,7 +4161,7 @@ function credAlcanza(tipo){
 function cardCreditos(){
   const c = credEstado();
   el.cardContent.innerHTML = '';
-  const h = document.createElement('h3'); h.textContent = 'Comprensión disponible';
+  const h = document.createElement('h3'); h.textContent = 'Tus créditos';
   const p1 = document.createElement('p');
   p1.textContent = 'Plan ' + c.plan.nombre + ' · ' + c.resta + ' de ' + c.total + ' créditos' +
     (c.extra ? ' (incluye ' + c.extra + ' de recarga)' : '') +
@@ -5872,7 +5874,7 @@ function construirMenu(){
     items.push(['Nueva sesión', nuevaSesion]);
   }
   items.push(['El ciclo de comprensión', mostrarCiclo]);
-  items.push(['Comprensión disponible', cardCreditos]);
+  items.push(['Tus créditos', cardCreditos]);
   items.push(['Consumo real', cardConsumo]);
   items.push(['Exportar respaldo', exportarDatos]);
   items.push(['Importar respaldo', cardImportar]);
