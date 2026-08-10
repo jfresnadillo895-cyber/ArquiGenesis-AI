@@ -4100,8 +4100,8 @@ function cardCreditos(){
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
   const filas = [
     ['Consulta de comprensión', COSTO.chat],
-    ['Lectura territorial (Urban)', COSTO.lectura],
-    ['Evaluación de campo (Context)', COSTO.campo],
+    ['Lectura territorial (Urbanismo)', COSTO.lectura],
+    ['Evaluación de campo (Contextos)', COSTO.campo],
     ['Informe', COSTO.informe],
     ['Profundizar una dimensión (9 subtítulos)', COSTO.profundizar]
   ];
@@ -4223,8 +4223,8 @@ const AYUDA = {
     ['¿Qué es un organismo y cuándo conviene crear uno?','Cualquier entidad organizada que quieras comprender en el tiempo: una ciudad, una empresa, un proyecto, una investigación. Conviene cuando la conversación se organiza alrededor de algo con nombre. Si ya estás conversando, el botón «→ Organismo» convierte la charla sin perder nada de lo comprendido.'],
     ['¿Qué guarda la ficha viva?','Comprensión, no historial: qué función está en juego, qué tensiones siguen activas, qué diagnóstico quedó vigente y qué ordena el próximo paso. Por eso podés retomar meses después sin empezar de cero.'],
     ['¿Qué es el campo mayor?','La jerarquía de escalas. Un local comercial puede pertenecer al campo de una ciudad: cada uno mantiene su ficha propia, pero el motor lee al menor dentro del mayor, sin confundir las escalas.'],
-    ['¿Qué son Urban y Context?','Especialidades. Urban lee el organismo desde adentro (lectura territorial y proyectivo). Context evalúa el campo externo que lo condiciona. El proyectivo del organismo es uno solo: nace interno y se vuelve integrado cuando se cruza con el campo.'],
-    ['¿Por qué a veces el informe se niega a generarse?','Porque no hay informe sin lectura. Studio comunica comprensión existente; no la inventa. Trabajá primero el organismo y el informe va a tener sustancia real.'],
+    ['¿Qué son Urbanismo y Contextos?','Especialidades. Urbanismo lee el organismo desde adentro (lectura territorial y proyectivo). Contextos evalúa el campo externo que lo condiciona. El proyectivo del organismo es uno solo: nace interno y se vuelve integrado cuando se cruza con el campo.'],
+    ['¿Por qué a veces el informe se niega a generarse?','Porque no hay informe sin lectura. Pro Estudio comunica comprensión existente; no la inventa. Trabajá primero el organismo y el informe va a tener sustancia real.'],
     ['¿Cómo llevo mis fichas a otro dispositivo?','Con «Exportar respaldo» (todo) o el botón «Exportar» de una ficha (un organismo y, opcionalmente, los de su campo). En el destino, «Importar respaldo»: se fusiona por recencia, sin duplicar.']
   ],
   datos: [
@@ -4388,7 +4388,7 @@ function fichaTieneLectura(o){
 
 async function generarInforme(o){
   if(!fichaTieneLectura(o)){
-    cardMensaje('No hay informe sin lectura', 'La ficha de «' + o.nombre + '» todavía no tiene diagnóstico ni lecturas. Studio comunica comprensión existente: trabajá primero el organismo en el chat, Urban o Context, y el informe va a tener sustancia real.');
+    cardMensaje('No hay informe sin lectura', 'La ficha de «' + o.nombre + '» todavía no tiene diagnóstico ni lecturas. Pro Estudio comunica comprensión existente: trabajá primero el organismo en el chat, Urbanismo o Contextos, y el informe va a tener sustancia real.');
     return;
   }
   if(!credAlcanza('informe')){ cardSinCreditos('informe'); return; }
@@ -4523,9 +4523,9 @@ function contextHabilitado(){
 
 function cardActivarContext(org){
   el.cardContent.innerHTML = '';
-  const h = document.createElement('h3'); h.textContent = 'Context · Especialidad de campo';
+  const h = document.createElement('h3'); h.textContent = 'Contextos · Especialidad de campo';
   const p1 = document.createElement('p');
-  p1.textContent = 'Context es una especialidad de Comprender AI: evaluación de las fuerzas externas que condicionan al organismo, y cruce con su lectura interna para el proyectivo integrado. Requiere credencial de acceso.';
+  p1.textContent = 'Contextos es una especialidad de Comprender AI: evaluación de las fuerzas externas que condicionan al organismo, y cruce con su lectura interna para el proyectivo integrado. Requiere credencial de acceso.';
   const f1 = document.createElement('div'); f1.className = 'field';
   const l1 = document.createElement('label'); l1.textContent = 'Código de activación';
   const inp = document.createElement('input'); inp.type='text'; inp.placeholder='CONTEXT-…';
@@ -4749,9 +4749,9 @@ function urbanHabilitado(){
 
 function cardActivarUrban(org){
   el.cardContent.innerHTML = '';
-  const h = document.createElement('h3'); h.textContent = 'Urban · Especialidad territorial';
+  const h = document.createElement('h3'); h.textContent = 'Urbanismo · Especialidad territorial';
   const p1 = document.createElement('p');
-  p1.textContent = 'Urban es una especialidad de Comprender AI: lectura territorial estructurada del organismo urbano y proyectivo de evolución. Requiere credencial de acceso.';
+  p1.textContent = 'Urbanismo es una especialidad de Comprender AI: lectura territorial estructurada del organismo urbano y proyectivo de evolución. Requiere credencial de acceso.';
   const f1 = document.createElement('div'); f1.className = 'field';
   const l1 = document.createElement('label'); l1.textContent = 'Código de activación';
   const inp = document.createElement('input'); inp.type='text'; inp.placeholder='URBAN-…';
@@ -4898,7 +4898,7 @@ function renderPanelNegocio(version, dimensiones, proyectivo){
   panel.appendChild(grid);
   const pr = document.createElement('div');
   pr.className = 'uproyectivo';
-  pr.innerHTML = '<b>Proyectivo interno</b> · se potencia al cruzarlo con el campo (Context)';
+  pr.innerHTML = '<b>Proyectivo interno</b> · se potencia al cruzarlo con el campo (Contextos)';
   const prt = document.createElement('div');
   prt.style.marginTop = '6px';
   prt.textContent = proyectivo;
@@ -4944,7 +4944,7 @@ function renderPanelUrban(version, dimensiones, proyectivo){
   panel.appendChild(grid);
   const pr = document.createElement('div');
   pr.className = 'uproyectivo';
-  pr.innerHTML = '<b>Proyectivo interno</b> · se profundizará con la lectura de campo (Context)';
+  pr.innerHTML = '<b>Proyectivo interno</b> · se profundizará con la lectura de campo (Contextos)';
   const prt = document.createElement('div');
   prt.style.marginTop = '6px';
   prt.textContent = proyectivo;
@@ -5234,7 +5234,7 @@ function cardOrientarModo(org){
   const row2 = document.createElement('div'); row2.className='cardrow';
   const bCore = document.createElement('button'); bCore.className='btn'; bCore.textContent='Comprensión general';
   bCore.onclick = function(){ cerrarOverlay(); abrirOrganismo(org); };
-  const bCtx = document.createElement('button'); bCtx.className='btn'; bCtx.textContent='Evaluar su campo (Context)';
+  const bCtx = document.createElement('button'); bCtx.className='btn'; bCtx.textContent='Evaluar su campo (Contextos)';
   bCtx.style.borderColor = 'rgba(155,123,212,.5)'; bCtx.style.color = 'var(--trans)';
   bCtx.onclick = function(){ abrirEnContext(org); };
   row2.appendChild(bCore); row2.appendChild(bCtx);
@@ -5413,7 +5413,7 @@ function mostrarFicha(){
     ['Principios acumulados', (o.principios && o.principios.length) ? o.principios.map(function(p){return p.texto;}).join(' · ') : 'ninguno todavía'],
     ['Campo mayor', (function(){ if(!o.campo_de) return 'ninguno — organismo independiente'; const pd = cargarOrganismos().find(function(x){return x.id===o.campo_de;}); return pd ? pd.nombre : 'vínculo roto (el organismo campo fue eliminado)'; })()],
     ['Organismos en su campo', (function(){ const hs = cargarOrganismos().filter(function(x){return x.campo_de===o.id;}); return hs.length ? hs.map(function(x){return x.nombre;}).join(' · ') : 'ninguno'; })()],
-    ['Derivación', (o.derivable && o.derivable.indexOf('urban') > -1) ? 'Marcada para Urban (lectura territorial disponible)' : 'sin derivaciones marcadas'],
+    ['Derivación', (o.derivable && o.derivable.indexOf('urban') > -1) ? 'Marcada para Urbanismo (lectura territorial disponible)' : 'sin derivaciones marcadas'],
     ['Lecturas territoriales', (o.lecturas_urban && o.lecturas_urban.length) ? o.lecturas_urban.length + ' realizadas (última v' + o.lecturas_urban.length + ')' : 'ninguna todavía'],
     ['Evaluaciones de campo', (o.evaluaciones_context && o.evaluaciones_context.length) ? o.evaluaciones_context.length + ' realizadas (última v' + o.evaluaciones_context.length + ')' : 'ninguna todavía'],
     ['Lecturas de negocio', (o.lecturas_negocio && o.lecturas_negocio.length) ? o.lecturas_negocio.length + ' realizadas (última v' + o.lecturas_negocio.length + ')' : 'ninguna todavía'],
@@ -5437,12 +5437,12 @@ function mostrarFicha(){
   const b = document.createElement('button'); b.className='btn primary'; b.textContent='Cerrar'; b.onclick = cerrarOverlay;
   row.appendChild(bDel);
   if(esUrbano){
-    const bU = document.createElement('button'); bU.className='btn'; bU.textContent='Abrir en Urban';
+    const bU = document.createElement('button'); bU.className='btn'; bU.textContent='Abrir en Urbanismo';
     bU.style.borderColor = 'rgba(79,174,126,.5)'; bU.style.color = 'var(--energia)';
     bU.onclick = function(){ abrirEnUrban(o); };
     row.appendChild(bU);
   }
-  const bC = document.createElement('button'); bC.className='btn'; bC.textContent='Abrir en Context';
+  const bC = document.createElement('button'); bC.className='btn'; bC.textContent='Abrir en Contextos';
   bC.style.borderColor = 'rgba(155,123,212,.5)'; bC.style.color = 'var(--trans)';
   bC.onclick = function(){ abrirEnContext(o); };
   row.appendChild(bC);

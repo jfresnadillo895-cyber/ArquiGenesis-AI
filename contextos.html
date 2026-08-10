@@ -2890,7 +2890,7 @@ function abrirInformeEnPestaña(){
   const estilos=Array.from(document.querySelectorAll('style')).map(s=>s.outerHTML).join('\n');
   const w=window.open('','_blank');
   if(!w){
-    setProgreso('Tu navegador bloqueó la ventana. Habilitá las ventanas emergentes para descargar el informe, o abrí Context en una pestaña propia (fuera de esta vista) y usá "Descargar informe PDF".');
+    setProgreso('Tu navegador bloqueó la ventana. Habilitá las ventanas emergentes para descargar el informe, o abrí Contextos en una pestaña propia (fuera de esta vista) y usá "Descargar informe PDF".');
     return;
   }
   w.document.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'+estilos+

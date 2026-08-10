@@ -2149,7 +2149,7 @@ canvas{animation:none !important}
     <h3>Capa de contexto exógeno</h3>
     <p class="msub">Importá el diagnóstico de <strong>Comprender · Contextos</strong>: los factores externos (internacional, nacional, regional, ambiental, económico) que condicionan la interpretación y la proyección del diagnóstico interno. El contexto no cambia los hechos del territorio — cambia su lectura. <strong>También podés pegar acá el marco de comprensión exportado desde Comprender AI</strong>, que orienta el diagnóstico como comprensión previa del Sujeto.</p>
     <div style="margin:.75rem 0">
-      <label style="display:block;font-size:11px;font-weight:700;color:var(--texto3);margin-bottom:4px">OPCIÓN A — Archivo exportado por Context (.json)</label>
+      <label style="display:block;font-size:11px;font-weight:700;color:var(--texto3);margin-bottom:4px">OPCIÓN A — Archivo exportado por Contextos (.json)</label>
       <input type="file" accept=".json,application/json" id="ctx-file" onchange="cargarContextoArchivo(this)" style="font-size:11px" />
     </div>
     <div style="margin:.75rem 0">
@@ -4560,7 +4560,7 @@ function aplicarContextoPegado(){
   }
 
   const txt = document.getElementById('ctx-json').value.trim();
-  if(!txt){ document.getElementById('ctx-estado').innerHTML = '<span style="color:var(--rojo)">Pegá el JSON exportado por Context.</span>'; return; }
+  if(!txt){ document.getElementById('ctx-estado').innerHTML = '<span style="color:var(--rojo)">Pegá el JSON exportado por Contextos.</span>'; return; }
   procesarContextoJSON(txt);
 }
 
@@ -5872,7 +5872,7 @@ async function regenerarHaiku(){
 function actualizarCtxBadge(){
   const badge = document.getElementById('ctx-badge');
   if(!badge) return;
-  const icons = {urban:'🏙️ Urban', business:'💼 Business', research:'🎓 Research'};
+  const icons = {urban:'🏙️ Urbanismo', business:'💼 Business', research:'🎓 Research'};
   badge.textContent = icons[contextoApp] || icons.urban;
 }
 
