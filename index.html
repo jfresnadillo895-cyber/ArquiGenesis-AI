@@ -4407,7 +4407,7 @@ function mostrarAyuda(){
   el.cardContent.appendChild(h);
   const tabs = document.createElement('div'); tabs.className = 'ay-tabs';
   const cont = document.createElement('div');
-  const secciones = [['uso','Uso'],['datos','Tus datos'],['ciclo','El ciclo de comprensión'],['referencia','Referencia esencial y enlaces'],['opinion','Tu opinión']];
+  const secciones = [['uso','Uso'],['datos','Tus datos'],['ciclo','El ciclo de comprensión'],['referencia','Referencia esencial y enlaces'],['opinion','Tu opinión'],['acerca','Acerca de']];
   function pintar(clave){
     cont.innerHTML = '';
     if(clave === 'ciclo'){
@@ -4417,6 +4417,8 @@ function mostrarAyuda(){
       setTimeout(function(){ ref.ta.focus(); }, 60);
     } else if(clave === 'referencia'){
       pintarReferencia(cont);
+    } else if(clave === 'acerca'){
+      construirAcercaContenido(cont);
     } else {
       for(const item of AYUDA[clave]){
         const s = document.createElement('div'); s.className='ay-sec';
@@ -5596,18 +5598,29 @@ function eliminarOrganismo(id){
     });
 }
 
-function mostrarAcerca(){
-  el.cardContent.innerHTML = '';
-  const h = document.createElement('h3'); h.textContent = '¿Qué es Comprender AI?';
+/* construirAcercaContenido (10/08): mismo patrón que construirCicloContenido /
+   construirOpinionContenido -- "Acerca de" se sumó como pestaña de Ayuda (a pedido de
+   Javier) sin duplicar el texto. mostrarAcerca() sigue existiendo tal cual porque
+   construirMenu() (el dropdown viejo, sin uso real, que solo sigue vivo por el self-test
+   N21) todavía la referencia por nombre. */
+function construirAcercaContenido(cont){
   const p1 = document.createElement('p'); p1.textContent = 'Inteligencia artificial para aprender a comprender. No entrega información: entrega comprensión que se vuelve capacidad. Ante lo que traés, busca la tensión que lo organiza por debajo de los síntomas, y devuelve criterio utilizable.';
   const p2 = document.createElement('p'); p2.textContent = 'El hilo de principios registra, en tiempo real, las leyes organizadoras que van emergiendo en la conversación. Al cerrar, la sesión se destila y puede guardarse en este dispositivo.';
   const p3 = document.createElement('p'); p3.textContent = 'Producto de ARQUIGÉNESIS · Corte B · Parche 1 · Variante de prueba · Metodología ArquiGenesis — Javier Darío Fresnadillo';
   p3.style.fontSize = '11.5px';
+  cont.appendChild(p1); cont.appendChild(p2); cont.appendChild(p3);
+}
+
+function mostrarAcerca(){
+  el.cardContent.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = '¿Qué es Comprender AI?';
+  el.cardContent.appendChild(h);
+  construirAcercaContenido(el.cardContent);
   const row = document.createElement('div'); row.className='cardrow';
   const b = document.createElement('button'); b.className='btn primary'; b.textContent='Entendido';
   b.onclick = cerrarOverlay;
   row.appendChild(b);
-  el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(p2); el.cardContent.appendChild(p3); el.cardContent.appendChild(row);
+  el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
 }
 
@@ -5765,8 +5778,9 @@ function construirTuEspacioConfig(){
   items.push(['Exportar respaldo', exportarDatos]);
   items.push(['Importar respaldo', cardImportar]);
   items.push(['Ayuda', mostrarAyuda]);
-  items.push(['Tu opinión', cardOpinion]);
-  items.push(['Acerca de', mostrarAcerca]);
+  // "Tu opinión" y "Acerca de" (10/08): a pedido de Javier se sacaron de acá -- las dos
+  // ya son pestañas dentro de "Ayuda" (mostrarAyuda), tenerlas también sueltas en la
+  // barra las duplicaba.
   for(const it of items){
     const b = document.createElement('button');
     b.className = 'mitem';
