@@ -543,6 +543,10 @@
   function mostrarChipCuenta(){
     if(chipInsertado || document.getElementById('comprenderChipCuenta')) return;
     chipInsertado = true;
+    // 10/08: en el Core (index.html, la unica pagina con #composer) "Cuenta" paso a vivir
+    // en la barra lateral "Tu espacio" -- no hace falta ademas el chip flotante ahi. En
+    // Urbanismo y Contextos (sin esa barra) el chip sigue exactamente igual que antes.
+    if(document.getElementById('composer')) return;
     var b = document.createElement('button');
     b.id = 'comprenderChipCuenta';
     b.textContent = 'Cuenta';
@@ -777,17 +781,22 @@
   function mostrarChipBandeja(){
     if(chipBandejaInsertado || document.getElementById('comprenderChipBandeja')) return;
     chipBandejaInsertado = true;
-    var b = document.createElement('button');
-    b.id = 'comprenderChipBandeja';
-    b.setAttribute('aria-label','Avisos');
-    b.innerHTML = 'Avisos <span id="comprenderBandejaContador" style="display:none;margin-left:4px;' +
-      'background:#b4441f;color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700;"></span>';
-    b.style.cssText = 'position:fixed;bottom:16px;right:90px;z-index:99990;padding:8px 14px;' +
-      'font-size:13px;font-weight:600;color:#1a1a1a;background:#fff;border:1px solid #ddd;' +
-      'border-radius:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.08);' +
-      'font-family:system-ui,-apple-system,sans-serif;';
-    b.addEventListener('click', mostrarBandeja);
-    document.body.appendChild(b);
+    // 10/08: mismo criterio que mostrarChipCuenta -- en el Core (index.html) "Avisos" paso
+    // a vivir en "Tu espacio", asi que el chip flotante no hace falta ahi. actualizarContadorBandeja()
+    // sigue llamandose siempre: ahora tambien actualiza el contador dentro de la barra lateral.
+    if(!document.getElementById('composer')){
+      var b = document.createElement('button');
+      b.id = 'comprenderChipBandeja';
+      b.setAttribute('aria-label','Avisos');
+      b.innerHTML = 'Avisos <span id="comprenderBandejaContador" style="display:none;margin-left:4px;' +
+        'background:#b4441f;color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700;"></span>';
+      b.style.cssText = 'position:fixed;bottom:16px;right:90px;z-index:99990;padding:8px 14px;' +
+        'font-size:13px;font-weight:600;color:#1a1a1a;background:#fff;border:1px solid #ddd;' +
+        'border-radius:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.08);' +
+        'font-family:system-ui,-apple-system,sans-serif;';
+      b.addEventListener('click', mostrarBandeja);
+      document.body.appendChild(b);
+    }
     actualizarContadorBandeja();
   }
 
@@ -804,6 +813,13 @@
         if(span2){
           if(n > 0){ span2.textContent = String(n); span2.style.display = 'inline-block'; }
           else{ span2.style.display = 'none'; }
+        }
+        // 10/08: contador de "Avisos" dentro de "Tu espacio" (index.html) -- mismo patron
+        // que el del pie movil, span nuevo y separado.
+        var span3 = document.getElementById('comprenderTeBandejaContador');
+        if(span3){
+          if(n > 0){ span3.textContent = String(n); span3.style.display = 'inline-block'; }
+          else{ span3.style.display = 'none'; }
         }
       })
       .catch(function(){});
@@ -849,9 +865,10 @@
     // repetida con la que ya tiene Tu espacio (barra lateral, index.html), que también
     // está disponible en mobile. ICN.ayuda queda sin usar a propósito (por si se
     // revierte esto), no se borra.
+    // 10/08: "Avisos" y "Cuenta" se sacan por el mismo motivo -- ahora viven en Tu espacio,
+    // disponible en cualquier tamaño de pantalla. ICN.avisos e ICN.cuenta quedan sin usar
+    // a propósito, mismo criterio que ICN.ayuda.
     var botones = [
-      { id:'ffAvisos', icn:ICN.avisos, txt:'Avisos', on:function(){ mostrarBandeja(); } },
-      { id:'ffCuenta', icn:ICN.cuenta, txt:'Cuenta', on:function(){ mostrarCuenta(); } },
       { id:'ffPrincipios', icn:ICN.principios, txt:'Principios', hook:'comprenderAbrirPrincipios', on:function(){ if(window.comprenderAbrirPrincipios) window.comprenderAbrirPrincipios(); } }
     ];
 
@@ -968,6 +985,14 @@
     pintarCargando();
     cargar();
   }
+
+  // 10/08: expuestas para que index.html pueda abrir estos mismos paneles desde "Tu espacio"
+  // (mismo patrón que window.cerrarSesionComprender, ya expuesto arriba) -- sin esto, el panel
+  // de Cuenta y el de Avisos solo eran alcanzables desde el chip flotante / pie móvil que
+  // vivían acá mismo, en candado.txt.
+  window.mostrarCuentaComprender = mostrarCuenta;
+  window.mostrarBandejaComprender = mostrarBandeja;
+  window.actualizarContadorBandejaComprender = actualizarContadorBandeja;
 
   /* ---------- pantalla de planes ----------
      Vive acá y no en los HTML por la misma razón que la sesión: es infraestructura.
