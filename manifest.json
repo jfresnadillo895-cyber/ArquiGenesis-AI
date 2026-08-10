@@ -1,0 +1,16 @@
+{
+  "name": "Comprender AI",
+  "short_name": "Comprender AI",
+  "description": "Comprender AI construye comprensión que podés utilizar: identifica la tensión detrás de una situación y devuelve un criterio para actuar.",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#2E5A87",
+  "lang": "es-AR",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
