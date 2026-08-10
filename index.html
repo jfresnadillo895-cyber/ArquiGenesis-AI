@@ -337,6 +337,17 @@ header .spacer{flex:1}
 .orgitem .oname{font-weight:600;font-size:13.5px;color:var(--text)}
 .orgitem .otipo{font-family:'DM Mono',monospace;font-size:10px;color:var(--faint);letter-spacing:.06em;display:block}
 .orgitem .ostado{flex:1;font-size:12px;color:var(--dim);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.orgWrap{width:100%}
+.orgWrap-indent{padding-left:14px;box-sizing:border-box}
+.orgMenuBtn{flex-shrink:0;padding:2px 7px;margin-left:2px;font-size:14px;line-height:1.4;color:var(--faint);border-radius:6px}
+.orgMenuBtn:hover{background:var(--line);color:var(--text)}
+.orgMenuPanel{display:flex;flex-direction:column;gap:2px;padding:6px;margin-top:4px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+.orgMenuItem{text-align:left;padding:8px 10px;font-size:12.5px;color:var(--text);border-radius:6px;background:transparent}
+.orgMenuItem:hover{background:var(--line)}
+.orgCarpetaHeader{display:flex;align-items:center;gap:8px;width:100%;padding:9px 6px;margin-top:6px;background:transparent;text-align:left;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase}
+.orgCarpetaHeader:hover{color:var(--text)}
+.orgCarpetaFlecha{flex-shrink:0;font-size:10px;color:var(--faint);width:10px}
+.orgCarpetaCount{margin-left:auto;flex-shrink:0;color:var(--faint);font-size:10.5px;text-transform:none;letter-spacing:0}
 .orgnew{display:block;width:100%;text-align:left;padding:15px 17px;border:1px dashed var(--line);border-radius:var(--radius);background:var(--panel);font-size:13.5px;color:var(--accent);line-height:1.45;transition:all .2s;box-shadow:0 1px 2px rgba(28,42,58,.04);margin-top:2px}
 .orgnew:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 4px 14px rgba(46,90,135,.10)}
 .orgnew b{display:block;color:var(--accent);font-weight:600;font-size:13px;margin-bottom:3px;letter-spacing:.02em}
@@ -534,6 +545,7 @@ header .spacer{flex:1}
     </div>
     <div id="teOrgSec">
       <h4>Organismos</h4>
+      <input id="teOrgSearch" type="text" placeholder="Buscar..." style="display:none;width:100%;padding:9px 12px;font-size:13px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;background:var(--panel);color:var(--text)">
       <div class="orglist" id="teOrgList"></div>
       <p class="orgexplic" id="teOrgVacio" style="display:none">Todavía no guardaste ningún tema. Guardalo cuando quieras seguir un análisis en el tiempo.</p>
     </div>
@@ -5866,20 +5878,57 @@ function construirMenu(){
    administrativos que ya vivian en el menú. No se agregó ningún botón nuevo: se
    reutiliza el ☰ existente, tal como se charló. "Cuenta" y "Avisos" quedan afuera de
    esta etapa a propósito (viven en candado.txt, compartido con Urbanismo/Contextos;
-   no se toca ese archivo acá). No hay buscar/ordenar/archivar todavía -- esa parte
-   implica un campo de dato nuevo y se deja para una etapa aparte, como se acordó. */
+   no se toca ese archivo acá). Ordenar ya existía como orden fijo (más reciente
+   primero); "Archivar" queda para otra etapa aparte porque implica un campo de dato
+   nuevo (`archivado`) en localStorage y servidor.
+   Buscar (10/08): campo de texto que filtra la lista en vivo por nombre. Se muestra
+   solo cuando hay más de TE_ORG_BUSCAR_UMBRAL organismos, para no restarle espacio a
+   "Tu espacio" en el caso común de listas cortas. */
+var TE_ORG_BUSCAR_UMBRAL = 8;
+/* Carpetas (10/08): un organismo pertenece a lo sumo a una carpeta, guardada como
+   `org.carpeta` (nombre libre) dentro del mismo objeto que ya sincroniza con el
+   servidor -- no es una entidad aparte, no hay carpetas vacías: una carpeta existe
+   mientras al menos un organismo la tenga asignada. Tres variables de estado de UI,
+   a propósito fuera de la función para que sobrevivan entre reconstrucciones
+   (se reconstruye la lista entera en cada acción): qué organismo tiene su menú "⋯"
+   abierto, si ese menú está mostrando el campo de "nueva carpeta", y qué carpetas
+   están colapsadas. */
+var teCarpetaMenuAbierto = null;
+var teMenuNuevaCarpeta = false;
+var teCarpetasColapsadas = new Set();
+function moverACarpeta(org, nombre){
+  if(nombre) org.carpeta = nombre; else delete org.carpeta;
+  guardarOrganismo(org);
+  teCarpetaMenuAbierto = null;
+  teMenuNuevaCarpeta = false;
+  construirTuEspacioOrganismos();
+}
 function construirTuEspacioOrganismos(){
   const cont = document.getElementById('teOrgList');
   const vacio = document.getElementById('teOrgVacio');
+  const buscador = document.getElementById('teOrgSearch');
   cont.innerHTML = '';
   const list = cargarOrganismos();
   if(!list.length){
     vacio.style.display = '';
+    buscador.style.display = 'none';
     return;
   }
   vacio.style.display = 'none';
   list.sort(function(a,b){ return (b.actualizado||'').localeCompare(a.actualizado||''); });
-  for(const org of list){
+
+  const carpetas = {};
+  const sueltos = [];
+  list.forEach(function(org){
+    if(org.carpeta){ (carpetas[org.carpeta] = carpetas[org.carpeta] || []).push(org); }
+    else { sueltos.push(org); }
+  });
+  const nombresCarpetas = Object.keys(carpetas).sort(function(a,b){ return a.localeCompare(b); });
+
+  function renderOrgItem(org, indentado){
+    const wrap = document.createElement('div');
+    wrap.className = 'orgWrap' + (indentado ? ' orgWrap-indent' : '');
+    wrap.dataset.nombre = org.nombre.toLowerCase();
     const b = document.createElement('button');
     b.className = 'orgitem';
     const left = document.createElement('span');
@@ -5888,9 +5937,121 @@ function construirTuEspacioOrganismos(){
     left.appendChild(nm); left.appendChild(tp);
     const st = document.createElement('span'); st.className='ostado';
     st.textContent = (org.ficha && org.ficha.proximo) ? org.ficha.proximo : 'Listo para comenzar';
-    b.appendChild(left); b.appendChild(st);
+    const menuBtn = document.createElement('span');
+    menuBtn.className = 'orgMenuBtn';
+    menuBtn.textContent = '⋯';
+    menuBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      teCarpetaMenuAbierto = (teCarpetaMenuAbierto === org.id) ? null : org.id;
+      teMenuNuevaCarpeta = false;
+      construirTuEspacioOrganismos();
+    });
+    b.appendChild(left); b.appendChild(st); b.appendChild(menuBtn);
     b.addEventListener('click', function(){ cerrarTuEspacio(); abrirOrganismo(org); });
-    cont.appendChild(b);
+    wrap.appendChild(b);
+
+    if(teCarpetaMenuAbierto === org.id){
+      const panel = document.createElement('div');
+      panel.className = 'orgMenuPanel';
+      nombresCarpetas.filter(function(n){ return n !== org.carpeta; }).forEach(function(n){
+        const mb = document.createElement('button');
+        mb.className = 'orgMenuItem';
+        mb.textContent = 'Mover a "' + n + '"';
+        mb.addEventListener('click', function(e){ e.stopPropagation(); moverACarpeta(org, n); });
+        panel.appendChild(mb);
+      });
+      if(org.carpeta){
+        const sb = document.createElement('button');
+        sb.className = 'orgMenuItem';
+        sb.textContent = 'Sacar de la carpeta';
+        sb.addEventListener('click', function(e){ e.stopPropagation(); moverACarpeta(org, null); });
+        panel.appendChild(sb);
+      }
+      if(!teMenuNuevaCarpeta){
+        const nb = document.createElement('button');
+        nb.className = 'orgMenuItem';
+        nb.textContent = '+ Nueva carpeta...';
+        nb.addEventListener('click', function(e){
+          e.stopPropagation();
+          teMenuNuevaCarpeta = true;
+          construirTuEspacioOrganismos();
+        });
+        panel.appendChild(nb);
+      } else {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:4px;padding:2px';
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.placeholder = 'Nombre de la carpeta';
+        inp.style.cssText = 'flex:1;min-width:0;padding:7px 9px;font-size:12.5px;border:1px solid var(--line);border-radius:6px;box-sizing:border-box;font-family:inherit';
+        const ok = document.createElement('button');
+        ok.className = 'orgMenuItem';
+        ok.style.cssText = 'flex-shrink:0;padding:7px 10px;background:var(--accent);color:#fff';
+        ok.textContent = 'Crear';
+        function crear(){
+          const nombre = inp.value.trim();
+          if(nombre) moverACarpeta(org, nombre);
+        }
+        ok.addEventListener('click', function(e){ e.stopPropagation(); crear(); });
+        inp.addEventListener('click', function(e){ e.stopPropagation(); });
+        inp.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.stopPropagation(); crear(); } });
+        row.appendChild(inp); row.appendChild(ok);
+        panel.appendChild(row);
+        setTimeout(function(){ inp.focus(); }, 0);
+      }
+      wrap.appendChild(panel);
+    }
+    return wrap;
+  }
+
+  sueltos.forEach(function(org){ cont.appendChild(renderOrgItem(org, false)); });
+
+  nombresCarpetas.forEach(function(nombre){
+    const colapsada = teCarpetasColapsadas.has(nombre);
+    const header = document.createElement('button');
+    header.className = 'orgCarpetaHeader';
+    const flecha = document.createElement('span'); flecha.className='orgCarpetaFlecha'; flecha.textContent = colapsada ? '▸' : '▾';
+    const label = document.createElement('span'); label.textContent = nombre;
+    const count = document.createElement('span'); count.className='orgCarpetaCount'; count.textContent = carpetas[nombre].length;
+    header.appendChild(flecha); header.appendChild(label); header.appendChild(count);
+    header.addEventListener('click', function(){
+      if(colapsada) teCarpetasColapsadas.delete(nombre); else teCarpetasColapsadas.add(nombre);
+      construirTuEspacioOrganismos();
+    });
+    cont.appendChild(header);
+    if(!colapsada){
+      carpetas[nombre].forEach(function(org){ cont.appendChild(renderOrgItem(org, true)); });
+    }
+  });
+
+  if(list.length > TE_ORG_BUSCAR_UMBRAL){
+    buscador.style.display = '';
+    buscador.oninput = function(){
+      const q = buscador.value.trim().toLowerCase();
+      const nodos = Array.from(cont.children);
+      nodos.forEach(function(n){
+        if(n.classList.contains('orgWrap')){
+          n.style.display = (!q || (n.dataset.nombre||'').indexOf(q) !== -1) ? '' : 'none';
+        }
+      });
+      let i = 0;
+      while(i < nodos.length){
+        if(nodos[i].classList.contains('orgCarpetaHeader')){
+          const header = nodos[i];
+          let j = i+1, tieneVisible = false;
+          while(j < nodos.length && !nodos[j].classList.contains('orgCarpetaHeader')){
+            if(nodos[j].style.display !== 'none') tieneVisible = true;
+            j++;
+          }
+          header.style.display = tieneVisible ? '' : 'none';
+          i = j;
+        } else { i++; }
+      }
+    };
+  } else {
+    buscador.style.display = 'none';
+    buscador.value = '';
+    buscador.oninput = null;
   }
 }
 function construirTuEspacioConfig(){
@@ -5998,6 +6159,8 @@ function abrirTuEspacio(){
 function cerrarTuEspacio(){
   document.getElementById('teFondo').classList.remove('open');
   document.getElementById('tuEspacio').classList.remove('open');
+  teCarpetaMenuAbierto = null;
+  teMenuNuevaCarpeta = false;
 }
 document.getElementById('teNueva').addEventListener('click', function(){ cerrarTuEspacio(); nuevaSesion(); });
 document.getElementById('teFondo').addEventListener('click', cerrarTuEspacio);
