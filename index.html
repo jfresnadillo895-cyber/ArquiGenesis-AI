@@ -117,14 +117,16 @@ header .spacer{flex:1}
    tamaño de #main/#panel. Reemplaza al dropdown del ☰ y a "Continuar donde lo
    dejaste" de la pantalla de bienvenida (ver #orgsec más abajo). */
 #teFondo{
-  position:fixed;inset:0;background:rgba(28,42,58,.28);z-index:65;display:none;
+  /* z-index por encima de #comprenderFooterMovil (candado.txt, 99991): en mobile el pie
+     quedaba flotando arriba de la barra abierta en vez de taparse (09/08). */
+  position:fixed;inset:0;background:rgba(28,42,58,.28);z-index:99992;display:none;
 }
 #teFondo.open{display:block}
 #tuEspacio{
   position:fixed;top:0;left:0;bottom:0;width:300px;max-width:86vw;
   background:var(--panel);border-right:1px solid var(--line);
   box-shadow:0 12px 34px rgba(28,42,58,.16);
-  z-index:66;display:flex;flex-direction:column;
+  z-index:99993;display:flex;flex-direction:column;
   transform:translateX(-100%);transition:transform .22s ease;
 }
 #tuEspacio.open{transform:none}
