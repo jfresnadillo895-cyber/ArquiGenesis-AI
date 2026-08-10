@@ -1378,12 +1378,33 @@ header header .cai-ham{flex-shrink:0}
     cargar();
   }
 
+  // 10/08: correo de la cuenta activa, con caché -- para mostrarlo en "Tu espacio" (al lado
+  // de "Cuenta") sin depender de que el panel de Cuenta ya se haya abierto una vez (ese panel
+  // guarda su propio cuentaCorreo local, adentro de mostrarCuenta(), que no sobrevive entre
+  // aperturas). Reusa tokenVigente()/obtenerUsuario(), ya definidas más arriba en este mismo
+  // script compartido.
+  var cuentaCorreoCache = '';
+  var cuentaCorreoCachePromesa = null;
+  function obtenerCorreoActivo(){
+    if(cuentaCorreoCache) return Promise.resolve(cuentaCorreoCache);
+    if(cuentaCorreoCachePromesa) return cuentaCorreoCachePromesa;
+    cuentaCorreoCachePromesa = tokenVigente().then(function(t){
+      if(!t) return '';
+      return obtenerUsuario(t).then(function(u){
+        cuentaCorreoCache = (u && u.email) || '';
+        return cuentaCorreoCache;
+      });
+    }).catch(function(){ return ''; });
+    return cuentaCorreoCachePromesa;
+  }
+
   // 10/08: expuestas por consistencia con candado.txt / index.html -- en esta página no hay
   // ningún llamador todavía (Contextos no tiene "Tu espacio"), pero el chip flotante sigue
   // siendo el camino real acá, sin cambios.
   window.mostrarCuentaComprender = mostrarCuenta;
   window.mostrarBandejaComprender = mostrarBandeja;
   window.actualizarContadorBandejaComprender = actualizarContadorBandeja;
+  window.obtenerCorreoActivoComprender = obtenerCorreoActivo;
 
   /* ---------- pantalla de planes ----------
      Vive acá y no en los HTML por la misma razón que la sesión: es infraestructura.

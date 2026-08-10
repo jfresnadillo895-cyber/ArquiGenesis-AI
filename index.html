@@ -1647,6 +1647,26 @@ header .spacer{flex:1}
     cargar();
   }
 
+  // 10/08: correo de la cuenta activa, con caché -- para mostrarlo en "Tu espacio" (al lado
+  // de "Cuenta") sin depender de que el panel de Cuenta ya se haya abierto una vez (ese panel
+  // guarda su propio cuentaCorreo local, adentro de mostrarCuenta(), que no sobrevive entre
+  // aperturas). Reusa tokenVigente()/obtenerUsuario(), ya definidas más arriba en este mismo
+  // script compartido.
+  var cuentaCorreoCache = '';
+  var cuentaCorreoCachePromesa = null;
+  function obtenerCorreoActivo(){
+    if(cuentaCorreoCache) return Promise.resolve(cuentaCorreoCache);
+    if(cuentaCorreoCachePromesa) return cuentaCorreoCachePromesa;
+    cuentaCorreoCachePromesa = tokenVigente().then(function(t){
+      if(!t) return '';
+      return obtenerUsuario(t).then(function(u){
+        cuentaCorreoCache = (u && u.email) || '';
+        return cuentaCorreoCache;
+      });
+    }).catch(function(){ return ''; });
+    return cuentaCorreoCachePromesa;
+  }
+
   // 10/08: expuestas para que el resto de la app (script global, "Tu espacio") pueda abrir
   // estos mismos paneles (mismo patrón que window.cerrarSesionComprender, ya expuesto arriba)
   // -- sin esto, el panel de Cuenta y el de Avisos solo eran alcanzables desde el chip
@@ -1654,6 +1674,7 @@ header .spacer{flex:1}
   window.mostrarCuentaComprender = mostrarCuenta;
   window.mostrarBandejaComprender = mostrarBandeja;
   window.actualizarContadorBandejaComprender = actualizarContadorBandeja;
+  window.obtenerCorreoActivoComprender = obtenerCorreoActivo;
 
   /* ---------- pantalla de planes ----------
      Vive acá y no en los HTML por la misma razón que la sesión: es infraestructura.
@@ -6144,9 +6165,19 @@ function construirTuEspacioConfig(){
   cfg.appendChild(bAvisos);
   const bCuenta = document.createElement('button');
   bCuenta.className = 'mitem';
-  bCuenta.textContent = 'Cuenta';
+  const bCuentaTitulo = document.createElement('div');
+  bCuentaTitulo.textContent = 'Cuenta';
+  const bCuentaCorreo = document.createElement('div');
+  bCuentaCorreo.style.cssText = 'font-size:11px;color:var(--faint);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+  bCuenta.appendChild(bCuentaTitulo);
+  bCuenta.appendChild(bCuentaCorreo);
   bCuenta.addEventListener('click', function(){ cerrarTuEspacio(); if(window.mostrarCuentaComprender) window.mostrarCuentaComprender(); });
   cfg.appendChild(bCuenta);
+  if(window.obtenerCorreoActivoComprender){
+    window.obtenerCorreoActivoComprender().then(function(correo){
+      bCuentaCorreo.textContent = correo || '';
+    });
+  }
   if(window.actualizarContadorBandejaComprender) window.actualizarContadorBandejaComprender();
 }
 function abrirTuEspacio(){
