@@ -74,6 +74,13 @@ header .spacer{flex:1}
 /* C-06: el menú también en escritorio. Antes sólo existía en móvil, y todo lo
    que vive adentro (créditos, consumo, propuestas, módulos) era inalcanzable. */
 #btnMenu{display:inline-block}
+/* Reorganización de navegación, etapa 1b (09/08): "Ayuda" quedaba repetido (este botón
+   fijo + el mismo ítem adentro de Tu espacio). Se oculta acá, igual que #btnPrincipios
+   arriba -- el botón y su listener (el.btnAcerca) siguen intactos, solo dejan de verse,
+   para no arriesgar nada tocando el objeto el{} ni la lógica. Ayuda sigue disponible
+   desde Tu espacio (☰) en cualquier tamaño de pantalla, y desde el pie de página en
+   mobile (candado.txt, sin tocar). */
+#btnAcerca{display:none}
 
 /* ---------- menú hamburguesa ---------- */
 #menu{
@@ -5656,11 +5663,13 @@ function construirTuEspacioOrganismos(){
 function construirTuEspacioConfig(){
   const cfg = document.getElementById('teConfig');
   cfg.innerHTML = '';
+  // Reorganización, etapa 1b (09/08): "Ficha del organismo" (= botón "Ficha"),
+  // "Convertir en organismo" (= botón "→ Organismo") y "Guardar sesión" (= botón del
+  // mismo nombre) ya tienen su lugar fijo en el header cuando corresponden -- estar
+  // acá también los duplicaba. "Propuestas" se queda: no tiene botón propio en ningún
+  // otro lado.
   const items = [];
-  if(state.organismo) items.push(['Ficha del organismo', mostrarFicha]);
   if(state.organismo) items.push(['Propuestas', cardPropuestas]);
-  if(state.started && !state.organismo) items.push(['Convertir en organismo', promoverAOrganismo]);
-  if(state.started) items.push(['Guardar sesión', function(){ ofrecerGuardado(null); }]);
   items.push(['El ciclo de comprensión', mostrarCiclo]);
   items.push(['Consumo real', cardConsumo]);
   items.push(['Exportar respaldo', exportarDatos]);
