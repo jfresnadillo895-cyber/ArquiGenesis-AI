@@ -4268,12 +4268,16 @@ const CICLO = [
   ['6','Comunicar','pro estudio · informe','c3','La comprensión construida se vuelve documento: para el equipo, el cliente, el concejo, el municipio.']
 ];
 
-function mostrarCiclo(){
-  el.cardContent.innerHTML = '';
-  const h = document.createElement('h3'); h.textContent = 'El ciclo de comprensión';
+/* construirCicloContenido / construirOpinionContenido (10/08): se separó la construcción del
+   contenido de mostrarCiclo() y cardOpinion() para poder reusarla tanto en su vista propia
+   (accesible desde "Tu espacio") como embebida dentro de las pestañas de Ayuda, sin duplicar
+   el HTML. Antes, las pestañas "El ciclo de comprensión" y "Tu opinión" de Ayuda cerraban el
+   panel entero y abrían estas vistas por separado: al volver, Javier tenía que cerrar Ayuda y
+   reabrirla para ver las otras pestañas. */
+function construirCicloContenido(cont){
   const intro = document.createElement('p'); intro.className = 'cic-intro';
   intro.textContent = 'Comprender AI no es una herramienta que usás una vez. Es un ciclo que se retroalimenta: cada vuelta comprende más que la anterior, sobre la misma memoria.';
-  el.cardContent.appendChild(h); el.cardContent.appendChild(intro);
+  cont.appendChild(intro);
   CICLO.forEach(function(paso, i){
     const fila = document.createElement('div'); fila.className = 'cic-paso';
     const col = document.createElement('div'); col.className = 'cic-col';
@@ -4287,13 +4291,20 @@ function mostrarCiclo(){
     const p = document.createElement('p'); p.textContent = paso[4];
     cuerpo.appendChild(t); cuerpo.appendChild(d); cuerpo.appendChild(p);
     fila.appendChild(col); fila.appendChild(cuerpo);
-    el.cardContent.appendChild(fila);
+    cont.appendChild(fila);
   });
   const v = document.createElement('div'); v.className = 'cic-vuelta';
   const b = document.createElement('b'); b.textContent = '↻ Y vuelve a empezar. ';
   v.appendChild(b);
   v.appendChild(document.createTextNode('Con el paradigma construido, la próxima lectura territorial no arranca de cero: lo toma como insumo y evalúa qué lo confirma, qué lo tensiona y cómo evoluciona el proyectivo. Diagnóstico → comprensión → paradigma → nuevo diagnóstico. La ficha conserva cada vuelta: el organismo no se relee, se sigue comprendiendo.'));
-  el.cardContent.appendChild(v);
+  cont.appendChild(v);
+}
+
+function mostrarCiclo(){
+  el.cardContent.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = 'El ciclo de comprensión';
+  el.cardContent.appendChild(h);
+  construirCicloContenido(el.cardContent);
   const row = document.createElement('div'); row.className='cardrow';
   const b1 = document.createElement('button'); b1.className='btn primary'; b1.textContent='Entendido'; b1.onclick = cerrarOverlay;
   row.appendChild(b1);
@@ -4301,12 +4312,10 @@ function mostrarCiclo(){
   el.overlay.classList.add('open');
 }
 
-function cardOpinion(){
-  el.cardContent.innerHTML = '';
-  const h = document.createElement('h3'); h.textContent = 'Tu opinión';
+function construirOpinionContenido(cont, incluirCancelar){
   const p1 = document.createElement('p');
   p1.textContent = 'Comprender AI mejora con el uso real. Contanos qué funcionó, qué no, o qué te gustaría que hiciera. Lo leemos todo.';
-  el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
+  cont.appendChild(p1);
 
   const f1 = document.createElement('div'); f1.className='field';
   const l1 = document.createElement('label'); l1.textContent = '¿Sobre qué querés escribirnos?';
@@ -4327,10 +4336,13 @@ function cardOpinion(){
   const inp = document.createElement('input'); inp.type='email'; inp.placeholder='nombre@correo.com';
   f3.appendChild(l3); f3.appendChild(inp);
 
-  el.cardContent.appendChild(f1); el.cardContent.appendChild(f2); el.cardContent.appendChild(f3);
+  cont.appendChild(f1); cont.appendChild(f2); cont.appendChild(f3);
 
   const row = document.createElement('div'); row.className='cardrow';
-  const b1 = document.createElement('button'); b1.className='btn'; b1.textContent='Cancelar'; b1.onclick = cerrarOverlay;
+  if(incluirCancelar){
+    const b1 = document.createElement('button'); b1.className='btn'; b1.textContent='Cancelar'; b1.onclick = cerrarOverlay;
+    row.appendChild(b1);
+  }
   const b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Enviar';
   b2.onclick = function(){
     const texto = ta.value.trim();
@@ -4351,10 +4363,18 @@ function cardOpinion(){
     cerrarOverlay();
     cardMensaje('Gracias', 'Tu mensaje quedó registrado. En esta variante de prueba se guarda en el dispositivo; en producción llega directamente a nosotros.');
   };
-  row.appendChild(b1); row.appendChild(b2);
-  el.cardContent.appendChild(row);
+  row.appendChild(b2);
+  cont.appendChild(row);
+  return { ta: ta };
+}
+
+function cardOpinion(){
+  el.cardContent.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = 'Tu opinión';
+  el.cardContent.appendChild(h);
+  const ref = construirOpinionContenido(el.cardContent, true);
   el.overlay.classList.add('open');
-  setTimeout(function(){ ta.focus(); }, 60);
+  setTimeout(function(){ ref.ta.focus(); }, 60);
 }
 
 function pintarReferencia(cont){
@@ -4389,10 +4409,13 @@ function mostrarAyuda(){
   const cont = document.createElement('div');
   const secciones = [['uso','Uso'],['datos','Tus datos'],['ciclo','El ciclo de comprensión'],['referencia','Referencia esencial y enlaces'],['opinion','Tu opinión']];
   function pintar(clave){
-    if(clave === 'ciclo'){ cerrarOverlay(); mostrarCiclo(); return; }
-    if(clave === 'opinion'){ cerrarOverlay(); cardOpinion(); return; }
     cont.innerHTML = '';
-    if(clave === 'referencia'){
+    if(clave === 'ciclo'){
+      construirCicloContenido(cont);
+    } else if(clave === 'opinion'){
+      const ref = construirOpinionContenido(cont, false);
+      setTimeout(function(){ ref.ta.focus(); }, 60);
+    } else if(clave === 'referencia'){
       pintarReferencia(cont);
     } else {
       for(const item of AYUDA[clave]){
