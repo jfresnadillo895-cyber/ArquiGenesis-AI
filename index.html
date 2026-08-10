@@ -5934,11 +5934,29 @@ function construirTuEspacioConfig(){
     });
     cfg.appendChild(bi);
   }
-  const items = [];
-  items.push(['El ciclo de comprensión', mostrarCiclo]);
-  items.push(['Exportar respaldo', exportarDatos]);
-  items.push(['Importar respaldo', cardImportar]);
-  items.push(['Ayuda', mostrarAyuda]);
+  const bCiclo = document.createElement('button');
+  bCiclo.className = 'mitem';
+  bCiclo.textContent = 'El ciclo de comprensión';
+  bCiclo.addEventListener('click', function(){ cerrarTuEspacio(); mostrarCiclo(); });
+  cfg.appendChild(bCiclo);
+
+  // "Exportar respaldo" / "Importar respaldo" (10/08): a pedido de Javier, van en una
+  // sola fila de dos botones en vez de dos filas completas -- ocupan la mitad de alto.
+  const filaResp = document.createElement('div');
+  filaResp.style.cssText = 'display:flex;gap:4px';
+  const bExport = document.createElement('button');
+  bExport.className = 'mitem';
+  bExport.style.cssText = 'flex:1;text-align:center;padding-left:6px;padding-right:6px';
+  bExport.textContent = 'Exportar respaldo';
+  bExport.addEventListener('click', function(){ cerrarTuEspacio(); exportarDatos(); });
+  const bImport = document.createElement('button');
+  bImport.className = 'mitem';
+  bImport.style.cssText = 'flex:1;text-align:center;padding-left:6px;padding-right:6px';
+  bImport.textContent = 'Importar respaldo';
+  bImport.addEventListener('click', function(){ cerrarTuEspacio(); cardImportar(); });
+  filaResp.appendChild(bExport); filaResp.appendChild(bImport);
+  cfg.appendChild(filaResp);
+
   // "Tu opinión" y "Acerca de" (10/08): a pedido de Javier se sacaron de acá -- las dos
   // ya son pestañas dentro de "Ayuda" (mostrarAyuda), tenerlas también sueltas en la
   // barra las duplicaba.
@@ -5946,13 +5964,11 @@ function construirTuEspacioConfig(){
   // la API (tokens, USD por llamada) pensados para calibrar cupos/precios de su lado, no
   // información que le sirva a un usuario final. cardConsumo() queda intacta, sin ningún
   // botón en la UI que la abra (construirMenu(), el dropdown legacy, todavía la referencia).
-  for(const it of items){
-    const b = document.createElement('button');
-    b.className = 'mitem';
-    b.textContent = it[0];
-    b.addEventListener('click', function(){ cerrarTuEspacio(); it[1](); });
-    cfg.appendChild(b);
-  }
+  const bAyuda = document.createElement('button');
+  bAyuda.className = 'mitem';
+  bAyuda.textContent = 'Ayuda';
+  bAyuda.addEventListener('click', function(){ cerrarTuEspacio(); mostrarAyuda(); });
+  cfg.appendChild(bAyuda);
   // "Avisos" y "Cuenta" (10/08): a pedido de Javier se sacan de la pantalla principal (chip
   // flotante + pie móvil, candado.txt) y pasan a vivir acá. Los paneles reales
   // (mostrarCuenta/mostrarBandeja) siguen definidos en candado.txt -- son infraestructura
