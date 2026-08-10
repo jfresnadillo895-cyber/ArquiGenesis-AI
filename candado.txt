@@ -624,7 +624,11 @@
           enlace('ccSalir','Cerrar sesión') +
           '<div id="ccAviso" style="font-size:13px;color:#2a7;margin-top:8px;min-height:18px;"></div>';
       } else {
+        // 10/08: "Comprensión disponible" solo aparece si la página define el hook -- en el
+        // Core (index.html) sí; en Urbanismo/Contextos no (tienen su propio medidor, sin
+        // tocar), así que ahí este botón simplemente no se dibuja.
         cuerpo =
+          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Comprensión disponible') : '') +
           botonSecundario('ccIrClave','Cambiar contraseña') +
           botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
           enlace('ccSalir','Cerrar sesión');
@@ -637,6 +641,8 @@
 
     function cablear(){
       if(vistaC === 'inicio'){
+        var irCreditos = capa.querySelector('#ccIrCreditos');
+        if(irCreditos) irCreditos.addEventListener('click', function(){ cerrar(); if(window.comprenderVerCreditos) window.comprenderVerCreditos(); });
         var irClave = capa.querySelector('#ccIrClave');
         if(irClave) irClave.addEventListener('click', function(){ vistaC='clave'; pintar(); });
         var irEliminar = capa.querySelector('#ccIrEliminar');

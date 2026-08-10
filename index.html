@@ -417,20 +417,14 @@ header .spacer{flex:1}
 .cic-vuelta{border:1px dashed var(--line);border-radius:12px;padding:12px 15px;margin-top:6px;font-size:12.5px;color:var(--dim);line-height:1.55}
 .cic-vuelta b{color:var(--text)}
 
-/* ---------- créditos ---------- */
-#cred{
-  display:flex;align-items:center;gap:7px;font-family:'DM Mono',monospace;font-size:10.5px;
-  letter-spacing:.06em;color:var(--dim);border:1px solid var(--line);border-radius:20px;padding:4px 11px;
-  transition:all .25s;cursor:pointer;
-}
-#cred:hover{border-color:var(--accent)}
-#cred{flex-shrink:0}
-#cred .barra{width:34px;height:4px;border-radius:3px;background:var(--line);overflow:hidden;flex-shrink:0}
-#cred .barra i{display:block;height:100%;background:var(--accent);transition:width .4s ease}
-#cred.bajo{border-color:rgba(201,162,75,.5);color:#C9A24B}
-#cred.bajo .barra i{background:#C9A24B}
-#cred.agotado{border-color:rgba(212,96,91,.5);color:#D4605B}
-#cred.agotado .barra i{background:#D4605B}
+/* ---------- créditos ----------
+   10/08: el medidor fijo (#cred, la barra + texto en el header) se sacó de acá -- Javier
+   pidió liberar espacio en el header, sobre todo el móvil, para poder sumar "Principios"
+   ahí en vez de dejarlo solo en el pie de página. "Comprensión disponible" (cardCreditos())
+   sigue existiendo igual, solo que ahora se abre desde "Cuenta" (candado.txt,
+   window.comprenderVerCreditos) en vez de tener su propio elemento siempre visible en el
+   header, en desktop y en mobile por igual -- no solo en mobile. Las reglas de #cred quedan
+   borradas; .cr-fila/.cr-tot (el contenido del panel) no se tocan. */
 .cr-fila{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:var(--dim);padding:7px 0;border-bottom:1px solid var(--line)}
 .cr-fila b{color:var(--text);font-weight:600}
 .cr-tot{display:flex;justify-content:space-between;font-size:15px;margin:14px 0 4px}
@@ -486,12 +480,14 @@ header .spacer{flex:1}
 @media (max-width:840px){
   header{padding:12px 12px;gap:7px}
   #orgchip{min-width:0;flex:1 1 auto;max-width:none;overflow:hidden}
-  #cred{padding:4px 8px;gap:5px}
-  #cred #credTxt{display:none}
-  #cred .barra{width:26px}
   header .spacer{display:none}
   #btnGuardar,#btnNueva,#btnAcerca,#btnFicha,#btnPromover{display:none!important}
   #btnMenu{display:inline-block}
+  /* 10/08: "Principios" pasa a estar disponible en el header también en mobile -- antes
+     #btnPrincipios estaba oculto siempre (línea ~73) porque en desktop el panel fijo ya
+     está a la vista sin necesitar botón, y en mobile el pie de página (candado.txt) era el
+     único camino. Con "Comprensión disponible" afuera del header ya hay lugar. */
+  #btnPrincipios{display:inline-block}
   #orgchip{max-width:110px}
   #panel{
     position:fixed;inset:auto 0 0 0;width:100%;max-height:62dvh;
@@ -540,7 +536,6 @@ header .spacer{flex:1}
         <span class="lg-txt">Comprender <b>AI</b></span>
       </span>
       <span id="orgchip"><b id="orgname"></b></span>
-      <span id="cred" title="Comprensión disponible"><span class="barra"><i id="credBarra"></i></span><span id="credTxt"></span></span>
       <span class="spacer"></span>
       <button class="hbtn" id="btnFicha" style="display:none">Ficha</button>
       <button class="hbtn" id="btnPrincipios">Principios</button>
@@ -1257,7 +1252,11 @@ header .spacer{flex:1}
           enlace('ccSalir','Cerrar sesión') +
           '<div id="ccAviso" style="font-size:13px;color:#2a7;margin-top:8px;min-height:18px;"></div>';
       } else {
+        // 10/08: "Comprensión disponible" solo aparece si la página define el hook -- en el
+        // Core (index.html) sí; en Urbanismo/Contextos no (tienen su propio medidor, sin
+        // tocar), así que ahí este botón simplemente no se dibuja.
         cuerpo =
+          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Comprensión disponible') : '') +
           botonSecundario('ccIrClave','Cambiar contraseña') +
           botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
           enlace('ccSalir','Cerrar sesión');
@@ -1270,6 +1269,8 @@ header .spacer{flex:1}
 
     function cablear(){
       if(vistaC === 'inicio'){
+        var irCreditos = capa.querySelector('#ccIrCreditos');
+        if(irCreditos) irCreditos.addEventListener('click', function(){ cerrar(); if(window.comprenderVerCreditos) window.comprenderVerCreditos(); });
         var irClave = capa.querySelector('#ccIrClave');
         if(irClave) irClave.addEventListener('click', function(){ vistaC='clave'; pintar(); });
         var irEliminar = capa.querySelector('#ccIrEliminar');
@@ -1458,30 +1459,22 @@ header .spacer{flex:1}
       .catch(function(){});
   }
 
-  /* ---------- footer movil unificado (Avisos, Cuenta, Principios, Ayuda) ----------
+  /* ---------- footer movil unificado ----------
      Se arma solo en paginas que tienen #composer (hoy, el Core): ahi es donde el header
      angosto de movil no alcanza para todo, y donde las chips flotantes de Cuenta/Avisos
      competian por el mismo rincon que el compositor. En Urbanismo y Contextos no hay
      #composer, asi que esto no se activa y las chips flotantes siguen exactamente igual
      que antes: cero riesgo para esos dos productos.
-     Principios y Ayuda son especificos de cada pagina (paneles/funciones que candado.txt
-     no conoce), asi que se enganchan via window.comprenderAbrirPrincipios /
-     window.comprenderMostrarAyuda -- si la pagina no los define, esos dos botones no
-     se dibujan y el footer queda con Avisos + Cuenta. */
+     10/08: "Ayuda" (09/08), "Avisos"/"Cuenta" y ahora "Principios" se fueron sacando de
+     acá a medida que consiguieron un lugar mejor (Tu espacio, y Principios directo en el
+     header movil -- ver #btnPrincipios en el CSS). botones queda vacío a propósito: si el
+     dia de mañana hace falta un boton nuevo acá, este mecanismo (con su hook opcional)
+     sigue andando igual. Mientras tanto, si no hay ningun boton para mostrar, la funcion
+     no crea una barra vacia ni le agrega el padding de mas al compositor. */
   var footerMovilInsertado = false;
   function mostrarFooterMovil(){
     if(footerMovilInsertado || document.getElementById('comprenderFooterMovil')) return;
     if(!document.getElementById('composer')) return;
-    footerMovilInsertado = true;
-
-    var css = document.createElement('style');
-    css.textContent =
-      '@media(max-width:840px){' +
-        '#comprenderChipCuenta,#comprenderChipBandeja{display:none!important}' +
-        '#composer{padding-bottom:calc(16px + env(safe-area-inset-bottom) + 60px)!important}' +
-        '#comprenderFooterMovil{display:flex!important}' +
-      '}';
-    document.head.appendChild(css);
 
     function icono(path){
       return '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
@@ -1493,17 +1486,22 @@ header .spacer{flex:1}
       principios: icono('<path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h10"></path>'),
       ayuda: icono('<circle cx="12" cy="12" r="9"></circle><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 1.7-2.5 3.5"></path><path d="M12 17h.01"></path>')
     };
+    // ICN.* quedan todos sin usar a propósito (por si algún botón vuelve al pie más
+    // adelante) -- ver el comentario de arriba.
+    var botones = [];
 
-    // Reorganización de navegación, etapa 1c (09/08): "Ayuda" se saca de acá -- quedaba
-    // repetida con la que ya tiene Tu espacio (barra lateral), que también está
-    // disponible en mobile. ICN.ayuda queda sin usar a propósito (por si se revierte
-    // esto), no se borra.
-    // 10/08: "Avisos" y "Cuenta" se sacan por el mismo motivo -- ahora viven en Tu espacio,
-    // disponible en cualquier tamaño de pantalla. ICN.avisos e ICN.cuenta quedan sin usar
-    // a propósito, mismo criterio que ICN.ayuda.
-    var botones = [
-      { id:'ffPrincipios', icn:ICN.principios, txt:'Principios', hook:'comprenderAbrirPrincipios', on:function(){ if(window.comprenderAbrirPrincipios) window.comprenderAbrirPrincipios(); } }
-    ];
+    var botonesVisibles = botones.filter(function(d){ return !d.hook || window[d.hook]; });
+    if(!botonesVisibles.length) return;   // nada que mostrar -- no crear una barra vacía
+    footerMovilInsertado = true;
+
+    var css = document.createElement('style');
+    css.textContent =
+      '@media(max-width:840px){' +
+        '#comprenderChipCuenta,#comprenderChipBandeja{display:none!important}' +
+        '#composer{padding-bottom:calc(16px + env(safe-area-inset-bottom) + 60px)!important}' +
+        '#comprenderFooterMovil{display:flex!important}' +
+      '}';
+    document.head.appendChild(css);
 
     var barra = document.createElement('div');
     barra.id = 'comprenderFooterMovil';
@@ -1511,9 +1509,8 @@ header .spacer{flex:1}
       'background:#fff;border-top:1px solid #ddd;padding:6px 4px calc(4px + env(safe-area-inset-bottom));' +
       'align-items:stretch;justify-content:space-around;font-family:system-ui,-apple-system,sans-serif;';
 
-    for(var i=0;i<botones.length;i++){
-      var d = botones[i];
-      if(d.hook && !window[d.hook]) continue;
+    for(var i=0;i<botonesVisibles.length;i++){
+      var d = botonesVisibles[i];
       var b = document.createElement('button');
       b.id = d.id;
       b.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;' +
@@ -4083,7 +4080,9 @@ function credConsumir(tipo){
   try{
     localStorage.setItem('ag_core_cred', JSON.stringify({ clave: c.clave, usado: c.usado + costo, extra: c.extra }));
   }catch(e){}
-  renderCred();
+  // 10/08: ya no hay un medidor fijo en el header que actualizar acá (ver nota en la
+  // sección CSS "créditos") -- credEstado() sigue siendo la fuente de verdad, cardCreditos()
+  // la lee fresca cada vez que se abre desde "Cuenta".
 }
 
 function credRecargar(){
@@ -4103,16 +4102,6 @@ function credRecargar(){
 
 function credAlcanza(tipo){
   return credEstado().resta >= (COSTO[tipo] || 1);
-}
-
-function renderCred(){
-  const c = credEstado();
-  const cont = document.getElementById('cred');
-  const pct = c.total ? Math.round((c.resta / c.total) * 100) : 0;
-  document.getElementById('credBarra').style.width = pct + '%';
-  document.getElementById('credTxt').textContent = c.resta.toLocaleString('es-AR') + ' créditos disponibles';
-  cont.classList.toggle('bajo', pct <= 25 && pct > 0);
-  cont.classList.toggle('agotado', c.resta === 0);
 }
 
 function cardCreditos(){
@@ -5803,6 +5792,9 @@ el.btnPrincipios.addEventListener('click', function(){ el.panel.classList.toggle
    candado.txt arma solo en esta pagina (ver mostrarFooterMovil en candado.txt). */
 window.comprenderAbrirPrincipios = function(){ el.panel.classList.toggle('open'); };
 window.comprenderMostrarAyuda = mostrarAyuda;
+// 10/08: mismo patrón -- candado.txt (mostrarCuenta) llama a esto para abrir "Comprensión
+// disponible" desde adentro de "Cuenta", ahora que #cred ya no vive en el header.
+window.comprenderVerCreditos = cardCreditos;
 el.overlay.addEventListener('click', function(e){ if(e.target === el.overlay) cerrarOverlay(); });
 document.addEventListener('click', function(e){
   if(window.innerWidth <= 840 && el.panel.classList.contains('open')){
@@ -6158,7 +6150,9 @@ document.getElementById('btnInfCompartir').addEventListener('click', function(){
   }
 });
 
-document.getElementById('cred').addEventListener('click', cardCreditos);
+/* 10/08: el listener de click sobre #cred se sacó de acá -- el elemento ya no existe en el
+   header (ver nota en la sección CSS "créditos"). cardCreditos() ahora se abre desde "Cuenta"
+   (candado.txt, window.comprenderVerCreditos, exportada más abajo). */
 
 /* ================= H04 · BANCO DE PRUEBAS (regresión) =================
    Acceso: agregá #pruebas a la URL, o Ctrl+Alt+P. No aparece en la UI del producto.
@@ -6668,7 +6662,6 @@ window.addEventListener('hashchange', function(){ if(location.hash === '#pruebas
 
 /* ================= init ================= */
 renderOrgList();
-renderCred();
 mostrarOnboarding(false);
 sincronizarOrganismosConServidor();   // Corte 0.5
 intentarAbrirOrganismoDesdeURL();     // Corte I: caso comun, ya esta en localStorage
