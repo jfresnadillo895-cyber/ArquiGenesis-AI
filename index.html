@@ -4249,10 +4249,45 @@ const AYUDA = {
       'En el otro dispositivo, seleccioná Importar respaldo. Comprender AI combinará la información conservando la versión más reciente y evitando duplicados.'
     ]]
   ],
+  /* datos (10/08): reescrito a pedido de Javier, verificado contra la implementación real antes
+     de publicarlo. Corrección hecha sobre su borrador: "se guardan localmente... únicamente" no
+     era exacto -- guardarOrganismo() también sincroniza cada ficha con el servidor
+     (sincronizarOrganismoServidor(), POST/GET/DELETE /api/organismos) mientras hay sesión
+     iniciada, para que el organismo esté disponible desde otro dispositivo. Se corrigió esa
+     frase para reflejarlo. También se sacó la palabra "local" de "la eliminación local es
+     permanente" (el borrado pega primero al servidor y después al dispositivo: no es solo
+     local). El resto del texto de Javier coincidía con el código y se dejó tal cual. */
   datos: [
-    ['¿Dónde se guardan mis datos?','En esta variante, en el almacenamiento local de tu dispositivo: no salen de acá salvo cuando consultás al motor. Tus organismos son tuyos; podés exportarlos o eliminarlos cuando quieras.'],
-    ['¿Qué se envía al motor?','El texto de tu consulta y el estado vigente de la ficha del organismo activo, para que la respuesta tenga continuidad. No se envía tu historial completo de otros organismos.'],
-    ['¿Puedo borrar todo?','Sí. Cada ficha se elimina desde su propia vista, con confirmación. La eliminación es permanente: exportá antes si querés conservar respaldo.']
+    ['¿Dónde se guardan mis datos?', [
+      'Las fichas de tus organismos se guardan en este dispositivo y navegador, y además se respaldan automáticamente en nuestro servidor mientras tenés la sesión iniciada, para que puedas acceder a ellas desde otro dispositivo.',
+      'Cuando consultás al motor, se transmite solamente la información necesaria para procesar la consulta y conservar la continuidad del organismo activo.',
+      'Podés exportar tus fichas para crear un respaldo o eliminarlas cuando quieras.'
+    ]],
+    ['¿Qué información se envía al motor?', [
+      'Se envían:',
+      { list: [
+        'El texto de tu consulta.',
+        'La información vigente de la ficha del organismo activo.',
+        'Los datos necesarios para interpretar la conversación con continuidad.'
+      ] },
+      'No se envía automáticamente el historial completo de tus otros organismos.',
+      'La información transmitida puede ser procesada por los proveedores tecnológicos necesarios para prestar el servicio, de acuerdo con nuestra Política de Privacidad.'
+    ]],
+    ['¿Puedo borrar mis fichas?', [
+      'Sí. Podés eliminar cada ficha desde su propia vista. Antes de hacerlo, Comprender AI te pedirá confirmación.',
+      'La eliminación es permanente. Si querés conservar una copia, exportá la ficha o realizá un respaldo antes de borrarla.'
+    ]],
+    ['¿Cómo creo un respaldo?', [
+      'Podés usar:',
+      { list: [
+        'Exportar respaldo, para guardar todas tus fichas.',
+        'Exportar, dentro de una ficha, para guardar solamente ese organismo y, si corresponde, los organismos relacionados con su campo.'
+      ] },
+      'Para recuperarlas en otro dispositivo, seleccioná Importar respaldo.'
+    ]],
+    ['Advertencia', [
+      'No ingreses contraseñas, datos bancarios, información médica identificable ni otros datos sensibles que no sean indispensables para la comprensión.'
+    ]]
   ]
 };
 /* La sección "Alcance y límites" (comprender ai asiste-no-dictamina, verificá los hechos, etc.)
@@ -4426,8 +4461,18 @@ function mostrarAyuda(){
         s.appendChild(t);
         const parrafos = Array.isArray(item[1]) ? item[1] : [item[1]];
         for(const texto of parrafos){
-          const d = document.createElement('p'); d.textContent = texto;
-          s.appendChild(d);
+          if(texto && typeof texto === 'object' && Array.isArray(texto.list)){
+            const ul = document.createElement('ul'); ul.style.cssText = 'margin:2px 0 10px 20px;padding:0';
+            for(const li of texto.list){
+              const liEl = document.createElement('li'); liEl.textContent = li;
+              liEl.style.cssText = 'margin-bottom:4px;color:var(--dim);font-size:13px;line-height:1.55';
+              ul.appendChild(liEl);
+            }
+            s.appendChild(ul);
+          } else {
+            const d = document.createElement('p'); d.textContent = texto;
+            s.appendChild(d);
+          }
         }
         cont.appendChild(s);
       }
