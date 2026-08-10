@@ -200,9 +200,9 @@ header .spacer{flex:1}
 }
 .derivacion b{color:var(--espacio);font-weight:600}
 #orgchip.urban{border-color:rgba(79,174,126,.5)}
-#orgchip.urban::after{content:"URBAN";font-size:8.5px;letter-spacing:.14em;color:var(--energia);font-weight:500}
+#orgchip.urban::after{content:"URBANISMO";font-size:8.5px;letter-spacing:.14em;color:var(--energia);font-weight:500}
 #orgchip.context{border-color:rgba(155,123,212,.5)}
-#orgchip.context::after{content:"CONTEXT";font-size:8.5px;letter-spacing:.14em;color:var(--trans);font-weight:500}
+#orgchip.context::after{content:"CONTEXTOS";font-size:8.5px;letter-spacing:.14em;color:var(--trans);font-weight:500}
 #orgchip.negocio{border-color:rgba(91,143,212,.5)}
 #orgchip.negocio::after{content:"NEGOCIO";font-size:8.5px;letter-spacing:.14em;color:var(--espacio);font-weight:500}
 .upanel{box-shadow:0 2px 10px rgba(28,42,58,.06);
@@ -4220,12 +4220,34 @@ function cerrarOnb(){
 
 const AYUDA = {
   uso: [
-    ['¿Qué es un organismo y cuándo conviene crear uno?','Cualquier entidad organizada que quieras comprender en el tiempo: una ciudad, una empresa, un proyecto, una investigación. Conviene cuando la conversación se organiza alrededor de algo con nombre. Si ya estás conversando, el botón «→ Organismo» convierte la charla sin perder nada de lo comprendido.'],
-    ['¿Qué guarda la ficha viva?','Comprensión, no historial: qué función está en juego, qué tensiones siguen activas, qué diagnóstico quedó vigente y qué ordena el próximo paso. Por eso podés retomar meses después sin empezar de cero.'],
-    ['¿Qué es el campo mayor?','La jerarquía de escalas. Un local comercial puede pertenecer al campo de una ciudad: cada uno mantiene su ficha propia, pero el motor lee al menor dentro del mayor, sin confundir las escalas.'],
-    ['¿Qué son Urbanismo y Contextos?','Especialidades. Urbanismo lee el organismo desde adentro (lectura territorial y proyectivo). Contextos evalúa el campo externo que lo condiciona. El proyectivo del organismo es uno solo: nace interno y se vuelve integrado cuando se cruza con el campo.'],
-    ['¿Por qué a veces el informe se niega a generarse?','Porque no hay informe sin lectura. Pro Estudio comunica comprensión existente; no la inventa. Trabajá primero el organismo y el informe va a tener sustancia real.'],
-    ['¿Cómo llevo mis fichas a otro dispositivo?','Con «Exportar respaldo» (todo) o el botón «Exportar» de una ficha (un organismo y, opcionalmente, los de su campo). En el destino, «Importar respaldo»: se fusiona por recencia, sin duplicar.']
+    ['¿Qué es un organismo y cuándo conviene crear uno?', [
+      'Un organismo es cualquier tema o entidad que quieras comprender y seguir a través del tiempo: una empresa, un proyecto, una ciudad, una investigación o una situación compleja.',
+      'Conviene crearlo cuando la conversación empieza a organizarse alrededor de algo con identidad propia. Si ya comenzaste a conversar, el botón «→ Organismo» convierte esa comprensión en una ficha viva y conserva lo desarrollado hasta ese momento.'
+    ]],
+    ['¿Qué guarda la ficha viva?', [
+      'Guarda comprensión, no una copia completa de la conversación.',
+      'Conserva qué función está en juego, qué tensiones permanecen activas, cuál es el diagnóstico vigente y qué puede orientar el próximo paso. Así podés retomar el organismo más adelante sin tener que reconstruir todo desde cero.'
+    ]],
+    ['¿Qué es el campo mayor?', [
+      'Es el organismo o contexto más amplio al que otro pertenece.',
+      'Por ejemplo, un local comercial puede formar parte de una ciudad. Cada uno conserva su propia ficha, pero Comprender AI puede interpretar al organismo menor dentro del campo mayor, sin mezclar sus escalas ni sus diagnósticos.'
+    ]],
+    ['¿Qué son Urbanismo y Contextos?', [
+      'Son dos especialidades complementarias:',
+      'Urbanismo estudia el organismo desde adentro: su organización territorial, sus relaciones y sus posibilidades de transformación.',
+      'Contextos analiza el campo externo: las condiciones, los actores y las fuerzas que influyen sobre el organismo.',
+      'El proyectivo del organismo es uno solo: comienza con la lectura interna y se integra con el contexto cuando ambas perspectivas se relacionan.'
+    ]],
+    ['¿Por qué a veces no puedo generar un informe?', [
+      'Porque Pro Estudio transforma en documentos la comprensión ya construida; no genera una lectura que todavía no existe.',
+      'Si el organismo aún no tiene contenido suficiente, primero necesitás desarrollarlo. Cuando exista una comprensión consistente, podrás convertirla en un informe.'
+    ]],
+    ['¿Cómo llevo mis fichas a otro dispositivo?', [
+      'Podés usar:',
+      'Exportar respaldo, para guardar todos tus organismos.',
+      'Exportar, dentro de una ficha, para guardar solamente ese organismo y, si lo elegís, los organismos relacionados con su campo.',
+      'En el otro dispositivo, seleccioná Importar respaldo. Comprender AI combinará la información conservando la versión más reciente y evitando duplicados.'
+    ]]
   ],
   datos: [
     ['¿Dónde se guardan mis datos?','En esta variante, en el almacenamiento local de tu dispositivo: no salen de acá salvo cuando consultás al motor. Tus organismos son tuyos; podés exportarlos o eliminarlos cuando quieras.'],
@@ -4240,10 +4262,10 @@ const AYUDA = {
 const CICLO = [
   ['1','Comprender','chat · comprender ai','c1','Traés lo que no anda. El motor no describe: encuentra la tensión que organiza el problema por debajo de los síntomas, y la función que la resuelve.'],
   ['2','Dar identidad','organismo · ficha viva','c1','Cuando la conversación se organiza alrededor de algo — tu ciudad, tu proyecto — le das nombre. Nace el organismo: una comprensión que decide continuar.'],
-  ['3','Diagnosticar','urban · lectura territorial','c2','El organismo se lee desde adentro: sus dimensiones, su tensión raíz, su estado. Y devuelve un proyectivo interno: hacia dónde puede evolucionar según sus propias dinámicas.'],
-  ['4','Situar','context · campo externo','c2','Las fuerzas que lo condicionan desde afuera. Cruzadas con la lectura interna, el proyectivo se vuelve integrado: uno solo, ahora completo.'],
+  ['3','Diagnosticar','urbanismo · lectura territorial','c2','El organismo se lee desde adentro: sus dimensiones, su tensión raíz, su estado. Y devuelve un proyectivo interno: hacia dónde puede evolucionar según sus propias dinámicas.'],
+  ['4','Situar','contextos · campo externo','c2','Las fuerzas que lo condicionan desde afuera. Cruzadas con la lectura interna, el proyectivo se vuelve integrado: uno solo, ahora completo.'],
   ['5','Construir el paradigma','chat · comprender ai','c3','Acá está el corazón del ciclo. El proyectivo vuelve a la conversación y trabajás cómo intervenir: qué priorizar, desde qué criterio, hacia qué estado. Eso es el paradigma, y queda en la ficha.'],
-  ['6','Comunicar','studio · informe','c3','La comprensión construida se vuelve documento: para el equipo, el cliente, el concejo, el municipio.']
+  ['6','Comunicar','pro estudio · informe','c3','La comprensión construida se vuelve documento: para el equipo, el cliente, el concejo, el municipio.']
 ];
 
 function mostrarCiclo(){
@@ -4376,8 +4398,13 @@ function mostrarAyuda(){
       for(const item of AYUDA[clave]){
         const s = document.createElement('div'); s.className='ay-sec';
         const t = document.createElement('h4'); t.textContent = item[0];
-        const d = document.createElement('p'); d.textContent = item[1];
-        s.appendChild(t); s.appendChild(d); cont.appendChild(s);
+        s.appendChild(t);
+        const parrafos = Array.isArray(item[1]) ? item[1] : [item[1]];
+        for(const texto of parrafos){
+          const d = document.createElement('p'); d.textContent = texto;
+          s.appendChild(d);
+        }
+        cont.appendChild(s);
       }
     }
     for(const b of tabs.children) b.classList.toggle('on', b.dataset.k === clave);
