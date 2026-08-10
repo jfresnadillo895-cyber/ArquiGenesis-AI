@@ -104,6 +104,34 @@ header .spacer{flex:1}
 #modulosMenu.open{display:flex}
 #modulosMenu .vacio{padding:11px 14px;font-size:12.5px;color:var(--faint)}
 
+/* ---------- Tu espacio (barra lateral, reorganización 09/08) ----------
+   Overlay a la izquierda, mismo patrón que #menu/#modulosMenu (position:fixed,
+   se abre/cierra con clases .open) para no tocar el layout flex de #app ni el
+   tamaño de #main/#panel. Reemplaza al dropdown del ☰ y a "Continuar donde lo
+   dejaste" de la pantalla de bienvenida (ver #orgsec más abajo). */
+#teFondo{
+  position:fixed;inset:0;background:rgba(28,42,58,.28);z-index:65;display:none;
+}
+#teFondo.open{display:block}
+#tuEspacio{
+  position:fixed;top:0;left:0;bottom:0;width:300px;max-width:86vw;
+  background:var(--panel);border-right:1px solid var(--line);
+  box-shadow:0 12px 34px rgba(28,42,58,.16);
+  z-index:66;display:flex;flex-direction:column;
+  transform:translateX(-100%);transition:transform .22s ease;
+}
+#tuEspacio.open{transform:none}
+#teTop{padding:16px 16px 12px}
+#teOrgSec{flex:1;overflow-y:auto;padding:4px 16px 16px}
+#teOrgSec h4{font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;margin-bottom:10px}
+#teConfig{border-top:1px solid var(--line);padding:6px;flex-shrink:0}
+@media (prefers-reduced-motion:reduce){#tuEspacio{transition:none}}
+
+/* La lista de organismos en la pantalla de bienvenida se reemplaza por Tu espacio
+   (más arriba): se oculta la sección, sin tocar el HTML/JS que la arma (renderOrgList
+   sigue existiendo tal cual, por si se necesita revertir esto rápido). */
+#orgsec{display:none!important}
+
 /* ---------- welcome ---------- */
 #welcome{
   flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -475,6 +503,18 @@ header .spacer{flex:1}
 </head>
 <body>
 <div id="app">
+  <div id="teFondo"></div>
+  <div id="tuEspacio">
+    <div id="teTop">
+      <button class="orgnew" id="teNueva" style="margin:0"><b>+ Nueva comprensión</b></button>
+    </div>
+    <div id="teOrgSec">
+      <h4>Organismos</h4>
+      <div class="orglist" id="teOrgList"></div>
+      <p class="orgexplic" id="teOrgVacio" style="display:none">Todavía no guardaste ningún tema. Guardalo cuando quieras seguir un análisis en el tiempo.</p>
+    </div>
+    <div id="teConfig"></div>
+  </div>
   <div id="main">
     <header>
       <span class="logo">
@@ -5577,17 +5617,85 @@ function construirMenu(){
     el.menu.appendChild(b);
   }
 }
+/* ================= Tu espacio (barra lateral) =================
+   Reorganización de navegación, etapa 1 (09/08): el botón ☰ dejaba de abrir el
+   dropdown chico de arriba (construirMenu(), que queda intacto y sin usarse desde la
+   UI -- N21 lo sigue probando directo) y pasa a abrir esta barra lateral, que junta
+   en un solo lugar la lista completa de organismos (antes limitada a "Continuar donde
+   lo dejaste", 3 nomás, en la pantalla de bienvenida) y los mismos items
+   administrativos que ya vivian en el menú. No se agregó ningún botón nuevo: se
+   reutiliza el ☰ existente, tal como se charló. "Cuenta" y "Avisos" quedan afuera de
+   esta etapa a propósito (viven en candado.txt, compartido con Urbanismo/Contextos;
+   no se toca ese archivo acá). No hay buscar/ordenar/archivar todavía -- esa parte
+   implica un campo de dato nuevo y se deja para una etapa aparte, como se acordó. */
+function construirTuEspacioOrganismos(){
+  const cont = document.getElementById('teOrgList');
+  const vacio = document.getElementById('teOrgVacio');
+  cont.innerHTML = '';
+  const list = cargarOrganismos();
+  if(!list.length){
+    vacio.style.display = '';
+    return;
+  }
+  vacio.style.display = 'none';
+  list.sort(function(a,b){ return (b.actualizado||'').localeCompare(a.actualizado||''); });
+  for(const org of list){
+    const b = document.createElement('button');
+    b.className = 'orgitem';
+    const left = document.createElement('span');
+    const nm = document.createElement('span'); nm.className='oname'; nm.textContent = org.nombre;
+    const tp = document.createElement('span'); tp.className='otipo'; tp.textContent = org.tipo;
+    left.appendChild(nm); left.appendChild(tp);
+    const st = document.createElement('span'); st.className='ostado';
+    st.textContent = (org.ficha && org.ficha.proximo) ? org.ficha.proximo : 'Listo para comenzar';
+    b.appendChild(left); b.appendChild(st);
+    b.addEventListener('click', function(){ cerrarTuEspacio(); abrirOrganismo(org); });
+    cont.appendChild(b);
+  }
+}
+function construirTuEspacioConfig(){
+  const cfg = document.getElementById('teConfig');
+  cfg.innerHTML = '';
+  const items = [];
+  if(state.organismo) items.push(['Ficha del organismo', mostrarFicha]);
+  if(state.organismo) items.push(['Propuestas', cardPropuestas]);
+  if(state.started && !state.organismo) items.push(['Convertir en organismo', promoverAOrganismo]);
+  if(state.started) items.push(['Guardar sesión', function(){ ofrecerGuardado(null); }]);
+  items.push(['El ciclo de comprensión', mostrarCiclo]);
+  items.push(['Consumo real', cardConsumo]);
+  items.push(['Exportar respaldo', exportarDatos]);
+  items.push(['Importar respaldo', cardImportar]);
+  items.push(['Ayuda', mostrarAyuda]);
+  items.push(['Tu opinión', cardOpinion]);
+  items.push(['Acerca de', mostrarAcerca]);
+  for(const it of items){
+    const b = document.createElement('button');
+    b.className = 'mitem';
+    b.textContent = it[0];
+    b.addEventListener('click', function(){ cerrarTuEspacio(); it[1](); });
+    cfg.appendChild(b);
+  }
+}
+function abrirTuEspacio(){
+  el.modulosMenu.classList.remove('open');
+  construirTuEspacioOrganismos();
+  construirTuEspacioConfig();
+  document.getElementById('teFondo').classList.add('open');
+  document.getElementById('tuEspacio').classList.add('open');
+}
+function cerrarTuEspacio(){
+  document.getElementById('teFondo').classList.remove('open');
+  document.getElementById('tuEspacio').classList.remove('open');
+}
+document.getElementById('teNueva').addEventListener('click', function(){ cerrarTuEspacio(); nuevaSesion(); });
+document.getElementById('teFondo').addEventListener('click', cerrarTuEspacio);
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape' && document.getElementById('tuEspacio').classList.contains('open')) cerrarTuEspacio();
+});
 el.btnMenu.addEventListener('click', function(e){
   e.stopPropagation();
-  el.modulosMenu.classList.remove('open');
-  if(el.menu.classList.contains('open')){ el.menu.classList.remove('open'); return; }
-  construirMenu();
-  el.menu.classList.add('open');
-});
-document.addEventListener('click', function(e){
-  if(el.menu.classList.contains('open') && !el.menu.contains(e.target) && e.target !== el.btnMenu){
-    el.menu.classList.remove('open');
-  }
+  if(document.getElementById('tuEspacio').classList.contains('open')){ cerrarTuEspacio(); return; }
+  abrirTuEspacio();
 });
 
 /* ================= menú de módulos (Urbanismo, Contextos y los que se agreguen) =================
