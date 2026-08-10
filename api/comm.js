@@ -27,6 +27,7 @@
 //                                              variables?, asunto?, contenido_html? }
 //     { recurso:'jobs',   accion:'programar',  job_id, not_before?, prioridad?, depende_de_job_id? }
 //     { recurso:'inbox',  accion:'leer'|'archivar', entry_id }
+//     { recurso:'opinion', accion:'enviar', categoria, mensaje }
 //
 // CORTE E — programar (programacion y recuperacion)
 //   Fija notBefore/prioridad/dependencia sobre un trabajo recien creado (estado
@@ -51,6 +52,14 @@
 //   BREVO_API_KEY                        clave de API de Brevo (Corte D)
 //   BREVO_SENDER_EMAIL                   remitente verificado (default: contacto@comprenderai.com)
 //   BREVO_SENDER_NAME                    nombre del remitente (default: "Comprender AI")
+//
+// 10/08 — recurso 'opinion' (arregla el cuadro "Tu opinión", ver MIGRACION_TU_OPINION.sql)
+//   POST /api/comm { recurso:'opinion', accion:'enviar', categoria, mensaje }
+//   Guarda en la tabla `opiniones` (respaldo permanente) y despues intenta avisar por correo
+//   a contacto@comprenderai.com via emitirYEnviarCorreo() -- mismo Brevo, mismo circuito que
+//   el resto de los correos de la app, sin sumar un archivo nuevo a api/ (cupo de 12 ya lleno).
+
+import { emitirYEnviarCorreo, obtenerEmailUsuario } from '../lib/comm-emitir.js';
 
 const registrar = (o) => console.log(JSON.stringify({ evento: 'comm', ...o }));
 
@@ -608,6 +617,81 @@ async function respuestasCrearTarea(cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
   }
 }
 
+// ---------- opinion (10/08) ----------
+// Privacidad, a pedido de Javier: acá NUNCA llega ficha, conversación, diagnóstico ni nombre
+// de organismo -- el cliente (construirOpinionContenido en index.html) solo manda categoria +
+// mensaje. El email de quien escribe se resuelve del lado del servidor (obtenerEmailUsuario,
+// via el token de sesión ya validado), no lo manda el cliente.
+
+const CATEGORIAS_OPINION = ['Algo funcionó bien', 'Encontré un problema', 'Me gustaría una nueva función'];
+
+function escaparHtml(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+async function opinionEnviar(cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
+  const categoria = cuerpo && cuerpo.categoria ? String(cuerpo.categoria).trim() : '';
+  const mensaje = cuerpo && cuerpo.mensaje ? String(cuerpo.mensaje).trim() : '';
+  if (!categoria || CATEGORIAS_OPINION.indexOf(categoria) === -1) {
+    return res.status(400).json({ error: { message: 'Categoria invalida.' } });
+  }
+  if (!mensaje) return res.status(400).json({ error: { message: 'Falta el mensaje.' } });
+  if (mensaje.length > 4000) return res.status(400).json({ error: { message: 'El mensaje es demasiado largo.' } });
+
+  // 1. Guardar primero -- esto es lo que de verdad importa: el respaldo permanente en
+  // Supabase. Si esto falla, se lo decimos al usuario y no seguimos (falla cerrado, mismo
+  // criterio que api/organismos.js).
+  let filaId = null;
+  try {
+    const r = await fetch(SB_URL + '/rest/v1/opiniones', {
+      method: 'POST',
+      headers: {
+        apikey: SERVICE_KEY, Authorization: 'Bearer ' + SERVICE_KEY,
+        'content-type': 'application/json', prefer: 'return=representation',
+      },
+      body: JSON.stringify({ perfil, categoria, mensaje }),
+    });
+    if (!r.ok) throw new Error('insertar devolvio ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 200));
+    const filas = await r.json();
+    filaId = Array.isArray(filas) && filas[0] ? filas[0].id : null;
+  } catch (e) {
+    registrar({ error: 'fallo_guardar_opinion', perfil: perfil.slice(0, 8), detalle: String((e && e.message) || e) });
+    return res.status(503).json({ error: { message: 'No se pudo guardar tu opinion. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+
+  // 2. Avisar por correo -- best-effort. Un fallo aca (Brevo caido, destinatario todavia no
+  // habilitado en comm_closed_recipients, lo que sea) NO puede convertir esta respuesta en un
+  // error para quien ya escribio: el dato ya esta guardado en el paso 1, se puede revisar por
+  // SQL directo aunque el correo nunca llegue.
+  try {
+    const email = await obtenerEmailUsuario(perfil, SB_URL, SERVICE_KEY);
+    const fecha = new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
+    const contenidoHtml =
+      '<p><b>Categoria:</b> ' + escaparHtml(categoria) + '</p>' +
+      '<p><b>Mensaje:</b></p><p>' + escaparHtml(mensaje).replace(/\n/g, '<br>') + '</p>' +
+      '<p style="color:#666;font-size:12px">Enviado ' + fecha + (email ? (' por ' + escaparHtml(email)) : '') + '</p>';
+
+    const resultado = await emitirYEnviarCorreo({
+      SB_URL, SERVICE_KEY, organizationId: perfil, purposeId: 'opinion_enviada',
+      type: 'opinion.enviada', producer: 'tu_opinion_form',
+      payload: { categoria, opinion_id: filaId },
+      destinatario: 'contacto@comprenderai.com',
+      asunto: 'Tu opinión — ' + categoria,
+      contenidoHtml,
+    });
+    registrar({
+      accion: resultado && resultado.enviado ? 'opinion_avisada' : 'opinion_guardada_correo_fallo',
+      perfil: perfil.slice(0, 8), opinion_id: filaId, motivo: resultado ? resultado.motivo : null,
+    });
+  } catch (e) {
+    registrar({ error: 'fallo_aviso_opinion', perfil: perfil.slice(0, 8), opinion_id: filaId, detalle: String((e && e.message) || e) });
+  }
+
+  return res.status(200).json({ ok: true });
+}
+
 // ---------- handler ----------
 
 export default async function handler(req, res) {
@@ -665,6 +749,7 @@ export default async function handler(req, res) {
   if (recurso === 'respuestas' && accion === 'clasificar') return respuestasClasificar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'respuestas' && ['cerrar', 'reabrir'].indexOf(accion) > -1) return respuestasFijarEstado(accion, cuerpo, res, perfil, SB_URL, SERVICE_KEY);
   if (recurso === 'respuestas' && accion === 'crear_tarea') return respuestasCrearTarea(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
+  if (recurso === 'opinion' && accion === 'enviar') return opinionEnviar(cuerpo, res, perfil, SB_URL, SERVICE_KEY);
 
   return res.status(400).json({ error: { message: 'Combinacion de recurso/accion invalida.' } });
 }
