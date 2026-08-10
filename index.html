@@ -4295,12 +4295,28 @@ const AYUDA = {
    software. Queda un resumen corto + enlaces en la pestaña "referencia" de mostrarAyuda(). */
 
 const CICLO = [
-  ['1','Comprender','chat · comprender ai','c1','Traés lo que no anda. El motor no describe: encuentra la tensión que organiza el problema por debajo de los síntomas, y la función que la resuelve.'],
-  ['2','Dar identidad','organismo · ficha viva','c1','Cuando la conversación se organiza alrededor de algo — tu ciudad, tu proyecto — le das nombre. Nace el organismo: una comprensión que decide continuar.'],
-  ['3','Diagnosticar','urbanismo · lectura territorial','c2','El organismo se lee desde adentro: sus dimensiones, su tensión raíz, su estado. Y devuelve un proyectivo interno: hacia dónde puede evolucionar según sus propias dinámicas.'],
-  ['4','Situar','contextos · campo externo','c2','Las fuerzas que lo condicionan desde afuera. Cruzadas con la lectura interna, el proyectivo se vuelve integrado: uno solo, ahora completo.'],
-  ['5','Construir el paradigma','chat · comprender ai','c3','Acá está el corazón del ciclo. El proyectivo vuelve a la conversación y trabajás cómo intervenir: qué priorizar, desde qué criterio, hacia qué estado. Eso es el paradigma, y queda en la ficha.'],
-  ['6','Comunicar','pro estudio · informe','c3','La comprensión construida se vuelve documento: para el equipo, el cliente, el concejo, el municipio.']
+  ['1','Comprender','chat · comprender ai','c1',[
+    'Contás qué está pasando. El motor no se limita a describir el problema: busca la tensión que existe detrás de los síntomas y la función necesaria para reorganizarlo.'
+  ]],
+  ['2','Dar identidad','organismo · ficha viva','c1',[
+    'Cuando la conversación empieza a organizarse alrededor de algo —tu negocio, tu ciudad, tu proyecto o una situación— podés darle un nombre y guardarla.',
+    'Así nace un organismo: un tema con identidad y memoria que podés seguir comprendiendo a través del tiempo.'
+  ]],
+  ['3','Diagnosticar','urbanismo · lectura interna','c2',[
+    'Urbanismo estudia el organismo desde adentro: cómo se organiza, qué relaciones lo sostienen, cuál es su tensión principal y en qué estado se encuentra.',
+    'A partir de esa lectura construye una primera proyección de cómo podría evolucionar según sus propias dinámicas.'
+  ]],
+  ['4','Situar','contextos · campo externo','c2',[
+    'Contextos analiza las condiciones, los actores y las fuerzas que influyen sobre el organismo desde afuera.',
+    'Al relacionar esta información con la lectura interna, la proyección se vuelve integrada: contempla al organismo y también el campo en el que existe.'
+  ]],
+  ['5','Construir el paradigma','chat · comprender ai','c3',[
+    'La proyección vuelve a la conversación para trabajar cómo intervenir: qué conviene priorizar, desde qué criterio actuar y hacia qué estado orientar la transformación.',
+    'De ese proceso surge el paradigma: el marco que organiza las decisiones futuras y queda conservado en la ficha viva.'
+  ]],
+  ['6','Comunicar','pro estudio · informes','c3',[
+    'La comprensión construida se convierte en un documento claro para compartir con un equipo, un cliente, una organización, un concejo o un municipio.'
+  ]]
 ];
 
 /* construirCicloContenido / construirOpinionContenido (10/08): se separó la construcción del
@@ -4311,7 +4327,7 @@ const CICLO = [
    reabrirla para ver las otras pestañas. */
 function construirCicloContenido(cont){
   const intro = document.createElement('p'); intro.className = 'cic-intro';
-  intro.textContent = 'Comprender AI no es una herramienta que usás una vez. Es un ciclo que se retroalimenta: cada vuelta comprende más que la anterior, sobre la misma memoria.';
+  intro.textContent = 'Comprender AI no es una herramienta que usás una sola vez. Cada etapa conserva lo comprendido y permite continuar desde ahí. Así, cada nueva vuelta comienza con más memoria que la anterior.';
   cont.appendChild(intro);
   CICLO.forEach(function(paso, i){
     const fila = document.createElement('div'); fila.className = 'cic-paso';
@@ -4323,15 +4339,34 @@ function construirCicloContenido(cont){
     const cuerpo = document.createElement('div'); cuerpo.className = 'cic-cuerpo';
     const t = document.createElement('h5'); t.textContent = paso[1];
     const d = document.createElement('div'); d.className = 'cic-donde ' + paso[3]; d.textContent = paso[2];
-    const p = document.createElement('p'); p.textContent = paso[4];
-    cuerpo.appendChild(t); cuerpo.appendChild(d); cuerpo.appendChild(p);
+    cuerpo.appendChild(t); cuerpo.appendChild(d);
+    const parrafos = Array.isArray(paso[4]) ? paso[4] : [paso[4]];
+    for(const texto of parrafos){
+      const p = document.createElement('p'); p.textContent = texto;
+      cuerpo.appendChild(p);
+    }
     fila.appendChild(col); fila.appendChild(cuerpo);
     cont.appendChild(fila);
   });
   const v = document.createElement('div'); v.className = 'cic-vuelta';
-  const b = document.createElement('b'); b.textContent = '↻ Y vuelve a empezar. ';
+  const b = document.createElement('b'); b.textContent = 'Y el ciclo vuelve a comenzar';
+  b.style.cssText = 'display:block;margin-bottom:6px';
   v.appendChild(b);
-  v.appendChild(document.createTextNode('Con el paradigma construido, la próxima lectura territorial no arranca de cero: lo toma como insumo y evalúa qué lo confirma, qué lo tensiona y cómo evoluciona el proyectivo. Diagnóstico → comprensión → paradigma → nuevo diagnóstico. La ficha conserva cada vuelta: el organismo no se relee, se sigue comprendiendo.'));
+  const p1 = document.createElement('p'); p1.style.margin = '0 0 6px';
+  p1.textContent = 'Con el paradigma construido, la próxima lectura no empieza desde cero. Comprender AI utiliza lo aprendido para reconocer:';
+  v.appendChild(p1);
+  const ul = document.createElement('ul'); ul.style.cssText = 'margin:0 0 8px 20px;padding:0';
+  for(const li of ['Qué se confirmó.','Qué cambió.','Qué nuevas tensiones aparecieron.','Cómo evolucionaron el organismo y su proyección.']){
+    const liEl = document.createElement('li'); liEl.textContent = li; liEl.style.marginBottom = '2px';
+    ul.appendChild(liEl);
+  }
+  v.appendChild(ul);
+  const p2 = document.createElement('p'); p2.style.margin = '0 0 6px';
+  p2.textContent = 'Diagnóstico → comprensión → paradigma → nuevo diagnóstico.';
+  v.appendChild(p2);
+  const p3 = document.createElement('p'); p3.style.margin = '0';
+  p3.textContent = 'La ficha viva conserva cada etapa. El organismo no vuelve a leerse como si fuera la primera vez: continúa comprendiéndose.';
+  v.appendChild(p3);
   cont.appendChild(v);
 }
 
