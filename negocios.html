@@ -65,6 +65,13 @@ main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
 .burbuja{max-width:82%;padding:10px 13px;border-radius:12px;font-size:.87rem;line-height:1.55;}
 .burbuja.ia{align-self:flex-start;background:var(--acento-suave);color:var(--texto);border-bottom-left-radius:3px;}
 .burbuja.usuario{align-self:flex-end;background:var(--acento);color:#FFFFFF;border-bottom-right-radius:3px;}
+.dimchip{display:inline-flex;align-items:center;gap:5px;font-size:.76rem;padding:4px 10px;border-radius:20px;background:var(--acento-suave);color:var(--texto);margin:0 6px 6px 0;}
+.relcard{border:1px solid var(--linea);border-radius:8px;padding:11px 13px;margin-bottom:8px;cursor:pointer;background:var(--fondo-card);}
+.relcard-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:.85rem;font-weight:500;}
+.relcard-tipo{font-size:.7rem;color:var(--texto-suave);font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;}
+.relcard-detalle{display:none;font-size:.82rem;color:var(--texto-suave);margin-top:8px;line-height:1.55;}
+.relcard.abierta .relcard-detalle{display:block;}
+.divergencia-box{background:#FBEFE9;border:1px solid #E3B3A3;border-radius:8px;padding:13px 15px;font-size:.85rem;color:var(--texto);}
 .export-box{width:100%;min-height:220px;max-height:44vh;background:var(--fondo-card);border:1px solid var(--linea);border-radius:6px;padding:12px;color:var(--texto);font-family:'IBM Plex Mono',monospace;font-size:.72rem;line-height:1.5;resize:vertical;}
 footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:.65rem;color:var(--texto-suave);letter-spacing:.06em;line-height:2;}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
@@ -140,7 +147,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 <div id="modulosMenu"></div>
 
 <header>
-  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Negocios</b></div><div class="cai-baja">Pro · esqueleto N2.1</div></div></div>
+  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Negocios</b></div><div class="cai-baja">Pro · N2.3</div></div></div>
   <span style="flex:1"></span>
   <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
   <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
@@ -186,8 +193,10 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
     </div>
     <div class="acciones">
       <button class="btn secundario" onclick="volverAInicio()">Volver</button>
+      <button class="btn secundario" id="btnVerIntegral" onclick="irADiagnosticoIntegral()" disabled>Ver diagnóstico integral</button>
       <button class="btn" id="btnCerrarDiagnostico" onclick="cerrarEvaluacion()">Cerrar evaluación</button>
     </div>
+    <p class="hint" id="hintIntegral" style="margin-top:10px">Confirmá al menos dos dimensiones para ver relaciones entre ellas.</p>
   </div>
 </section>
 
@@ -225,6 +234,50 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
   </div>
 </section>
 
+<!-- ============ DIAGNÓSTICO INTEGRAL (N2.3) ============ -->
+<section id="pantallaIntegral" class="pantalla">
+  <div class="form-card">
+    <h3>Diagnóstico integral</h3>
+    <p class="hint" id="intIntro" style="margin-bottom:16px"></p>
+
+    <div id="intVigente" style="display:none;margin-bottom:18px;border:1px solid var(--linea);border-radius:8px;padding:14px 16px"></div>
+
+    <div id="intHilo" class="dimhilo"></div>
+    <div id="intCargando" class="hint" style="display:none;margin:6px 0">Pensando…</div>
+    <div id="intEntrada" class="campo" style="margin-top:10px">
+      <textarea id="intInput" placeholder="Escribí acá si querés agregar algo…" rows="2"></textarea>
+    </div>
+    <div class="acciones">
+      <button class="btn secundario" onclick="volverASelectorDesdeIntegral()">Volver</button>
+      <button class="btn" id="btnEnviarInt" onclick="enviarTurnoDesdeInputIntegral()">Enviar</button>
+    </div>
+
+    <div id="intPropuestaCard" style="display:none;margin-top:22px;border-top:1px solid var(--linea);padding-top:18px">
+      <h4 style="font-size:.95rem;font-weight:500;margin-bottom:10px">Diagnóstico integral propuesto</h4>
+      <p id="intSintesis" style="font-size:.9rem;margin-bottom:10px"></p>
+      <p id="intTensionSistemica" style="font-size:.88rem;font-weight:500;margin-bottom:14px"></p>
+
+      <div id="intDivergencia" style="display:none;margin-bottom:14px"></div>
+
+      <div id="intRelacionesVisual" style="margin-bottom:6px"></div>
+
+      <div id="intListas" style="font-size:.85rem;color:var(--texto-suave);margin-bottom:6px"></div>
+
+      <div class="acciones">
+        <button class="btn secundario" onclick="seguirProfundizandoIntegral()">Seguir profundizando</button>
+        <button class="btn secundario" onclick="mostrarCorreccionIntegral()">Corregir</button>
+        <button class="btn" onclick="confirmarDiagnosticoIntegral()">Confirmar</button>
+      </div>
+      <div id="intCorreccionBox" class="campo" style="display:none;margin-top:12px">
+        <textarea id="intCorreccionInput" placeholder="Qué corregirías de este diagnóstico…" rows="2"></textarea>
+        <div class="acciones" style="margin-top:8px">
+          <button class="btn" onclick="enviarCorreccionIntegral()">Enviar corrección</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ CIERRE / EXPORTACIÓN ============ -->
 <section id="pantallaCierre" class="pantalla">
   <div class="form-card">
@@ -240,7 +293,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 
 </main>
 
-<footer>COMPRENDER · NEGOCIOS PRO — versión profesional (N2.2) · Un producto de ARQUIGÉNESIS</footer>
+<footer>COMPRENDER · NEGOCIOS PRO — versión profesional (N2.3) · Un producto de ARQUIGÉNESIS</footer>
 
 <script>
 /* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
@@ -1814,7 +1867,7 @@ document.addEventListener('click', function(e){
   }
 });
 
-/* ================= Circuito propio de Negocios Pro (N2.1 + N2.2) ================= */
+/* ================= Circuito propio de Negocios Pro (N2.1 + N2.2 + N2.3) ================= */
 var state = {
   marco: null,
   marcoGenerado: null,
@@ -1825,8 +1878,28 @@ var state = {
   historialDim: [],       // [{role,content}] turnos de la dimensión activa, van a /api/anthropic tal cual
   evidenciasDim: [],      // textos propios del usuario en la dimensión activa (para persistir "evidencias")
   propuestaActual: null,  // {estado,tension_principal,oportunidad,lectura} pendiente de confirmar/corregir
-  llamando: false         // evita doble envío mientras se espera respuesta
+  llamando: false,        // evita doble envío mientras se espera respuesta
+
+  // ---- N2.3: relaciones entre dimensiones y diagnóstico integral ----
+  diagnosticosIntegrales: [],  // [{version,fecha,contenido,confirmado:true}] -- siempre se agrega, nunca se pisa
+  propuestaIntegral: null,     // "contenido" pendiente de confirmar (misma forma que el objeto persistido)
+  historialIntegral: [],       // [{role,content}] turnos de la conversación del diagnóstico integral
+  llamandoIntegral: false      // lock propio, separado del de la conversación por dimensión
 };
+
+/* ---- N2.3: vocabulario de relaciones -- alfabeto cerrado, mismo criterio defensivo que
+   ORDEN_ESTADOS: lo que no está acá se descarta, nunca se inventa una categoría nueva. */
+var TIPOS_RELACION = ['refuerzo', 'dependencia', 'bloqueo', 'compensacion', 'contradiccion', 'transferencia_tension', 'capacidad_habilitante'];
+var TIPO_RELACION_LABEL = {
+  refuerzo: 'Refuerzo', dependencia: 'Dependencia', bloqueo: 'Bloqueo', compensacion: 'Compensación',
+  contradiccion: 'Contradicción', transferencia_tension: 'Transferencia de tensión', capacidad_habilitante: 'Capacidad habilitante'
+};
+var ROLES_CAUSALES = ['origen', 'manifestacion', 'amplificador', 'consecuencia', 'capacidad_compensatoria'];
+var ROL_CAUSAL_LABEL = {
+  origen: 'Condición de origen', manifestacion: 'Manifestación', amplificador: 'Amplificador',
+  consecuencia: 'Consecuencia', capacidad_compensatoria: 'Capacidad compensatoria'
+};
+var RELEVANCIA_RELACION = ['alta', 'media', 'baja'];
 
 /* ---- C-06 · marco pendiente dejado por el Core (mismo mecanismo de un solo uso
    que usan Urbanismo/Contextos: se lee y se borra, no se reaplica en cada carga). */
@@ -1901,6 +1974,19 @@ function construirSelectorDimensiones(){
     row.addEventListener('click', function(){ abrirDimension(cod); });
     cont.appendChild(row);
   });
+  // N2.3: el botón de diagnóstico integral necesita al menos dos dimensiones confirmadas --
+  // una sola no puede tener relaciones con otra.
+  var btnInt = document.getElementById('btnVerIntegral');
+  var hintInt = document.getElementById('hintIntegral');
+  var n = codigosConfirmados().length;
+  if(btnInt) btnInt.disabled = n < 2;
+  if(hintInt){
+    hintInt.textContent = n < 2
+      ? 'Confirmá al menos dos dimensiones para ver relaciones entre ellas.'
+      : (state.diagnosticosIntegrales.length
+          ? 'Diagnóstico integral vigente: v' + state.diagnosticosIntegrales[state.diagnosticosIntegrales.length - 1].version + '.'
+          : 'Ya podés ver el diagnóstico integral entre las dimensiones confirmadas.');
+  }
 }
 function volverASelectorDimensiones(){
   construirSelectorDimensiones();
@@ -1990,8 +2076,8 @@ function parseLecturaDim(texto){
   };
 }
 
-function agregarBurbuja(tipo, texto){
-  var hilo = document.getElementById('dimHilo');
+function agregarBurbuja(tipo, texto, hiloId){
+  var hilo = document.getElementById(hiloId || 'dimHilo');
   var b = document.createElement('div');
   b.className = 'burbuja ' + tipo;
   b.textContent = texto;
@@ -1999,7 +2085,7 @@ function agregarBurbuja(tipo, texto){
   hilo.scrollTop = hilo.scrollHeight;
 }
 
-function mostrarErrorIA(err){
+function mostrarErrorIA(err, hiloId){
   var mensajes = {
     sin_saldo: 'Te quedaste sin créditos. Revisá tu plan desde el Core, en Cuenta.',
     requiere_plan: 'Tu plan actual no incluye este módulo.',
@@ -2009,7 +2095,7 @@ function mostrarErrorIA(err){
     servicio_no_disponible: 'El servicio no está disponible en este momento. Probá de nuevo en unos minutos.'
   };
   var texto = (err && mensajes[err.codigo]) || (err && err.message) || 'No se pudo completar la consulta.';
-  agregarBurbuja('ia', texto);
+  agregarBurbuja('ia', texto, hiloId);
 }
 
 function abrirDimension(cod){
@@ -2120,6 +2206,362 @@ function seguirProfundizando(){
   document.getElementById('dimInput').focus();
 }
 
+/* ================= N2.3 · relaciones entre dimensiones y diagnóstico integral =================
+   No vuelve a evaluar cada dimensión: toma las que ya están confirmadas y busca qué relaciones
+   entre ellas explican el estado global del negocio. Mismo patrón de gobernanza que N2.2
+   (Confirmar / Corregir / Seguir profundizando), pero la IA propone directo en el primer turno
+   -- el insumo ya existe, no hace falta juntar evidencia nueva. */
+
+function codigosConfirmados(){
+  return ORDEN_DIMENSIONES_NEGOCIO.filter(function(c){ return state.dimensiones[c] && state.dimensiones[c].confirmada; });
+}
+
+function ultimoDiagnosticoIntegralConfirmado(){
+  var l = state.diagnosticosIntegrales;
+  return l.length ? l[l.length - 1] : null;
+}
+
+function resumenDimensionesConfirmadasParaIntegral(){
+  var claves = codigosConfirmados();
+  if(!claves.length) return 'Ninguna dimensión confirmada todavía.';
+  return claves.map(function(c){
+    var d = state.dimensiones[c];
+    var partes = [c + ' · ' + d.nombre + ' — ' + (ESTADO_LABEL[d.estado] || d.estado)];
+    if(d.tension_principal) partes.push('Tensión: ' + d.tension_principal);
+    if(d.oportunidad) partes.push('Oportunidad: ' + d.oportunidad);
+    if(d.lectura) partes.push('Lectura: ' + d.lectura);
+    if(d.evidencias && d.evidencias.length) partes.push('Evidencia: ' + d.evidencias.join('; '));
+    return partes.join('\n  ');
+  }).join('\n\n');
+}
+
+function PROMPT_DIAGNOSTICO_INTEGRAL(){
+  return 'Tenés las dimensiones de este negocio ya evaluadas por separado. Tu trabajo ahora es distinto: no volver a evaluar cada una, sino encontrar qué relaciones entre ellas explican el estado global del negocio.\n\n' +
+    'MARCO DEL NEGOCIO (del Core, comprensión previa):\n' + resumenMarcoTexto() + '\n\n' +
+    'DIMENSIONES CONFIRMADAS:\n' + resumenDimensionesConfirmadasParaIntegral() + '\n\n' +
+    'TAREA:\n' +
+    '1. Identificá solo las relaciones entre dimensiones que tengan capacidad explicativa real -- no generes todas las combinaciones posibles como una matriz mecánica. Máximo 5, y solo entre dimensiones confirmadas.\n' +
+    '2. Para cada dimensión tensionada o crítica, distinguí si es condición de origen, manifestación, amplificador, consecuencia, o si otra dimensión actúa como capacidad compensatoria sobre ella. No trates todas las tensiones como causas equivalentes.\n' +
+    '3. Si la comprensión previa del Core (arriba) contradice de forma importante lo que muestran las dimensiones confirmadas, registralo como una divergencia -- no decidas cuál lectura es la correcta, es una señal para que la revise una persona.\n' +
+    '4. Nunca muestres códigos internos (B1-B6, T01-T14, M01-M09) en el texto visible: referite a las dimensiones por nombre. Los códigos solo van dentro del JSON del marcador.\n\n' +
+    'Cerrá con el marcador exacto (JSON válido, sin comentarios ni texto extra adentro):\n' +
+    '[[DIAGNOSTICO_INTEGRAL:{\n' +
+    '  "sintesis": "...",\n' +
+    '  "tension_sistemica": "...",\n' +
+    '  "relaciones": [ { "dimensiones": ["B2","B4"], "tipo": "refuerzo|dependencia|bloqueo|compensacion|contradiccion|transferencia_tension|capacidad_habilitante", "lectura": "...", "evidencias": ["..."], "efecto": "...", "relevancia": "alta|media|baja" } ],\n' +
+    '  "roles_causales": [ { "dimension": "B3", "rol": "origen|manifestacion|amplificador|consecuencia|capacidad_compensatoria", "explicacion": "..." } ],\n' +
+    '  "capacidades": ["..."],\n' +
+    '  "fragilidades": ["..."],\n' +
+    '  "dependencia_critica": "..." o null,\n' +
+    '  "apalancamiento": "...",\n' +
+    '  "faltantes": ["..."],\n' +
+    '  "divergencia_lectura": null, o { "existe": true, "lectura_core": "...", "lectura_pro": "...", "diferencia": "...", "requiere_revision": true }\n' +
+    '}]]\n' +
+    'seguido de un texto visible de 2 a 4 líneas con la síntesis en lenguaje llano -- esa es la parte que lee el usuario. Si el usuario te escribe algo después, es para corregir o profundizar: ajustá el diagnóstico y volvé a cerrar con el mismo marcador completo.';
+}
+
+function llamarIADiagnosticoIntegral(mensajes){
+  return fetch('/api/anthropic', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2600,
+      system: PROMPT_DIAGNOSTICO_INTEGRAL(),
+      messages: mensajes
+    })
+  }).then(function(res){
+    return res.json().catch(function(){ return {}; }).then(function(data){
+      if(!res.ok){
+        var err = new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+        err.codigo = data && data.error && data.error.codigo;
+        throw err;
+      }
+      var texto = (data.content || []).map(function(b){ return b.text || ''; }).join('');
+      return texto;
+    });
+  });
+}
+
+/* ---- validadores defensivos: cada pieza se valida por separado. Una relación mal formada,
+   con una dimensión no confirmada, o con un tipo fuera del alfabeto, se descarta sola -- no
+   tira todo el diagnóstico. Mismo criterio que parseLecturaDim, aplicado pieza por pieza. */
+function validarRelacionIntegral(rel, confirmadas){
+  if(!rel || typeof rel !== 'object') return null;
+  if(!Array.isArray(rel.dimensiones) || rel.dimensiones.length < 2 || rel.dimensiones.length > 4) return null;
+  for(var i = 0; i < rel.dimensiones.length; i++){
+    if(confirmadas.indexOf(rel.dimensiones[i]) === -1) return null;
+  }
+  if(TIPOS_RELACION.indexOf(rel.tipo) === -1) return null;
+  if(RELEVANCIA_RELACION.indexOf(rel.relevancia) === -1) return null;
+  if(!rel.lectura || typeof rel.lectura !== 'string') return null;
+  var evidencias = Array.isArray(rel.evidencias) ? rel.evidencias.filter(function(e){ return typeof e === 'string' && e.trim(); }) : [];
+  if(!evidencias.length) return null;
+  return {
+    dimensiones: rel.dimensiones.slice(),
+    tipo: rel.tipo,
+    lectura: rel.lectura,
+    evidencias: evidencias,
+    efecto: (typeof rel.efecto === 'string') ? rel.efecto : '',
+    relevancia: rel.relevancia
+  };
+}
+function validarRolCausalIntegral(r, confirmadas){
+  if(!r || typeof r !== 'object') return null;
+  if(confirmadas.indexOf(r.dimension) === -1) return null;
+  if(ROLES_CAUSALES.indexOf(r.rol) === -1) return null;
+  return { dimension: r.dimension, rol: r.rol, explicacion: (typeof r.explicacion === 'string') ? r.explicacion : '' };
+}
+function validarDivergenciaIntegral(d){
+  if(!d || typeof d !== 'object' || d.existe !== true) return null;
+  if(!d.lectura_core || !d.lectura_pro || !d.diferencia) return null;
+  return {
+    existe: true,
+    lectura_core: String(d.lectura_core),
+    lectura_pro: String(d.lectura_pro),
+    diferencia: String(d.diferencia),
+    requiere_revision: true
+  };
+}
+function listaStringsIntegral(arr, tope){
+  if(!Array.isArray(arr)) return [];
+  return arr.filter(function(s){ return typeof s === 'string' && s.trim(); }).slice(0, tope || 8);
+}
+
+/* Parser chico y aparte, igual que parseLecturaDim: no toca parseMotor(). Si el JSON no
+   parsea, o faltan los tres campos centrales (síntesis, tensión sistémica, apalancamiento),
+   o no queda ninguna relación válida después de filtrar, toda la propuesta se descarta y el
+   mensaje queda como un turno más de conversación -- no se ofrece Confirmar sobre algo vacío. */
+function parseDiagnosticoIntegral(texto){
+  var re = /\[\[DIAGNOSTICO_INTEGRAL:([\s\S]*?)\]\]/;
+  var m = texto.match(re);
+  if(!m) return { visible: texto.trim(), propuesta: null };
+  var visible = (texto.slice(0, m.index) + texto.slice(m.index + m[0].length)).trim();
+  var datos;
+  try{ datos = JSON.parse(m[1]); }catch(e){ return { visible: visible, propuesta: null }; }
+  if(!datos || typeof datos !== 'object') return { visible: visible, propuesta: null };
+  if(!datos.sintesis || !datos.tension_sistemica || !datos.apalancamiento) return { visible: visible, propuesta: null };
+
+  var confirmadas = codigosConfirmados();
+  var relaciones = (Array.isArray(datos.relaciones) ? datos.relaciones : [])
+    .map(function(r){ return validarRelacionIntegral(r, confirmadas); })
+    .filter(Boolean)
+    .slice(0, 5);
+  if(!relaciones.length) return { visible: visible, propuesta: null };
+
+  var rolesCausales = (Array.isArray(datos.roles_causales) ? datos.roles_causales : [])
+    .map(function(r){ return validarRolCausalIntegral(r, confirmadas); })
+    .filter(Boolean);
+
+  return {
+    visible: visible,
+    propuesta: {
+      sintesis: datos.sintesis,
+      tension_sistemica: datos.tension_sistemica,
+      relaciones: relaciones,
+      roles_causales: rolesCausales,
+      capacidades: listaStringsIntegral(datos.capacidades),
+      fragilidades: listaStringsIntegral(datos.fragilidades),
+      dependencia_critica: (typeof datos.dependencia_critica === 'string' && datos.dependencia_critica.trim()) ? datos.dependencia_critica : null,
+      apalancamiento: datos.apalancamiento,
+      faltantes: listaStringsIntegral(datos.faltantes),
+      divergencia_lectura: validarDivergenciaIntegral(datos.divergencia_lectura)
+    }
+  };
+}
+
+function irADiagnosticoIntegral(){
+  if(codigosConfirmados().length < 2) return;
+  abrirDiagnosticoIntegral();
+}
+
+function abrirDiagnosticoIntegral(){
+  state.historialIntegral = [];
+  state.propuestaIntegral = null;
+  document.getElementById('intPropuestaCard').style.display = 'none';
+  document.getElementById('intCorreccionBox').style.display = 'none';
+  document.getElementById('intHilo').innerHTML = '';
+  document.getElementById('intInput').value = '';
+  var vigente = ultimoDiagnosticoIntegralConfirmado();
+  var vigenteBox = document.getElementById('intVigente');
+  if(vigente){
+    vigenteBox.style.display = 'block';
+    vigenteBox.innerHTML = '';
+    var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '6px';
+    h.textContent = 'Vigente: diagnóstico integral v' + vigente.version + ' (' + new Date(vigente.fecha).toLocaleDateString('es-AR') + ')';
+    var p = document.createElement('div'); p.style.fontSize = '.85rem'; p.style.color = 'var(--texto-suave)';
+    p.textContent = vigente.contenido.tension_sistemica;
+    vigenteBox.appendChild(h); vigenteBox.appendChild(p);
+    document.getElementById('intIntro').textContent = 'Ya hay un diagnóstico integral confirmado. Si generás uno nuevo y lo confirmás, se agrega como versión nueva -- este no se pierde.';
+  } else {
+    vigenteBox.style.display = 'none';
+    document.getElementById('intIntro').textContent = 'La IA va a proponer qué relaciones entre las dimensiones ya evaluadas explican el estado global del negocio.';
+  }
+  mostrarPantalla('pantallaIntegral');
+  enviarTurnoIntegral(null);
+}
+
+function enviarTurnoIntegral(textoUsuario){
+  if(state.llamandoIntegral) return;
+  var esInicio = (textoUsuario === null);
+  if(!esInicio){
+    state.historialIntegral.push({ role: 'user', content: textoUsuario });
+    agregarBurbuja('usuario', textoUsuario, 'intHilo');
+  }
+  var mensajes = esInicio
+    ? [{ role: 'user', content: '(generá el diagnóstico integral con las dimensiones confirmadas)' }]
+    : state.historialIntegral.slice();
+  state.llamandoIntegral = true;
+  document.getElementById('intCargando').style.display = 'block';
+  document.getElementById('btnEnviarInt').disabled = true;
+  llamarIADiagnosticoIntegral(mensajes).then(function(texto){
+    state.llamandoIntegral = false;
+    document.getElementById('intCargando').style.display = 'none';
+    document.getElementById('btnEnviarInt').disabled = false;
+    state.historialIntegral.push({ role: 'assistant', content: texto });
+    var parsed = parseDiagnosticoIntegral(texto);
+    agregarBurbuja('ia', parsed.visible, 'intHilo');
+    if(parsed.propuesta){
+      state.propuestaIntegral = parsed.propuesta;
+      mostrarPropuestaIntegral(parsed.propuesta);
+    }
+  }).catch(function(err){
+    state.llamandoIntegral = false;
+    document.getElementById('intCargando').style.display = 'none';
+    document.getElementById('btnEnviarInt').disabled = false;
+    mostrarErrorIA(err, 'intHilo');
+  });
+}
+function enviarTurnoDesdeInputIntegral(){
+  var ta = document.getElementById('intInput');
+  var texto = ta.value.trim();
+  if(!texto || state.llamandoIntegral) return;
+  ta.value = '';
+  enviarTurnoIntegral(texto);
+}
+
+function renderRelacionesVisual(relaciones, rolesCausales){
+  var cont = document.getElementById('intRelacionesVisual');
+  cont.innerHTML = '';
+
+  var chipsFila = document.createElement('div');
+  ORDEN_DIMENSIONES_NEGOCIO.forEach(function(cod){
+    var d = state.dimensiones[cod];
+    var chip = document.createElement('span'); chip.className = 'dimchip';
+    var punto = document.createElement('span'); punto.className = 'dim-estado-chip';
+    punto.style.background = (d && d.confirmada) ? (ESTADO_COLOR[d.estado] || ESTADO_COLOR.desconocida) : ESTADO_COLOR.desconocida;
+    chip.appendChild(punto);
+    chip.appendChild(document.createTextNode(DIMENSIONES_NEGOCIO_MODO[cod]));
+    chipsFila.appendChild(chip);
+  });
+  cont.appendChild(chipsFila);
+
+  var rolesPorDim = {};
+  (rolesCausales || []).forEach(function(r){ rolesPorDim[r.dimension] = r; });
+
+  (relaciones || []).forEach(function(rel){
+    var card = document.createElement('div'); card.className = 'relcard';
+    var head = document.createElement('div'); head.className = 'relcard-head';
+    var nombres = rel.dimensiones.map(function(c){ return DIMENSIONES_NEGOCIO_MODO[c] || c; }).join(' · ');
+    var izq = document.createElement('span'); izq.textContent = nombres;
+    var der = document.createElement('span'); der.className = 'relcard-tipo';
+    der.textContent = (TIPO_RELACION_LABEL[rel.tipo] || rel.tipo) + ' · ' + rel.relevancia;
+    head.appendChild(izq); head.appendChild(der);
+    var detalle = document.createElement('div'); detalle.className = 'relcard-detalle';
+    var partes = [rel.lectura];
+    if(rel.efecto) partes.push('Efecto: ' + rel.efecto);
+    var rolesTxt = rel.dimensiones
+      .filter(function(c){ return rolesPorDim[c]; })
+      .map(function(c){ return DIMENSIONES_NEGOCIO_MODO[c] + ': ' + (ROL_CAUSAL_LABEL[rolesPorDim[c].rol] || rolesPorDim[c].rol); });
+    if(rolesTxt.length) partes.push(rolesTxt.join(' · '));
+    if(rel.evidencias && rel.evidencias.length) partes.push('Evidencia: ' + rel.evidencias.join('; '));
+    detalle.textContent = partes.join('  —  ');
+    card.appendChild(head); card.appendChild(detalle);
+    card.addEventListener('click', function(){ card.classList.toggle('abierta'); });
+    cont.appendChild(card);
+  });
+}
+
+function mostrarPropuestaIntegral(propuesta){
+  document.getElementById('intSintesis').textContent = propuesta.sintesis;
+  document.getElementById('intTensionSistemica').textContent = 'Tensión sistémica principal: ' + propuesta.tension_sistemica;
+
+  var divBox = document.getElementById('intDivergencia');
+  if(propuesta.divergencia_lectura){
+    var d = propuesta.divergencia_lectura;
+    divBox.innerHTML = '';
+    var caja = document.createElement('div'); caja.className = 'divergencia-box';
+    var t = document.createElement('div'); t.style.fontWeight = '500'; t.style.marginBottom = '6px';
+    t.textContent = 'Divergencia con la comprensión previa del Core -- para revisar';
+    var p = document.createElement('div'); p.textContent = d.diferencia;
+    caja.appendChild(t); caja.appendChild(p);
+    divBox.appendChild(caja);
+    divBox.style.display = 'block';
+  } else {
+    divBox.style.display = 'none';
+    divBox.innerHTML = '';
+  }
+
+  renderRelacionesVisual(propuesta.relaciones, propuesta.roles_causales);
+
+  var listas = document.getElementById('intListas');
+  listas.innerHTML = '';
+  function bloque(titulo, items){
+    if(!items || !items.length) return;
+    var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.margin = '10px 0 4px'; h.style.color = 'var(--texto)';
+    h.textContent = titulo;
+    listas.appendChild(h);
+    items.forEach(function(it){
+      var p = document.createElement('div'); p.textContent = '— ' + it;
+      listas.appendChild(p);
+    });
+  }
+  bloque('Capacidades', propuesta.capacidades);
+  bloque('Fragilidades', propuesta.fragilidades);
+  if(propuesta.dependencia_critica) bloque('Dependencia crítica', [propuesta.dependencia_critica]);
+  bloque('Punto de apalancamiento', [propuesta.apalancamiento]);
+  bloque('Información faltante', propuesta.faltantes);
+
+  document.getElementById('intCorreccionBox').style.display = 'none';
+  document.getElementById('intPropuestaCard').style.display = 'block';
+}
+
+function confirmarDiagnosticoIntegral(){
+  if(!state.propuestaIntegral) return;
+  var version = state.diagnosticosIntegrales.length + 1;
+  state.diagnosticosIntegrales.push({
+    version: version,
+    fecha: new Date().toISOString(),
+    contenido: state.propuestaIntegral,
+    confirmado: true
+  });
+  state.propuestaIntegral = null;
+  volverASelectorDesdeIntegral();
+}
+function mostrarCorreccionIntegral(){
+  document.getElementById('intCorreccionBox').style.display = 'block';
+  var ta = document.getElementById('intCorreccionInput');
+  ta.value = '';
+  setTimeout(function(){ ta.focus(); }, 0);
+}
+function enviarCorreccionIntegral(){
+  var ta = document.getElementById('intCorreccionInput');
+  var texto = ta.value.trim();
+  if(!texto) return;
+  document.getElementById('intPropuestaCard').style.display = 'none';
+  state.propuestaIntegral = null;
+  enviarTurnoIntegral('No estoy de acuerdo con ese diagnóstico integral: ' + texto);
+}
+function seguirProfundizandoIntegral(){
+  document.getElementById('intPropuestaCard').style.display = 'none';
+  state.propuestaIntegral = null;
+  document.getElementById('intInput').focus();
+}
+function volverASelectorDesdeIntegral(){
+  construirSelectorDimensiones();
+  mostrarPantalla('pantallaDiagnostico');
+}
+
 function cerrarEvaluacion(){
   var dims = ORDEN_DIMENSIONES_NEGOCIO.map(function(cod){
     var d = state.dimensiones[cod];
@@ -2139,7 +2581,8 @@ function cerrarEvaluacion(){
       version: 1,
       estado: 'cerrada',
       dimensiones: dims,
-      sintesis: sintesisEl ? sintesisEl.value.trim() : ''
+      sintesis: sintesisEl ? sintesisEl.value.trim() : '',
+      diagnosticos_integrales: state.diagnosticosIntegrales.slice()   // N2.3: siempre array, puede ir vacío
     }
   });
   mostrarExportacion(payload);
