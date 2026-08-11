@@ -3763,13 +3763,33 @@ function adjuntarEvaluacionNegocioPro(datos, silencioso, forzarDestino){
   const proys = Array.isArray(ev.proyectivos) ? ev.proyectivos : null;
   const ultimoProy = (proys && proys.length) ? proys[proys.length - 1] : null;
   const sintesisProyectiva = ultimoProy && ultimoProy.contenido ? ultimoProy.contenido.sintesis_proyectiva : null;
+  // N2.5: campos_decisiones[] sigue el mismo criterio -- array que nunca se pisa, vigente es el
+  // último. El resumen cuenta estados en vez de repetir cada decisión (pueden ser hasta 6).
+  const camposDec = Array.isArray(ev.campos_decisiones) ? ev.campos_decisiones : null;
+  const ultimoCD = (camposDec && camposDec.length) ? camposDec[camposDec.length - 1] : null;
+  let resumenDecisiones = null;
+  if(ultimoCD && ultimoCD.contenido && Array.isArray(ultimoCD.contenido.decisiones)){
+    const ds = ultimoCD.contenido.decisiones;
+    const contar = function(estado){ return ds.filter(function(d){ return d.estado === estado; }).length; };
+    const adoptadas = contar('adoptada'), condicionadas = contar('condicionada'), postergadas = contar('postergada'),
+      enRevision = contar('en_revision'), descartadas = contar('descartada'), sinResolver = contar('propuesta');
+    const partes = [];
+    if(adoptadas) partes.push(adoptadas + ' adoptada' + (adoptadas > 1 ? 's' : ''));
+    if(condicionadas) partes.push(condicionadas + ' condicionada' + (condicionadas > 1 ? 's' : ''));
+    if(postergadas) partes.push(postergadas + ' postergada' + (postergadas > 1 ? 's' : ''));
+    if(enRevision) partes.push(enRevision + ' en revisión');
+    if(descartadas) partes.push(descartadas + ' descartada' + (descartadas > 1 ? 's' : ''));
+    if(sinResolver) partes.push(sinResolver + ' sin resolver');
+    resumenDecisiones = partes.length ? partes.join(', ') : null;
+  }
   const resumen = PRODUCTO_NEGOCIOS_PRO + ' — diagnóstico rápido: ' +
     dims.map(function(d){
       return d.cod + ' ' + (d.estado || 'desconocida') + (d.tension_principal ? ' (' + d.tension_principal + ')' : '');
     }).join(' · ') +
     (ev.sintesis ? '. Síntesis: ' + ev.sintesis : '') +
     (tensionSistemica ? '. Diagnóstico integral (v' + ultimoDI.version + '): ' + tensionSistemica : '') +
-    (sintesisProyectiva ? '. Proyectivo (v' + ultimoProy.version + '): ' + sintesisProyectiva : '');
+    (sintesisProyectiva ? '. Proyectivo (v' + ultimoProy.version + '): ' + sintesisProyectiva : '') +
+    (resumenDecisiones ? '. Campo de decisiones (v' + ultimoCD.version + '): ' + resumenDecisiones : '');
   destino.evaluaciones_negocio_pro.push({ version: version, fecha: new Date().toISOString(), resumen: resumen, datos: datos });
   destino.actualizado = new Date().toISOString();
   guardarOrganismo(destino);
@@ -6839,6 +6859,47 @@ function correrPruebasAuto(){
         adjuntarEvaluacionNegocioPro(payload, true);
         var r = o.evaluaciones_negocio_pro[0].resumen;
         return r.indexOf('Proyectivo') === -1 && r.indexOf('B1 estable') > -1;
+      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('IMP·8 · resumen cuenta los estados del último campos_decisiones[] confirmado (N2.5)', (function(){
+      var o = { id:'org_imp8_test', nombre:'Decisiones Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
+      var origGuardar = guardarOrganismo, origState = state.organismo;
+      try{
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = null;
+        var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp8_test',
+          evaluacion: { alcance:'rapida', version:1, estado:'cerrada', dimensiones: [
+            { cod:'B1', nombre:'Identidad y dirección', estado:'estable' }
+          ], sintesis:'', diagnosticos_integrales: [
+            { version:1, fecha:'x', confirmado:true, contenido:{ tension_sistemica:'ts' } }
+          ], proyectivos: [
+            { version:1, fecha:'x', confirmado:true, contenido:{ sintesis_proyectiva:'sp' } }
+          ], campos_decisiones: [
+            { version:1, fecha:'x', confirmado:true, contenido:{ decisiones:[ { id:'D1', estado:'propuesta' } ] } },
+            { version:2, fecha:'y', confirmado:true, contenido:{ decisiones:[
+              { id:'D1', estado:'adoptada' }, { id:'D2', estado:'condicionada' }, { id:'D3', estado:'propuesta' }
+            ] } }
+          ] } };
+        adjuntarEvaluacionNegocioPro(payload, true);
+        var r = o.evaluaciones_negocio_pro[0].resumen;
+        // tiene que usar la ÚLTIMA versión (v2), no la primera, y no perder proyectivo/diagnóstico integral
+        return r.indexOf('Campo de decisiones (v2): 1 adoptada, 1 condicionada, 1 sin resolver') > -1
+          && r.indexOf('Proyectivo (v1)') > -1 && r.indexOf('Diagnóstico integral (v1)') > -1;
+      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('IMP·9 · resumen se comporta igual que N2.4 cuando no hay campo de decisiones confirmado', (function(){
+      var o = { id:'org_imp9_test', nombre:'Sin Decisiones Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
+      var origGuardar = guardarOrganismo, origState = state.organismo;
+      try{
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = null;
+        var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp9_test',
+          evaluacion: { alcance:'rapida', version:1, estado:'cerrada', dimensiones: [
+            { cod:'B1', nombre:'Identidad y dirección', estado:'estable' }
+          ], sintesis:'', diagnosticos_integrales: [], proyectivos: [], campos_decisiones: [] } };
+        adjuntarEvaluacionNegocioPro(payload, true);
+        var r = o.evaluaciones_negocio_pro[0].resumen;
+        return r.indexOf('Campo de decisiones') === -1 && r.indexOf('B1 estable') > -1;
       } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
 

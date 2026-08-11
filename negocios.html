@@ -83,6 +83,31 @@ main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
 .esc-cuerpo{font-size:.82rem;color:var(--texto-suave);line-height:1.6;}
 .esc-variante{margin-top:8px;font-size:.72rem;background:none;border:1px solid var(--linea);color:var(--texto-suave);border-radius:6px;padding:4px 9px;cursor:pointer;}
 .palanca-box{background:var(--acento-suave);border:1px solid var(--linea);border-radius:8px;padding:13px 15px;font-size:.85rem;color:var(--texto);}
+/* ---- N2.5: campo de decisiones ---- */
+.crit-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--linea);border-radius:20px;padding:6px 12px;font-size:.78rem;background:var(--fondo-card);cursor:pointer;margin:0 8px 8px 0;}
+.crit-chip.activo{border-color:var(--acento,#2b4c6f);background:var(--acento-suave);font-weight:500;}
+.crit-chip select{font-size:.72rem;border:none;background:none;font-family:inherit;color:inherit;}
+.comp-card{border:1px solid var(--linea);border-radius:8px;padding:12px 14px;margin-bottom:10px;background:var(--fondo-card);}
+.comp-titulo{font-size:.85rem;font-weight:500;margin-bottom:6px;}
+.comp-cuerpo{font-size:.82rem;color:var(--texto-suave);line-height:1.6;}
+.dec-card{border:1px solid var(--linea);border-radius:8px;padding:12px 14px;margin-bottom:10px;background:var(--fondo-card);}
+.dec-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap;}
+.dec-titulo{font-size:.88rem;font-weight:500;}
+.dec-estado-badge{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;font-family:'IBM Plex Mono',monospace;padding:3px 8px;border-radius:5px;border:1px solid var(--linea);}
+.dec-estado-badge.est-adoptada{background:#e3f3e6;color:#1f6b34;border-color:#bfe3c6;}
+.dec-estado-badge.est-condicionada{background:#fff3d6;color:#8a6100;border-color:#f0dda3;}
+.dec-estado-badge.est-en_revision{background:#e8eef7;color:#2b4c6f;border-color:#cdd9ea;}
+.dec-estado-badge.est-postergada{background:#f1efea;color:#6b6558;border-color:var(--linea);}
+.dec-estado-badge.est-descartada{background:#f7e6e6;color:#8a2f2f;border-color:#eec6c6;}
+.dec-estado-badge.est-propuesta{background:none;color:var(--texto-suave);border-color:var(--linea);}
+.dec-cuerpo{font-size:.82rem;color:var(--texto-suave);line-height:1.6;margin-bottom:8px;}
+.dec-sugerencia{font-size:.74rem;color:var(--texto-suave);font-style:italic;margin-bottom:8px;}
+.dec-faltantes{font-size:.7rem;color:var(--presion);margin-bottom:8px;}
+.dec-acciones{display:flex;flex-wrap:wrap;gap:6px;}
+.dec-btn{font-size:.72rem;background:none;border:1px solid var(--linea);border-radius:6px;padding:4px 9px;cursor:pointer;}
+.dec-condicion-box{margin-top:10px;border-top:1px solid var(--linea);padding-top:10px;}
+.dec-condicion-box textarea{width:100%;font-size:.8rem;margin-bottom:6px;}
+.dec-relacion{font-size:.78rem;color:var(--texto-suave);padding:4px 0;font-family:'IBM Plex Mono',monospace;}
 .export-box{width:100%;min-height:220px;max-height:44vh;background:var(--fondo-card);border:1px solid var(--linea);border-radius:6px;padding:12px;color:var(--texto);font-family:'IBM Plex Mono',monospace;font-size:.72rem;line-height:1.5;resize:vertical;}
 footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:.65rem;color:var(--texto-suave);letter-spacing:.06em;line-height:2;}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
@@ -158,7 +183,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 <div id="modulosMenu"></div>
 
 <header>
-  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Negocios</b></div><div class="cai-baja">Pro · N2.4</div></div></div>
+  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Negocios</b></div><div class="cai-baja">Pro · N2.5</div></div></div>
   <span style="flex:1"></span>
   <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
   <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
@@ -206,10 +231,12 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
       <button class="btn secundario" onclick="volverAInicio()">Volver</button>
       <button class="btn secundario" id="btnVerIntegral" onclick="irADiagnosticoIntegral()" disabled>Ver diagnóstico integral</button>
       <button class="btn secundario" id="btnVerProyectivo" onclick="irAProyectivo()" disabled>Explorar proyectivo</button>
+      <button class="btn secundario" id="btnVerDecisiones" onclick="irACampoDecisiones()" disabled>Abrir Campo de Decisiones</button>
       <button class="btn" id="btnCerrarDiagnostico" onclick="cerrarEvaluacion()">Cerrar evaluación</button>
     </div>
     <p class="hint" id="hintIntegral" style="margin-top:10px">Confirmá al menos dos dimensiones para ver relaciones entre ellas.</p>
     <p class="hint" id="hintProyectivo" style="margin-top:4px">Confirmá un diagnóstico integral para explorar el proyectivo.</p>
+    <p class="hint" id="hintDecisiones" style="margin-top:4px">Confirmá un proyectivo para abrir el Campo de Decisiones.</p>
   </div>
 </section>
 
@@ -343,6 +370,70 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
   </div>
 </section>
 
+<!-- ============ CAMPO DE DECISIONES (N2.5) ============ -->
+<section id="pantallaDecisiones" class="pantalla">
+  <div class="form-card">
+    <h3>Campo de decisiones</h3>
+
+    <div id="decVista1">
+      <p class="hint" style="margin-bottom:16px">A partir del proyectivo vigente, este espacio ayuda a convertir parte de esas posibilidades en decisiones explícitas -- qué se elige, bajo qué criterio, y qué se descarta o posterga. Esto no ejecuta nada: registra elecciones, no tareas.</p>
+      <div id="decResumenVigente" style="border:1px solid var(--linea);border-radius:8px;padding:14px 16px;margin-bottom:18px"></div>
+
+      <h4 style="font-size:.88rem;font-weight:500;margin-bottom:8px">Criterios para decidir</h4>
+      <p class="hint" style="margin-bottom:10px">Elegí los que importen para este negocio y, si querés, ponderalos. Podés dejar alguno sin ponderar.</p>
+      <div id="decCriteriosChips" style="margin-bottom:10px"></div>
+      <div class="campo" style="margin-bottom:18px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <label for="decCriterioPropio">Agregar un criterio propio</label>
+          <input type="text" id="decCriterioPropio" placeholder="Ej.: relación con el municipio">
+        </div>
+        <button class="btn secundario" onclick="agregarCriterioPropio()">Agregar</button>
+      </div>
+
+      <div class="acciones">
+        <button class="btn secundario" onclick="volverASelectorDesdeDecisiones()">Volver</button>
+        <button class="btn" id="btnCompararYDecidir" onclick="iniciarComparacionYDecision()">Comparar y decidir</button>
+      </div>
+    </div>
+
+    <div id="decVista2" style="display:none">
+      <div id="decVigente" style="display:none;margin-bottom:18px;border:1px solid var(--linea);border-radius:8px;padding:14px 16px"></div>
+
+      <div id="decHilo" class="dimhilo"></div>
+      <div id="decCargando" class="hint" style="display:none;margin:6px 0">Pensando…</div>
+      <div id="decEntrada" class="campo" style="margin-top:10px">
+        <textarea id="decInput" placeholder="Escribí acá si querés agregar algo…" rows="2"></textarea>
+      </div>
+      <div class="acciones">
+        <button class="btn secundario" onclick="volverASelectorDesdeDecisiones()">Volver</button>
+        <button class="btn" id="btnEnviarDec" onclick="enviarTurnoDesdeInputDecisiones()">Enviar</button>
+      </div>
+
+      <div id="decPropuestaCard" style="display:none;margin-top:22px;border-top:1px solid var(--linea);padding-top:18px">
+        <h4 style="font-size:.95rem;font-weight:500;margin-bottom:10px">Campo de decisiones propuesto</h4>
+        <p id="decSintesis" style="font-size:.9rem;margin-bottom:14px"></p>
+
+        <div id="decComparaciones" style="margin-bottom:14px"></div>
+        <div id="decDecisiones" style="margin-bottom:14px"></div>
+        <div id="decRelaciones" style="margin-bottom:14px"></div>
+        <div id="decFaltantes" style="font-size:.85rem;color:var(--texto-suave);margin-bottom:6px"></div>
+
+        <div class="acciones">
+          <button class="btn secundario" onclick="seguirProfundizandoDecisiones()">Seguir profundizando</button>
+          <button class="btn secundario" onclick="mostrarCorreccionDecisiones()">Corregir</button>
+          <button class="btn" id="btnConfirmarCampoDecisiones" onclick="confirmarCampoDecisiones()">Confirmar Campo</button>
+        </div>
+        <div id="decCorreccionBox" class="campo" style="display:none;margin-top:12px">
+          <textarea id="decCorreccionInput" placeholder="Qué corregirías de este Campo de decisiones…" rows="2"></textarea>
+          <div class="acciones" style="margin-top:8px">
+            <button class="btn" onclick="enviarCorreccionDecisiones()">Enviar corrección</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ CIERRE / EXPORTACIÓN ============ -->
 <section id="pantallaCierre" class="pantalla">
   <div class="form-card">
@@ -358,7 +449,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 
 </main>
 
-<footer>COMPRENDER · NEGOCIOS PRO — versión profesional (N2.4) · Un producto de ARQUIGÉNESIS</footer>
+<footer>COMPRENDER · NEGOCIOS PRO — versión profesional (N2.5) · Un producto de ARQUIGÉNESIS</footer>
 
 <script>
 /* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
@@ -1956,7 +2047,14 @@ var state = {
   propuestaProyectivo: null,   // "contenido" pendiente de confirmar (misma forma que el objeto persistido), se edita en vivo al descartar
   historialProyectivo: [],     // [{role,content}] turnos de la conversación del proyectivo
   llamandoProyectivo: false,   // lock propio
-  descartesProyectivo: []      // [{id,nombre,transformacion}] descartadas por el usuario en esta sesión -- viajan al prompt
+  descartesProyectivo: [],     // [{id,nombre,transformacion}] descartadas por el usuario en esta sesión -- viajan al prompt
+
+  // ---- N2.5: campo de decisiones ----
+  camposDecisiones: [],        // [{version,fecha,proyectivo_origen,contenido,confirmado:true}] -- siempre se agrega, nunca se pisa
+  propuestaDecisiones: null,   // "contenido" pendiente de confirmar -- decisiones acá llevan ademas estado_propuesto (transitorio, nunca persiste)
+  historialDecisiones: [],     // [{role,content}] turnos de la conversación del campo de decisiones
+  llamandoDecisiones: false,   // lock propio
+  criteriosUsuario: []         // [{nombre,peso,definicion_usuario,propio}] elegidos por chips -- fuente humana primaria, nunca pisada por la IA
 };
 
 /* ---- N2.3: vocabulario de relaciones -- alfabeto cerrado, mismo criterio defensivo que
@@ -1980,6 +2078,30 @@ var NIVELES_REVERSIBILIDAD = ['alta', 'media', 'baja'];
 var REVERSIBILIDAD_LABEL = { alta: 'Alta reversibilidad', media: 'Reversibilidad media', baja: 'Baja reversibilidad' };
 var TIPOS_ESCENARIO = ['continuidad', 'reorganizacion_focal', 'reorganizacion_ampliada'];
 var TIPO_ESCENARIO_LABEL = { continuidad: 'Continuidad', reorganizacion_focal: 'Reorganización focal', reorganizacion_ampliada: 'Reorganización ampliada' };
+
+/* ---- N2.5: vocabulario del campo de decisiones -- mismos criterios de alfabeto cerrado.
+   HORIZONTES/NIVELES_REVERSIBILIDAD se reutilizan tal cual de N2.4, no se duplican. ---- */
+var CRITERIOS_SUGERIDOS = ['impacto_sistemico', 'urgencia', 'costo', 'capacidad_disponible', 'riesgo', 'reversibilidad', 'tiempo', 'dependencia_externa', 'coherencia_identidad', 'impacto_clientes', 'impacto_personas', 'sustentabilidad'];
+var CRITERIO_LABEL = {
+  impacto_sistemico: 'Impacto sistémico', urgencia: 'Urgencia', costo: 'Costo', capacidad_disponible: 'Capacidad disponible',
+  riesgo: 'Riesgo', reversibilidad: 'Reversibilidad', tiempo: 'Tiempo', dependencia_externa: 'Dependencia externa',
+  coherencia_identidad: 'Coherencia con identidad/dirección', impacto_clientes: 'Impacto sobre clientes',
+  impacto_personas: 'Impacto sobre personas', sustentabilidad: 'Sustentabilidad'
+};
+var PESOS_CRITERIO = ['alto', 'medio', 'bajo'];
+var PESO_CRITERIO_LABEL = { alto: 'Alto', medio: 'Medio', bajo: 'Bajo' };
+/* alfabeto completo -- lo que puede terminar persistido en una decisión confirmada */
+var ESTADOS_DECISION = ['propuesta', 'adoptada', 'descartada', 'postergada', 'condicionada', 'en_revision'];
+var ESTADO_DECISION_LABEL = {
+  propuesta: 'Propuesta', adoptada: 'Adoptada', descartada: 'Descartada', postergada: 'Postergada',
+  condicionada: 'Condicionada', en_revision: 'En revisión'
+};
+var PRIORIDADES_DECISION = ['inmediata', 'siguiente', 'posterior', 'contingente'];
+var PRIORIDAD_DECISION_LABEL = { inmediata: 'Inmediata', siguiente: 'Siguiente', posterior: 'Posterior', contingente: 'Contingente' };
+var TIPOS_RELACION_DECISION = ['compatible', 'condicionada', 'secuencial', 'incompatible'];
+var TIPO_RELACION_DECISION_LABEL = { compatible: 'Compatible', condicionada: 'Condicionada', secuencial: 'Secuencial', incompatible: 'Incompatible' };
+/* topes por versión del Campo (no acumulan contra el historial) -- decisión de diseño, no del documento original */
+var TOPE_DECISIONES = 6, TOPE_COMPARACIONES = 4, TOPE_CRITERIOS = 8, TOPE_RELACIONES_DECISION = 10;
 
 /* ---- C-06 · marco pendiente dejado por el Core (mismo mecanismo de un solo uso
    que usan Urbanismo/Contextos: se lee y se borra, no se reaplica en cada carga). */
@@ -2079,6 +2201,19 @@ function construirSelectorDimensiones(){
       : (state.proyectivos.length
           ? 'Proyectivo vigente: v' + state.proyectivos[state.proyectivos.length - 1].version + '.'
           : 'Ya podés explorar el proyectivo a partir del diagnóstico integral confirmado.');
+  }
+  // N2.5: el Campo de Decisiones necesita un proyectivo ya confirmado -- convierte parte de esas
+  // posibilidades en decisiones explícitas, nunca decide a partir de una propuesta sin confirmar.
+  var btnDec = document.getElementById('btnVerDecisiones');
+  var hintDec = document.getElementById('hintDecisiones');
+  var proyVigente = ultimoProyectivoConfirmado();
+  if(btnDec) btnDec.disabled = !proyVigente;
+  if(hintDec){
+    hintDec.textContent = !proyVigente
+      ? 'Confirmá un proyectivo para abrir el Campo de Decisiones.'
+      : (state.camposDecisiones.length
+          ? 'Campo de decisiones vigente: v' + state.camposDecisiones[state.camposDecisiones.length - 1].version + '.'
+          : 'Ya podés abrir el Campo de Decisiones a partir del proyectivo confirmado.');
   }
 }
 function volverASelectorDimensiones(){
@@ -3139,6 +3274,682 @@ function volverASelectorDesdeProyectivo(){
   mostrarPantalla('pantallaDiagnostico');
 }
 
+/* ================= N2.5 · Campo de Decisiones =================
+   Convierte parte del proyectivo confirmado en decisiones explícitas, trazables y revisables.
+   Distinción dura respecto de N2.4: acá nunca se decide desde la IA -- el marcador solo puede
+   traer "estado_propuesto" (una sugerencia transitoria, que ni siquiera se persiste); el "estado"
+   real de una decisión SOLO lo escribe una acción humana explícita en la pantalla
+   (adoptar/descartar/postergar/condicionar/marcar en revisión). Ajuste de Javier (11/08): esto
+   se resuelve sin duplicar campos en el objeto persistido -- la sugerencia vive nada más que en
+   state.propuestaDecisiones, nunca llega a camposDecisiones[]. */
+
+function ultimoCampoDecisionesConfirmado(){
+  var l = state.camposDecisiones;
+  return l.length ? l[l.length - 1] : null;
+}
+
+function resumenProyectivoParaDecisiones(){
+  var proy = ultimoProyectivoConfirmado();
+  if(!proy) return 'Sin proyectivo confirmado todavía.';
+  var c = proy.contenido;
+  var partes = [];
+  partes.push('Versión del proyectivo vigente: v' + proy.version);
+  partes.push('Síntesis proyectiva: ' + c.sintesis_proyectiva);
+  if(c.transformaciones && c.transformaciones.length){
+    partes.push('Transformaciones disponibles (usá su id tal cual para origen.transformaciones):');
+    c.transformaciones.forEach(function(t){
+      partes.push('  [' + t.id + '] ' + t.nombre + ' -- ' + t.transformacion + ' (horizonte: ' + t.horizonte + ', reversibilidad: ' + t.reversibilidad + ')');
+      if(t.riesgos && t.riesgos.length) partes.push('    riesgos: ' + t.riesgos.join('; '));
+      if(t.condiciones && t.condiciones.length) partes.push('    condiciones: ' + t.condiciones.join('; '));
+    });
+  }
+  if(c.escenarios && c.escenarios.length){
+    partes.push('Escenarios disponibles (usá su tipo tal cual para origen.escenario):');
+    c.escenarios.forEach(function(e){
+      partes.push('  [' + e.tipo + '] ' + e.nombre + ' -- ' + e.logica);
+    });
+  }
+  if(c.palanca_prioritaria){
+    partes.push('Palanca prioritaria: ' + c.palanca_prioritaria.transformacion_id + ' -- ' + c.palanca_prioritaria.por_que);
+  }
+  if(c.faltantes_para_decidir && c.faltantes_para_decidir.length) partes.push('Información faltante del proyectivo: ' + c.faltantes_para_decidir.join('; '));
+  return partes.join('\n');
+}
+
+function resumenCriteriosUsuario(){
+  if(!state.criteriosUsuario.length) return '';
+  return '\n\nCRITERIOS QUE EL USUARIO YA ELIGIÓ (fuente humana primaria -- nunca los reemplaces ni les cambies la ponderación explícita; si no tienen peso todavía, podés ayudar a definirlo preguntando, pero no asumirlo):\n' +
+    state.criteriosUsuario.map(function(c){
+      var label = c.propio ? c.nombre : (CRITERIO_LABEL[c.nombre] || c.nombre);
+      return '- ' + label + (c.peso ? ' (peso: ' + c.peso + ')' : ' (sin ponderar)');
+    }).join('\n');
+}
+
+function resumenTrayectoriaDecisiones(){
+  var previo = ultimoCampoDecisionesConfirmado();
+  if(!previo) return '';
+  var partes = ['\n\nTRAYECTORIA DE DECISIONES PREVIAS (Campo v' + previo.version + ', sobre proyectivo v' + previo.proyectivo_origen.version + '):'];
+  (previo.contenido.decisiones || []).forEach(function(d){
+    partes.push('- [' + (ESTADO_DECISION_LABEL[d.estado] || d.estado) + '] ' + d.titulo + ': ' + d.decision);
+  });
+  return partes.join('\n');
+}
+
+function PROMPT_CAMPO_DECISIONES(){
+  var proyVigente = ultimoProyectivoConfirmado();
+  var versionVigente = proyVigente ? proyVigente.version : 1;
+  return 'Tenés el proyectivo ya confirmado de este negocio. Tu trabajo ahora es ayudar a convertir parte de esas posibilidades en decisiones explícitas -- qué se elige, bajo qué criterio, qué se descarta o posterga. NO es tu trabajo decidir por el usuario, ni ejecutar nada (nada de tareas, cronogramas, responsables ni KPIs -- eso corresponde a otra capa).\n\n' +
+    'MARCO DEL NEGOCIO (del Core):\n' + resumenMarcoTexto() + '\n\n' +
+    'DIMENSIONES CONFIRMADAS:\n' + resumenDimensionesConfirmadasParaIntegral() + '\n\n' +
+    'PROYECTIVO VIGENTE:\n' + resumenProyectivoParaDecisiones() +
+    resumenCriteriosUsuario() +
+    resumenTrayectoriaDecisiones() + '\n\n' +
+    'TAREA:\n' +
+    '1. Si todavía no hay criterios claros (ni elegidos por el usuario ni discutidos en la conversación), preguntá qué le importa priorizar antes de proponer decisiones -- no abras con una decisión ya armada.\n' +
+    '2. Al comparar alternativas: qué problema aborda cada una, qué relación modifica, impacto esperado, segundo orden, riesgos, condiciones, reversibilidad, horizonte, y qué criterios favorece o compromete cada una. Nunca produzcas un ganador automático: podés concluir que la elección depende de un criterio humano, o que falta información.\n' +
+    '3. IMPORTANTE: vos NUNCA fijás el estado definitivo de una decisión. Podés sugerir uno en "estado_propuesto" (tu lectura de por dónde viene la conversación), pero es solo una sugerencia -- adoptar, descartar, postergar, condicionar o poner en revisión es siempre una acción humana explícita en la pantalla, nunca algo que vos decidís.\n' +
+    '4. Cada decisión necesita origen trazable real: "origen.proyectivo_version" tiene que ser exactamente ' + versionVigente + ', y "origen.transformaciones" y/o "origen.escenario" tienen que ser IDs/tipos que existan de verdad en el proyectivo vigente de arriba. No inventes ni repares un origen.\n' +
+    '5. Si detectás que dos decisiones compiten por el mismo recurso, tienen condiciones excluyentes, se contradicen, tienen horizontes incompatibles o una bloquea a la otra, registralo en relaciones_decisiones (compatible/condicionada/secuencial/incompatible) -- no la resuelvas vos.\n' +
+    '6. Hablá en términos de posibilidad y criterio, nunca de mandato: "esta alternativa favorece...", "si priorizás X, esta opción gana relevancia", "la elección depende de...", "este curso acepta el riesgo de..." -- nunca "tenés que elegir" ni "la decisión correcta es".\n' +
+    '7. Nunca muestres códigos internos (B1-B6, T01-T14, M01-M09, IDs de transformaciones como TR1) en el texto visible: referite por nombre.\n' +
+    '8. PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador. El JSON tiene que cerrar completo -- una oración corta por campo, listas de máximo 2 ítems, hasta 6 decisiones y 4 comparaciones por turno. Recién después del marcador cerrado va el texto visible breve.\n\n' +
+    'Cerrá con el marcador exacto (JSON válido, sin comentarios ni texto extra adentro):\n' +
+    '[[CAMPO_DECISIONES:{\n' +
+    '  "sintesis": "...",\n' +
+    '  "criterios": [ { "nombre": "...", "peso": "alto|medio|bajo|null", "definicion_usuario": "..." } ],\n' +
+    '  "comparaciones": [ { "alternativas": ["TR1","TR3"], "lectura": "...", "tradeoffs": ["..."], "informacion_faltante": ["..."] } ],\n' +
+    '  "decisiones": [ { "id": "D1", "titulo": "...", "estado_propuesto": "propuesta|adoptada|descartada|postergada|condicionada|en_revision", "origen": { "proyectivo_version": ' + versionVigente + ', "transformaciones": ["TR1"], "escenario": "reorganizacion_focal" }, "decision": "...", "criterio_principal": "...", "criterios_secundarios": ["..."], "alternativas_consideradas": ["..."], "razones_eleccion": ["..."], "razones_descarte_alternativas": ["..."], "riesgos_aceptados": ["..."], "riesgos_no_aceptados": ["..."], "condiciones_activacion": ["..."], "dependencias": ["D2"], "prioridad": "inmediata|siguiente|posterior|contingente", "horizonte": "inmediato|corto|medio|largo", "reversibilidad": "alta|media|baja" } ],\n' +
+    '  "relaciones_decisiones": [ { "origen": "D1", "destino": "D2", "tipo": "compatible|condicionada|secuencial|incompatible", "explicacion": "..." } ],\n' +
+    '  "faltantes_para_actuar": ["..."]\n' +
+    '}]]\n' +
+    'seguido, recién ahí, de un texto visible de 2 a 4 líneas. Si el usuario corrige, profundiza, o resuelve el estado de alguna decisión desde la pantalla, incorporalo y volvé a cerrar con el mismo marcador completo, siempre primero.';
+}
+
+function llamarIACampoDecisiones(mensajes){
+  return fetch('/api/anthropic', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 16000,
+      system: PROMPT_CAMPO_DECISIONES(),
+      messages: mensajes
+    })
+  }).then(function(res){
+    return res.json().catch(function(){ return {}; }).then(function(data){
+      if(!res.ok){
+        var err = new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+        err.codigo = data && data.error && data.error.codigo;
+        throw err;
+      }
+      var texto = (data.content || []).map(function(b){ return b.text || ''; }).join('');
+      return texto;
+    });
+  });
+}
+
+/* ---- validadores defensivos, pieza por pieza -- mismo criterio que N2.3/N2.4 ---- */
+function validarCriterio(c){
+  if(!c || typeof c !== 'object') return null;
+  if(!c.nombre || typeof c.nombre !== 'string' || !c.nombre.trim()) return null;
+  var peso = PESOS_CRITERIO.indexOf(c.peso) > -1 ? c.peso : null;
+  return {
+    nombre: c.nombre.trim(), peso: peso,
+    definicion_usuario: (typeof c.definicion_usuario === 'string') ? c.definicion_usuario : ''
+  };
+}
+function validarComparacion(c, idsTransformacionesValidas){
+  if(!c || typeof c !== 'object') return null;
+  if(!c.lectura) return null;
+  var alternativas = Array.isArray(c.alternativas) ? c.alternativas.filter(function(id){ return idsTransformacionesValidas.indexOf(id) > -1; }) : [];
+  if(alternativas.length < 2) return null;   // comparar una sola cosa no es una comparación
+  return {
+    alternativas: alternativas, lectura: c.lectura,
+    tradeoffs: listaStringsIntegral(c.tradeoffs),
+    informacion_faltante: listaStringsIntegral(c.informacion_faltante)
+  };
+}
+/* Trazabilidad estricta (ajuste de Javier, 11/08): version exacta del proyectivo vigente, y al
+   menos una transformación o un escenario reales de ESE proyectivo. Sin eso, la decisión entera
+   se descarta -- nunca se repara ni se inventa un origen. */
+function validarDecisionBase(d, idsTransformacionesValidas, escenariosDelProyectivo, versionProyectivoVigente){
+  if(!d || typeof d !== 'object') return null;
+  if(!d.id || typeof d.id !== 'string') return null;
+  if(!d.titulo || !d.decision || !d.criterio_principal) return null;
+
+  var origen = d.origen && typeof d.origen === 'object' ? d.origen : null;
+  if(!origen || origen.proyectivo_version !== versionProyectivoVigente) return null;
+  var transOrigen = Array.isArray(origen.transformaciones) ? origen.transformaciones.filter(function(id){ return idsTransformacionesValidas.indexOf(id) > -1; }) : [];
+  var escenarioOrigen = (typeof origen.escenario === 'string' && escenariosDelProyectivo.indexOf(origen.escenario) > -1) ? origen.escenario : null;
+  if(!transOrigen.length && !escenarioOrigen) return null;
+
+  // metadatos secundarios: si vienen inválidos se normalizan a null y quedan como "faltantes" --
+  // no tiran la decisión, a diferencia del origen (ajuste de Javier, 11/08).
+  var metadatosFaltantes = [];
+  var horizonte = HORIZONTES.indexOf(d.horizonte) > -1 ? d.horizonte : null;
+  if(!horizonte) metadatosFaltantes.push('horizonte');
+  var reversibilidad = NIVELES_REVERSIBILIDAD.indexOf(d.reversibilidad) > -1 ? d.reversibilidad : null;
+  if(!reversibilidad) metadatosFaltantes.push('reversibilidad');
+  var prioridad = PRIORIDADES_DECISION.indexOf(d.prioridad) > -1 ? d.prioridad : null;
+  if(!prioridad) metadatosFaltantes.push('prioridad');
+
+  var estadoPropuesto = ESTADOS_DECISION.indexOf(d.estado_propuesto) > -1 ? d.estado_propuesto : null;
+  var dependenciasRaw = Array.isArray(d.dependencias) ? d.dependencias.filter(function(x){ return typeof x === 'string'; }) : [];
+
+  return {
+    id: d.id, titulo: d.titulo,
+    estado: 'propuesta',                // default inerte: nunca se persiste un estado activo sin acción humana
+    estado_propuesto: estadoPropuesto,   // transitorio -- se descarta antes de persistir (confirmarCampoDecisiones)
+    confirmada_por_usuario: false,
+    origen: { proyectivo_version: versionProyectivoVigente, transformaciones: transOrigen, escenario: escenarioOrigen },
+    decision: d.decision, criterio_principal: d.criterio_principal,
+    criterios_secundarios: listaStringsIntegral(d.criterios_secundarios),
+    alternativas_consideradas: listaStringsIntegral(d.alternativas_consideradas),
+    razones_eleccion: listaStringsIntegral(d.razones_eleccion),
+    razones_descarte_alternativas: listaStringsIntegral(d.razones_descarte_alternativas),
+    riesgos_aceptados: listaStringsIntegral(d.riesgos_aceptados),
+    riesgos_no_aceptados: listaStringsIntegral(d.riesgos_no_aceptados),
+    condiciones_activacion: listaStringsIntegral(d.condiciones_activacion),
+    condicion_detalle: null,
+    dependencias: dependenciasRaw,       // se resuelve contra IDs reales en resolverDependenciasYRelaciones()
+    prioridad: prioridad, horizonte: horizonte, reversibilidad: reversibilidad,
+    metadatos_faltantes: metadatosFaltantes,
+    fecha: new Date().toISOString()
+  };
+}
+/* segunda pasada: recién acá se conoce el set final de IDs de decisiones que sobrevivieron, así
+   que dependencias/relaciones se resuelven después, no dentro de validarDecisionBase(). */
+function resolverDependenciasYRelaciones(decisiones, relacionesRaw){
+  var idsValidos = decisiones.map(function(d){ return d.id; });
+  decisiones.forEach(function(d){
+    d.dependencias = d.dependencias.filter(function(id){ return idsValidos.indexOf(id) > -1 && id !== d.id; });
+  });
+  return (Array.isArray(relacionesRaw) ? relacionesRaw : [])
+    .map(function(r){
+      if(!r || typeof r !== 'object') return null;
+      if(idsValidos.indexOf(r.origen) === -1 || idsValidos.indexOf(r.destino) === -1) return null;
+      if(r.origen === r.destino) return null;
+      if(TIPOS_RELACION_DECISION.indexOf(r.tipo) === -1) return null;
+      if(!r.explicacion) return null;
+      return { origen: r.origen, destino: r.destino, tipo: r.tipo, explicacion: r.explicacion };
+    })
+    .filter(Boolean)
+    .slice(0, TOPE_RELACIONES_DECISION);
+}
+/* Ajuste de Javier (11/08): los chips del usuario son la fuente primaria -- su peso nunca se pisa.
+   Lo que la IA lee de la conversación puede completar una definición vacía o sumar un criterio
+   nuevo que el usuario no había elegido (queda sin ponderar hasta que el usuario lo pondere). */
+function fusionarCriterios(criteriosUsuario, criteriosIA){
+  var resultado = criteriosUsuario.map(function(c){
+    return { nombre: c.nombre, peso: c.peso, definicion_usuario: c.definicion_usuario || '', origen: 'usuario' };
+  });
+  var nombresUsuario = resultado.map(function(c){ return c.nombre.toLowerCase(); });
+  (criteriosIA || []).forEach(function(c){
+    var idx = nombresUsuario.indexOf(c.nombre.toLowerCase());
+    if(idx > -1){
+      if(!resultado[idx].definicion_usuario && c.definicion_usuario) resultado[idx].definicion_usuario = c.definicion_usuario;
+    } else {
+      resultado.push({ nombre: c.nombre, peso: null, definicion_usuario: c.definicion_usuario || '', origen: 'ia' });
+    }
+  });
+  return resultado.slice(0, TOPE_CRITERIOS);
+}
+
+function parseCampoDecisiones(texto){
+  var re = /\[\[CAMPO_DECISIONES:([\s\S]*?)\]\]/;
+  var m = texto.match(re);
+  if(!m){
+    var apertura = texto.indexOf('[[CAMPO_DECISIONES:');
+    var visibleSinCierre = (apertura > -1 ? texto.slice(0, apertura) : texto).trim();
+    return { visible: visibleSinCierre, propuesta: null };
+  }
+  var visible = (texto.slice(0, m.index) + texto.slice(m.index + m[0].length)).trim();
+  var datos;
+  try{ datos = JSON.parse(m[1]); }catch(e){ return { visible: visible, propuesta: null }; }
+  if(!datos || typeof datos !== 'object') return { visible: visible, propuesta: null };
+  if(!datos.sintesis) return { visible: visible, propuesta: null };
+
+  var proyVigente = ultimoProyectivoConfirmado();
+  if(!proyVigente) return { visible: visible, propuesta: null };
+  var idsTransformacionesValidas = (proyVigente.contenido.transformaciones || []).map(function(t){ return t.id; });
+  var escenariosDelProyectivo = (proyVigente.contenido.escenarios || []).map(function(e){ return e.tipo; });
+  var versionVigente = proyVigente.version;
+
+  var vistos = {};
+  var decisiones = (Array.isArray(datos.decisiones) ? datos.decisiones : [])
+    .map(function(d){ return validarDecisionBase(d, idsTransformacionesValidas, escenariosDelProyectivo, versionVigente); })
+    .filter(Boolean)
+    .filter(function(d){
+      if(vistos[d.id]) return false;
+      vistos[d.id] = true;
+      return true;
+    })
+    .slice(0, TOPE_DECISIONES);
+
+  var relaciones = resolverDependenciasYRelaciones(decisiones, datos.relaciones_decisiones);
+
+  var comparaciones = (Array.isArray(datos.comparaciones) ? datos.comparaciones : [])
+    .map(function(c){ return validarComparacion(c, idsTransformacionesValidas); })
+    .filter(Boolean)
+    .slice(0, TOPE_COMPARACIONES);
+
+  var criteriosIA = (Array.isArray(datos.criterios) ? datos.criterios : []).map(validarCriterio).filter(Boolean);
+  var criterios = fusionarCriterios(state.criteriosUsuario, criteriosIA);
+
+  return {
+    visible: visible,
+    propuesta: {
+      sintesis: datos.sintesis, criterios: criterios, comparaciones: comparaciones,
+      decisiones: decisiones, relaciones_decisiones: relaciones,
+      faltantes_para_actuar: listaStringsIntegral(datos.faltantes_para_actuar)
+    }
+  };
+}
+
+/* ---- criterios: chips en el cliente, sin llamar IA ---- */
+function renderCriteriosChips(){
+  var cont = document.getElementById('decCriteriosChips');
+  if(!cont) return;
+  cont.innerHTML = '';
+  var items = CRITERIOS_SUGERIDOS.map(function(nombre){
+    var existente = state.criteriosUsuario.find(function(c){ return c.nombre === nombre; });
+    return { nombre: nombre, label: CRITERIO_LABEL[nombre], propio: false, seleccionado: !!existente, peso: existente ? existente.peso : null };
+  });
+  state.criteriosUsuario.filter(function(c){ return c.propio; }).forEach(function(c){
+    items.push({ nombre: c.nombre, label: c.nombre, propio: true, seleccionado: true, peso: c.peso });
+  });
+  items.forEach(function(item){
+    var chip = document.createElement('span');
+    chip.className = 'crit-chip' + (item.seleccionado ? ' activo' : '');
+    var txt = document.createElement('span'); txt.textContent = item.label;
+    chip.appendChild(txt);
+    chip.addEventListener('click', function(e){
+      if(e.target && e.target.tagName === 'SELECT') return;
+      toggleCriterioChip(item.nombre, item.propio);
+    });
+    if(item.seleccionado){
+      var sel = document.createElement('select');
+      var op0 = document.createElement('option'); op0.value = ''; op0.textContent = 'sin ponderar';
+      sel.appendChild(op0);
+      PESOS_CRITERIO.forEach(function(p){
+        var op = document.createElement('option'); op.value = p; op.textContent = PESO_CRITERIO_LABEL[p];
+        if(item.peso === p) op.selected = true;
+        sel.appendChild(op);
+      });
+      sel.addEventListener('change', function(){ ponderarCriterio(item.nombre, sel.value || null); });
+      chip.appendChild(sel);
+    }
+    cont.appendChild(chip);
+  });
+}
+function toggleCriterioChip(nombre, propio){
+  var idx = state.criteriosUsuario.findIndex(function(c){ return c.nombre === nombre; });
+  if(idx > -1){
+    state.criteriosUsuario.splice(idx, 1);
+  } else {
+    if(state.criteriosUsuario.length >= TOPE_CRITERIOS) return;
+    state.criteriosUsuario.push({ nombre: nombre, peso: null, definicion_usuario: '', propio: !!propio });
+  }
+  renderCriteriosChips();
+}
+function ponderarCriterio(nombre, peso){
+  var c = state.criteriosUsuario.find(function(x){ return x.nombre === nombre; });
+  if(!c) return;
+  c.peso = (PESOS_CRITERIO.indexOf(peso) > -1) ? peso : null;
+}
+function agregarCriterioPropio(){
+  var input = document.getElementById('decCriterioPropio');
+  var nombre = input.value.trim();
+  if(!nombre) return;
+  var yaExiste = state.criteriosUsuario.some(function(c){ return c.nombre.toLowerCase() === nombre.toLowerCase(); })
+    || CRITERIOS_SUGERIDOS.indexOf(nombre) > -1;
+  if(yaExiste){ input.value = ''; return; }
+  if(state.criteriosUsuario.length >= TOPE_CRITERIOS) return;
+  state.criteriosUsuario.push({ nombre: nombre, peso: null, definicion_usuario: '', propio: true });
+  input.value = '';
+  renderCriteriosChips();
+}
+
+function irACampoDecisiones(){
+  if(!ultimoProyectivoConfirmado()) return;
+  abrirCampoDecisiones();
+}
+function abrirCampoDecisiones(){
+  state.historialDecisiones = [];
+  state.propuestaDecisiones = null;
+  document.getElementById('decPropuestaCard').style.display = 'none';
+  document.getElementById('decCorreccionBox').style.display = 'none';
+  document.getElementById('decHilo').innerHTML = '';
+  document.getElementById('decInput').value = '';
+  document.getElementById('decVista1').style.display = 'block';
+  document.getElementById('decVista2').style.display = 'none';
+
+  var proy = ultimoProyectivoConfirmado();
+  var box = document.getElementById('decResumenVigente');
+  box.innerHTML = '';
+  if(proy){
+    var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '8px';
+    h.textContent = 'Proyectivo vigente (v' + proy.version + ')';
+    var p1 = document.createElement('div'); p1.style.fontSize = '.85rem'; p1.style.marginBottom = '6px';
+    p1.textContent = proy.contenido.sintesis_proyectiva;
+    box.appendChild(h); box.appendChild(p1);
+    if(proy.contenido.transformaciones && proy.contenido.transformaciones.length){
+      var p2 = document.createElement('div'); p2.style.fontSize = '.85rem';
+      p2.textContent = 'Transformaciones: ' + proy.contenido.transformaciones.map(function(t){ return t.nombre; }).join('; ');
+      box.appendChild(p2);
+    }
+  }
+  var decVigente = ultimoCampoDecisionesConfirmado();
+  var boxDecVigente = document.getElementById('decVigente');
+  if(decVigente){
+    boxDecVigente.style.display = 'block';
+    boxDecVigente.innerHTML = '';
+    var hv = document.createElement('div'); hv.style.fontWeight = '500'; hv.style.marginBottom = '6px';
+    hv.textContent = 'Vigente: Campo de decisiones v' + decVigente.version + ' (' + new Date(decVigente.fecha).toLocaleDateString('es-AR') + ')';
+    var pv = document.createElement('div'); pv.style.fontSize = '.85rem'; pv.style.color = 'var(--texto-suave)';
+    pv.textContent = decVigente.contenido.sintesis;
+    boxDecVigente.appendChild(hv); boxDecVigente.appendChild(pv);
+  } else {
+    boxDecVigente.style.display = 'none';
+  }
+
+  renderCriteriosChips();
+  mostrarPantalla('pantallaDecisiones');
+}
+function iniciarComparacionYDecision(){
+  document.getElementById('decVista1').style.display = 'none';
+  document.getElementById('decVista2').style.display = 'block';
+  enviarTurnoDecisiones(null);
+}
+function enviarTurnoDecisiones(textoUsuario){
+  if(state.llamandoDecisiones) return;
+  var esInicio = (textoUsuario === null);
+  if(!esInicio){
+    state.historialDecisiones.push({ role: 'user', content: textoUsuario });
+    agregarBurbuja('usuario', textoUsuario, 'decHilo');
+  }
+  var mensajes = esInicio
+    ? [{ role: 'user', content: '(ayudame a comparar y decidir a partir del proyectivo vigente)' }]
+    : state.historialDecisiones.slice();
+  state.llamandoDecisiones = true;
+  document.getElementById('decCargando').style.display = 'block';
+  document.getElementById('btnEnviarDec').disabled = true;
+  llamarIACampoDecisiones(mensajes).then(function(texto){
+    state.llamandoDecisiones = false;
+    document.getElementById('decCargando').style.display = 'none';
+    document.getElementById('btnEnviarDec').disabled = false;
+    state.historialDecisiones.push({ role: 'assistant', content: texto });
+    var parsed = parseCampoDecisiones(texto);
+    agregarBurbuja('ia', parsed.visible, 'decHilo');
+    if(parsed.propuesta){
+      state.propuestaDecisiones = parsed.propuesta;
+      mostrarPropuestaDecisiones(parsed.propuesta);
+    }
+  }).catch(function(err){
+    state.llamandoDecisiones = false;
+    document.getElementById('decCargando').style.display = 'none';
+    document.getElementById('btnEnviarDec').disabled = false;
+    mostrarErrorIA(err, 'decHilo');
+  });
+}
+function enviarTurnoDesdeInputDecisiones(){
+  var ta = document.getElementById('decInput');
+  var texto = ta.value.trim();
+  if(!texto || state.llamandoDecisiones) return;
+  ta.value = '';
+  enviarTurnoDecisiones(texto);
+}
+
+function renderComparacionesVisual(comparaciones){
+  var cont = document.getElementById('decComparaciones');
+  cont.innerHTML = '';
+  if(!comparaciones || !comparaciones.length) return;
+  var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '8px';
+  h.textContent = 'Comparaciones';
+  cont.appendChild(h);
+  var proy = ultimoProyectivoConfirmado();
+  comparaciones.forEach(function(c){
+    var card = document.createElement('div'); card.className = 'comp-card';
+    var tit = document.createElement('div'); tit.className = 'comp-titulo';
+    var nombres = c.alternativas.map(function(id){
+      var t = proy && proy.contenido.transformaciones.find(function(x){ return x.id === id; });
+      return t ? t.nombre : id;
+    });
+    tit.textContent = nombres.join(' vs. ');
+    var cuerpo = document.createElement('div'); cuerpo.className = 'comp-cuerpo';
+    var partes = [c.lectura];
+    if(c.tradeoffs && c.tradeoffs.length) partes.push('Tradeoffs: ' + c.tradeoffs.join('; '));
+    if(c.informacion_faltante && c.informacion_faltante.length) partes.push('Falta saber: ' + c.informacion_faltante.join('; '));
+    cuerpo.textContent = partes.join('  —  ');
+    card.appendChild(tit); card.appendChild(cuerpo);
+    cont.appendChild(card);
+  });
+}
+function renderDecisionesVisual(decisiones, relaciones){
+  var cont = document.getElementById('decDecisiones');
+  cont.innerHTML = '';
+  var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '8px';
+  h.textContent = 'Decisiones';
+  cont.appendChild(h);
+  (decisiones || []).forEach(function(d){
+    var card = document.createElement('div'); card.className = 'dec-card';
+    var head = document.createElement('div'); head.className = 'dec-head';
+    var tit = document.createElement('span'); tit.className = 'dec-titulo'; tit.textContent = d.titulo;
+    var badge = document.createElement('span'); badge.className = 'dec-estado-badge est-' + d.estado;
+    badge.textContent = ESTADO_DECISION_LABEL[d.estado] || d.estado;
+    head.appendChild(tit); head.appendChild(badge);
+    card.appendChild(head);
+
+    var cuerpo = document.createElement('div'); cuerpo.className = 'dec-cuerpo';
+    var partes = [d.decision, 'Criterio principal: ' + d.criterio_principal];
+    if(d.riesgos_aceptados && d.riesgos_aceptados.length) partes.push('Riesgos aceptados: ' + d.riesgos_aceptados.join('; '));
+    if(d.condiciones_activacion && d.condiciones_activacion.length) partes.push('Condiciones: ' + d.condiciones_activacion.join('; '));
+    if(d.dependencias && d.dependencias.length) partes.push('Depende de: ' + d.dependencias.join(', '));
+    cuerpo.textContent = partes.join('  —  ');
+    card.appendChild(cuerpo);
+
+    if(d.estado_propuesto && d.estado_propuesto !== d.estado){
+      var sug = document.createElement('div'); sug.className = 'dec-sugerencia';
+      sug.textContent = 'La IA sugiere: ' + (ESTADO_DECISION_LABEL[d.estado_propuesto] || d.estado_propuesto) + '.';
+      card.appendChild(sug);
+    }
+    if(d.metadatos_faltantes && d.metadatos_faltantes.length){
+      var falt = document.createElement('div'); falt.className = 'dec-faltantes';
+      falt.textContent = 'Falta definir: ' + d.metadatos_faltantes.join(', ') + '.';
+      card.appendChild(falt);
+    }
+    if(d.estado === 'condicionada' && d.condicion_detalle){
+      var cd = document.createElement('div'); cd.className = 'dec-cuerpo';
+      cd.textContent = 'Condición: ' + d.condicion_detalle.condicion + ' -- evidencia: ' + d.condicion_detalle.evidencia_necesaria;
+      card.appendChild(cd);
+    }
+
+    var acciones = document.createElement('div'); acciones.className = 'dec-acciones';
+    if(d.estado_propuesto && d.estado_propuesto !== d.estado && d.estado_propuesto !== 'condicionada'){
+      var btnSug = document.createElement('button'); btnSug.className = 'dec-btn';
+      btnSug.textContent = 'Usar sugerencia (' + (ESTADO_DECISION_LABEL[d.estado_propuesto] || d.estado_propuesto) + ')';
+      btnSug.addEventListener('click', function(){ aceptarSugerenciaEstado(d.id); });
+      acciones.appendChild(btnSug);
+    }
+    [
+      ['Adoptar', function(){ adoptarDecision(d.id); }],
+      ['Descartar', function(){ descartarDecision(d.id); }],
+      ['Postergar', function(){ postergarDecision(d.id); }],
+      ['Condicionar', function(){ abrirCondicionarDecision(d.id); }],
+      ['En revisión', function(){ marcarEnRevisionDecision(d.id); }],
+      ['Corregir esta', function(){ corregirDecisionPuntual(d.id); }]
+    ].forEach(function(b){
+      var btn = document.createElement('button'); btn.className = 'dec-btn'; btn.textContent = b[0];
+      btn.addEventListener('click', b[1]);
+      acciones.appendChild(btn);
+    });
+    card.appendChild(acciones);
+
+    if(d._condicionando){
+      var box = document.createElement('div'); box.className = 'dec-condicion-box';
+      var f1 = document.createElement('textarea'); f1.placeholder = 'Condición (ej.: si la demanda se sostiene 3 meses)'; f1.rows = 1;
+      var f2 = document.createElement('textarea'); f2.placeholder = 'Evidencia necesaria'; f2.rows = 1;
+      var f3 = document.createElement('textarea'); f3.placeholder = 'Qué ocurre si se cumple'; f3.rows = 1;
+      var f4 = document.createElement('textarea'); f4.placeholder = 'Qué ocurre si no se cumple'; f4.rows = 1;
+      [f1, f2, f3, f4].forEach(function(f){ box.appendChild(f); });
+      var btnOk = document.createElement('button'); btnOk.className = 'dec-btn'; btnOk.textContent = 'Guardar condición';
+      btnOk.addEventListener('click', function(){
+        confirmarCondicionDecision(d.id, {
+          condicion: f1.value.trim(), evidencia_necesaria: f2.value.trim(),
+          si_se_cumple: f3.value.trim(), si_no_se_cumple: f4.value.trim()
+        });
+      });
+      box.appendChild(btnOk);
+      card.appendChild(box);
+    }
+
+    cont.appendChild(card);
+  });
+
+  var contRel = document.getElementById('decRelaciones');
+  contRel.innerHTML = '';
+  if(relaciones && relaciones.length){
+    var hr = document.createElement('div'); hr.style.fontWeight = '500'; hr.style.marginBottom = '6px';
+    hr.textContent = 'Relaciones entre decisiones';
+    contRel.appendChild(hr);
+    relaciones.forEach(function(r){
+      var linea = document.createElement('div'); linea.className = 'dec-relacion';
+      linea.textContent = r.origen + ' → ' + (TIPO_RELACION_DECISION_LABEL[r.tipo] || r.tipo).toLowerCase() + ' → ' + r.destino + ' (' + r.explicacion + ')';
+      contRel.appendChild(linea);
+    });
+  }
+}
+function mostrarPropuestaDecisiones(propuesta){
+  document.getElementById('decSintesis').textContent = propuesta.sintesis;
+  renderComparacionesVisual(propuesta.comparaciones);
+  renderDecisionesVisual(propuesta.decisiones, propuesta.relaciones_decisiones);
+
+  var falt = document.getElementById('decFaltantes');
+  falt.innerHTML = '';
+  if(propuesta.faltantes_para_actuar && propuesta.faltantes_para_actuar.length){
+    var hf = document.createElement('div'); hf.style.fontWeight = '500'; hf.style.margin = '6px 0 4px';
+    hf.textContent = 'Información faltante para actuar';
+    falt.appendChild(hf);
+    propuesta.faltantes_para_actuar.forEach(function(f){
+      var p = document.createElement('div'); p.textContent = '— ' + f; falt.appendChild(p);
+    });
+  }
+
+  document.getElementById('decCorreccionBox').style.display = 'none';
+  document.getElementById('decPropuestaCard').style.display = 'block';
+}
+
+/* ---- acciones por decisión: siempre locales, siempre la única vía hacia un estado activo ---- */
+function encontrarDecision(id){
+  if(!state.propuestaDecisiones) return null;
+  return state.propuestaDecisiones.decisiones.find(function(d){ return d.id === id; }) || null;
+}
+function fijarEstadoDecision(id, estado){
+  var d = encontrarDecision(id);
+  if(!d) return;
+  d.estado = estado;
+  d.confirmada_por_usuario = true;
+  d.fecha = new Date().toISOString();
+  if(estado !== 'condicionada') d.condicion_detalle = null;
+  d._condicionando = false;
+  mostrarPropuestaDecisiones(state.propuestaDecisiones);
+}
+function adoptarDecision(id){ fijarEstadoDecision(id, 'adoptada'); }
+function descartarDecision(id){ fijarEstadoDecision(id, 'descartada'); }
+function postergarDecision(id){ fijarEstadoDecision(id, 'postergada'); }
+function marcarEnRevisionDecision(id){ fijarEstadoDecision(id, 'en_revision'); }
+function aceptarSugerenciaEstado(id){
+  var d = encontrarDecision(id);
+  if(!d || !d.estado_propuesto) return;
+  if(d.estado_propuesto === 'condicionada'){ abrirCondicionarDecision(id); return; }
+  fijarEstadoDecision(id, d.estado_propuesto);
+}
+function abrirCondicionarDecision(id){
+  var d = encontrarDecision(id);
+  if(!d) return;
+  d._condicionando = true;
+  mostrarPropuestaDecisiones(state.propuestaDecisiones);
+}
+function confirmarCondicionDecision(id, detalle){
+  var d = encontrarDecision(id);
+  if(!d || !detalle || !detalle.condicion) return;
+  d.condicion_detalle = detalle;
+  d.estado = 'condicionada';
+  d.confirmada_por_usuario = true;
+  d.fecha = new Date().toISOString();
+  d._condicionando = false;
+  mostrarPropuestaDecisiones(state.propuestaDecisiones);
+}
+function corregirDecisionPuntual(id){
+  var d = encontrarDecision(id);
+  if(!d) return;
+  document.getElementById('decPropuestaCard').style.display = 'none';
+  enviarTurnoDecisiones('Corregime específicamente la decisión "' + d.titulo + '" (id ' + d.id + ').');
+}
+
+function mostrarCorreccionDecisiones(){
+  document.getElementById('decCorreccionBox').style.display = 'block';
+  var ta = document.getElementById('decCorreccionInput');
+  ta.value = '';
+  setTimeout(function(){ ta.focus(); }, 0);
+}
+function enviarCorreccionDecisiones(){
+  var ta = document.getElementById('decCorreccionInput');
+  var texto = ta.value.trim();
+  if(!texto) return;
+  document.getElementById('decPropuestaCard').style.display = 'none';
+  enviarTurnoDecisiones('No estoy de acuerdo con este Campo de decisiones: ' + texto);
+}
+function seguirProfundizandoDecisiones(){
+  document.getElementById('decPropuestaCard').style.display = 'none';
+  document.getElementById('decInput').focus();
+}
+
+/* "confirmación general" (sección 13): puede correr con una mezcla de estados -- D1 adoptada,
+   D2 todavía en revisión -- eso está autorizado explícitamente. estado_propuesto y _condicionando
+   son transitorios y NUNCA llegan al objeto persistido. */
+function confirmarCampoDecisiones(){
+  if(!state.propuestaDecisiones) return;
+  var proy = ultimoProyectivoConfirmado();
+  if(!proy) return;
+  var version = state.camposDecisiones.length + 1;
+  var contenido = {
+    sintesis: state.propuestaDecisiones.sintesis,
+    criterios: state.propuestaDecisiones.criterios,
+    comparaciones: state.propuestaDecisiones.comparaciones,
+    decisiones: state.propuestaDecisiones.decisiones.map(function(d){
+      return {
+        id: d.id, titulo: d.titulo, estado: d.estado, confirmada_por_usuario: d.confirmada_por_usuario,
+        origen: d.origen, decision: d.decision, criterio_principal: d.criterio_principal,
+        criterios_secundarios: d.criterios_secundarios, alternativas_consideradas: d.alternativas_consideradas,
+        razones_eleccion: d.razones_eleccion, razones_descarte_alternativas: d.razones_descarte_alternativas,
+        riesgos_aceptados: d.riesgos_aceptados, riesgos_no_aceptados: d.riesgos_no_aceptados,
+        condiciones_activacion: d.condiciones_activacion, condicion_detalle: d.condicion_detalle,
+        dependencias: d.dependencias, prioridad: d.prioridad, horizonte: d.horizonte, reversibilidad: d.reversibilidad,
+        metadatos_faltantes: d.metadatos_faltantes, fecha: d.fecha
+      };
+    }),
+    relaciones_decisiones: state.propuestaDecisiones.relaciones_decisiones,
+    faltantes_para_actuar: state.propuestaDecisiones.faltantes_para_actuar
+  };
+  state.camposDecisiones.push({
+    version: version,
+    fecha: new Date().toISOString(),
+    proyectivo_origen: {
+      version: proy.version, fecha: proy.fecha, sintesis_proyectiva: proy.contenido.sintesis_proyectiva,
+      ids_transformaciones_disponibles: (proy.contenido.transformaciones || []).map(function(t){ return t.id; })
+    },
+    contenido: contenido,
+    confirmado: true
+  });
+  state.propuestaDecisiones = null;
+  volverASelectorDesdeDecisiones();
+}
+function volverASelectorDesdeDecisiones(){
+  construirSelectorDimensiones();
+  mostrarPantalla('pantallaDiagnostico');
+}
+
 function cerrarEvaluacion(){
   var dims = ORDEN_DIMENSIONES_NEGOCIO.map(function(cod){
     var d = state.dimensiones[cod];
@@ -3160,7 +3971,8 @@ function cerrarEvaluacion(){
       dimensiones: dims,
       sintesis: sintesisEl ? sintesisEl.value.trim() : '',
       diagnosticos_integrales: state.diagnosticosIntegrales.slice(),  // N2.3: siempre array, puede ir vacío
-      proyectivos: state.proyectivos.slice()   // N2.4: siempre array, puede ir vacío
+      proyectivos: state.proyectivos.slice(),   // N2.4: siempre array, puede ir vacío
+      campos_decisiones: state.camposDecisiones.slice()   // N2.5: siempre array, puede ir vacío
     }
   });
   mostrarExportacion(payload);
