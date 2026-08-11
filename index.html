@@ -2066,10 +2066,12 @@ var CONTRATO = { version_contrato: '2.1', lenguaje: 'universal', ontology_versio
 var PRODUCTO_CORE      = 'Comprender AI';
 var PRODUCTO_URBANISMO = 'Comprender Urbanismo';
 var PRODUCTO_CONTEXTOS = 'Comprender Contextos';
+var PRODUCTO_NEGOCIOS_PRO = 'Comprender Negocios Pro';
 function idProducto(d){ return (d && (d.producto || d.software)) || ''; }
 function esProductoCore(d){ var p = idProducto(d); return p === PRODUCTO_CORE || p === 'ArquiGenesis AI Core' || p === 'Comprender AI Core'; }
 function esProductoUrbanismo(d){ var p = idProducto(d); return p === PRODUCTO_URBANISMO || p === 'ArquiGenesis AI Urban'; }
 function esProductoContextos(d){ var p = idProducto(d); return p === PRODUCTO_CONTEXTOS || p === 'ArquiGenesis AI Context'; }
+function esProductoNegociosPro(d){ var p = idProducto(d); return p === PRODUCTO_NEGOCIOS_PRO; }
 
 function sellarContrato(obj){
   var base = { version_contrato: CONTRATO.version_contrato, lenguaje: CONTRATO.lenguaje, ontology_version: CONTRATO.ontology_version };
@@ -3356,6 +3358,12 @@ function buildSystem(){
     ctx += '\nDiagnóstico profesional incorporado (v' + dp.version + '): ' + dp.resumen +
       '\nSi el usuario quiere entender o trabajar este diagnóstico, ayudalo a leerlo desde la comprensión ya construida: qué confirma, qué tensiona, qué abre.';
   }
+  const enpros = o.evaluaciones_negocio_pro || [];
+  if(enpros.length){
+    const enp = enpros[enpros.length - 1];
+    ctx += '\nÚltima evaluación de Negocios Pro incorporada (v' + enp.version + '): ' + enp.resumen +
+      '\nEsto es una evaluación estructurada aparte, no la ficha confirmada: si el usuario quiere trabajarla, ayudalo a leerla desde lo ya comprendido, sin confundirla con las lecturas conversacionales de Negocios que puedan existir.';
+  }
   ctx += '\nRespondé desde este estado. No empieces de cero.';
   if(state.modoUrban) ctx += URBAN_PROMPT;
   if(state.modoContext) ctx += CONTEXT_PROMPT;
@@ -3708,6 +3716,46 @@ function adjuntarDiagnosticoPro(datos, ciudad, origen, silencioso){
   return 'incorporado a «' + destino.nombre + '» (v' + version + ')';
 }
 
+/* ================= Negocios Pro (N2.1) =================
+   Mismo criterio de ruteo que adjuntarDiagnosticoPro, pero separado a propósito:
+   esto NO es un diagnóstico Pro de Urbanismo/Contextos (o.diagnosticos_pro) ni una
+   lectura conversacional (o.lecturas_negocio) — es una evaluación estructurada aparte,
+   en o.evaluaciones_negocio_pro[]. La ficha confirmada (o.ficha) no se toca acá. */
+function adjuntarEvaluacionNegocioPro(datos, silencioso){
+  let destino = null;
+  const idm = datos.organismo_id || null;
+  if(idm){
+    destino = cargarOrganismos().find(function(o){ return o.id === idm; }) || null;
+  }
+  if(!destino && datos.marco_origen && datos.marco_origen.organismo){
+    const lista = cargarOrganismos();
+    destino = lista.find(function(o){ return normalizarNombre(o.nombre) === normalizarNombre(datos.marco_origen.organismo); }) || null;
+  }
+  if(!destino && state.organismo) destino = state.organismo;
+  if(!destino){
+    const msj = 'sin organismo coincidente — incorporá el organismo y reimportá';
+    if(silencioso) return msj;
+    cardMensaje('Evaluación de Negocios Pro sin destino', 'Reconocí una evaluación de ' + PRODUCTO_NEGOCIOS_PRO + ', pero no hay organismo con ese nombre ni uno activo compatible. Incorporá el organismo y volvé a importar.');
+    return msj;
+  }
+  destino.evaluaciones_negocio_pro = destino.evaluaciones_negocio_pro || [];
+  const version = destino.evaluaciones_negocio_pro.length + 1;
+  const ev = (datos.evaluacion || {});
+  const dims = Array.isArray(ev.dimensiones) ? ev.dimensiones : [];
+  const resumen = PRODUCTO_NEGOCIOS_PRO + ' — diagnóstico rápido: ' +
+    dims.map(function(d){ return d.cod + ' ' + (d.estado || 'desconocida'); }).join(' · ') +
+    (ev.sintesis ? '. Síntesis: ' + ev.sintesis : '');
+  destino.evaluaciones_negocio_pro.push({ version: version, fecha: new Date().toISOString(), resumen: resumen, datos: datos });
+  destino.actualizado = new Date().toISOString();
+  guardarOrganismo(destino);
+  if(state.organismo && state.organismo.id === destino.id) state.organismo = destino;
+  if(!silencioso){
+    renderOrgList();
+    cardMensaje('Evaluación de Negocios Pro incorporada', resumen + ' Quedó en la ficha de «' + destino.nombre + '» (v' + version + '), separada de la ficha confirmada: podés trabajarla en el chat.');
+  }
+  return 'incorporado a «' + destino.nombre + '» (v' + version + ')';
+}
+
 /* ================= CRÉDITOS — presupuesto de comprensión =================
    El límite es de USO, no de tema. Todas las especialidades están disponibles
    para todos: lo que se paga es cuánta comprensión, no cuál.
@@ -3949,7 +3997,8 @@ var ACCESO_MODULOS = {
                      desc:'Campo de fuerzas externas: 6 sistemas, 54 cualidades y deriva del campo.' },
   tecnologias:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Tecnologías' },
   sustentabilidad: { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Sustentabilidad' },
-  negocios:        { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Negocios' },
+  negocios:        { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Negocios', archivo:'negocios.html',
+                     desc:'Evaluación estructurada del negocio como organismo: dimensiones, estados y síntesis.' },
   capacidades:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Integración de capacidades' },
   trayectoria:     { plan_minimo:'estudio', prueba_en_gratis:false, nombre:'Trayectoria' }
 };
@@ -6324,6 +6373,11 @@ function procesarImport(datos){
     importarDiagnosticoPro(datos);
     return;
   }
+  // Negocios Pro: aparte de diagnosticos_pro y de lecturas_negocio — ver adjuntarEvaluacionNegocioPro
+  if(datos && esProductoNegociosPro(datos)){
+    adjuntarEvaluacionNegocioPro(datos);
+    return;
+  }
   // H01: validación de contrato — acepta respaldos previos (sin sello), pero frena lenguaje incompatible
   var vc = validarContrato(datos);
   if(!vc.ok){
@@ -6490,6 +6544,77 @@ function correrPruebasAuto(){
              NEGOCIO_PROMPT.indexOf('Nunca muestres códigos B1-B6') > -1 &&
              Object.keys(DIMENSIONES_NEGOCIO_MODO).length === 6;
     })());
+    /* ---- N2.1 · Negocios Pro: slot, contrato, ruteo de import y ficha intacta.
+       NPRO·3 y NPRO·4 (consumo del marco pendiente y persistencia de las 6 dimensiones
+       en pantalla) viven del lado de negocios.html, una página aparte sin banco de
+       pruebas propio -- igual que el resto del circuito Pro (import/export de
+       Urbanismo/Contextos), se verifican en vivo en el navegador, no acá. */
+    chk('NPRO·1 · el slot de Negocios Pro está activo con su archivo', (function(){
+      var m = ACCESO_MODULOS.negocios;
+      return !!m && m.archivo === 'negocios.html' && m.plan_minimo === 'estudio';
+    })());
+    chk('NPRO·2 · el marco que arma el Core trae lo que negocios.html necesita leer', (function(){
+      var o = { id:'org_x', nombre:'Empresa X', tipo:'empresa', ficha:{ diagnostico:'d', funcion:'orientar' }, principios:[] };
+      var marco = construirMarcoCore(o);
+      return marco.organismo_id === 'org_x' && marco.version_contrato === '2.1' &&
+             marco.marco && Array.isArray(marco.marco.correspondencias);
+    })());
+    chk('NPRO·5 · el export de Negocios Pro pasa validarContrato', (function(){
+      var payload = sellarContrato({
+        producto: PRODUCTO_NEGOCIOS_PRO, tipo: 'evaluacion_negocio_pro',
+        organismo_id: 'org_x',
+        evaluacion: { alcance:'rapida', version:1, estado:'cerrada',
+          dimensiones: [{ cod:'B1', nombre:'Identidad y dirección', estado:'estable', nota:'' }],
+          sintesis: '' }
+      });
+      return esProductoNegociosPro(payload) === true && validarContrato(payload).ok === true;
+    })());
+    chk('NPRO·6 · el identificador de producto no confunde Negocios Pro con los otros Pro', (function(){
+      return esProductoNegociosPro({ producto: PRODUCTO_NEGOCIOS_PRO }) === true &&
+             esProductoNegociosPro({ producto: PRODUCTO_URBANISMO }) === false &&
+             esProductoNegociosPro({ producto: PRODUCTO_CONTEXTOS }) === false &&
+             esProductoContextos({ producto: PRODUCTO_NEGOCIOS_PRO }) === false &&
+             esProductoUrbanismo({ producto: PRODUCTO_NEGOCIOS_PRO }) === false;
+    })());
+    chk('NPRO·7/8 · evaluaciones_negocio_pro crece, versiona y no toca la ficha (byte a byte)', (function(){
+      var fichaOriginal = { diagnostico:'d', funcion:'orientar', tensiones:'t', proximo:'p' };
+      var o = { id:'org_test_npro', nombre:'Empresa X', tipo:'empresa',
+                ficha: JSON.parse(JSON.stringify(fichaOriginal)), principios:[], evaluaciones_negocio_pro:[] };
+      var origCargar = cargarOrganismos, origGuardar = guardarOrganismo, origState = state.organismo;
+      try{
+        cargarOrganismos = function(){ return [o]; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = null;
+        var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_test_npro',
+          evaluacion: { alcance:'rapida', version:1, estado:'cerrada',
+            dimensiones: [{ cod:'B1', nombre:'Identidad y dirección', estado:'estable', nota:'' }], sintesis:'x' } };
+        var r1 = adjuntarEvaluacionNegocioPro(payload, true);
+        var v1ok = o.evaluaciones_negocio_pro.length === 1 && o.evaluaciones_negocio_pro[0].version === 1;
+        var r2 = adjuntarEvaluacionNegocioPro(payload, true);
+        var v2ok = o.evaluaciones_negocio_pro.length === 2 && o.evaluaciones_negocio_pro[1].version === 2;
+        var fichaIntacta = JSON.stringify(o.ficha) === JSON.stringify(fichaOriginal);
+        var separadaDeLecturas = !o.lecturas_negocio || o.lecturas_negocio.length === 0;
+        return v1ok && v2ok && fichaIntacta && separadaDeLecturas &&
+               /incorporado/.test(r1) && /incorporado/.test(r2);
+      } finally { cargarOrganismos = origCargar; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('NPRO·9 · buildSystem incluye la última evaluación de Negocios Pro', (function(){
+      var g = state.organismo;
+      try{
+        state.organismo = { id:'org_test_npro2', nombre:'Empresa Y', tipo:'empresa', ficha:{}, principios:[],
+          evaluaciones_negocio_pro: [{ version:1, resumen:'B1 estable · B2 tensionada', fecha:'x' }] };
+        var ctx = buildSystem();
+        return ctx.indexOf('evaluación de Negocios Pro') > -1 && ctx.indexOf('B1 estable') > -1;
+      } finally { state.organismo = g; }
+    })());
+    chk('NPRO·10 · el rollback es reversible sin tocar Urbanismo/Contextos/candado', (function(){
+      // el slot se desactiva quitando "archivo"; los otros módulos Pro no dependen de este.
+      var copia = Object.assign({}, ACCESO_MODULOS.negocios);
+      delete copia.archivo;
+      return !copia.archivo && ACCESO_MODULOS.urbanismo.archivo === 'urbanismo.html' &&
+             ACCESO_MODULOS.contextos.archivo === 'contextos.html';
+    })());
+
     chk('ORI·1 · el tipo orienta a la especialidad correcta (o a ninguna)', (function(){
       return orientacionDeTipo('Empresa / institución') === 'negocio' &&
              orientacionDeTipo('Proyecto / obra') === 'negocio' &&

@@ -1,0 +1,1918 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comprender · Negocios Pro — versión profesional</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --fondo:#F7F6F3; --fondo-panel:#FFFFFF; --fondo-card:#FFFFFF;
+  --linea:#E2DFD8; --texto:#1C2A3A; --texto-suave:#5C6B7D; --tenue:#94A0AD;
+  --acento:#2E5A87; --acento-suave:#EAF0F6; --oro:#2E5A87;
+  --presion:#C1553F; --neutro:#94A0AD; --soporte:#3E8C7A;
+  --radio:12px; --grid-max:1080px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--fondo);color:var(--texto);font-family:'IBM Plex Sans',sans-serif;font-weight:300;line-height:1.6;min-height:100vh;overflow-x:hidden;}
+h1,h2,h3{font-family:'Fraunces',serif;font-weight:500;}
+header{display:flex;align-items:center;gap:14px;padding:11px 18px;border-bottom:1px solid var(--linea);position:sticky;top:0;background:rgba(247,246,243,.94);backdrop-filter:blur(8px);z-index:20;overflow:hidden;min-width:0;}
+main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
+.pantalla{display:none;animation:aparecer .5s ease;}
+.pantalla.activa{display:block;}
+@keyframes aparecer{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+@keyframes girar{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.hero h2{font-size:1.9rem;margin-bottom:10px;font-weight:300;}
+.hero h2 strong{font-weight:600;color:var(--oro);}
+.hero p{color:var(--texto-suave);font-size:.95rem;max-width:60ch;}
+.form-card{background:var(--fondo-panel);border:1px solid var(--linea);border-radius:var(--radio);padding:26px;margin-top:34px;}
+.form-card h3{font-size:1.05rem;margin-bottom:18px;color:var(--oro);font-weight:500;}
+.campo{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
+.campo label{font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--texto-suave);}
+.campo input,.campo select,.campo textarea{background:var(--fondo-card);border:1px solid var(--linea);border-radius:6px;padding:11px 13px;color:var(--texto);font-family:'IBM Plex Sans',sans-serif;font-size:.95rem;}
+.campo textarea{min-height:70px;resize:vertical;}
+.campo input:focus,.campo select:focus,.campo textarea:focus{outline:2px solid var(--oro);outline-offset:1px;border-color:transparent;}
+.hint{font-size:.75rem;color:var(--texto-suave);}
+.btn{display:inline-flex;align-items:center;gap:8px;background:var(--acento);color:#FFFFFF;border:none;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:.95rem;padding:13px 26px;border-radius:8px;transition:transform .15s,box-shadow .15s;}
+.btn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(46,90,135,.22);}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none;}
+.btn.secundario{background:transparent;color:var(--texto);border:1px solid var(--linea);font-weight:400;}
+.btn.secundario:hover{border-color:var(--oro);box-shadow:none;}
+.acciones{margin-top:22px;display:flex;gap:12px;flex-wrap:wrap;}
+.aviso{background:var(--acento-suave);border:1px solid var(--linea);border-radius:var(--radio);padding:16px 18px;margin-bottom:18px;font-size:.88rem;color:var(--texto-suave);}
+.selector-tipo{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;}
+.tipo-card{border:1px solid var(--linea);border-radius:var(--radio);padding:16px;text-align:left;background:var(--fondo-card);cursor:pointer;transition:border-color .15s;}
+.tipo-card:hover:not(.deshabilitada){border-color:var(--oro);}
+.tipo-card.deshabilitada{opacity:.5;cursor:default;}
+.tipo-card h4{font-size:.95rem;font-weight:500;margin-bottom:4px;}
+.tipo-card p{font-size:.78rem;color:var(--texto-suave);}
+.dim-fila{display:grid;grid-template-columns:200px 160px 1fr;gap:12px;align-items:start;padding:14px 0;border-top:1px solid var(--linea);}
+.dim-fila:first-of-type{border-top:none;}
+.dim-nombre{font-size:.9rem;font-weight:500;padding-top:9px;}
+.dim-estado-chip{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;}
+@media(max-width:700px){
+  .dim-fila{grid-template-columns:1fr;gap:6px;}
+  .selector-tipo{grid-template-columns:1fr;}
+}
+.export-box{width:100%;min-height:220px;max-height:44vh;background:var(--fondo-card);border:1px solid var(--linea);border-radius:6px;padding:12px;color:var(--texto);font-family:'IBM Plex Mono',monospace;font-size:.72rem;line-height:1.5;resize:vertical;}
+footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:.65rem;color:var(--texto-suave);letter-spacing:.06em;line-height:2;}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+
+/* ===== kit CAI — overlay/menú genéricos, idéntico en los tres productos ===== */
+.cai-item{text-align:left;padding:11px 14px;font-size:13.5px;color:#1C2A3A;border-radius:9px;background:none;border:none;
+  cursor:pointer;font-family:inherit;transition:background .15s}
+.cai-item:hover{background:#F1EFEA}
+#cai-ov{position:fixed;inset:0;background:rgba(28,42,58,.38);backdrop-filter:blur(4px);display:none;
+  align-items:center;justify-content:center;z-index:9100;padding:22px}
+#cai-ov.open{display:flex}
+.cai-card{background:#FFF;border:1px solid #E2DFD8;border-radius:18px;max-width:520px;width:100%;padding:26px;
+  max-height:84dvh;overflow-y:auto;box-shadow:0 18px 50px rgba(28,42,58,.16);color:#1C2A3A;
+  font-family:system-ui,-apple-system,'Segoe UI',sans-serif}
+.cai-card h3{font-size:17px;font-weight:600;margin:0 0 12px}
+.cai-card p{color:#5C6B7D;font-size:13.5px;line-height:1.6;margin:0 0 12px}
+.cai-row{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px}
+.cai-btn{padding:9px 16px;border-radius:10px;font-size:13px;border:1px solid #E2DFD8;color:#5C6B7D;background:none;
+  cursor:pointer;font-family:inherit}
+.cai-btn.pri{background:#2E5A87;color:#FFF;border-color:#2E5A87;font-weight:600}
+.cai-ham{background:none;border:1px solid #E2DFD8;color:#5C6B7D;border-radius:9px;padding:6px 11px;
+  font-size:15px;cursor:pointer;line-height:1;flex-shrink:0;font-family:inherit}
+.cai-ham:hover{border-color:#2E5A87;color:#2E5A87}
+
+/* ---------- Tu espacio -- mismo formato visual que index.html/urbanismo.html/contextos.html.
+   Negocios Pro tampoco tiene lista de organismos propia: llega uno solo, por marco pendiente. ---- */
+#teFondo{position:fixed;inset:0;background:rgba(28,42,58,.28);z-index:99992;display:none}
+#teFondo.open{display:block}
+#tuEspacio{position:fixed;top:0;left:0;bottom:0;width:300px;max-width:86vw;background:#FFF;
+  border-right:1px solid #E2DFD8;box-shadow:0 12px 34px rgba(28,42,58,.16);z-index:99993;
+  display:flex;flex-direction:column;transform:translateX(-100%);transition:transform .22s ease}
+#tuEspacio.open{transform:none}
+#teTop{padding:16px 16px 12px;border-bottom:1px solid #E2DFD8;font-size:15px;font-weight:600;color:#1C2A3A}
+#teConfig{padding:6px;flex:1;overflow-y:auto;display:flex;flex-direction:column}
+@media (prefers-reduced-motion:reduce){ #tuEspacio{transition:none} }
+
+/* ---------- menú de módulos -- mismo botón de 4 cuadraditos que index.html. */
+#modulosMenu{position:fixed;z-index:9050;background:#FFF;border:1px solid #E2DFD8;border-radius:14px;
+  padding:6px;min-width:200px;box-shadow:0 12px 34px rgba(28,42,58,.16);display:none;flex-direction:column}
+#modulosMenu.open{display:flex}
+#modulosMenu .vacio{padding:11px 14px;font-size:12.5px;color:#8a8a8a}
+
+/* ===== TÍTULO DE MARCA — idéntico en los tres productos ===== */
+.cai-head{display:flex;align-items:center;gap:10px;flex:0 1 auto;min-width:0}
+.cai-toro{width:30px;height:30px;min-width:30px;flex:none;color:#2E5A87;
+  animation:girar 30s linear infinite;transform-origin:center}
+.cai-titulo{
+  font-family:'DM Sans','Inter','IBM Plex Sans',system-ui,-apple-system,sans-serif !important;
+  font-size:21px !important; font-weight:400 !important; line-height:1.15 !important;
+  color:#1C2A3A !important; letter-spacing:-.01em !important;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.cai-titulo b{font-weight:700 !important;color:#2E5A87 !important}
+.cai-titulo .s{color:#94A0AD;font-weight:300;margin:0 2px}
+.cai-baja{font-family:'DM Sans','Inter','IBM Plex Sans',system-ui,sans-serif !important;
+  font-size:10px !important;color:#94A0AD !important;letter-spacing:.06em;margin-top:1px;
+  text-transform:none !important}
+.cai-ham{flex-shrink:0}
+@media (max-width:840px){
+  .cai-titulo{font-size:17px !important}
+  .cai-toro{width:26px;height:26px;min-width:26px}
+  .cai-baja{display:none}
+}
+</style>
+</head>
+<body>
+
+<div id="teFondo"></div>
+<div id="tuEspacio">
+  <div id="teTop">Comprender AI</div>
+  <div id="teConfig"></div>
+</div>
+<div id="modulosMenu"></div>
+
+<header>
+  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Negocios</b></div><div class="cai-baja">Pro · esqueleto N2.1</div></div></div>
+  <span style="flex:1"></span>
+  <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
+  <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
+</header>
+
+<main>
+
+<!-- ============ INICIO: identidad + selector ============ -->
+<section id="pantallaInicio" class="pantalla activa">
+  <div class="hero">
+    <h2>Comprender <strong>Negocios Pro</strong></h2>
+    <p>Evaluación estructurada del negocio como organismo. Esta es la primera versión del circuito: solo el diagnóstico rápido está activo — el resto se suma en incrementos siguientes, sobre este mismo esqueleto.</p>
+  </div>
+
+  <div id="cajaOrganismo" class="aviso" style="display:none"></div>
+  <div id="cajaSinOrganismo" class="aviso">
+    Todavía no recibí un organismo del Core. Abrí este módulo desde el organismo que querés evaluar — ícono de 4 cuadraditos (arriba a la derecha) → <b>Negocios</b> — y volvé a esta pantalla con el marco ya cargado. También podés continuar sin organismo vinculado, a modo de prueba: la evaluación se genera igual, pero sin <code>organismo_id</code> para incorporar del otro lado.
+  </div>
+
+  <div class="form-card">
+    <h3>Tipo de evaluación</h3>
+    <div class="selector-tipo">
+      <button type="button" class="tipo-card" id="tipoRapida" onclick="irADiagnosticoRapido()">
+        <h4>Diagnóstico rápido</h4>
+        <p>Seis dimensiones, clasificación manual, sin IA todavía.</p>
+      </button>
+      <div class="tipo-card deshabilitada"><h4>Evaluación integral</h4><p>Próximamente.</p></div>
+      <div class="tipo-card deshabilitada"><h4>Seguimiento</h4><p>Próximamente.</p></div>
+      <div class="tipo-card deshabilitada"><h4>Evaluación temática</h4><p>Próximamente.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DIAGNÓSTICO RÁPIDO ============ -->
+<section id="pantallaDiagnostico" class="pantalla">
+  <div class="form-card">
+    <h3>Diagnóstico rápido · seis dimensiones</h3>
+    <p class="hint" style="margin-bottom:18px">Clasificá cada dimensión con lo que ya sabés del negocio. No hace falta completar todas — "Desconocida" es una respuesta válida.</p>
+    <div id="contDimensiones"></div>
+    <div class="campo" style="margin-top:18px">
+      <label for="inSintesis">Síntesis general (opcional)</label>
+      <textarea id="inSintesis" placeholder="Una idea breve de qué está pasando en conjunto."></textarea>
+    </div>
+    <div class="acciones">
+      <button class="btn secundario" onclick="volverAInicio()">Volver</button>
+      <button class="btn" id="btnCerrarDiagnostico" onclick="cerrarDiagnosticoRapido()">Cerrar evaluación</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CIERRE / EXPORTACIÓN ============ -->
+<section id="pantallaCierre" class="pantalla">
+  <div class="form-card">
+    <h3>Evaluación lista</h3>
+    <p class="hint" style="margin-bottom:14px">Copiá este texto y pegalo en Comprender AI: <b>Tu espacio → Configuración y ayuda → Importar respaldo</b>. La ficha confirmada del organismo no se modifica — esto se incorpora como evaluación aparte, para que el chat la retome.</p>
+    <textarea id="cajaExportacion" class="export-box" readonly></textarea>
+    <div class="acciones">
+      <button class="btn secundario" onclick="volverAInicio()">Nueva evaluación</button>
+      <button class="btn" id="btnCopiarExport" onclick="copiarExportacion()">Copiar al portapapeles</button>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>COMPRENDER · NEGOCIOS PRO — versión profesional (N2.1) · Un producto de ARQUIGÉNESIS</footer>
+
+<script>
+/* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
+   v6 suma controles de cuenta sobre el v5 (sesion + planes + registro + recuperacion): ver el
+   correo logueado, cambiar la contraseña estando adentro (pidiendo la actual), cerrar sesión
+   desde un botón real -- antes existía la función pero ningún botón la llamaba en los tres
+   productos -- y eliminar la cuenta propia. Se inyecta igual: gen_deploy.py lo inserta despues
+   del primer <script> de cada fuente.
+
+   QUE HACE
+     1. Si no hay sesion, muestra un portal con tres caminos: ingresar, crear cuenta, recuperar
+        contrasena. No deja pasar sin sesion.
+     2. Guarda la sesion y la renueva sola cuando vence.
+     3. Agrega el token a toda llamada a /api/anthropic o /api/organismos, mas el modulo
+        desde donde se llama (Corte 0.5, 01/08: sumo /api/organismos al mismo interceptor).
+     4. Lee el saldo del servidor y lo deja donde credEstado() lo encuentra.
+     5. Crea cuenta contra Supabase Auth. El disparador que ya esta en la base crea la fila de
+        perfiles solo -- este archivo no toca la base directamente.
+     6. Recupera contrasena: pide el link por correo y, cuando el usuario vuelve con ese link,
+        muestra la pantalla para elegir una nueva.
+     7. Mientras hay sesion, agrega un boton fijo ("Cuenta") que abre un panel con: el correo
+        logueado, cambiar contraseña (pide la actual, la vuelve a autenticar contra Supabase y
+        recien ahi cambia), cerrar sesión, y eliminar la cuenta (pide escribir una palabra de
+        confirmacion, y llama a /api/cuenta (accion:'eliminar') -- ver mas abajo).
+
+   ELIMINAR CUENTA · ENDPOINT NUEVO EN EL SERVIDOR
+     Borrar el usuario de Auth necesita la clave de servicio, que nunca viaja al navegador. Este
+     archivo llama a POST /api/cuenta (accion:'eliminar') con el token de sesion; ese endpoint
+     (entregado aparte, api/cuenta.js -- unifica lo que hasta el 05/08 eran tres archivos
+     separados: eliminar-cuenta.js, cancelar-baja.js, cancelar-downgrade.js, por el limite de
+     12 Funciones Serverless de Vercel, ver la nota completa en su cabecera) valida el token.
+     Corte L (05/08): ya no borra al instante -- programa perfiles.baja_programada = ahora+7
+     dias; el borrado real (lib/cuenta.js) lo ejecuta el cron cuando ese plazo se cumple, o
+     POST /api/cuenta (accion:'cancelar_baja') revierte el pedido si el usuario se arrepiente
+     antes. CORRECCION (05/08, contra lo que decia esta nota desde el 29/07):
+     perfiles.id SI tiene FK real hacia auth.users (perfiles_id_fkey, ON DELETE CASCADE,
+     confirmado en vivo) -- borrar el usuario de Auth borra la fila de perfiles solo. consumo
+     cascada desde perfiles; pagos conserva el historial con perfil=NULL, a proposito.
+
+   REGISTRO Y RECUPERACION · COMO LLEGA EL CORREO
+     Via el SMTP de Resend ya configurado en Supabase Auth (dominio mail.comprenderai.com
+     verificado). El interruptor "Allow new users to sign up" tiene que estar PRENDIDO del lado
+     del servidor para que /auth/v1/signup funcione -- si esta apagado, el alta responde
+     "Signups not allowed for this instance" y el portal se lo dice al usuario con esas palabras.
+     A proposito NO se prende solo desde aca: es una decision de Javier, tomada cuando este
+     probado.
+
+   REDIRECT_TO · YA CONFIGURADO EN SUPABASE (27/07)
+     El registro y la recuperacion mandan redirect_to = la URL actual (origin + pathname). Javier
+     ya agrego las URLs de app.comprenderai.com a Authentication -> URL Configuration -> Redirect
+     URLs -- sin eso, Supabase ignora el redirect_to y manda a la Site URL por defecto.
+
+   POR QUE SIN LIBRERIA
+     supabase-js resolveria esto, pero traeria una dependencia de CDN a un producto que hoy no
+     tiene ninguna: si el CDN falla, no abre nada. Los endpoints que hacen falta son REST comun.
+     Se sostiene la regla de la casa: HTML monolitico, sin build.
+
+   LO QUE VIAJA AL NAVEGADOR
+     La URL y la clave publicable son publicas por diseno: no autorizan nada por si solas.
+     Quien decide es la politica de RLS y el proxy. La clave secreta no aparece aca.  --- */
+(function(){
+  var SB_URL = 'https://spavobqrigvbjabwyvbl.supabase.co';
+  var SB_KEY = 'sb_publishable_QbvJTscQJ63YjLasQ4p51w_0nLqwm6j';
+  var TERMINOS_URL = 'https://www.comprenderai.com/legal/terminos';
+  var PRIVACIDAD_URL = 'https://www.comprenderai.com/legal/privacidad';
+  var TERMINOS_VERSION = 'v1-2026-08-01';     // subir esto si el texto de los Terminos cambia de forma material
+  var PRIVACIDAD_VERSION = 'v1-2026-08-01';   // Cierre tecnico legal (05/08): independiente de TERMINOS_VERSION --
+                                               // subir esta si el texto de la Politica de Privacidad cambia sola,
+                                               // sin tocar el de los Terminos (y viceversa)
+  var LLAVE   = 'comprender_sesion';
+  var MARGEN  = 60000;   // se renueva un minuto antes de vencer
+  var LS_STORE = 'comprenderai';   // subdominio de la tienda en Lemon Squeezy (Corte B.6, pago internacional)
+  var perfilId = null;   // uuid de la fila propia en perfiles; lo necesita el checkout de Lemon Squeezy
+  var perfilBajaProgramada = null;   // Corte L: fecha ISO si hay una eliminacion de cuenta en curso, o null
+  var perfilSuscripcionActiva = false;   // Encargo 115 AG, Corte M (05/08): true si ya hay un plan pago en curso --
+                                          // el boton "Elegir <plan>" NO bloquea en ese caso, enruta a llamarCambiarPlan()
+                                          // en vez de armar una suscripcion nueva en paralelo (ver esa funcion mas abajo)
+
+  /* ---------- sesion guardada ---------- */
+  function leer(){
+    try{ return JSON.parse(localStorage.getItem(LLAVE) || 'null'); }catch(e){ return null; }
+  }
+  function guardar(s){
+    try{ localStorage.setItem(LLAVE, JSON.stringify(s)); }catch(e){}
+  }
+  function borrar(){
+    try{ localStorage.removeItem(LLAVE); }catch(e){}
+    try{ localStorage.removeItem('ag_core_saldo'); }catch(e){}
+  }
+  function desdeRespuesta(d){
+    if(!d || !d.access_token) return null;
+    return {
+      token:   d.access_token,
+      refresco: d.refresh_token || '',
+      vence:   Date.now() + ((d.expires_in || 3600) * 1000),
+      correo:  (d.user && d.user.email) || ''
+    };
+  }
+
+  /* ---------- llamadas a Supabase ---------- */
+  function auth(ruta, cuerpo){
+    return fetch(SB_URL + '/auth/v1/' + ruta, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify(cuerpo)
+    }).then(function(r){
+      return r.json().then(function(d){ return { ok: r.ok, estado: r.status, datos: d }; });
+    });
+  }
+
+  function ingresar(correo, clave){
+    return auth('token?grant_type=password', { email: correo, password: clave })
+      .then(function(r){
+        if(!r.ok) return { ok:false, mensaje: mensajeAuth(r) };
+        var s = desdeRespuesta(r.datos);
+        if(!s) return { ok:false, mensaje:'Respuesta inesperada del servidor.' };
+        guardar(s);
+        return { ok:true };
+      })
+      .catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor. Revisá tu conexión.' }; });
+  }
+
+  function mensajeAuth(r){
+    var d = r.datos || {};
+    var t = String(d.error_description || d.msg || d.message || '').toLowerCase();
+    if(r.estado === 400 || r.estado === 401) return 'Correo o contraseña incorrectos.';
+    if(t.indexOf('confirm') > -1) return 'La cuenta todavía no está confirmada.';
+    if(r.estado >= 500) return 'El servicio no está disponible en este momento. Probá en unos minutos.';
+    return 'No se pudo iniciar sesión.';
+  }
+
+  /* ---------- alta de cuenta ---------- */
+  function registrar(correo, clave, consentimiento){
+    var destino = location.origin + location.pathname;
+    var cuerpo = { email: correo, password: clave };
+    if(consentimiento){ cuerpo.data = consentimiento; }
+    return auth('signup?redirect_to=' + encodeURIComponent(destino), cuerpo)
+      .then(function(r){
+        if(!r.ok) return { ok:false, mensaje: mensajeRegistro(r) };
+        var s = desdeRespuesta(r.datos);
+        if(s){ guardar(s); return { ok:true, sesion:true }; }   // confirmacion automatica, poco comun
+        return { ok:true, sesion:false };                        // caso normal: espera el correo
+      })
+      .catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor. Revisá tu conexión.' }; });
+  }
+
+  function mensajeRegistro(r){
+    var d = r.datos || {};
+    var t = String(d.error_description || d.msg || d.message || '').toLowerCase();
+    if(t.indexOf('already registered') > -1 || t.indexOf('already exists') > -1) return 'Ese correo ya tiene cuenta. Ingresá con tu contraseña.';
+    if(t.indexOf('signups not allowed') > -1 || t.indexOf('signup is disabled') > -1) return 'El registro todavía no está habilitado.';
+    if(t.indexOf('password') > -1) return 'La contraseña no cumple los requisitos mínimos.';
+    if(t.indexOf('email') > -1 && t.indexOf('invalid') > -1) return 'Ese correo no es válido.';
+    if(r.estado >= 500) return 'El servicio no está disponible en este momento. Probá en unos minutos.';
+    return 'No se pudo crear la cuenta.';
+  }
+
+  /* ---------- recuperacion de contrasena ---------- */
+  function recuperar(correo){
+    var destino = location.origin + location.pathname;
+    return auth('recover?redirect_to=' + encodeURIComponent(destino), { email: correo })
+      .catch(function(){ return { ok:false }; });
+  }
+
+  // Cierre tecnico legal, Corte AC (08/08): canjea el token_hash (llega por query string, no
+  // dispara nada solo con cargar la pagina) por una sesion real -- recien cuando esta funcion
+  // se llama de verdad (o sea, cuando el usuario hizo clic en "Guardar" con su contrasena
+  // nueva) se consume el link de un solo uso contra Supabase. Antes el link apuntaba directo
+  // a Supabase (#access_token en el hash) y un simple GET ya lo gastaba -- eso es lo que
+  // probablemente consumia Gmail solo, escaneando el correo por seguridad, antes de que el
+  // usuario llegara a hacer clic de verdad.
+  function verificarRecuperacion(tokenHash){
+    return auth('verify', { type: 'recovery', token_hash: tokenHash }).then(function(r){
+      if(!r.ok) return null;
+      return desdeRespuesta(r.datos);
+    }).catch(function(){ return null; });
+  }
+
+  // Cierre tecnico legal, Corte AE (09/08): mismo blindaje que verificarRecuperacion, pero para
+  // la confirmacion de alta -- el correo de "Confirm signup" ahora tambien apunta a esta misma
+  // pagina (?type=signup&token_hash=...) en vez de directo a Supabase, y el canje recien pasa
+  // con el clic real de "Confirmar y entrar".
+  function verificarAlta(tokenHash){
+    return auth('verify', { type: 'signup', token_hash: tokenHash }).then(function(r){
+      if(!r.ok) return null;
+      return desdeRespuesta(r.datos);
+    }).catch(function(){ return null; });
+  }
+
+  function cambiarClave(token, clave){
+    return fetch(SB_URL + '/auth/v1/user', {
+      method: 'PUT',
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ password: clave })
+    }).then(function(r){
+      return r.json().then(function(d){ return { ok:r.ok, estado:r.status, datos:d }; });
+    }).then(function(r){
+      if(!r.ok) return { ok:false, mensaje:'No se pudo guardar. Probá de nuevo en un momento.' };
+      return { ok:true };
+    }).catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor.' }; });
+  }
+
+  /* ---------- datos del usuario logueado ---------- */
+  function obtenerUsuario(token){
+    return fetch(SB_URL + '/auth/v1/user', {
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + token }
+    }).then(function(r){ return r.ok ? r.json() : null; })
+      .catch(function(){ return null; });
+  }
+
+  /* ---------- link de correo (confirmacion de alta / recuperacion) ----------
+     Supabase devuelve al sitio con el token en el fragmento de la URL, nunca en la
+     query: #access_token=...&refresh_token=...&type=signup|recovery|magiclink|invite
+     Se lee una sola vez al arrancar y se limpia de la barra de direcciones. */
+  function leerHash(){
+    var h = location.hash || '';
+    if(h.charAt(0) === '#') h = h.slice(1);
+    if(!h) return null;
+    var p = {};
+    h.split('&').forEach(function(par){
+      var kv = par.split('=');
+      if(kv[0]) p[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
+    });
+    return p.access_token ? p : null;
+  }
+  function limpiarHash(){
+    try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){}
+  }
+
+  // Cierre tecnico legal, Corte AC (08/08): el link de recuperacion de contrasena ahora apunta
+  // a esta misma pagina (query string: ?type=recovery&token_hash=...), no directo a Supabase.
+  // Cargar la pagina con esto en la URL NO consume el link -- recien lo hace
+  // verificarRecuperacion(), llamada desde el clic real de "Guardar" en la pantalla de nueva
+  // contrasena. El resto de los links de correo (alta, invitacion) siguen igual, por el hash.
+  function leerQueryRecovery(){
+    try{
+      var p = new URLSearchParams(location.search);
+      if(p.get('type') === 'recovery' && p.get('token_hash')) return p.get('token_hash');
+    }catch(e){}
+    return null;
+  }
+  // Corte AE (09/08): mismo mecanismo, para el link de confirmacion de alta.
+  function leerQuerySignup(){
+    try{
+      var p = new URLSearchParams(location.search);
+      if(p.get('type') === 'signup' && p.get('token_hash')) return p.get('token_hash');
+    }catch(e){}
+    return null;
+  }
+  function limpiarQuery(){
+    try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){}
+  }
+
+  var renovando = null;
+  function refrescar(){
+    var s = leer();
+    if(!s || !s.refresco) return Promise.resolve(null);
+    if(renovando) return renovando;              // una sola renovacion a la vez
+    renovando = auth('token?grant_type=refresh_token', { refresh_token: s.refresco })
+      .then(function(r){
+        renovando = null;
+        if(!r.ok){ borrar(); return null; }
+        var n = desdeRespuesta(r.datos);
+        if(n) guardar(n);
+        return n;
+      })
+      .catch(function(){ renovando = null; return null; });
+    return renovando;
+  }
+
+  // Devuelve un token utilizable, renovando si hace falta. null = hay que ingresar.
+  function tokenVigente(){
+    var s = leer();
+    if(!s) return Promise.resolve(null);
+    if(Date.now() < (s.vence - MARGEN)) return Promise.resolve(s.token);
+    return refrescar().then(function(n){ return n ? n.token : null; });
+  }
+
+  /* ---------- saldo ---------- */
+  // Se guarda donde credEstado() lo busca. El navegador deja de calcular el saldo:
+  // pasa a mostrarlo. Esa es la diferencia entre honor system y contabilidad real.
+  function anotarSaldo(plan, saldo){
+    try{
+      if(plan && ['gratis','profesional','estudio','magister'].indexOf(plan) > -1){
+        if(localStorage.getItem('ag_core_plan') !== plan) localStorage.setItem('ag_core_plan', plan);
+      }
+      if(saldo !== null && saldo !== undefined && saldo !== '' && !isNaN(Number(saldo))){
+        localStorage.setItem('ag_core_saldo', JSON.stringify({ saldo: Number(saldo), momento: Date.now() }));
+      }
+      if(typeof renderCred === 'function') renderCred();
+    }catch(e){}
+  }
+
+  // Al abrir, se lee la fila propia. La politica de RLS deja ver solo esa.
+  // De paso, muestra el boton fijo de cuenta: si hay token valido, hay sesion.
+  function sincronizarSaldo(){
+    return tokenVigente().then(function(t){
+      if(!t) return;
+      mostrarChipCuenta();
+      mostrarChipBandeja();
+      mostrarFooterMovil();
+      return fetch(SB_URL + '/rest/v1/perfiles?select=id,plan,saldo,baja_programada,suscripcion,estado', {
+        headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t }
+      }).then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(f){ if(f && f[0]){
+          perfilId = f[0].id;
+          perfilBajaProgramada = f[0].baja_programada || null;
+          // Encargo 115 AG, Corte M (05/08): un plan pago con suscripcion activa/en gracia se
+          // trata como "ya suscripto" -- el boton de elegir otro plan enruta a llamarCambiarPlan()
+          // (sube de inmediato, o programa la baja para el fin del ciclo) en vez de dejar crear
+          // una segunda suscripcion en paralelo. Ver api/suscribir.js para la logica real.
+          perfilSuscripcionActiva = !!f[0].suscripcion && (f[0].estado === 'activo' || f[0].estado === 'gracia') && f[0].plan !== 'gratis';
+          anotarSaldo(f[0].plan, f[0].saldo);
+        } })
+        .catch(function(){});
+    });
+  }
+
+  /* ---------- piezas de formulario compartidas ----------
+     Las usan tanto el portal (ingreso/registro/recuperar) como el panel de cuenta. */
+  function campo(id, tipo, placeholder, autoc){
+    return '<input id="' + id + '" type="' + tipo + '" autocomplete="' + autoc + '" placeholder="' + placeholder + '" ' +
+      'style="width:100%;padding:12px;font-size:16px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;box-sizing:border-box;">';
+  }
+  function boton(id, texto){
+    return '<button id="' + id + '" style="width:100%;padding:12px;font-size:16px;font-weight:600;color:#fff;' +
+      'background:#1a1a1a;border:0;border-radius:8px;cursor:pointer;margin-top:4px;">' + texto + '</button>';
+  }
+  function enlace(id, texto){
+    return '<div style="margin-top:12px;text-align:center;">' +
+      '<a href="#" id="' + id + '" style="font-size:13px;color:#777;text-decoration:underline;">' + texto + '</a></div>';
+  }
+  function casilla(id, htmlEtiqueta){
+    return '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:#555;' +
+      'margin-bottom:14px;line-height:1.45;cursor:pointer;">' +
+      '<input id="' + id + '" type="checkbox" style="margin-top:2px;flex-shrink:0;width:15px;height:15px;">' +
+      '<span>' + htmlEtiqueta + '</span></label>';
+  }
+
+  /* ---------- portal ----------
+     Un solo overlay con cinco vistas: ingreso, registro, recuperar, nueva_clave,
+     confirmar_cuenta.
+     Se redibuja el innerHTML de la misma capa al cambiar de vista, no se crean capas
+     nuevas -- asi el resto del candado (fetch, planes) sigue viendo un unico portal. */
+  var portalAbierto = false;
+  function portal(avisoInicial, modoInicial, extra){
+    if(portalAbierto) return;
+    portalAbierto = true;
+    var modo = modoInicial || 'ingreso';
+    var aviso = avisoInicial || '';
+
+    var capa = document.createElement('div');
+    capa.setAttribute('id','comprenderPortal');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fbfaf8;display:flex;' +
+      'align-items:center;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif;';
+    document.body.appendChild(capa);
+
+    function vista(){
+      var titulo, sub, cuerpo;
+      if(modo === 'registro'){
+        titulo = 'Crear cuenta';
+        sub = 'Con tu correo y una contraseña.';
+        cuerpo =
+          campo('cpMail2','email','Correo','username') +
+          campo('cpClave2','password','Contraseña (mínimo 6 caracteres)','new-password') +
+          casilla('cpTerminos',
+            'Acepto los <a href="' + TERMINOS_URL + '" target="_blank" rel="noopener" style="color:#1a1a1a;">Términos y Condiciones de Uso</a> ' +
+            'y la <a href="' + PRIVACIDAD_URL + '" target="_blank" rel="noopener" style="color:#1a1a1a;">Política de Privacidad</a>.') +
+          boton('cpAccion','Crear cuenta') +
+          enlace('cpAIngreso','¿Ya tenés cuenta? Ingresá');
+      } else if(modo === 'recuperar'){
+        titulo = 'Recuperar contraseña';
+        sub = 'Te mandamos un link para elegir una nueva.';
+        cuerpo =
+          campo('cpMail3','email','Correo','username') +
+          boton('cpAccion','Enviar link') +
+          enlace('cpAIngreso','Volver a ingresar');
+      } else if(modo === 'nueva_clave'){
+        titulo = 'Elegí una contraseña nueva';
+        sub = '';
+        cuerpo =
+          campo('cpClave4','password','Contraseña nueva (mínimo 6 caracteres)','new-password') +
+          boton('cpAccion','Guardar');
+      } else if(modo === 'confirmar_cuenta'){
+        titulo = 'Confirmá tu cuenta';
+        sub = 'Tocá el botón para terminar de crear tu cuenta.';
+        cuerpo = boton('cpAccion','Confirmar y entrar');
+      } else {
+        titulo = 'Comprender';
+        sub = 'Ingresá para continuar.';
+        cuerpo =
+          campo('cpMail','email','Correo','username') +
+          campo('cpClave','password','Contraseña','current-password') +
+          boton('cpAccion','Ingresar') +
+          enlace('cpARecuperar','¿Olvidaste tu contraseña?') +
+          enlace('cpARegistro','Crear una cuenta');
+      }
+      return '<div style="width:100%;max-width:360px;">' +
+        '<div style="font-size:19px;font-weight:600;margin-bottom:6px;color:#1a1a1a;">' + titulo + '</div>' +
+        (sub ? '<div style="font-size:14px;color:#666;margin-bottom:22px;">' + sub + '</div>'
+             : '<div style="margin-bottom:22px;"></div>') +
+        cuerpo +
+        '<div id="cpAviso" style="font-size:13px;color:#b4441f;margin-top:12px;min-height:18px;"></div>' +
+      '</div>';
+    }
+
+    function pintar(){
+      capa.innerHTML = vista();
+      var avisoEl = capa.querySelector('#cpAviso');
+      if(aviso) avisoEl.textContent = aviso;
+      aviso = '';
+      cablear(avisoEl);
+    }
+
+    function cablear(avisoEl){
+      var accion = capa.querySelector('#cpAccion');
+      function ocupado(si, texto){
+        accion.disabled = si;
+        if(texto) accion.textContent = texto;
+      }
+
+      if(modo === 'ingreso'){
+        var mail = capa.querySelector('#cpMail'), pass = capa.querySelector('#cpClave');
+        function intentar(){
+          var c = (mail.value||'').trim(), k = pass.value||'';
+          if(!c||!k){ avisoEl.textContent = 'Faltan datos.'; return; }
+          ocupado(true,'Entrando…'); avisoEl.textContent = '';
+          ingresar(c,k).then(function(r){
+            if(r.ok){ portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} } }
+            else{ ocupado(false,'Ingresar'); avisoEl.textContent = r.mensaje; }
+          });
+        }
+        accion.addEventListener('click', intentar);
+        pass.addEventListener('keydown', function(e){ if(e.key==='Enter') intentar(); });
+        capa.querySelector('#cpARecuperar').addEventListener('click', function(e){ e.preventDefault(); modo='recuperar'; pintar(); });
+        capa.querySelector('#cpARegistro').addEventListener('click', function(e){ e.preventDefault(); modo='registro'; pintar(); });
+        setTimeout(function(){ try{ mail.focus(); }catch(e){} }, 60);
+
+      } else if(modo === 'registro'){
+        var mail2 = capa.querySelector('#cpMail2'), pass2 = capa.querySelector('#cpClave2'), term2 = capa.querySelector('#cpTerminos');
+        function intentarReg(){
+          var c=(mail2.value||'').trim(), k=pass2.value||'';
+          if(!c||!k){ avisoEl.textContent='Faltan datos.'; return; }
+          if(k.length<6){ avisoEl.textContent='La contraseña necesita al menos 6 caracteres.'; return; }
+          if(!term2.checked){ avisoEl.textContent='Tenés que aceptar los Términos y la Política de Privacidad para crear una cuenta.'; return; }
+          ocupado(true,'Creando…'); avisoEl.textContent = '';
+          var consentimiento = {
+            terminos_aceptados: true,
+            terminos_version: TERMINOS_VERSION,
+            privacidad_aceptada: true,
+            privacidad_version: PRIVACIDAD_VERSION,
+            origen: 'registro_web',
+            terminos_fecha: new Date().toISOString()
+          };
+          registrar(c,k,consentimiento).then(function(r){
+            if(r.ok && r.sesion){ portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} } return; }
+            if(r.ok){ modo='ingreso'; aviso='Cuenta creada. Revisá tu correo para confirmarla y después ingresá.'; pintar(); return; }
+            ocupado(false,'Crear cuenta'); avisoEl.textContent = r.mensaje;
+          });
+        }
+        accion.addEventListener('click', intentarReg);
+        pass2.addEventListener('keydown', function(e){ if(e.key==='Enter') intentarReg(); });
+        capa.querySelector('#cpAIngreso').addEventListener('click', function(e){ e.preventDefault(); modo='ingreso'; pintar(); });
+        setTimeout(function(){ try{ mail2.focus(); }catch(e){} }, 60);
+
+      } else if(modo === 'recuperar'){
+        var mail3 = capa.querySelector('#cpMail3');
+        function intentarRec(){
+          var c=(mail3.value||'').trim();
+          if(!c){ avisoEl.textContent='Falta el correo.'; return; }
+          ocupado(true,'Enviando…'); avisoEl.textContent = '';
+          recuperar(c).then(function(){
+            ocupado(false,'Enviar link');
+            avisoEl.textContent = 'Si esa cuenta existe, te llegó un correo con el link.';
+          });
+        }
+        accion.addEventListener('click', intentarRec);
+        mail3.addEventListener('keydown', function(e){ if(e.key==='Enter') intentarRec(); });
+        capa.querySelector('#cpAIngreso').addEventListener('click', function(e){ e.preventDefault(); modo='ingreso'; pintar(); });
+        setTimeout(function(){ try{ mail3.focus(); }catch(e){} }, 60);
+
+      } else if(modo === 'nueva_clave'){
+        var pass4 = capa.querySelector('#cpClave4');
+        function intentarNueva(){
+          var k = pass4.value||'';
+          if(k.length<6){ avisoEl.textContent='La contraseña necesita al menos 6 caracteres.'; return; }
+          ocupado(true,'Guardando…'); avisoEl.textContent = '';
+          // extra.token: viene del hash viejo (alta/invitacion, sigue igual). extra.token_hash:
+          // viene del link de recuperacion nuevo -- recien se canjea por una sesion en este
+          // clic real, nunca al cargar la pagina (ver verificarRecuperacion arriba).
+          var listo = extra.token
+            ? Promise.resolve({ token: extra.token, refresco: extra.refresco || '' })
+            : verificarRecuperacion(extra.token_hash);
+          listo.then(function(sesion){
+            if(!sesion){
+              ocupado(false,'Guardar');
+              avisoEl.textContent = 'El link venció o ya se usó. Pedí uno nuevo desde "¿Olvidaste tu contraseña?".';
+              return;
+            }
+            cambiarClave(sesion.token, k).then(function(r){
+              if(r.ok){
+                guardar({ token: sesion.token, refresco: sesion.refresco||'', vence: Date.now()+3600000, correo:'' });
+                portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
+              }else{
+                ocupado(false,'Guardar'); avisoEl.textContent = r.mensaje;
+              }
+            });
+          });
+        }
+        accion.addEventListener('click', intentarNueva);
+        pass4.addEventListener('keydown', function(e){ if(e.key==='Enter') intentarNueva(); });
+        setTimeout(function(){ try{ pass4.focus(); }catch(e){} }, 60);
+
+      } else if(modo === 'confirmar_cuenta'){
+        function intentarConfirmar(){
+          ocupado(true,'Confirmando…'); avisoEl.textContent = '';
+          verificarAlta(extra.token_hash).then(function(sesion){
+            if(!sesion){
+              ocupado(false,'Confirmar y entrar');
+              avisoEl.textContent = 'El link venció o ya se usó. Si ya habías confirmado antes, ingresá directamente.';
+              return;
+            }
+            guardar(sesion);
+            portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
+          });
+        }
+        accion.addEventListener('click', intentarConfirmar);
+        setTimeout(function(){ try{ accion.focus(); }catch(e){} }, 60);
+      }
+    }
+
+    pintar();
+  }
+
+  window.cerrarSesionComprender = function(){
+    borrar();
+    location.reload();
+  };
+
+  /* ---------- boton fijo de cuenta + panel ----------
+     El boton aparece solo mientras hay sesion (lo dispara sincronizarSaldo). El panel
+     vive aca por la misma razon que el portal y los planes: es infraestructura, y asi
+     queda disponible en los tres productos sin repetirla. */
+  var chipInsertado = false;
+  function mostrarChipCuenta(){
+    if(chipInsertado || document.getElementById('comprenderChipCuenta')) return;
+    chipInsertado = true;
+    // 10/08: "Cuenta" vive en el panel "Tu espacio" en los tres productos (index.html,
+    // urbanismo.html, contextos.html) -- no hace falta ademas el chip flotante donde ese
+    // panel ya existe. Antes el corte era #composer (solo el Core); ahora los tres tienen
+    // panel, asi que el chip flotante queda retirado en los tres.
+    if(document.getElementById('tuEspacio')) return;
+    var b = document.createElement('button');
+    b.id = 'comprenderChipCuenta';
+    b.textContent = 'Cuenta';
+    b.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:99990;padding:8px 14px;' +
+      'font-size:13px;font-weight:600;color:#1a1a1a;background:#fff;border:1px solid #ddd;' +
+      'border-radius:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.08);' +
+      'font-family:system-ui,-apple-system,sans-serif;';
+    b.addEventListener('click', mostrarCuenta);
+    document.body.appendChild(b);
+  }
+
+  function botonSecundario(id, texto, peligro){
+    return '<button id="' + id + '" style="width:100%;padding:11px;font-size:14px;font-weight:600;' +
+      'border:1px solid ' + (peligro ? '#e3b3a3' : '#ddd') + ';border-radius:8px;cursor:pointer;' +
+      'background:#fff;color:' + (peligro ? '#b4441f' : '#1a1a1a') + ';margin-bottom:10px;">' + texto + '</button>';
+  }
+
+  var cuentaAbierta = false;
+  function mostrarCuenta(){
+    if(cuentaAbierta) return;
+    cuentaAbierta = true;
+
+    var capa = document.createElement('div');
+    capa.setAttribute('id','comprenderCuenta');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(251,250,248,.97);' +
+      'display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif;';
+    document.body.appendChild(capa);
+
+    var vistaC = 'inicio';
+    var cuentaCorreo = '';
+    var mensajeCuenta = '';
+
+    function cerrar(){ cuentaAbierta = false; capa.remove(); }
+
+    function marco(cuerpoHtml){
+      return '<div style="width:100%;max-width:380px;background:#fff;border:1px solid #e2e0dc;' +
+        'border-radius:14px;padding:24px;position:relative;">' +
+          '<button id="ccCerrar" style="position:absolute;top:14px;right:14px;background:none;' +
+            'border:0;font-size:22px;line-height:1;color:#999;cursor:pointer;">&times;</button>' +
+          '<div style="font-size:17px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">Mi cuenta</div>' +
+          '<div style="font-size:13px;color:#666;margin-bottom:16px;">' + (cuentaCorreo || 'Cargando…') + '</div>' +
+          (mensajeCuenta ? '<div style="font-size:13px;color:#2a7;margin-bottom:14px;">' + mensajeCuenta + '</div>' : '') +
+          cuerpoHtml +
+        '</div>';
+    }
+
+    function pintar(){
+      var cuerpo;
+      if(vistaC === 'clave'){
+        cuerpo =
+          campo('ccClaveActual','password','Contraseña actual','current-password') +
+          campo('ccClaveNueva','password','Contraseña nueva (mínimo 6 caracteres)','new-password') +
+          boton('ccAccion','Guardar') +
+          enlace('ccVolver','Cancelar') +
+          '<div id="ccAviso" style="font-size:13px;color:#b4441f;margin-top:8px;min-height:18px;"></div>';
+      } else if(vistaC === 'eliminar'){
+        cuerpo =
+          '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
+            'Al confirmar, tu cuenta queda programada para eliminarse en 7 días. Podés cancelar el pedido en cualquier momento antes de esa fecha, desde este mismo panel.</div>' +
+          campo('ccConfirmar','text','Escribí ELIMINAR para confirmar','off') +
+          boton('ccAccion','Eliminar mi cuenta') +
+          enlace('ccVolver','Cancelar') +
+          '<div id="ccAviso" style="font-size:13px;color:#b4441f;margin-top:8px;min-height:18px;"></div>';
+      } else if(perfilBajaProgramada){
+        // Corte L: hay una eliminacion en curso -- el panel deja de ofrecer "Eliminar cuenta"
+        // y en cambio muestra el plazo y la opcion de arrepentirse.
+        var fechaBaja = '';
+        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }); }
+        catch(e){ fechaBaja = perfilBajaProgramada; }
+        cuerpo =
+          '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
+            'Tu cuenta está programada para eliminarse el ' + fechaBaja + '. Hasta entonces podés seguir usándola con normalidad.</div>' +
+          botonSecundario('ccCancelarBaja','Cancelar eliminación', true) +
+          botonSecundario('ccIrClave','Cambiar contraseña') +
+          enlace('ccSalir','Cerrar sesión') +
+          '<div id="ccAviso" style="font-size:13px;color:#2a7;margin-top:8px;min-height:18px;"></div>';
+      } else {
+        // 10/08: "Comprensión disponible" solo aparece si la página define el hook -- en el
+        // Core (index.html) sí; en Urbanismo/Contextos no (tienen su propio medidor, sin
+        // tocar), así que ahí este botón simplemente no se dibuja.
+        cuerpo =
+          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tus créditos') : '') +
+          botonSecundario('ccIrClave','Cambiar contraseña') +
+          botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
+          enlace('ccSalir','Cerrar sesión');
+      }
+      mensajeCuenta = '';   // se muestra una sola vez, en el pintado que sigue a la accion
+      capa.innerHTML = marco(cuerpo);
+      capa.querySelector('#ccCerrar').addEventListener('click', cerrar);
+      cablear();
+    }
+
+    function cablear(){
+      if(vistaC === 'inicio'){
+        var irCreditos = capa.querySelector('#ccIrCreditos');
+        if(irCreditos) irCreditos.addEventListener('click', function(){ cerrar(); if(window.comprenderVerCreditos) window.comprenderVerCreditos(); });
+        var irClave = capa.querySelector('#ccIrClave');
+        if(irClave) irClave.addEventListener('click', function(){ vistaC='clave'; pintar(); });
+        var irEliminar = capa.querySelector('#ccIrEliminar');
+        if(irEliminar) irEliminar.addEventListener('click', function(){ vistaC='eliminar'; pintar(); });
+        var salir = capa.querySelector('#ccSalir');
+        if(salir) salir.addEventListener('click', function(e){ e.preventDefault(); window.cerrarSesionComprender(); });
+
+        // Corte L: solo existe cuando perfilBajaProgramada esta seteado (ver pintar()).
+        var cancelarBaja = capa.querySelector('#ccCancelarBaja');
+        if(cancelarBaja){
+          cancelarBaja.addEventListener('click', function(){
+            var avisoEl2 = capa.querySelector('#ccAviso');
+            cancelarBaja.disabled = true; cancelarBaja.textContent = 'Cancelando…';
+            tokenVigente().then(function(t){
+              if(!t){
+                if(avisoEl2) avisoEl2.textContent = 'Tu sesión venció. Cerrá esto y volvé a entrar.';
+                cancelarBaja.disabled = false; cancelarBaja.textContent = 'Cancelar eliminación';
+                return;
+              }
+              // Corte M (05/08): /api/cancelar-baja se unifico en /api/cuenta (accion en el
+              // body) por el limite de 12 Funciones Serverless de Vercel -- ver la nota en
+              // la cabecera de api/cuenta.js.
+              _fetch('/api/cuenta', {
+                method:'POST',
+                headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+                body: JSON.stringify({ accion:'cancelar_baja' })
+              })
+                .then(function(r){
+                  if(r.ok){
+                    perfilBajaProgramada = null;
+                    mensajeCuenta = 'Listo, tu cuenta ya no está programada para eliminarse.';
+                    pintar();
+                    return;
+                  }
+                  return r.json().catch(function(){ return {}; }).then(function(d){
+                    cancelarBaja.disabled = false; cancelarBaja.textContent = 'Cancelar eliminación';
+                    if(avisoEl2) avisoEl2.textContent = (d && d.error && d.error.message) || 'No se pudo cancelar.';
+                  });
+                }).catch(function(){
+                  cancelarBaja.disabled = false; cancelarBaja.textContent = 'Cancelar eliminación';
+                  if(avisoEl2) avisoEl2.textContent = 'No se pudo conectar. Revisá tu conexión.';
+                });
+            });
+          });
+        }
+        return;
+      }
+
+      var avisoEl = capa.querySelector('#ccAviso');
+      var accion = capa.querySelector('#ccAccion');
+      capa.querySelector('#ccVolver').addEventListener('click', function(e){ e.preventDefault(); vistaC='inicio'; pintar(); });
+
+      function ocupado(si, texto){ accion.disabled = si; if(texto) accion.textContent = texto; }
+
+      if(vistaC === 'clave'){
+        var actual = capa.querySelector('#ccClaveActual'), nueva = capa.querySelector('#ccClaveNueva');
+        accion.addEventListener('click', function(){
+          var k1 = actual.value||'', k2 = nueva.value||'';
+          if(!k1||!k2){ avisoEl.textContent='Faltan datos.'; return; }
+          if(k2.length<6){ avisoEl.textContent='La contraseña nueva necesita al menos 6 caracteres.'; return; }
+          ocupado(true,'Guardando…'); avisoEl.textContent='';
+          ingresar(cuentaCorreo, k1).then(function(r){
+            if(!r.ok){ ocupado(false,'Guardar'); avisoEl.textContent = 'Contraseña actual incorrecta.'; return; }
+            var s = leer();
+            cambiarClave(s.token, k2).then(function(r2){
+              if(r2.ok){ mensajeCuenta = 'Contraseña actualizada.'; vistaC='inicio'; pintar(); }
+              else{ ocupado(false,'Guardar'); avisoEl.textContent = r2.mensaje; }
+            });
+          });
+        });
+      } else if(vistaC === 'eliminar'){
+        var confirmar = capa.querySelector('#ccConfirmar');
+        accion.addEventListener('click', function(){
+          if((confirmar.value||'').trim().toUpperCase() !== 'ELIMINAR'){
+            avisoEl.textContent = 'Escribí ELIMINAR, tal cual, para confirmar.'; return;
+          }
+          ocupado(true,'Eliminando…'); avisoEl.textContent='';
+          tokenVigente().then(function(t){
+            if(!t){ avisoEl.textContent='Tu sesión venció. Cerrá esto y volvé a entrar.'; ocupado(false,'Eliminar mi cuenta'); return; }
+            // Corte M (05/08): /api/eliminar-cuenta se unifico en /api/cuenta (accion en el
+            // body) por el limite de 12 Funciones Serverless de Vercel -- ver la nota en la
+            // cabecera de api/cuenta.js. 'eliminar' es default si no se manda body, pero se
+            // manda explicito igual, por claridad.
+            _fetch('/api/cuenta', {
+              method:'POST',
+              headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+              body: JSON.stringify({ accion:'eliminar' })
+            }).then(function(r){
+              if(r.ok){
+                // Corte L: ya no borra al instante -- queda programada. Se sigue con la
+                // sesion abierta (el usuario puede seguir usando la cuenta hasta la fecha,
+                // o arrepentirse desde este mismo panel).
+                return r.json().catch(function(){ return {}; }).then(function(d){
+                  perfilBajaProgramada = (d && d.baja_programada) || null;
+                  mensajeCuenta = 'Listo, tu cuenta quedó programada para eliminarse en 7 días. Podés cancelarlo cuando quieras desde este panel.';
+                  vistaC = 'inicio';
+                  pintar();
+                });
+              }
+              return r.json().catch(function(){ return {}; }).then(function(d){
+                ocupado(false,'Eliminar mi cuenta');
+                avisoEl.textContent = (d && d.error && d.error.message) || 'No se pudo eliminar la cuenta.';
+              });
+            }).catch(function(){
+              ocupado(false,'Eliminar mi cuenta');
+              avisoEl.textContent = 'No se pudo conectar. Revisá tu conexión.';
+            });
+          });
+        });
+      }
+    }
+
+    pintar();   // primer pintado inmediato ("Cargando…"), se repinta solo cuando llega el correo
+    tokenVigente().then(function(t){
+      if(!t) return;
+      obtenerUsuario(t).then(function(u){
+        cuentaCorreo = (u && u.email) || '';
+        if(vistaC === 'inicio') pintar();
+      });
+    });
+  }
+
+  /* ---------- bandeja (Corte B del sistema comunicacional, 03/08) ----------
+     Contador + panel de avisos internos. Vive aca por la misma razon que "Cuenta" y los
+     planes: es infraestructura compartida por los tres productos, no se repite en cada
+     HTML. Lee y marca via api/comm.js (recurso=inbox) -- no hay todavia ningun productor real
+     conectado (eso es un corte posterior), asi que puede aparecer vacia; el contador y
+     el panel ya quedan listos para cuando existan avisos de verdad. */
+  function bandejaFetch(ruta, opciones){
+    opciones = opciones || {};
+    return tokenVigente().then(function(t){
+      if(!t) return Promise.reject(new Error('sin sesión'));
+      var headers = opciones.headers || {};
+      headers['Authorization'] = 'Bearer ' + t;
+      headers['content-type'] = 'application/json';
+      opciones.headers = headers;
+      return _fetch(ruta, opciones);
+    });
+  }
+
+  var chipBandejaInsertado = false;
+  function mostrarChipBandeja(){
+    if(chipBandejaInsertado || document.getElementById('comprenderChipBandeja')) return;
+    chipBandejaInsertado = true;
+    // 10/08: mismo criterio que mostrarChipCuenta -- "Avisos" vive en el panel "Tu espacio"
+    // en los tres productos, asi que el chip flotante no hace falta donde ese panel ya
+    // existe. actualizarContadorBandeja() sigue llamandose siempre: ahora tambien actualiza
+    // el contador dentro del panel (mismo id, comprenderTeBandejaContador, en los tres).
+    if(!document.getElementById('tuEspacio')){
+      var b = document.createElement('button');
+      b.id = 'comprenderChipBandeja';
+      b.setAttribute('aria-label','Avisos');
+      b.innerHTML = 'Avisos <span id="comprenderBandejaContador" style="display:none;margin-left:4px;' +
+        'background:#b4441f;color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700;"></span>';
+      b.style.cssText = 'position:fixed;bottom:16px;right:90px;z-index:99990;padding:8px 14px;' +
+        'font-size:13px;font-weight:600;color:#1a1a1a;background:#fff;border:1px solid #ddd;' +
+        'border-radius:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.08);' +
+        'font-family:system-ui,-apple-system,sans-serif;';
+      b.addEventListener('click', mostrarBandeja);
+      document.body.appendChild(b);
+    }
+    actualizarContadorBandeja();
+  }
+
+  function actualizarContadorBandeja(){
+    bandejaFetch('/api/comm?recurso=inbox').then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        var n = (d && typeof d.no_leidas === 'number') ? d.no_leidas : 0;
+        var span = document.getElementById('comprenderBandejaContador');
+        if(span){
+          if(n > 0){ span.textContent = String(n); span.style.display = 'inline-block'; }
+          else{ span.style.display = 'none'; }
+        }
+        var span2 = document.getElementById('comprenderFooterBandejaContador');
+        if(span2){
+          if(n > 0){ span2.textContent = String(n); span2.style.display = 'inline-block'; }
+          else{ span2.style.display = 'none'; }
+        }
+        // 10/08: contador de "Avisos" dentro de "Tu espacio" (index.html) -- mismo patron
+        // que el del pie movil, span nuevo y separado.
+        var span3 = document.getElementById('comprenderTeBandejaContador');
+        if(span3){
+          if(n > 0){ span3.textContent = String(n); span3.style.display = 'inline-block'; }
+          else{ span3.style.display = 'none'; }
+        }
+      })
+      .catch(function(){});
+  }
+
+  /* ---------- footer movil unificado (Avisos, Cuenta, Principios, Ayuda) ----------
+     Se arma solo en paginas que tienen #composer (hoy, el Core): ahi es donde el header
+     angosto de movil no alcanza para todo, y donde las chips flotantes de Cuenta/Avisos
+     competian por el mismo rincon que el compositor. En Urbanismo y Contextos no hay
+     #composer, asi que esto no se activa y las chips flotantes siguen exactamente igual
+     que antes: cero riesgo para esos dos productos.
+     Principios y Ayuda son especificos de cada pagina (paneles/funciones que candado.txt
+     no conoce), asi que se enganchan via window.comprenderAbrirPrincipios /
+     window.comprenderMostrarAyuda -- si la pagina no los define, esos dos botones no
+     se dibujan y el footer queda con Avisos + Cuenta. */
+  var footerMovilInsertado = false;
+  function mostrarFooterMovil(){
+    if(footerMovilInsertado || document.getElementById('comprenderFooterMovil')) return;
+    if(!document.getElementById('composer')) return;
+    footerMovilInsertado = true;
+
+    var css = document.createElement('style');
+    css.textContent =
+      '@media(max-width:840px){' +
+        '#comprenderChipCuenta,#comprenderChipBandeja{display:none!important}' +
+        '#composer{padding-bottom:calc(16px + env(safe-area-inset-bottom) + 60px)!important}' +
+        '#comprenderFooterMovil{display:flex!important}' +
+      '}';
+    document.head.appendChild(css);
+
+    function icono(path){
+      return '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
+    }
+    var ICN = {
+      avisos: icono('<path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 01-3.46 0"></path>'),
+      cuenta: icono('<circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 4-6 8-6s8 2 8 6"></path>'),
+      principios: icono('<path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h10"></path>'),
+      ayuda: icono('<circle cx="12" cy="12" r="9"></circle><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 1.7-2.5 3.5"></path><path d="M12 17h.01"></path>')
+    };
+
+    // Reorganización de navegación, etapa 1c (09/08): "Ayuda" se saca de acá -- quedaba
+    // repetida con la que ya tiene Tu espacio (barra lateral, index.html), que también
+    // está disponible en mobile. ICN.ayuda queda sin usar a propósito (por si se
+    // revierte esto), no se borra.
+    // 10/08: "Avisos" y "Cuenta" se sacan por el mismo motivo -- ahora viven en Tu espacio,
+    // disponible en cualquier tamaño de pantalla. ICN.avisos e ICN.cuenta quedan sin usar
+    // a propósito, mismo criterio que ICN.ayuda.
+    var botones = [
+      { id:'ffPrincipios', icn:ICN.principios, txt:'Principios', hook:'comprenderAbrirPrincipios', on:function(){ if(window.comprenderAbrirPrincipios) window.comprenderAbrirPrincipios(); } }
+    ];
+
+    var barra = document.createElement('div');
+    barra.id = 'comprenderFooterMovil';
+    barra.style.cssText = 'display:none;position:fixed;left:0;right:0;bottom:0;z-index:99991;' +
+      'background:#fff;border-top:1px solid #ddd;padding:6px 4px calc(4px + env(safe-area-inset-bottom));' +
+      'align-items:stretch;justify-content:space-around;font-family:system-ui,-apple-system,sans-serif;';
+
+    for(var i=0;i<botones.length;i++){
+      var d = botones[i];
+      if(d.hook && !window[d.hook]) continue;
+      var b = document.createElement('button');
+      b.id = d.id;
+      b.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;' +
+        'padding:6px 2px;font-size:10.5px;font-weight:600;color:#1a1a1a;background:none;border:none;' +
+        'cursor:pointer;position:relative;';
+      var badge = (d.id === 'ffAvisos') ?
+        ' <span id="comprenderFooterBandejaContador" style="display:none;position:absolute;top:2px;' +
+        'right:22%;background:#b4441f;color:#fff;border-radius:10px;padding:0 5px;font-size:10px;font-weight:700;">' +
+        '</span>' : '';
+      b.innerHTML = d.icn + badge + '<span>' + d.txt + '</span>';
+      b.addEventListener('click', d.on);
+      barra.appendChild(b);
+    }
+    document.body.appendChild(barra);
+  }
+
+  var bandejaAbierta = false;
+  function mostrarBandeja(){
+    if(bandejaAbierta) return;
+    bandejaAbierta = true;
+
+    var capa = document.createElement('div');
+    capa.setAttribute('id','comprenderBandeja');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99996;background:rgba(251,250,248,.97);' +
+      'display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif;';
+    document.body.appendChild(capa);
+
+    function cerrar(){ bandejaAbierta = false; capa.remove(); actualizarContadorBandeja(); }
+
+    function marco(cuerpoHtml){
+      return '<div style="width:100%;max-width:440px;max-height:80vh;overflow-y:auto;background:#fff;' +
+        'border:1px solid #e2e0dc;border-radius:14px;padding:24px;position:relative;">' +
+          '<button id="cbCerrar" aria-label="Cerrar" style="position:absolute;top:14px;right:14px;background:none;' +
+            'border:0;font-size:22px;line-height:1;color:#999;cursor:pointer;">&times;</button>' +
+          '<div style="font-size:17px;font-weight:600;color:#1a1a1a;margin-bottom:16px;">Avisos</div>' +
+          cuerpoHtml +
+        '</div>';
+    }
+
+    function pintarCargando(){
+      capa.innerHTML = marco('<div style="font-size:14px;color:#666;">Cargando…</div>');
+      capa.querySelector('#cbCerrar').addEventListener('click', cerrar);
+    }
+
+    function pintarEntradas(entradas){
+      if(!entradas.length){
+        capa.innerHTML = marco('<div style="font-size:14px;color:#666;">No tenés avisos por ahora.</div>');
+        capa.querySelector('#cbCerrar').addEventListener('click', cerrar);
+        return;
+      }
+      var filas = entradas.map(function(e){
+        var noLeida = !e.leida_en;
+        var titulo = e.vencida ? '<em>Este aviso ya no está disponible.</em>' : (e.titulo || '(sin título)');
+        var resumen = e.vencida ? '' : (e.resumen ? '<div style="font-size:13px;color:#666;margin-top:2px;">' + e.resumen + '</div>' : '');
+        var etiqueta = e.accion_requerida ? '<span style="font-size:11px;font-weight:600;color:#b4441f;margin-left:6px;">· requiere acción</span>' : '';
+        return '<div style="padding:12px 0;border-bottom:1px solid #eee;">' +
+          '<div style="font-size:14px;font-weight:' + (noLeida ? '700' : '500') + ';color:#1a1a1a;">' + titulo + etiqueta + '</div>' +
+          resumen +
+          '<div style="margin-top:8px;display:flex;gap:14px;">' +
+            (noLeida ? '<a href="#" data-leer="' + e.id + '" style="font-size:12px;color:#1a1a1a;text-decoration:underline;">Marcar leída</a>' : '') +
+            '<a href="#" data-archivar="' + e.id + '" style="font-size:12px;color:#888;text-decoration:underline;">Archivar</a>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+      capa.innerHTML = marco(filas);
+      capa.querySelector('#cbCerrar').addEventListener('click', cerrar);
+
+      Array.prototype.forEach.call(capa.querySelectorAll('a[data-leer]'), function(a){
+        a.addEventListener('click', function(e){
+          e.preventDefault();
+          var id = a.getAttribute('data-leer');
+          bandejaFetch('/api/comm', { method:'POST', body: JSON.stringify({ recurso:'inbox', accion:'leer', entry_id: id }) })
+            .then(function(){ cargar(); })
+            .catch(function(){});
+        });
+      });
+      Array.prototype.forEach.call(capa.querySelectorAll('a[data-archivar]'), function(a){
+        a.addEventListener('click', function(e){
+          e.preventDefault();
+          var id = a.getAttribute('data-archivar');
+          bandejaFetch('/api/comm', { method:'POST', body: JSON.stringify({ recurso:'inbox', accion:'archivar', entry_id: id }) })
+            .then(function(){ cargar(); })
+            .catch(function(){});
+        });
+      });
+    }
+
+    function cargar(){
+      bandejaFetch('/api/comm?recurso=inbox').then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){
+          if(!bandejaAbierta) return;
+          pintarEntradas((d && d.entradas) || []);
+          actualizarContadorBandeja();
+        })
+        .catch(function(){
+          if(!bandejaAbierta) return;
+          capa.innerHTML = marco('<div style="font-size:14px;color:#b4441f;">No se pudieron cargar los avisos. Probá de nuevo.</div>');
+          capa.querySelector('#cbCerrar').addEventListener('click', cerrar);
+        });
+    }
+
+    pintarCargando();
+    cargar();
+  }
+
+  // 10/08: correo de la cuenta activa, con caché -- para mostrarlo en "Tu espacio" (al lado
+  // de "Cuenta") sin depender de que el panel de Cuenta ya se haya abierto una vez (ese panel
+  // guarda su propio cuentaCorreo local, adentro de mostrarCuenta(), que no sobrevive entre
+  // aperturas). Reusa tokenVigente()/obtenerUsuario(), ya definidas más arriba en este mismo
+  // script compartido.
+  var cuentaCorreoCache = '';
+  var cuentaCorreoCachePromesa = null;
+  function obtenerCorreoActivo(){
+    if(cuentaCorreoCache) return Promise.resolve(cuentaCorreoCache);
+    if(cuentaCorreoCachePromesa) return cuentaCorreoCachePromesa;
+    cuentaCorreoCachePromesa = tokenVigente().then(function(t){
+      if(!t) return '';
+      return obtenerUsuario(t).then(function(u){
+        cuentaCorreoCache = (u && u.email) || '';
+        return cuentaCorreoCache;
+      });
+    }).catch(function(){ return ''; });
+    return cuentaCorreoCachePromesa;
+  }
+
+  // 10/08: expuestas para que index.html pueda abrir estos mismos paneles desde "Tu espacio"
+  // (mismo patrón que window.cerrarSesionComprender, ya expuesto arriba) -- sin esto, el panel
+  // de Cuenta y el de Avisos solo eran alcanzables desde el chip flotante / pie móvil que
+  // vivían acá mismo, en candado.txt.
+  window.mostrarCuentaComprender = mostrarCuenta;
+  window.mostrarBandejaComprender = mostrarBandeja;
+  window.actualizarContadorBandejaComprender = actualizarContadorBandeja;
+  window.obtenerCorreoActivoComprender = obtenerCorreoActivo;
+
+  /* ---------- pantalla de planes ----------
+     Vive acá y no en los HTML por la misma razón que la sesión: es infraestructura.
+     Así queda disponible en los tres productos sin repetirla tres veces.
+
+     Los dos planes se muestran SIEMPRE juntos, y la diferencia se dice con todas
+     las letras: Profesional NO incluye los módulos. Alguien que probó Urbanismo y
+     se suscribe a Profesional sin saberlo se sentiría estafado, con razón.
+
+     TEXTOS: el de Estudio es de Javier. El de Profesional es un borrador mío
+     —está marcado— y se cambia acá abajo sin tocar nada más.                    */
+  // Respaldo instantaneo de precio/creditos para que la pantalla de planes se vea bien
+  // apenas se abre, sin esperar red. api/catalogo.js es la unica fuente de verdad del
+  // NUMERO -- obtenerCatalogo() lo trae abajo y pisa estos valores si responde a tiempo.
+  // El texto de marketing (lema/incluye/excluye) sigue viviendo solo aca.
+  var CATALOGO_CACHE = null;
+  function obtenerCatalogo(){
+    if(CATALOGO_CACHE) return Promise.resolve(CATALOGO_CACHE);
+    return fetch('/api/catalogo').then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        if(!d || !Array.isArray(d.planes)) return null;
+        var m = {};
+        d.planes.forEach(function(p){ m[p.id] = p; });
+        CATALOGO_CACHE = m;
+        return m;
+      })
+      .catch(function(){ return null; });
+  }
+
+  // Textos definitivos (catálogo comercial vigente, 04/08). Profesional YA incluye
+  // Urbanismo y Contextos -- a proposito no hay ningun "excluye" para ese plan (antes
+  // decia lo contrario, era un error real, no solo de redaccion).
+  var PLANES = [
+    { id:'profesional', nombre:'Profesional', precio:'$30.000', creditos:'1.800 créditos por mes', precioUsd:19,
+      lema:'Para comprender y desarrollar organismos con capacidades profesionales',
+      incluye:['Chat completo de Comprender AI','Ficha viva y memoria funcional','Comprender Urbanismo','Comprender Contextos'],
+      excluye:[],
+      boton:'Elegir Profesional',
+      destacado:false },
+    { id:'estudio', nombre:'Comprender · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
+      lema:'Para estudios y prácticas profesionales con mayor escala',
+      incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
+      excluye:[],
+      boton:'Elegir Comprender · Estudio',
+      destacado:true },
+    { id:'magister', nombre:'Magister', precio:'$160.000', creditos:'9.000 créditos por mes', precioUsd:79,
+      lema:'Para investigaciones extensas, profundas y sostenidas',
+      incluye:['Todo lo incluido en Comprender · Estudio','Mayor capacidad para procesos prolongados','Continuidad sobre organismos complejos','Memoria, trazabilidad y exploración relacional intensivas'],
+      excluye:[],
+      boton:'Elegir Magister',
+      destacado:false }
+  ];
+
+  var planesAbierto = false;
+  window.mostrarPlanes = function(motivo){
+    if(planesAbierto) return;
+    planesAbierto = true;
+
+    var capa = document.createElement('div');
+    capa.setAttribute('id','comprenderPlanes');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(251,250,248,.97);' +
+      'overflow-y:auto;padding:32px 20px;font-family:system-ui,-apple-system,sans-serif;';
+
+    var aviso = '';
+    if(motivo === 'sin_saldo')     aviso = 'Se te terminaron los créditos.';
+    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Comprender · Estudio.';
+
+    var tarjetas = PLANES.map(function(p){
+      var creditosItem = '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
+             '<span style="position:absolute;left:0;color:#2a7;">✓</span>' +
+             '<span data-plan-creditos="' + p.id + '">' + p.creditos + '</span></li>';
+      var items = p.incluye.map(function(t){
+        return '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
+               '<span style="position:absolute;left:0;color:#2a7;">✓</span>' + t + '</li>';
+      }).join('');
+      var no = p.excluye.map(function(t){
+        return '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#b4441f;font-weight:500;">' +
+               '<span style="position:absolute;left:0;">·</span>' + t + '</li>';
+      }).join('');
+      return '<div style="flex:1 1 260px;max-width:330px;background:#fff;border:' +
+        (p.destacado ? '2px solid #1a1a1a' : '1px solid #e2e0dc') +
+        ';border-radius:14px;padding:22px;position:relative;">' +
+        (p.destacado ? '<div style="position:absolute;top:-11px;left:22px;background:#1a1a1a;color:#fff;' +
+          'font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;letter-spacing:.04em;">RECOMENDADO</div>' : '') +
+        '<div style="font-size:17px;font-weight:600;color:#1a1a1a;">' + p.nombre + '</div>' +
+        '<div style="font-size:13px;color:#777;margin-bottom:14px;">' + p.lema + '</div>' +
+        '<div style="font-size:27px;font-weight:600;color:#1a1a1a;">' +
+          '<span data-plan-precio="' + p.id + '">' + p.precio + '</span>' +
+          '<span style="font-size:14px;font-weight:400;color:#888;"> /mes</span></div>' +
+        '<ul style="list-style:none;padding:0;margin:14px 0 20px;">' + creditosItem + items + no + '</ul>' +
+        '<button data-plan="' + p.id + '" style="width:100%;padding:11px;font-size:15px;font-weight:600;' +
+          'border:0;border-radius:8px;cursor:pointer;' +
+          (p.destacado ? 'background:#1a1a1a;color:#fff;' : 'background:#f0eeea;color:#1a1a1a;') +
+          '">' + p.boton + '</button>' +
+        '<div style="margin-top:8px;text-align:center;">' +
+          '<a href="#" data-ls="' + p.id + '" style="font-size:12px;color:#888;text-decoration:underline;">' +
+            '¿Pagás desde afuera de Argentina? Pagar en ' +
+            '<span data-plan-usd="' + p.id + '">USD ' + (p.precioUsd ? '$' + p.precioUsd : '') + '</span>' +
+          '</a></div>' +
+        '</div>';
+    }).join('');
+
+    capa.innerHTML =
+      '<div style="max-width:720px;margin:0 auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px;">' +
+          '<div style="font-size:21px;font-weight:600;color:#1a1a1a;">Planes</div>' +
+          '<button id="cpCerrar" style="background:none;border:0;font-size:26px;line-height:1;' +
+            'color:#999;cursor:pointer;padding:0 4px;">&times;</button>' +
+        '</div>' +
+        (aviso ? '<div style="font-size:14px;color:#b4441f;margin-bottom:16px;">' + aviso + '</div>'
+               : '<div style="font-size:14px;color:#666;margin-bottom:16px;">Elegí cómo querés seguir.</div>') +
+        '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;">' + tarjetas + '</div>' +
+        '<div id="cpEstado" style="font-size:13px;color:#b4441f;margin-top:16px;min-height:18px;"></div>' +
+        '<div style="font-size:12px;color:#999;margin-top:20px;line-height:1.5;">' +
+          'Se cobra por Mercado Pago, todos los meses. Podés cancelar cuando quieras: ' +
+          'los créditos del período ya pagado siguen disponibles hasta que termine. ' +
+          'Pago internacional en USD a través de Lemon Squeezy, mismo criterio de cancelación.' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(capa);
+
+    // Se ve instantaneo con el respaldo local; si el catalogo real responde a tiempo,
+    // corrige el precio/creditos en el lugar, sin rearmar la pantalla.
+    obtenerCatalogo().then(function(cat){
+      if(!cat || !planesAbierto) return;
+      PLANES.forEach(function(p){
+        var real = cat[p.id];
+        if(!real) return;
+        var elP = capa.querySelector('[data-plan-precio="' + p.id + '"]');
+        var elC = capa.querySelector('[data-plan-creditos="' + p.id + '"]');
+        if(elP && typeof real.precio_ars === 'number'){
+          elP.textContent = '$' + real.precio_ars.toLocaleString('es-AR');
+        }
+        if(elC && typeof real.creditos === 'number'){
+          elC.textContent = real.creditos.toLocaleString('es-AR') + ' créditos por mes';
+        }
+        var elU = capa.querySelector('[data-plan-usd="' + p.id + '"]');
+        if(elU && typeof real.precio_usd === 'number'){
+          elU.textContent = 'USD $' + real.precio_usd;
+        }
+      });
+    });
+
+    function cerrar(){ planesAbierto = false; capa.remove(); }
+    capa.querySelector('#cpCerrar').addEventListener('click', cerrar);
+
+    var estado = capa.querySelector('#cpEstado');
+
+    // Encargo 115 AG, Corte M (05/08): si ya hay una suscripcion paga activa, elegir OTRO
+    // plan ya no arma una suscripcion nueva en paralelo (ese era el riesgo real que motivo
+    // el freno original acá) -- ahora llama a /api/suscribir, que MIRA el estado real de la
+    // cuenta y decide sola si es alta nueva o cambio de plan sobre la suscripcion EXISTENTE
+    // (sube ya, o programa la baja para cuando termine el ciclo pagado). Sirve para los dos
+    // botones (Mercado Pago y Lemon Squeezy) por igual: reconoce la pasarela del lado del
+    // servidor, asi que ninguno de los dos necesita saber cual es -- ver lib/pasarela.js.
+    // (Hasta el 05/08 esto vivia en un endpoint aparte, /api/cambiar-plan -- se unificaron
+    // en el mismo archivo por el limite de 12 Funciones Serverless del plan Hobby de Vercel,
+    // ver la nota completa en la cabecera de api/suscribir.js.)
+    function llamarCambiarPlan(plan, b, textoOriginal){
+      b.disabled = true; b.textContent = 'Aplicando…'; estado.textContent = '';
+      tokenVigente().then(function(t){
+        if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
+        return _fetch('/api/suscribir', {
+          method:'POST',
+          headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+          body: JSON.stringify({ plan: plan })
+        }).then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
+          .then(function(x){
+            b.disabled = false; b.textContent = textoOriginal;
+            if(!x.ok){
+              estado.textContent = (x.d && x.d.error && x.d.error.message) || 'No se pudo cambiar de plan.';
+              return;
+            }
+            var nombrePlan = (PLANES.filter(function(p){ return p.id === plan; })[0] || {}).nombre || plan;
+            if(x.d.aplicado === 'inmediato'){
+              estado.textContent = 'Listo, ya tenés el plan ' + nombrePlan + ' activo.';
+            } else if(x.d.aplicado === 'facturando_diferencia'){
+              estado.textContent = x.d.mensaje || 'Estamos procesando el cambio de plan.';
+            } else if(x.d.aplicado === 'programado'){
+              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
+              estado.textContent = 'Vas a pasar al plan ' + nombrePlan + ' el ' + fecha + '. Tu plan actual sigue activo hasta esa fecha.';
+            } else {
+              estado.textContent = 'Cambio de plan registrado.';
+            }
+            sincronizarSaldo();
+          });
+      }).catch(function(){
+        b.disabled = false; b.textContent = textoOriginal;
+        estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
+      });
+    }
+
+    Array.prototype.forEach.call(capa.querySelectorAll('button[data-plan]'), function(b){
+      b.addEventListener('click', function(){
+        var plan = b.getAttribute('data-plan');
+        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Comprender · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
+        if(perfilSuscripcionActiva){ llamarCambiarPlan(plan, b, textoOriginal); return; }
+        b.disabled = true; b.textContent = 'Preparando…'; estado.textContent = '';
+        tokenVigente().then(function(t){
+          if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
+          return _fetch('/api/suscribir', {
+            method:'POST',
+            headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+            body: JSON.stringify({ plan: plan })
+          }).then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
+            .then(function(x){
+              if(x.ok && x.d.url){ location.href = x.d.url; return; }   // al checkout
+              b.disabled = false; b.textContent = textoOriginal;
+              estado.textContent = (x.d && x.d.error && x.d.error.message) || 'No se pudo iniciar la suscripción.';
+            });
+        }).catch(function(){
+          b.disabled = false; b.textContent = textoOriginal;
+          estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
+        });
+      });
+    });
+
+    // Pago internacional (Corte B.6): el link no pasa por /api/suscribir -- arma
+    // directo el checkout de Lemon Squeezy con el perfil como dato personalizado,
+    // igual que hoy hace el checkout de Mercado Pago pero sin ida y vuelta al servidor.
+    //
+    // Pendiente resuelto (04/08): antes navegaba la pestaña actual con location.href
+    // -- el usuario quedaba atrapado en la pagina de Lemon Squeezy, sin boton para
+    // volver al chat. Ahora se abre en una pestaña NUEVA: cerrarla (o simplemente
+    // volver a la de siempre) es "cerrar el pago", sin agregar ninguna dependencia de
+    // CDN (se sostiene la regla de la casa -- ver la nota de arriba sobre supabase-js;
+    // el overlay oficial de Lemon Squeezy exige cargar su propio lemon.js). La pestaña
+    // se abre en blanco de forma SINCRONICA, dentro del click, para que el navegador
+    // no la bloquee como popup -- recien despues, cuando la URL esta lista (tras dos
+    // llamadas async), se le asigna el destino real.
+    Array.prototype.forEach.call(capa.querySelectorAll('a[data-ls]'), function(a){
+      a.addEventListener('click', function(e){
+        e.preventDefault();
+        var plan = a.getAttribute('data-ls');
+        // Encargo 115 AG, Corte M (05/08): si ya hay suscripcion activa no hace falta abrir
+        // ningun checkout nuevo -- /api/suscribir reconoce la pasarela sola (lib/pasarela.js)
+        // y si resulta ser Lemon Squeezy, cambia la suscripcion EXISTENTE por API (PATCH), sin
+        // que el usuario tenga que volver a pasar por el checkout hospedado. Mismo camino que
+        // el boton de Mercado Pago -- ver llamarCambiarPlan más arriba.
+        if(perfilSuscripcionActiva){ llamarCambiarPlan(plan, a, a.textContent); return; }
+        var pestana = window.open('', '_blank');
+        tokenVigente().then(function(t){
+          if(!t){ if(pestana) pestana.close(); cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
+          if(!perfilId){ if(pestana) pestana.close(); estado.textContent = 'No se pudo identificar tu cuenta. Probá de nuevo en un momento.'; return; }
+          obtenerCatalogo().then(function(cat){
+            var real = cat && cat[plan];
+            var uuid = real && real.ls_checkout_uuid;
+            if(!uuid){ if(pestana) pestana.close(); estado.textContent = 'El pago internacional no está disponible en este momento.'; return; }
+            var url = 'https://' + LS_STORE + '.lemonsqueezy.com/checkout/buy/' + uuid +
+              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId);
+            if(pestana){ pestana.location.href = url; } else { location.href = url; }   // pestaña bloqueada -- se cae al comportamiento de antes
+          }).catch(function(){
+            if(pestana) pestana.close();
+            estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
+          });
+        }).catch(function(){
+          if(pestana) pestana.close();
+          estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
+        });
+      });
+    });
+  };
+
+  /* ---------- arranque ----------
+     Antes de mirar si hay sesion guardada, se revisa si el navegador volvio con un
+     link de correo (hash con access_token). Si es de recuperacion, se muestra la
+     pantalla de nueva contrasena en vez del portal normal. Cualquier otro hash con
+     token (confirmacion de alta, magic link, invitacion) deja una sesion valida:
+     se guarda y arranca directo, sin pasar por el portal.
+
+     Corte AD (09/08): la deteccion de recuperacion (query ?type=recovery o hash
+     #access_token...&type=recovery) se saca de arrancar() y corre ACA MISMO, sincronica
+     e inmediata -- no puede esperar a DOMContentLoaded. El segundo <script> de cada
+     pagina real (index/urbanismo/contextos) dispara su propio fetch de arranque
+     (/api/organismos) apenas se parsea; sin sesion guardada, tokenVigente() resuelve casi
+     instantaneo (sin red, ver mas arriba) y ese fetch le ganaba la carrera al portal de
+     recuperacion -- se terminaba mostrando "Tu sesion vencio" tapando la pantalla de
+     "Elegi una contraseña nueva" (confirmado en vivo con diagnostico en sessionStorage:
+     el 401 llegaba unos milisegundos antes que arrancar(), que estaba esperando
+     DOMContentLoaded). document.body ya existe en este punto (este script esta adentro
+     de <body>), asi que portal() puede llamarse ya mismo.
+
+     Corte AE (09/08): mismo mecanismo (link a esta pagina + query token_hash, canje recien
+     con un clic real) para la confirmacion de alta, y por la misma razon (la carrera contra
+     el fetch de arranque) se agrega ACA, no adentro de arrancar(). */
+  var _arranqueInicial = (function(){
+    var th = leerQueryRecovery();
+    if(th){ limpiarQuery(); return { modo: 'nueva_clave', extra: { token_hash: th } }; }
+    var ts = leerQuerySignup();
+    if(ts){ limpiarQuery(); return { modo: 'confirmar_cuenta', extra: { token_hash: ts } }; }
+    var h = leerHash();
+    if(h && h.type === 'recovery'){ limpiarHash(); return { modo: 'nueva_clave', extra: { token: h.access_token, refresco: h.refresh_token || '' } }; }
+    return null;
+  })();
+  if(_arranqueInicial) portal('', _arranqueInicial.modo, _arranqueInicial.extra);
+
+  function arrancar(){
+    if(_arranqueInicial) return;
+    var h = leerHash();
+    if(h && h.access_token){
+      guardar({
+        token: h.access_token,
+        refresco: h.refresh_token || '',
+        vence: Date.now() + ((Number(h.expires_in) || 3600) * 1000),
+        correo: ''
+      });
+      limpiarHash();
+      sincronizarSaldo();
+      return;
+    }
+    tokenVigente().then(function(t){
+      if(!t) portal('');
+      else sincronizarSaldo();
+    });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar);
+  else arrancar();
+
+  /* ---------- envoltorio de fetch ---------- */
+  var _fetch = window.fetch;
+  window.fetch = function(recurso, opciones){
+    var url = '';
+    try{ url = String((recurso && recurso.url) ? recurso.url : recurso || ''); }catch(e){}
+    var esApiComprender = url.indexOf('/api/anthropic') > -1 || url.indexOf('/api/organismos') > -1;
+    if(!esApiComprender) return _fetch.apply(this, arguments);
+
+    var args = arguments;
+    var yo = this;
+    return tokenVigente().then(function(t){
+      if(!t){ portal('Tu sesión venció. Ingresá de nuevo.');
+              return Promise.reject(new Error('sin sesión')); }
+
+      opciones = opciones || {};
+      var h = opciones.headers, plano = {};
+      try{
+        if(h && typeof h.forEach === 'function' && !Array.isArray(h)){ h.forEach(function(v,k){ plano[k]=v; }); }
+        else if(h){ for(var k in h){ if(Object.prototype.hasOwnProperty.call(h,k)) plano[k]=h[k]; } }
+      }catch(e){}
+      plano['Authorization'] = 'Bearer ' + t;
+      try{ plano['x-comprender-modulo'] = (typeof MODULE_ID === 'string' && MODULE_ID) ? MODULE_ID : 'core'; }
+      catch(e){ plano['x-comprender-modulo'] = 'core'; }
+      opciones.headers = plano;
+
+      return _fetch.call(yo, recurso, opciones).then(function(resp){
+        try{
+          var g = resp && resp.headers && resp.headers.get ? resp.headers : null;
+          if(g) anotarSaldo(g.get('x-comprender-plan'), g.get('x-comprender-saldo'));
+        }catch(e){}
+        // 401 del proxy = la sesion no sirve. Se limpia y se vuelve a pedir.
+        if(resp && resp.status === 401){ borrar(); portal('Tu sesión venció. Ingresá de nuevo.'); }
+
+        // 402 sin saldo · 403 plan insuficiente: el contador es el disparador,
+        // la pantalla de planes es el destino. Se abre sola donde hizo falta.
+        if(resp && (resp.status === 402 || resp.status === 403)){
+          try{
+            resp.clone().json().then(function(d){
+              var m = (d && d.error && d.error.codigo) || '';
+              if(m === 'sin_saldo' || m === 'requiere_plan') window.mostrarPlanes(m);
+            }).catch(function(){});
+          }catch(e){}
+        }
+        return resp;
+      });
+    });
+  };
+})();
+</script>
+<script>
+/* ============================================================
+   negocios.html — script 2 (lógica propia de la página, alcance
+   global). El primer <script> de este archivo es candado.txt,
+   pegado tal cual, sin editar (igual que index.html/urbanismo.html/
+   contextos.html). Este segundo bloque sigue el mismo criterio que
+   esos tres: constantes de contrato, kit CAI de overlay/menú, Tu
+   espacio + menú de módulos, y acá además el circuito propio de
+   Negocios Pro N2.1 -- solo diagnóstico rápido, sin IA todavía.
+   ============================================================ */
+
+/* ---- Contrato Core → Pro (mismo valor que index.html:2056) ---- */
+var CONTRATO = { version_contrato: '2.1', lenguaje: 'universal', ontology_version: '3.0' };
+function sellarContrato(obj){
+  var out = Object.assign({}, CONTRATO, obj);
+  return out;
+}
+
+/* ---- Seis dimensiones -- mismos códigos B1-B6 que ya usa el modo
+   conversacional de Negocios en el Core (DIMENSIONES_NEGOCIO_MODO,
+   index.html:2261), para que ambas lecturas queden comparables. No
+   se usan los códigos D1-D6 del bloque inerte "N1 · Negocios"
+   (index.html:2705) -- ese bloque es solo diccionario, no vocabulario
+   activo. */
+var DIMENSIONES_NEGOCIO_MODO = {
+  B1: 'Identidad y dirección',
+  B2: 'Mercado y relaciones',
+  B3: 'Economía y viabilidad',
+  B4: 'Operaciones y capacidad',
+  B5: 'Organización y personas',
+  B6: 'Adaptación y evolución'
+};
+var ORDEN_DIMENSIONES_NEGOCIO = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6'];
+var ESTADO_COLOR = { critica: '#D4756B', tensionada: '#D4A95B', estable: '#8391A8', potencia: '#4FAE7E', desconocida: '#54617A' };
+var ESTADO_LABEL = { critica: 'Crítica', tensionada: 'Tensionada', estable: 'Estable', potencia: 'Potencia', desconocida: 'Desconocida' };
+var ORDEN_ESTADOS = ['desconocida', 'estable', 'tensionada', 'critica', 'potencia'];
+
+/* ---- kit CAI: navegación entre productos (idéntico en los tres) ---- */
+var MODULE_ID = 'negocios';
+var ACCESO_MODULOS = {
+  urbanismo:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Urbanismo', archivo:'urbanismo.html' },
+  contextos:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Contextos', archivo:'contextos.html' },
+  tecnologias:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Tecnologías' },
+  sustentabilidad: { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Sustentabilidad' },
+  negocios:        { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Negocios' },
+  capacidades:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Integración de capacidades' },
+  trayectoria:     { plan_minimo:'estudio', prueba_en_gratis:false, nombre:'Trayectoria' }
+};
+var ORDEN_PLANES = ['gratis', 'profesional', 'estudio'];
+var CRED_PLANES = {
+  gratis:      { nombre:'Gratis' },
+  profesional: { nombre:'Profesional' },
+  estudio:     { nombre:'Comprender · Estudio' },
+  magister:    { nombre:'Magister' }
+};
+function credPlan(){ try{ return localStorage.getItem('ag_core_plan') || 'gratis'; }catch(e){ return 'gratis'; } }
+function moduloHabilitado(id){
+  var m = ACCESO_MODULOS[id || MODULE_ID];
+  if(!m) return true;
+  var p = credPlan();
+  if(p === 'gratis') return !!m.prueba_en_gratis;
+  return ORDEN_PLANES.indexOf(p) >= ORDEN_PLANES.indexOf(m.plan_minimo);
+}
+function moduloBloqueado(id){
+  var m = ACCESO_MODULOS[id || MODULE_ID] || { nombre:'Este módulo', plan_minimo:'estudio' };
+  var req = (CRED_PLANES[m.plan_minimo]) ? CRED_PLANES[m.plan_minimo].nombre : m.plan_minimo;
+  var card = caiOverlay(); card.innerHTML = '';
+  var h = document.createElement('h3'); h.textContent = m.nombre + ' está incluido en ' + req;
+  var p1 = document.createElement('p');
+  p1.textContent = 'Tu plan actual no incluye este módulo. Forma parte de ' + req + '.';
+  var row = document.createElement('div'); row.className = 'cai-row';
+  var b = document.createElement('button'); b.className = 'cai-btn pri';
+  b.textContent = 'Entendido'; b.onclick = caiCerrar;
+  row.appendChild(b);
+  card.appendChild(h); card.appendChild(p1); card.appendChild(row);
+  caiAbrir();
+}
+var NAV_CORE = { nombre: 'Comprender AI', archivo: 'index.html' };
+function caiIrA(archivo){ try{ window.open(archivo, '_blank'); }catch(e){ location.href = archivo; } }
+function caiNavItems(){
+  var out = [], k, m;
+  out.push([NAV_CORE.nombre + ' →', function(){ caiIrA(NAV_CORE.archivo); }]);
+  for(k in ACCESO_MODULOS){
+    if(!Object.prototype.hasOwnProperty.call(ACCESO_MODULOS, k)) continue;
+    m = ACCESO_MODULOS[k];
+    if(!m.archivo || k === MODULE_ID) continue;
+    (function(id, mod){
+      out.push([mod.nombre + (moduloHabilitado(id) ? ' →' : ' · Estudio'),
+                function(){ if(moduloHabilitado(id)) caiIrA(mod.archivo); else moduloBloqueado(id); }]);
+    })(k, m);
+  }
+  return out;
+}
+
+/* ---- kit CAI: overlay genérico ---- */
+function caiOverlay(){
+  var ov = document.getElementById('cai-ov');
+  if(!ov){
+    ov = document.createElement('div'); ov.id = 'cai-ov';
+    ov.innerHTML = '<div class="cai-card" id="cai-card"></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function(e){ if(e.target === ov) caiCerrar(); });
+  }
+  return document.getElementById('cai-card');
+}
+function caiAbrir(){ document.getElementById('cai-ov').classList.add('open'); }
+function caiCerrar(){ var o = document.getElementById('cai-ov'); if(o) o.classList.remove('open'); }
+
+/* ---- Tu espacio (panel lateral) -- mismo formato que index.html/urbanismo.html/
+   contextos.html. Negocios Pro N2.1 mantiene esta sección deliberadamente mínima:
+   solo Avisos y Cuenta -- no incluye todavía Ciclo/Ayuda/Tu opinión/Acerca de,
+   porque ese contenido no forma parte del recorrido aprobado para este incremento. */
+function abrirTuEspacio(){
+  construirTuEspacioConfig();
+  document.getElementById('teFondo').classList.add('open');
+  document.getElementById('tuEspacio').classList.add('open');
+}
+function cerrarTuEspacio(){
+  document.getElementById('teFondo').classList.remove('open');
+  document.getElementById('tuEspacio').classList.remove('open');
+}
+function tuEspacioToggle(){
+  if(document.getElementById('tuEspacio').classList.contains('open')){ cerrarTuEspacio(); return; }
+  abrirTuEspacio();
+}
+document.getElementById('teFondo').addEventListener('click', cerrarTuEspacio);
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape' && document.getElementById('tuEspacio').classList.contains('open')) cerrarTuEspacio();
+});
+function construirTuEspacioConfig(){
+  var cfg = document.getElementById('teConfig');
+  cfg.innerHTML = '';
+  var bAvisos = document.createElement('button');
+  bAvisos.className = 'cai-item';
+  bAvisos.innerHTML = 'Avisos <span id="comprenderTeBandejaContador" style="display:none;margin-left:4px;background:#b4441f;color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700;"></span>';
+  bAvisos.addEventListener('click', function(){ cerrarTuEspacio(); if(window.mostrarBandejaComprender) window.mostrarBandejaComprender(); });
+  cfg.appendChild(bAvisos);
+  var bCuenta = document.createElement('button');
+  bCuenta.className = 'cai-item';
+  bCuenta.textContent = 'Cuenta';
+  bCuenta.addEventListener('click', function(){ cerrarTuEspacio(); if(window.mostrarCuentaComprender) window.mostrarCuentaComprender(); });
+  cfg.appendChild(bCuenta);
+  if(window.actualizarContadorBandejaComprender) window.actualizarContadorBandejaComprender();
+}
+
+/* ---- menú de módulos (4 cuadraditos) ---- */
+function construirModulosMenu(){
+  var menu = document.getElementById('modulosMenu');
+  menu.innerHTML = '';
+  var items = caiNavItems();
+  if(!items.length){
+    var v = document.createElement('div'); v.className = 'vacio';
+    v.textContent = 'Todavía no hay más módulos disponibles.';
+    menu.appendChild(v);
+    return;
+  }
+  items.forEach(function(it){
+    var b = document.createElement('button');
+    b.className = 'cai-item';
+    b.textContent = it[0];
+    b.addEventListener('click', function(){ menu.classList.remove('open'); it[1](); });
+    menu.appendChild(b);
+  });
+}
+function abrirModulosMenu(boton){
+  var menu = document.getElementById('modulosMenu');
+  if(menu.classList.contains('open')){ menu.classList.remove('open'); return; }
+  construirModulosMenu();
+  var r = boton.getBoundingClientRect();
+  menu.style.top = (r.bottom + 8) + 'px';
+  menu.style.right = Math.max(10, window.innerWidth - r.right) + 'px';
+  menu.classList.add('open');
+}
+document.addEventListener('click', function(e){
+  var menu = document.getElementById('modulosMenu');
+  if(menu.classList.contains('open') && !menu.contains(e.target) && !e.target.closest('.cai-ham')){
+    menu.classList.remove('open');
+  }
+});
+
+/* ================= Circuito propio de Negocios Pro N2.1 ================= */
+var state = {
+  marco: null,
+  marcoGenerado: null,
+  organismoId: null,
+  organismoNombre: ''
+};
+
+/* ---- C-06 · marco pendiente dejado por el Core (mismo mecanismo de un solo uso
+   que usan Urbanismo/Contextos: se lee y se borra, no se reaplica en cada carga). */
+function leerMarcoPendiente(){
+  try{
+    var raw = localStorage.getItem('ag_marco_pendiente');
+    if(!raw) return;
+    localStorage.removeItem('ag_marco_pendiente');
+    var p = JSON.parse(raw);
+    if(!p || !p.marco) return;
+    /* Forma real escrita por abrirModulo() (index.html): { generado, organismo: <nombre string>,
+       marco: sellarContrato(construirMarcoCore(o)) } -- el nombre viaja en p.organismo, no dentro
+       de marco; el id del organismo sí viaja dentro, en marco.organismo_id. */
+    state.marco = p.marco;
+    state.marcoGenerado = p.generado || p.marco.generado || new Date().toISOString();
+    state.organismoId = p.marco.organismo_id || null;
+    state.organismoNombre = p.organismo || 'Organismo sin nombre';
+  }catch(e){}
+}
+
+function pintarInicio(){
+  var cajaOk = document.getElementById('cajaOrganismo');
+  var cajaNo = document.getElementById('cajaSinOrganismo');
+  if(state.marco){
+    cajaNo.style.display = 'none';
+    cajaOk.style.display = 'block';
+    cajaOk.innerHTML = 'Organismo recibido del Core: <b>' + escaparHtml(state.organismoNombre) + '</b>.'
+      + (state.marcoGenerado ? ' Marco generado el ' + new Date(state.marcoGenerado).toLocaleString('es-AR') + '.' : '')
+      + ' La evaluación que generes acá se va a poder importar directamente sobre este organismo, aparte de su ficha confirmada.';
+  } else {
+    cajaOk.style.display = 'none';
+    cajaNo.style.display = 'block';
+  }
+}
+function escaparHtml(s){
+  var d = document.createElement('div');
+  d.textContent = (s == null ? '' : String(s));
+  return d.innerHTML;
+}
+
+function mostrarPantalla(id){
+  document.querySelectorAll('.pantalla').forEach(function(p){ p.classList.remove('activa'); });
+  document.getElementById(id).classList.add('activa');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function volverAInicio(){ pintarInicio(); mostrarPantalla('pantallaInicio'); }
+
+function irADiagnosticoRapido(){
+  construirDiagnosticoRapido();
+  mostrarPantalla('pantallaDiagnostico');
+}
+function construirDiagnosticoRapido(){
+  var cont = document.getElementById('contDimensiones');
+  cont.innerHTML = '';
+  ORDEN_DIMENSIONES_NEGOCIO.forEach(function(cod){
+    var fila = document.createElement('div');
+    fila.className = 'dim-fila';
+    var nombre = document.createElement('div');
+    nombre.className = 'dim-nombre';
+    nombre.textContent = cod + ' · ' + DIMENSIONES_NEGOCIO_MODO[cod];
+    var sel = document.createElement('select');
+    sel.id = 'dim_' + cod;
+    ORDEN_ESTADOS.forEach(function(est){
+      var op = document.createElement('option');
+      op.value = est; op.textContent = ESTADO_LABEL[est];
+      if(est === 'desconocida') op.selected = true;
+      sel.appendChild(op);
+    });
+    var nota = document.createElement('input');
+    nota.type = 'text';
+    nota.id = 'nota_' + cod;
+    nota.placeholder = 'Nota breve (opcional)';
+    fila.appendChild(nombre); fila.appendChild(sel); fila.appendChild(nota);
+    cont.appendChild(fila);
+  });
+}
+
+function cerrarDiagnosticoRapido(){
+  var dims = ORDEN_DIMENSIONES_NEGOCIO.map(function(cod){
+    var sel = document.getElementById('dim_' + cod);
+    var nota = document.getElementById('nota_' + cod);
+    return {
+      cod: cod,
+      nombre: DIMENSIONES_NEGOCIO_MODO[cod],
+      estado: sel ? sel.value : 'desconocida',
+      nota: nota ? nota.value.trim() : ''
+    };
+  });
+  var sintesisEl = document.getElementById('inSintesis');
+  var payload = sellarContrato({
+    producto: 'Comprender Negocios Pro',
+    tipo: 'evaluacion_negocio_pro',
+    generado: new Date().toISOString(),
+    organismo_id: state.organismoId,
+    marco_origen: state.marco ? { generado: state.marcoGenerado, organismo: state.organismoNombre } : null,
+    evaluacion: {
+      alcance: 'rapida',
+      version: 1,
+      estado: 'cerrada',
+      dimensiones: dims,
+      sintesis: sintesisEl ? sintesisEl.value.trim() : ''
+    }
+  });
+  mostrarExportacion(payload);
+}
+
+function mostrarExportacion(payload){
+  var caja = document.getElementById('cajaExportacion');
+  caja.value = JSON.stringify(payload, null, 2);
+  mostrarPantalla('pantallaCierre');
+}
+function copiarExportacion(){
+  var caja = document.getElementById('cajaExportacion');
+  caja.select();
+  var boton = document.getElementById('btnCopiarExport');
+  var textoOriginal = boton.textContent;
+  function marcarCopiado(){
+    boton.textContent = 'Copiado ✓';
+    setTimeout(function(){ boton.textContent = textoOriginal; }, 1800);
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(caja.value).then(marcarCopiado).catch(function(){
+      try{ document.execCommand('copy'); marcarCopiado(); }catch(e){}
+    });
+  } else {
+    try{ document.execCommand('copy'); marcarCopiado(); }catch(e){}
+  }
+}
+
+/* ---- arranque ---- */
+function arrancarNegociosPro(){
+  leerMarcoPendiente();
+  pintarInicio();
+}
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancarNegociosPro);
+else arrancarNegociosPro();
+</script>
+</body>
+</html>
