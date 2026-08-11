@@ -3644,10 +3644,16 @@ function normalizarNombre(s){
   return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
 }
 
-function importarDiagnosticoPro(datos){
+function importarDiagnosticoPro(datos, forzarDestino){
   const esContext = esProductoContextos(datos);
   if(esContext){
-    adjuntarDiagnosticoPro(datos, datos.ciudad || '', 'context_pro');
+    adjuntarDiagnosticoPro(datos, datos.ciudad || '', 'context_pro', false, forzarDestino);
+    return;
+  }
+  if(forzarDestino){
+    // El usuario ya eligió el organismo desde "Pegar evaluación Pro": no separar por ciudad,
+    // todo el historial (mezcle o no varias ciudades) va a ese único organismo elegido.
+    adjuntarDiagnosticoPro(datos, null, 'urban_pro', false, forzarDestino);
     return;
   }
   // Urban: el historial puede mezclar ciudades — separar y rutear cada una a su organismo
@@ -3672,21 +3678,23 @@ function importarDiagnosticoPro(datos){
   cardMensaje('Importación por ciudad', 'El historial traía ' + ciudades.length + ' ciudad(es), separadas y ruteadas:\n' + resultados.join('\n'));
 }
 
-function adjuntarDiagnosticoPro(datos, ciudad, origen, silencioso){
-  let destino = null;
-  // ruteo canónico: por ID del organismo si el Pro lo devolvió (viaja en el marco)
-  const idm = datos.organismo_id || (datos.marco_core && datos.marco_core.organismo_id) || null;
-  if(idm){
-    destino = cargarOrganismos().find(function(o){ return o.id === idm; }) || null;
+function adjuntarDiagnosticoPro(datos, ciudad, origen, silencioso, forzarDestino){
+  let destino = forzarDestino || null;
+  if(!destino){
+    // ruteo canónico: por ID del organismo si el Pro lo devolvió (viaja en el marco)
+    const idm = datos.organismo_id || (datos.marco_core && datos.marco_core.organismo_id) || null;
+    if(idm){
+      destino = cargarOrganismos().find(function(o){ return o.id === idm; }) || null;
+    }
+    if(!destino && ciudad){
+      const lista = cargarOrganismos();
+      destino = lista.find(function(o){ return normalizarNombre(o.nombre) === normalizarNombre(ciudad); }) || null;
+    }
+    if(!destino && state.organismo && (!ciudad || normalizarNombre(state.organismo.nombre) === normalizarNombre(ciudad))){
+      destino = state.organismo;
+    }
+    if(!destino && !ciudad && state.organismo) destino = state.organismo;
   }
-  if(!destino && ciudad){
-    const lista = cargarOrganismos();
-    destino = lista.find(function(o){ return normalizarNombre(o.nombre) === normalizarNombre(ciudad); }) || null;
-  }
-  if(!destino && state.organismo && (!ciudad || normalizarNombre(state.organismo.nombre) === normalizarNombre(ciudad))){
-    destino = state.organismo;
-  }
-  if(!destino && !ciudad && state.organismo) destino = state.organismo;
   if(!destino){
     const msj = 'sin organismo coincidente — incorporá «' + (ciudad || '?') + '» y reimportá';
     if(silencioso) return msj;
@@ -3721,17 +3729,19 @@ function adjuntarDiagnosticoPro(datos, ciudad, origen, silencioso){
    esto NO es un diagnóstico Pro de Urbanismo/Contextos (o.diagnosticos_pro) ni una
    lectura conversacional (o.lecturas_negocio) — es una evaluación estructurada aparte,
    en o.evaluaciones_negocio_pro[]. La ficha confirmada (o.ficha) no se toca acá. */
-function adjuntarEvaluacionNegocioPro(datos, silencioso){
-  let destino = null;
-  const idm = datos.organismo_id || null;
-  if(idm){
-    destino = cargarOrganismos().find(function(o){ return o.id === idm; }) || null;
+function adjuntarEvaluacionNegocioPro(datos, silencioso, forzarDestino){
+  let destino = forzarDestino || null;
+  if(!destino){
+    const idm = datos.organismo_id || null;
+    if(idm){
+      destino = cargarOrganismos().find(function(o){ return o.id === idm; }) || null;
+    }
+    if(!destino && datos.marco_origen && datos.marco_origen.organismo){
+      const lista = cargarOrganismos();
+      destino = lista.find(function(o){ return normalizarNombre(o.nombre) === normalizarNombre(datos.marco_origen.organismo); }) || null;
+    }
+    if(!destino && state.organismo) destino = state.organismo;
   }
-  if(!destino && datos.marco_origen && datos.marco_origen.organismo){
-    const lista = cargarOrganismos();
-    destino = lista.find(function(o){ return normalizarNombre(o.nombre) === normalizarNombre(datos.marco_origen.organismo); }) || null;
-  }
-  if(!destino && state.organismo) destino = state.organismo;
   if(!destino){
     const msj = 'sin organismo coincidente — incorporá el organismo y reimportá';
     if(silencioso) return msj;
@@ -3754,6 +3764,52 @@ function adjuntarEvaluacionNegocioPro(datos, silencioso){
     cardMensaje('Evaluación de Negocios Pro incorporada', resumen + ' Quedó en la ficha de «' + destino.nombre + '» (v' + version + '), separada de la ficha confirmada: podés trabajarla en el chat.');
   }
   return 'incorporado a «' + destino.nombre + '» (v' + version + ')';
+}
+
+/* ================= Pegar evaluación/diagnóstico Pro directo en un organismo (11/08) =================
+   El ruteo automático de arriba (por organismo_id) ya funciona solo -- pero pegar en la caja
+   genérica de "Importar respaldo" no deja ver a dónde va a caer, y eso no genera confianza.
+   Esto agrega un segundo camino, más explícito: desde el menú "⋯" de un organismo puntual en
+   Tu espacio, pegás el export y se incorpora ahí mismo. Si el export trae un organismo/ciudad
+   de origen que no coincide con el elegido, se avisa antes de aplicarlo -- nunca se pisa en
+   silencio. */
+function importarProParaOrganismo(org, textoJSON){
+  let datos;
+  try{ datos = JSON.parse(textoJSON); }
+  catch(e){
+    cerrarTuEspacio();
+    cardMensaje('No se pudo leer el texto', 'Pegá el JSON completo tal como lo copiaste desde Urbanismo, Contextos o Negocios Pro.');
+    return;
+  }
+  if(esProductoContextos(datos) || esProductoUrbanismo(datos)){
+    const nombreOrigen = esProductoContextos(datos) ? (datos.ciudad || '') : (datos.ciudad_principal || '');
+    ejecutarImportForzado(org, nombreOrigen, function(){ importarDiagnosticoPro(datos, org); });
+    return;
+  }
+  if(esProductoNegociosPro(datos)){
+    const nombreOrigen = datos.marco_origen && datos.marco_origen.organismo;
+    ejecutarImportForzado(org, nombreOrigen, function(){ adjuntarEvaluacionNegocioPro(datos, false, org); });
+    return;
+  }
+  cerrarTuEspacio();
+  cardMensaje('No reconocido', 'Esto no es un export de Urbanismo, Contextos ni Negocios Pro. Para respaldos completos de Comprender AI, usá "Importar respaldo".');
+}
+function ejecutarImportForzado(org, nombreOrigen, aplicar){
+  const coincide = !nombreOrigen || normalizarNombre(nombreOrigen) === normalizarNombre(org.nombre);
+  cerrarTuEspacio();
+  if(coincide){ aplicar(); return; }
+  el.cardContent.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = '¿Importar en «' + org.nombre + '» de todos modos?';
+  const p1 = document.createElement('p');
+  p1.textContent = 'Esto parece pertenecer a «' + nombreOrigen + '», no a «' + org.nombre + '». Si continuás, se va a incorporar en «' + org.nombre + '» igual.';
+  const row = document.createElement('div'); row.className = 'cardrow';
+  const b1 = document.createElement('button'); b1.className = 'btn'; b1.textContent = 'Cancelar';
+  b1.onclick = cerrarOverlay;
+  const b2 = document.createElement('button'); b2.className = 'btn primary'; b2.textContent = 'Importar en «' + org.nombre + '»';
+  b2.onclick = function(){ cerrarOverlay(); aplicar(); };
+  row.appendChild(b1); row.appendChild(b2);
+  el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(row);
+  el.overlay.classList.add('open');
 }
 
 /* ================= CRÉDITOS — presupuesto de comprensión =================
@@ -5968,6 +6024,7 @@ var TE_ORG_BUSCAR_UMBRAL = 8;
 var teCarpetaMenuAbierto = null;
 var teMenuNuevaCarpeta = false;
 var teCarpetasColapsadas = new Set();
+var teImportarProAbierto = null;   // id del organismo con la cajita de "Pegar evaluación Pro" abierta
 function moverACarpeta(org, nombre){
   if(nombre) org.carpeta = nombre; else delete org.carpeta;
   guardarOrganismo(org);
@@ -6038,6 +6095,37 @@ function construirTuEspacioOrganismos(){
         sb.textContent = 'Sacar de la carpeta';
         sb.addEventListener('click', function(e){ e.stopPropagation(); moverACarpeta(org, null); });
         panel.appendChild(sb);
+      }
+      const ib = document.createElement('button');
+      ib.className = 'orgMenuItem';
+      ib.textContent = teImportarProAbierto === org.id ? 'Cancelar pegado' : 'Pegar evaluación Pro';
+      ib.addEventListener('click', function(e){
+        e.stopPropagation();
+        teImportarProAbierto = (teImportarProAbierto === org.id) ? null : org.id;
+        construirTuEspacioOrganismos();
+      });
+      panel.appendChild(ib);
+      if(teImportarProAbierto === org.id){
+        const cont = document.createElement('div');
+        cont.style.cssText = 'padding:4px 2px 2px';
+        const hint = document.createElement('div');
+        hint.style.cssText = 'font-size:11.5px;color:var(--faint);padding:2px 2px 6px';
+        hint.textContent = 'Pegá acá el export de Urbanismo, Contextos o Negocios Pro — se incorpora directo a «' + org.nombre + '».';
+        const ta = document.createElement('textarea');
+        ta.placeholder = '{ "producto": "...", ... }';
+        ta.style.cssText = 'width:100%;height:90px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);font-family:DM Mono,monospace;font-size:11px;padding:8px;resize:vertical;box-sizing:border-box;margin-bottom:6px';
+        ta.addEventListener('click', function(e){ e.stopPropagation(); });
+        const okb = document.createElement('button');
+        okb.className = 'orgMenuItem';
+        okb.style.cssText = 'background:var(--accent);color:#fff';
+        okb.textContent = 'Importar acá';
+        okb.addEventListener('click', function(e){
+          e.stopPropagation();
+          importarProParaOrganismo(org, ta.value);
+        });
+        cont.appendChild(hint); cont.appendChild(ta); cont.appendChild(okb);
+        panel.appendChild(cont);
+        setTimeout(function(){ ta.focus(); }, 0);
       }
       if(!teMenuNuevaCarpeta){
         const nb = document.createElement('button');
@@ -6243,6 +6331,7 @@ function cerrarTuEspacio(){
   document.getElementById('tuEspacio').classList.remove('open');
   teCarpetaMenuAbierto = null;
   teMenuNuevaCarpeta = false;
+  teImportarProAbierto = null;
 }
 document.getElementById('teNueva').addEventListener('click', function(){ cerrarTuEspacio(); nuevaSesion(); });
 document.getElementById('teFondo').addEventListener('click', cerrarTuEspacio);
@@ -6613,6 +6702,35 @@ function correrPruebasAuto(){
       delete copia.archivo;
       return !copia.archivo && ACCESO_MODULOS.urbanismo.archivo === 'urbanismo.html' &&
              ACCESO_MODULOS.contextos.archivo === 'contextos.html';
+    })());
+
+    /* ---- IMP·1 · "Pegar evaluación Pro" desde un organismo puntual (11/08) ---- */
+    chk('IMP·1 · forzarDestino ignora el ruteo automático y va directo al organismo elegido', (function(){
+      var o = { id:'org_imp_test', nombre:'Otra Empresa', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
+      var origGuardar = guardarOrganismo, origState = state.organismo;
+      try{
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = null;
+        // organismo_id apunta a OTRO id, pero forzarDestino tiene que ganar igual
+        var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'no_coincide',
+          evaluacion: { alcance:'rapida', version:1, estado:'cerrada', dimensiones:[], sintesis:'' } };
+        var r = adjuntarEvaluacionNegocioPro(payload, true, o);
+        return /Otra Empresa/.test(r) && o.evaluaciones_negocio_pro.length === 1;
+      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('IMP·2 · ejecutarImportForzado avisa si el origen no coincide, y aplica directo si coincide', (function(){
+      var snapCard = el.cardContent.innerHTML, snapOpen = el.overlay.classList.contains('open');
+      try{
+        var aplicoDirecto = false;
+        ejecutarImportForzado({ id:'x', nombre:'Panadería Sur' }, 'Panadería Sur', function(){ aplicoDirecto = true; });
+        var directoOk = aplicoDirecto === true && !el.overlay.classList.contains('open');
+        var aplicoConAviso = false;
+        ejecutarImportForzado({ id:'x', nombre:'Panadería Sur' }, 'Otro Organismo', function(){ aplicoConAviso = true; });
+        var avisoOk = aplicoConAviso === false && el.overlay.classList.contains('open') &&
+                      el.cardContent.textContent.indexOf('Panadería Sur') > -1 &&
+                      el.cardContent.textContent.indexOf('Otro Organismo') > -1;
+        return directoOk && avisoOk;
+      } finally { el.cardContent.innerHTML = snapCard; if(!snapOpen) el.overlay.classList.remove('open'); }
     })());
 
     chk('ORI·1 · el tipo orienta a la especialidad correcta (o a ninguna)', (function(){
