@@ -2714,14 +2714,14 @@ function PROMPT_PROYECTIVO(){
     'DIAGNÓSTICO INTEGRAL VIGENTE:\n' + resumenDiagnosticoIntegralParaProyectivo() +
     resumenDescartesProyectivo() + '\n\n' +
     'TAREA:\n' +
-    '1. Para cada transformación, seguí la secuencia: relación a intervenir -> transformación posible -> efectos directos -> efectos de segundo orden (OBLIGATORIO: qué puede pasar después del efecto inmediato, incluyendo posible desplazamiento de la tensión a otro lugar) -> riesgos -> condiciones necesarias. Máximo 5 transformaciones, cada una con al menos una dimensión confirmada afectada.\n' +
+    '1. Para cada transformación, seguí la secuencia: relación a intervenir -> transformación posible -> efectos directos -> efectos de segundo orden (OBLIGATORIO: qué puede pasar después del efecto inmediato, incluyendo posible desplazamiento de la tensión a otro lugar) -> riesgos -> condiciones necesarias. Entre 2 y 4 transformaciones (no fuerces a 5 si el sistema no da para tantas), cada una con al menos una dimensión confirmada afectada.\n' +
     '2. Antes de proponer incorporar recursos externos (personal, capital, herramientas), evaluá si alguna capacidad ya confirmada del negocio puede reorganizarse o amplificarse. Preferí esa vía cuando tenga sentido.\n' +
     '3. El punto de apalancamiento del diagnóstico integral NO es automáticamente "la respuesta correcta": evaluá qué otras dimensiones recibirían el efecto de intervenir ahí, y si existe riesgo de desplazar la tensión a otro lugar en vez de resolverla.\n' +
     '4. Armá hasta 3 escenarios -- Continuidad (poco o ningún cambio), Reorganización focal (interviene sobre el apalancamiento principal), Reorganización ampliada (varias relaciones coordinadas). No generes los tres si la información no alcanza para alguno.\n' +
     '5. Hablá en términos de posibilidad, nunca de certeza: "podría", "es esperable que", "este escenario supone", "el principal riesgo sería" -- nunca "deberías" ni "la mejor opción es".\n' +
     '6. Nunca muestres códigos internos (B1-B6, T01-T14, M01-M09) en el texto visible: referite a las dimensiones por nombre.\n' +
-    '7. PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador (sin ningún texto ni encabezado antes). El JSON del marcador es lo prioritario y tiene que cerrar completo -- cada campo de texto va en 1-2 oraciones concretas, sin desarrollar de más. Recién después del marcador cerrado va el texto visible breve.\n\n' +
-    'Cerrá con el marcador exacto (JSON válido, sin comentarios ni texto extra adentro, cada campo de texto en 1-2 oraciones):\n' +
+    '7. PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador (sin ningún texto ni encabezado antes). El JSON del marcador es lo prioritario y tiene que cerrar completo -- brevedad estricta: cada campo de texto es UNA oración corta (no un párrafo), y cada lista (efectos, riesgos, condiciones, etc.) tiene como máximo 2 ítems. Preferí menos transformaciones o menos escenarios antes que recortar el cierre del marcador. Recién después del marcador cerrado va el texto visible breve.\n\n' +
+    'Cerrá con el marcador exacto (JSON válido, sin comentarios ni texto extra adentro; cada campo de texto en UNA oración corta; cada lista con máximo 2 ítems):\n' +
     '[[PROYECTIVO_NEGOCIO:{\n' +
     '  "sintesis_proyectiva": "...",\n' +
     '  "transformaciones": [ { "id": "TR1", "nombre": "...", "origen_estructural": "...", "relaciones_origen": [0,2], "transformacion": "...", "mecanismo": "...", "dimensiones_afectadas": ["B3","B4"], "efectos_esperados": ["..."], "efectos_segundo_orden": ["..."], "riesgos": ["..."], "condiciones": ["..."], "horizonte": "inmediato|corto|medio|largo", "reversibilidad": "alta|media|baja" } ],\n' +
@@ -2738,7 +2738,7 @@ function llamarIAProyectivo(mensajes){
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
+      max_tokens: 16000,
       system: PROMPT_PROYECTIVO(),
       messages: mensajes
     })
