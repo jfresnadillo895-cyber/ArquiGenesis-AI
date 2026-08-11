@@ -55,6 +55,16 @@ main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
   .dim-fila{grid-template-columns:1fr;gap:6px;}
   .selector-tipo{grid-template-columns:1fr;}
 }
+.dimrow{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;
+  padding:14px 4px;border-top:1px solid var(--linea);background:none;cursor:pointer;}
+.dimrow:first-of-type{border-top:none;}
+.dimrow:hover .dimrow-nombre{color:var(--oro);}
+.dimrow-nombre{font-size:.9rem;font-weight:500;transition:color .15s;}
+.dimrow-estado{font-size:.78rem;color:var(--texto-suave);display:flex;align-items:center;}
+.dimhilo{display:flex;flex-direction:column;gap:10px;max-height:50vh;overflow-y:auto;margin-bottom:6px;padding-right:2px;}
+.burbuja{max-width:82%;padding:10px 13px;border-radius:12px;font-size:.87rem;line-height:1.55;}
+.burbuja.ia{align-self:flex-start;background:var(--acento-suave);color:var(--texto);border-bottom-left-radius:3px;}
+.burbuja.usuario{align-self:flex-end;background:var(--acento);color:#FFFFFF;border-bottom-right-radius:3px;}
 .export-box{width:100%;min-height:220px;max-height:44vh;background:var(--fondo-card);border:1px solid var(--linea);border-radius:6px;padding:12px;color:var(--texto);font-family:'IBM Plex Mono',monospace;font-size:.72rem;line-height:1.5;resize:vertical;}
 footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:.65rem;color:var(--texto-suave);letter-spacing:.06em;line-height:2;}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
@@ -142,7 +152,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 <section id="pantallaInicio" class="pantalla activa">
   <div class="hero">
     <h2>Comprender <strong>Negocios Pro</strong></h2>
-    <p>Evaluación estructurada del negocio como organismo. Esta es la primera versión del circuito: solo el diagnóstico rápido está activo — el resto se suma en incrementos siguientes, sobre este mismo esqueleto.</p>
+    <p>Evaluación estructurada del negocio como organismo. Cada dimensión se comprende en una conversación breve con la IA — vos confirmás o corregís antes de que quede incorporada.</p>
   </div>
 
   <div id="cajaOrganismo" class="aviso" style="display:none"></div>
@@ -153,9 +163,9 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
   <div class="form-card">
     <h3>Tipo de evaluación</h3>
     <div class="selector-tipo">
-      <button type="button" class="tipo-card" id="tipoRapida" onclick="irADiagnosticoRapido()">
+      <button type="button" class="tipo-card" id="tipoRapida" onclick="irASelectorDimensiones()">
         <h4>Diagnóstico rápido</h4>
-        <p>Seis dimensiones, clasificación manual, sin IA todavía.</p>
+        <p>Seis dimensiones, conversación guiada con la IA, vos confirmás cada lectura.</p>
       </button>
       <div class="tipo-card deshabilitada"><h4>Evaluación integral</h4><p>Próximamente.</p></div>
       <div class="tipo-card deshabilitada"><h4>Seguimiento</h4><p>Próximamente.</p></div>
@@ -164,11 +174,11 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
   </div>
 </section>
 
-<!-- ============ DIAGNÓSTICO RÁPIDO ============ -->
+<!-- ============ SELECTOR DE DIMENSIONES ============ -->
 <section id="pantallaDiagnostico" class="pantalla">
   <div class="form-card">
     <h3>Diagnóstico rápido · seis dimensiones</h3>
-    <p class="hint" style="margin-bottom:18px">Clasificá cada dimensión con lo que ya sabés del negocio. No hace falta completar todas — "Desconocida" es una respuesta válida.</p>
+    <p class="hint" style="margin-bottom:18px">Entrá en cada dimensión para conversar brevemente con la IA. Podés dejar alguna sin evaluar — "Desconocida" es una respuesta válida — y cerrar la evaluación cuando quieras.</p>
     <div id="contDimensiones"></div>
     <div class="campo" style="margin-top:18px">
       <label for="inSintesis">Síntesis general (opcional)</label>
@@ -176,7 +186,41 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
     </div>
     <div class="acciones">
       <button class="btn secundario" onclick="volverAInicio()">Volver</button>
-      <button class="btn" id="btnCerrarDiagnostico" onclick="cerrarDiagnosticoRapido()">Cerrar evaluación</button>
+      <button class="btn" id="btnCerrarDiagnostico" onclick="cerrarEvaluacion()">Cerrar evaluación</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONVERSACIÓN POR DIMENSIÓN ============ -->
+<section id="pantallaDimension" class="pantalla">
+  <div class="form-card">
+    <h3 id="dimTitulo">B1 · Identidad y dirección</h3>
+    <p class="hint" id="dimIntro" style="margin-bottom:16px"></p>
+    <div id="dimHilo" class="dimhilo"></div>
+    <div id="dimCargando" class="hint" style="display:none;margin:6px 0">Pensando…</div>
+    <div id="dimEntrada" class="campo" style="margin-top:10px">
+      <textarea id="dimInput" placeholder="Escribí tu respuesta…" rows="2"></textarea>
+    </div>
+    <div class="acciones">
+      <button class="btn secundario" onclick="volverASelectorDimensiones()">Volver</button>
+      <button class="btn" id="btnEnviarDim" onclick="enviarTurnoDesdeInput()">Enviar</button>
+    </div>
+
+    <div id="dimLecturaCard" style="display:none;margin-top:22px;border-top:1px solid var(--linea);padding-top:18px">
+      <h4 style="font-size:.95rem;font-weight:500;margin-bottom:10px">Lectura propuesta</h4>
+      <p id="dimLecturaEstado" style="font-size:.88rem;margin-bottom:8px"></p>
+      <p id="dimLecturaTexto" style="font-size:.9rem;color:var(--texto-suave);margin-bottom:14px"></p>
+      <div class="acciones">
+        <button class="btn secundario" onclick="seguirProfundizando()">Seguir profundizando</button>
+        <button class="btn secundario" onclick="mostrarCorreccion()">Corregir</button>
+        <button class="btn" onclick="confirmarLectura()">Confirmar</button>
+      </div>
+      <div id="dimCorreccionBox" class="campo" style="display:none;margin-top:12px">
+        <textarea id="dimCorreccionInput" placeholder="Qué corregirías de esta lectura…" rows="2"></textarea>
+        <div class="acciones" style="margin-top:8px">
+          <button class="btn" onclick="enviarCorreccion()">Enviar corrección</button>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -185,7 +229,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 <section id="pantallaCierre" class="pantalla">
   <div class="form-card">
     <h3>Evaluación lista</h3>
-    <p class="hint" style="margin-bottom:14px">Copiá este texto y pegalo en Comprender AI: <b>Tu espacio → Configuración y ayuda → Importar respaldo</b>. La ficha confirmada del organismo no se modifica — esto se incorpora como evaluación aparte, para que el chat la retome.</p>
+    <p class="hint" style="margin-bottom:14px">Copiá este texto y pegalo en Comprender AI: <b>Tu espacio → Configuración y ayuda → Importar respaldo</b> (o en el menú "⋯" del organismo → "Pegar evaluación Pro"). La ficha confirmada del organismo no se modifica — esto se incorpora como evaluación aparte, para que el chat la retome.</p>
     <textarea id="cajaExportacion" class="export-box" readonly></textarea>
     <div class="acciones">
       <button class="btn secundario" onclick="volverAInicio()">Nueva evaluación</button>
@@ -196,7 +240,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 
 </main>
 
-<footer>COMPRENDER · NEGOCIOS PRO — versión profesional (N2.1) · Un producto de ARQUIGÉNESIS</footer>
+<footer>COMPRENDER · NEGOCIOS PRO — versión profesional (N2.2) · Un producto de ARQUIGÉNESIS</footer>
 
 <script>
 /* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
@@ -1770,12 +1814,18 @@ document.addEventListener('click', function(e){
   }
 });
 
-/* ================= Circuito propio de Negocios Pro N2.1 ================= */
+/* ================= Circuito propio de Negocios Pro (N2.1 + N2.2) ================= */
 var state = {
   marco: null,
   marcoGenerado: null,
   organismoId: null,
-  organismoNombre: ''
+  organismoNombre: '',
+  dimensiones: {},        // cod -> {cod,nombre,estado,evidencias,lectura,tension_principal,oportunidad,fecha,confirmada}
+  dimensionActual: null,  // cod en conversación ahora mismo
+  historialDim: [],       // [{role,content}] turnos de la dimensión activa, van a /api/anthropic tal cual
+  evidenciasDim: [],      // textos propios del usuario en la dimensión activa (para persistir "evidencias")
+  propuestaActual: null,  // {estado,tension_principal,oportunidad,lectura} pendiente de confirmar/corregir
+  llamando: false         // evita doble envío mientras se espera respuesta
 };
 
 /* ---- C-06 · marco pendiente dejado por el Core (mismo mecanismo de un solo uso
@@ -1824,46 +1874,258 @@ function mostrarPantalla(id){
 }
 function volverAInicio(){ pintarInicio(); mostrarPantalla('pantallaInicio'); }
 
-function irADiagnosticoRapido(){
-  construirDiagnosticoRapido();
+function irASelectorDimensiones(){
+  construirSelectorDimensiones();
   mostrarPantalla('pantallaDiagnostico');
 }
-function construirDiagnosticoRapido(){
+function construirSelectorDimensiones(){
   var cont = document.getElementById('contDimensiones');
   cont.innerHTML = '';
   ORDEN_DIMENSIONES_NEGOCIO.forEach(function(cod){
-    var fila = document.createElement('div');
-    fila.className = 'dim-fila';
-    var nombre = document.createElement('div');
-    nombre.className = 'dim-nombre';
-    nombre.textContent = cod + ' · ' + DIMENSIONES_NEGOCIO_MODO[cod];
-    var sel = document.createElement('select');
-    sel.id = 'dim_' + cod;
-    ORDEN_ESTADOS.forEach(function(est){
-      var op = document.createElement('option');
-      op.value = est; op.textContent = ESTADO_LABEL[est];
-      if(est === 'desconocida') op.selected = true;
-      sel.appendChild(op);
+    var d = state.dimensiones[cod];
+    var row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'dimrow';
+    var nom = document.createElement('span'); nom.className = 'dimrow-nombre';
+    nom.textContent = cod + ' · ' + DIMENSIONES_NEGOCIO_MODO[cod];
+    var est = document.createElement('span'); est.className = 'dimrow-estado';
+    if(d && d.confirmada){
+      var chip = document.createElement('span'); chip.className = 'dim-estado-chip';
+      chip.style.background = ESTADO_COLOR[d.estado] || ESTADO_COLOR.desconocida;
+      est.appendChild(chip);
+      est.appendChild(document.createTextNode(ESTADO_LABEL[d.estado] || 'Desconocida'));
+    } else {
+      est.textContent = 'Sin evaluar';
+    }
+    row.appendChild(nom); row.appendChild(est);
+    row.addEventListener('click', function(){ abrirDimension(cod); });
+    cont.appendChild(row);
+  });
+}
+function volverASelectorDimensiones(){
+  construirSelectorDimensiones();
+  mostrarPantalla('pantallaDiagnostico');
+}
+
+/* ---- Conversación guiada por dimensión (N2.2) ---- */
+function resumenMarcoTexto(){
+  if(!state.marco || !state.marco.marco) return 'Sin marco recibido del Core todavía.';
+  var m = state.marco.marco;
+  var partes = [];
+  if(m.ideas && m.ideas.length) partes.push('Principios: ' + m.ideas.join('; '));
+  if(m.correspondencias && m.correspondencias.length) partes.push(m.correspondencias.join('. '));
+  if(m.abierto && m.abierto.length) partes.push('Abierto: ' + m.abierto.join('. '));
+  return partes.length ? partes.join('\n') : 'Marco recibido, sin contenido todavía.';
+}
+function resumenConfirmadasTexto(codActual){
+  var claves = Object.keys(state.dimensiones).filter(function(c){ return c !== codActual && state.dimensiones[c].confirmada; });
+  if(!claves.length) return 'ninguna todavía';
+  return claves.map(function(c){
+    var d = state.dimensiones[c];
+    return c + ' ' + d.estado + (d.tension_principal ? ' (' + d.tension_principal + ')' : '');
+  }).join(' · ');
+}
+function PROMPT_DIMENSION(cod){
+  var nombre = DIMENSIONES_NEGOCIO_MODO[cod];
+  return 'Estás ayudando a comprender una sola dimensión del negocio activo: ' + nombre + '.\n' +
+    'No sos un consultor: tu trabajo es entender qué relación organiza esta dimensión antes de proponer un estado.\n\n' +
+    'MARCO DEL NEGOCIO (del Core):\n' + resumenMarcoTexto() + '\n\n' +
+    'DIMENSIONES YA CONFIRMADAS EN ESTA EVALUACIÓN: ' + resumenConfirmadasTexto(cod) + '\n\n' +
+    'CONDUCCIÓN: hacé una pregunta concreta por turno, en lenguaje llano, sobre ' + nombre + '. Entre 2 y 4 intercambios normalmente. No pidas números si no hacen falta: la evidencia cualitativa también sirve. Cuando ya comprendas lo suficiente, cerrá con el marcador exacto:\n' +
+    '[[LECTURA_DIM:ESTADO=<desconocida|estable|tensionada|critica|potencia>|TENSION=<tensión principal, lenguaje de negocio, una frase>|OPORTUNIDAD=<oportunidad o capacidad asociada, una frase>]]\n' +
+    'seguido del texto visible: la lectura propuesta en 2 a 4 líneas, lenguaje llano, explicando por qué proponés ese estado -- no solo el nombre del estado.\n' +
+    'Nunca muestres códigos internos, ni la palabra "alfabeto", ni el nombre de otras dimensiones por su código (B1-B6): referite a ellas por su nombre si hace falta.';
+}
+
+function llamarIADimension(mensajes){
+  return fetch('/api/anthropic', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1200,
+      system: PROMPT_DIMENSION(state.dimensionActual),
+      messages: mensajes
+    })
+  }).then(function(res){
+    return res.json().catch(function(){ return {}; }).then(function(data){
+      if(!res.ok){
+        var err = new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+        err.codigo = data && data.error && data.error.codigo;
+        throw err;
+      }
+      var texto = (data.content || []).map(function(b){ return b.text || ''; }).join('');
+      return texto;
     });
-    var nota = document.createElement('input');
-    nota.type = 'text';
-    nota.id = 'nota_' + cod;
-    nota.placeholder = 'Nota breve (opcional)';
-    fila.appendChild(nombre); fila.appendChild(sel); fila.appendChild(nota);
-    cont.appendChild(fila);
   });
 }
 
-function cerrarDiagnosticoRapido(){
+/* Parser chico y aparte del parseMotor() del Core (no lo toca): un solo marcador nuevo,
+   mismo estilo [[TAG:...]] y misma filosofía defensiva -- si ESTADO no está en el alfabeto
+   permitido, o el marcador viene malformado, se ignora y el mensaje se trata como un turno
+   más de conversación (no se ofrece Confirmar). */
+function parseLecturaDim(texto){
+  var re = /\[\[LECTURA_DIM:([\s\S]*?)\]\]/;
+  var m = texto.match(re);
+  if(!m) return { visible: texto.trim(), propuesta: null };
+  var visible = (texto.slice(0, m.index) + texto.slice(m.index + m[0].length)).trim();
+  var campos = {};
+  m[1].split('|').forEach(function(parte){
+    var eq = parte.indexOf('=');
+    if(eq === -1) return;
+    var k = parte.slice(0, eq).trim().toUpperCase();
+    var v = parte.slice(eq + 1).trim();
+    campos[k] = v;
+  });
+  var estado = (campos.ESTADO || '').toLowerCase();
+  if(ORDEN_ESTADOS.indexOf(estado) === -1) return { visible: visible, propuesta: null };
+  return {
+    visible: visible,
+    propuesta: {
+      estado: estado,
+      tension_principal: campos.TENSION || '',
+      oportunidad: campos.OPORTUNIDAD || '',
+      lectura: visible
+    }
+  };
+}
+
+function agregarBurbuja(tipo, texto){
+  var hilo = document.getElementById('dimHilo');
+  var b = document.createElement('div');
+  b.className = 'burbuja ' + tipo;
+  b.textContent = texto;
+  hilo.appendChild(b);
+  hilo.scrollTop = hilo.scrollHeight;
+}
+
+function mostrarErrorIA(err){
+  var mensajes = {
+    sin_saldo: 'Te quedaste sin créditos. Revisá tu plan desde el Core, en Cuenta.',
+    requiere_plan: 'Tu plan actual no incluye este módulo.',
+    modulo_inactivo: 'Este módulo no está disponible en este momento.',
+    sesion_invalida: 'Tu sesión venció. Volvé a entrar desde el Core y abrí Negocios de nuevo.',
+    sin_sesion: 'No encontramos tu sesión. Volvé a entrar desde el Core.',
+    servicio_no_disponible: 'El servicio no está disponible en este momento. Probá de nuevo en unos minutos.'
+  };
+  var texto = (err && mensajes[err.codigo]) || (err && err.message) || 'No se pudo completar la consulta.';
+  agregarBurbuja('ia', texto);
+}
+
+function abrirDimension(cod){
+  state.dimensionActual = cod;
+  state.historialDim = [];
+  state.evidenciasDim = [];
+  state.propuestaActual = null;
+  var previa = state.dimensiones[cod];
+  document.getElementById('dimTitulo').textContent = cod + ' · ' + DIMENSIONES_NEGOCIO_MODO[cod];
+  document.getElementById('dimIntro').textContent = (previa && previa.confirmada)
+    ? 'Ya evaluada como ' + (ESTADO_LABEL[previa.estado] || previa.estado) + '. Podés volver a conversar para revisarla.'
+    : 'Contame lo que sepas de esta dimensión -- vamos de a una pregunta por vez.';
+  document.getElementById('dimLecturaCard').style.display = 'none';
+  document.getElementById('dimCorreccionBox').style.display = 'none';
+  document.getElementById('dimHilo').innerHTML = '';
+  document.getElementById('dimInput').value = '';
+  mostrarPantalla('pantallaDimension');
+  enviarTurnoDimension(null);   // la IA abre la conversación con la primera pregunta
+}
+
+function enviarTurnoDimension(textoUsuario){
+  if(state.llamando) return;
+  var esInicio = (textoUsuario === null);
+  if(!esInicio){
+    state.historialDim.push({ role: 'user', content: textoUsuario });
+    state.evidenciasDim.push(textoUsuario);
+    agregarBurbuja('usuario', textoUsuario);
+  }
+  var mensajes = esInicio
+    ? [{ role: 'user', content: '(inicio de la conversación sobre esta dimensión)' }]
+    : state.historialDim.slice();
+  state.llamando = true;
+  document.getElementById('dimCargando').style.display = 'block';
+  document.getElementById('btnEnviarDim').disabled = true;
+  llamarIADimension(mensajes).then(function(texto){
+    state.llamando = false;
+    document.getElementById('dimCargando').style.display = 'none';
+    document.getElementById('btnEnviarDim').disabled = false;
+    state.historialDim.push({ role: 'assistant', content: texto });
+    var parsed = parseLecturaDim(texto);
+    agregarBurbuja('ia', parsed.visible);
+    if(parsed.propuesta){
+      state.propuestaActual = parsed.propuesta;
+      mostrarLecturaPropuesta(parsed.propuesta);
+    }
+  }).catch(function(err){
+    state.llamando = false;
+    document.getElementById('dimCargando').style.display = 'none';
+    document.getElementById('btnEnviarDim').disabled = false;
+    mostrarErrorIA(err);
+  });
+}
+function enviarTurnoDesdeInput(){
+  var ta = document.getElementById('dimInput');
+  var texto = ta.value.trim();
+  if(!texto || state.llamando) return;
+  ta.value = '';
+  enviarTurnoDimension(texto);
+}
+
+function mostrarLecturaPropuesta(propuesta){
+  var card = document.getElementById('dimLecturaCard');
+  var estadoEl = document.getElementById('dimLecturaEstado');
+  var textoEl = document.getElementById('dimLecturaTexto');
+  estadoEl.innerHTML = '';
+  var chip = document.createElement('span'); chip.className = 'dim-estado-chip';
+  chip.style.background = ESTADO_COLOR[propuesta.estado] || ESTADO_COLOR.desconocida;
+  estadoEl.appendChild(chip);
+  estadoEl.appendChild(document.createTextNode('Estado propuesto: ' + (ESTADO_LABEL[propuesta.estado] || propuesta.estado)));
+  textoEl.textContent = propuesta.lectura;
+  document.getElementById('dimCorreccionBox').style.display = 'none';
+  card.style.display = 'block';
+}
+function confirmarLectura(){
+  if(!state.propuestaActual || !state.dimensionActual) return;
+  var cod = state.dimensionActual;
+  var p = state.propuestaActual;
+  state.dimensiones[cod] = {
+    cod: cod,
+    nombre: DIMENSIONES_NEGOCIO_MODO[cod],
+    estado: p.estado,
+    evidencias: state.evidenciasDim.slice(),
+    lectura: p.lectura,
+    tension_principal: p.tension_principal,
+    oportunidad: p.oportunidad,
+    fecha: new Date().toISOString(),
+    confirmada: true
+  };
+  volverASelectorDimensiones();
+}
+function mostrarCorreccion(){
+  document.getElementById('dimCorreccionBox').style.display = 'block';
+  var ta = document.getElementById('dimCorreccionInput');
+  ta.value = '';
+  setTimeout(function(){ ta.focus(); }, 0);
+}
+function enviarCorreccion(){
+  var ta = document.getElementById('dimCorreccionInput');
+  var texto = ta.value.trim();
+  if(!texto) return;
+  document.getElementById('dimLecturaCard').style.display = 'none';
+  state.propuestaActual = null;
+  enviarTurnoDimension('No estoy de acuerdo con esa lectura: ' + texto);
+}
+function seguirProfundizando(){
+  document.getElementById('dimLecturaCard').style.display = 'none';
+  state.propuestaActual = null;
+  document.getElementById('dimInput').focus();
+}
+
+function cerrarEvaluacion(){
   var dims = ORDEN_DIMENSIONES_NEGOCIO.map(function(cod){
-    var sel = document.getElementById('dim_' + cod);
-    var nota = document.getElementById('nota_' + cod);
-    return {
-      cod: cod,
-      nombre: DIMENSIONES_NEGOCIO_MODO[cod],
-      estado: sel ? sel.value : 'desconocida',
-      nota: nota ? nota.value.trim() : ''
-    };
+    var d = state.dimensiones[cod];
+    if(d) return d;
+    return { cod: cod, nombre: DIMENSIONES_NEGOCIO_MODO[cod], estado: 'desconocida',
+      evidencias: [], lectura: '', tension_principal: '', oportunidad: '', fecha: null, confirmada: false };
   });
   var sintesisEl = document.getElementById('inSintesis');
   var payload = sellarContrato({

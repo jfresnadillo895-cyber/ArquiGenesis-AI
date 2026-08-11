@@ -3753,7 +3753,9 @@ function adjuntarEvaluacionNegocioPro(datos, silencioso, forzarDestino){
   const ev = (datos.evaluacion || {});
   const dims = Array.isArray(ev.dimensiones) ? ev.dimensiones : [];
   const resumen = PRODUCTO_NEGOCIOS_PRO + ' — diagnóstico rápido: ' +
-    dims.map(function(d){ return d.cod + ' ' + (d.estado || 'desconocida'); }).join(' · ') +
+    dims.map(function(d){
+      return d.cod + ' ' + (d.estado || 'desconocida') + (d.tension_principal ? ' (' + d.tension_principal + ')' : '');
+    }).join(' · ') +
     (ev.sintesis ? '. Síntesis: ' + ev.sintesis : '');
   destino.evaluaciones_negocio_pro.push({ version: version, fecha: new Date().toISOString(), resumen: resumen, datos: datos });
   destino.actualizado = new Date().toISOString();
@@ -6731,6 +6733,24 @@ function correrPruebasAuto(){
                       el.cardContent.textContent.indexOf('Otro Organismo') > -1;
         return directoOk && avisoOk;
       } finally { el.cardContent.innerHTML = snapCard; if(!snapOpen) el.overlay.classList.remove('open'); }
+    })());
+
+    /* ---- N2.2 · compatibilidad del resumen con evaluaciones N2.1 sin tension_principal ---- */
+    chk('IMP·3 · adjuntarEvaluacionNegocioPro arma el resumen igual con dims viejas (N2.1) y nuevas (N2.2) mezcladas', (function(){
+      var o = { id:'org_imp3_test', nombre:'Compat Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
+      var origGuardar = guardarOrganismo, origState = state.organismo;
+      try{
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = null;
+        var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp3_test',
+          evaluacion: { alcance:'rapida', version:1, estado:'cerrada', dimensiones: [
+            { cod:'B1', nombre:'Identidad y dirección', estado:'estable', nota:'forma vieja N2.1, sin tension_principal' },
+            { cod:'B3', nombre:'Economía y viabilidad', estado:'tensionada', tension_principal:'dependencia concentrada', oportunidad:'diversificar', evidencias:['x'], confirmada:true }
+          ], sintesis:'' } };
+        adjuntarEvaluacionNegocioPro(payload, true);
+        var r = o.evaluaciones_negocio_pro[0].resumen;
+        return r.indexOf('B1 estable') > -1 && r.indexOf('B3 tensionada (dependencia concentrada)') > -1;
+      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
 
     chk('ORI·1 · el tipo orienta a la especialidad correcta (o a ninguna)', (function(){
