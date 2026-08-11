@@ -72,6 +72,17 @@ main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
 .relcard-detalle{display:none;font-size:.82rem;color:var(--texto-suave);margin-top:8px;line-height:1.55;}
 .relcard.abierta .relcard-detalle{display:block;}
 .divergencia-box{background:#FBEFE9;border:1px solid #E3B3A3;border-radius:8px;padding:13px 15px;font-size:.85rem;color:var(--texto);}
+.tr-card{border:1px solid var(--linea);border-radius:8px;padding:11px 13px;margin-bottom:8px;background:var(--fondo-card);}
+.tr-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:.85rem;font-weight:500;cursor:pointer;}
+.tr-meta{font-size:.7rem;color:var(--texto-suave);font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;}
+.tr-detalle{display:none;font-size:.82rem;color:var(--texto-suave);margin-top:8px;line-height:1.6;}
+.tr-card.abierta .tr-detalle{display:block;}
+.tr-descartar{margin-top:8px;font-size:.72rem;background:none;border:1px solid var(--linea);color:var(--presion);border-radius:6px;padding:4px 9px;cursor:pointer;}
+.esc-card{border:1px solid var(--linea);border-radius:8px;padding:12px 14px;margin-bottom:10px;background:var(--fondo-card);}
+.esc-titulo{font-size:.88rem;font-weight:500;margin-bottom:6px;}
+.esc-cuerpo{font-size:.82rem;color:var(--texto-suave);line-height:1.6;}
+.esc-variante{margin-top:8px;font-size:.72rem;background:none;border:1px solid var(--linea);color:var(--texto-suave);border-radius:6px;padding:4px 9px;cursor:pointer;}
+.palanca-box{background:var(--acento-suave);border:1px solid var(--linea);border-radius:8px;padding:13px 15px;font-size:.85rem;color:var(--texto);}
 .export-box{width:100%;min-height:220px;max-height:44vh;background:var(--fondo-card);border:1px solid var(--linea);border-radius:6px;padding:12px;color:var(--texto);font-family:'IBM Plex Mono',monospace;font-size:.72rem;line-height:1.5;resize:vertical;}
 footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:.65rem;color:var(--texto-suave);letter-spacing:.06em;line-height:2;}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
@@ -147,7 +158,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 <div id="modulosMenu"></div>
 
 <header>
-  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Negocios</b></div><div class="cai-baja">Pro · N2.3</div></div></div>
+  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Negocios</b></div><div class="cai-baja">Pro · N2.4</div></div></div>
   <span style="flex:1"></span>
   <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
   <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
@@ -194,9 +205,11 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
     <div class="acciones">
       <button class="btn secundario" onclick="volverAInicio()">Volver</button>
       <button class="btn secundario" id="btnVerIntegral" onclick="irADiagnosticoIntegral()" disabled>Ver diagnóstico integral</button>
+      <button class="btn secundario" id="btnVerProyectivo" onclick="irAProyectivo()" disabled>Explorar proyectivo</button>
       <button class="btn" id="btnCerrarDiagnostico" onclick="cerrarEvaluacion()">Cerrar evaluación</button>
     </div>
     <p class="hint" id="hintIntegral" style="margin-top:10px">Confirmá al menos dos dimensiones para ver relaciones entre ellas.</p>
+    <p class="hint" id="hintProyectivo" style="margin-top:4px">Confirmá un diagnóstico integral para explorar el proyectivo.</p>
   </div>
 </section>
 
@@ -278,6 +291,58 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
   </div>
 </section>
 
+<!-- ============ PROYECTIVO Y ESCENARIOS (N2.4) ============ -->
+<section id="pantallaProyectivo" class="pantalla">
+  <div class="form-card">
+    <h3>Proyectivo</h3>
+
+    <div id="proyVista1">
+      <p class="hint" style="margin-bottom:16px">A partir del diagnóstico integral vigente, explorá qué transformaciones posibles emergen si se interviene sobre las relaciones que hoy organizan el sistema. Esto no es un plan de acción: explora posibilidades, no las prescribe.</p>
+      <div id="proyResumenVigente" style="border:1px solid var(--linea);border-radius:8px;padding:14px 16px;margin-bottom:18px"></div>
+      <div class="acciones">
+        <button class="btn secundario" onclick="volverASelectorDesdeProyectivo()">Volver</button>
+        <button class="btn" id="btnExplorarTransformaciones" onclick="explorarTransformaciones()">Explorar transformaciones</button>
+      </div>
+    </div>
+
+    <div id="proyVista2" style="display:none">
+      <div id="proyVigente" style="display:none;margin-bottom:18px;border:1px solid var(--linea);border-radius:8px;padding:14px 16px"></div>
+
+      <div id="proyHilo" class="dimhilo"></div>
+      <div id="proyCargando" class="hint" style="display:none;margin:6px 0">Pensando…</div>
+      <div id="proyEntrada" class="campo" style="margin-top:10px">
+        <textarea id="proyInput" placeholder="Escribí acá si querés agregar algo…" rows="2"></textarea>
+      </div>
+      <div class="acciones">
+        <button class="btn secundario" onclick="volverASelectorDesdeProyectivo()">Volver</button>
+        <button class="btn" id="btnEnviarProy" onclick="enviarTurnoDesdeInputProyectivo()">Enviar</button>
+      </div>
+
+      <div id="proyPropuestaCard" style="display:none;margin-top:22px;border-top:1px solid var(--linea);padding-top:18px">
+        <h4 style="font-size:.95rem;font-weight:500;margin-bottom:10px">Proyectivo propuesto</h4>
+        <p id="proySintesis" style="font-size:.9rem;margin-bottom:14px"></p>
+
+        <div id="proyTransformaciones" style="margin-bottom:14px"></div>
+        <div id="proyEscenarios" style="margin-bottom:14px"></div>
+        <div id="proyPalanca" style="display:none;margin-bottom:14px"></div>
+        <div id="proyFaltantes" style="font-size:.85rem;color:var(--texto-suave);margin-bottom:6px"></div>
+
+        <div class="acciones">
+          <button class="btn secundario" onclick="seguirProfundizandoProyectivo()">Seguir profundizando</button>
+          <button class="btn secundario" onclick="mostrarCorreccionProyectivo()">Corregir</button>
+          <button class="btn" id="btnConfirmarProyectivo" onclick="confirmarProyectivo()">Confirmar</button>
+        </div>
+        <div id="proyCorreccionBox" class="campo" style="display:none;margin-top:12px">
+          <textarea id="proyCorreccionInput" placeholder="Qué corregirías de este proyectivo…" rows="2"></textarea>
+          <div class="acciones" style="margin-top:8px">
+            <button class="btn" onclick="enviarCorreccionProyectivo()">Enviar corrección</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ CIERRE / EXPORTACIÓN ============ -->
 <section id="pantallaCierre" class="pantalla">
   <div class="form-card">
@@ -293,7 +358,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 
 </main>
 
-<footer>COMPRENDER · NEGOCIOS PRO — versión profesional (N2.3) · Un producto de ARQUIGÉNESIS</footer>
+<footer>COMPRENDER · NEGOCIOS PRO — versión profesional (N2.4) · Un producto de ARQUIGÉNESIS</footer>
 
 <script>
 /* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
@@ -1884,7 +1949,14 @@ var state = {
   diagnosticosIntegrales: [],  // [{version,fecha,contenido,confirmado:true}] -- siempre se agrega, nunca se pisa
   propuestaIntegral: null,     // "contenido" pendiente de confirmar (misma forma que el objeto persistido)
   historialIntegral: [],       // [{role,content}] turnos de la conversación del diagnóstico integral
-  llamandoIntegral: false      // lock propio, separado del de la conversación por dimensión
+  llamandoIntegral: false,     // lock propio, separado del de la conversación por dimensión
+
+  // ---- N2.4: proyectivo y escenarios de reorganización ----
+  proyectivos: [],             // [{version,fecha,diagnostico_origen,contenido,confirmado:true}] -- siempre se agrega, nunca se pisa
+  propuestaProyectivo: null,   // "contenido" pendiente de confirmar (misma forma que el objeto persistido), se edita en vivo al descartar
+  historialProyectivo: [],     // [{role,content}] turnos de la conversación del proyectivo
+  llamandoProyectivo: false,   // lock propio
+  descartesProyectivo: []      // [{id,nombre,transformacion}] descartadas por el usuario en esta sesión -- viajan al prompt
 };
 
 /* ---- N2.3: vocabulario de relaciones -- alfabeto cerrado, mismo criterio defensivo que
@@ -1900,6 +1972,14 @@ var ROL_CAUSAL_LABEL = {
   consecuencia: 'Consecuencia', capacidad_compensatoria: 'Capacidad compensatoria'
 };
 var RELEVANCIA_RELACION = ['alta', 'media', 'baja'];
+
+/* ---- N2.4: vocabulario del proyectivo -- mismos criterios de alfabeto cerrado ---- */
+var HORIZONTES = ['inmediato', 'corto', 'medio', 'largo'];
+var HORIZONTE_LABEL = { inmediato: 'Inmediato', corto: 'Corto plazo', medio: 'Mediano plazo', largo: 'Largo plazo' };
+var NIVELES_REVERSIBILIDAD = ['alta', 'media', 'baja'];
+var REVERSIBILIDAD_LABEL = { alta: 'Alta reversibilidad', media: 'Reversibilidad media', baja: 'Baja reversibilidad' };
+var TIPOS_ESCENARIO = ['continuidad', 'reorganizacion_focal', 'reorganizacion_ampliada'];
+var TIPO_ESCENARIO_LABEL = { continuidad: 'Continuidad', reorganizacion_focal: 'Reorganización focal', reorganizacion_ampliada: 'Reorganización ampliada' };
 
 /* ---- C-06 · marco pendiente dejado por el Core (mismo mecanismo de un solo uso
    que usan Urbanismo/Contextos: se lee y se borra, no se reaplica en cada carga). */
@@ -1986,6 +2066,19 @@ function construirSelectorDimensiones(){
       : (state.diagnosticosIntegrales.length
           ? 'Diagnóstico integral vigente: v' + state.diagnosticosIntegrales[state.diagnosticosIntegrales.length - 1].version + '.'
           : 'Ya podés ver el diagnóstico integral entre las dimensiones confirmadas.');
+  }
+  // N2.4: el proyectivo necesita un diagnóstico integral ya confirmado -- explora
+  // transformaciones sobre relaciones ya detectadas, no vuelve a evaluar nada por su cuenta.
+  var btnProy = document.getElementById('btnVerProyectivo');
+  var hintProy = document.getElementById('hintProyectivo');
+  var diVigente = ultimoDiagnosticoIntegralConfirmado();
+  if(btnProy) btnProy.disabled = !diVigente;
+  if(hintProy){
+    hintProy.textContent = !diVigente
+      ? 'Confirmá un diagnóstico integral para explorar el proyectivo.'
+      : (state.proyectivos.length
+          ? 'Proyectivo vigente: v' + state.proyectivos[state.proyectivos.length - 1].version + '.'
+          : 'Ya podés explorar el proyectivo a partir del diagnóstico integral confirmado.');
   }
 }
 function volverASelectorDimensiones(){
@@ -2562,6 +2655,483 @@ function volverASelectorDesdeIntegral(){
   mostrarPantalla('pantallaDiagnostico');
 }
 
+/* ================= N2.4 · proyectivo y escenarios de reorganización =================
+   A partir del último diagnóstico integral confirmado, explora qué transformaciones posibles
+   emergen si se interviene sobre las relaciones que hoy organizan el sistema. NO es un plan
+   de acción: primero explora, nunca prescribe. Mismo patrón de gobernanza que N2.2/N2.3, con
+   dos acciones nuevas propias de esta capa: descartar una transformación puntual (saneamiento
+   en cascada, sin nueva llamada a la IA) y pedir una variante de un escenario. */
+
+function ultimoProyectivoConfirmado(){
+  var l = state.proyectivos;
+  return l.length ? l[l.length - 1] : null;
+}
+
+function resumenDiagnosticoIntegralParaProyectivo(){
+  var di = ultimoDiagnosticoIntegralConfirmado();
+  if(!di) return 'Sin diagnóstico integral confirmado todavía.';
+  var c = di.contenido;
+  var partes = [];
+  partes.push('Síntesis: ' + c.sintesis);
+  partes.push('Tensión sistémica: ' + c.tension_sistemica);
+  if(c.relaciones && c.relaciones.length){
+    partes.push('Relaciones estructurantes (usá su índice para relaciones_origen):');
+    c.relaciones.forEach(function(r, i){
+      var nombres = r.dimensiones.map(function(cod){ return DIMENSIONES_NEGOCIO_MODO[cod] || cod; }).join(' · ');
+      partes.push('  [' + i + '] ' + nombres + ' -- ' + (TIPO_RELACION_LABEL[r.tipo] || r.tipo) + ': ' + r.lectura + ' (efecto: ' + r.efecto + ', relevancia: ' + r.relevancia + ')');
+    });
+  }
+  if(c.roles_causales && c.roles_causales.length){
+    partes.push('Roles causales: ' + c.roles_causales.map(function(rc){
+      return (DIMENSIONES_NEGOCIO_MODO[rc.dimension] || rc.dimension) + ': ' + (ROL_CAUSAL_LABEL[rc.rol] || rc.rol);
+    }).join(' · '));
+  }
+  if(c.capacidades && c.capacidades.length) partes.push('Capacidades: ' + c.capacidades.join('; '));
+  if(c.fragilidades && c.fragilidades.length) partes.push('Fragilidades: ' + c.fragilidades.join('; '));
+  partes.push('Dependencia crítica: ' + (c.dependencia_critica || 'ninguna registrada'));
+  partes.push('Punto de apalancamiento: ' + c.apalancamiento);
+  if(c.faltantes && c.faltantes.length) partes.push('Información faltante: ' + c.faltantes.join('; '));
+  if(c.divergencia_lectura && c.divergencia_lectura.existe){
+    partes.push('Divergencia sin resolver con el Core: ' + c.divergencia_lectura.diferencia);
+  }
+  return partes.join('\n');
+}
+
+/* Ajuste 3 (ChatGPT/Javier, 11/08): los descartes viajan al prompt en los turnos siguientes,
+   con nombre y contenido esencial -- no alcanza con guardar solo el ID, porque un mismo ID
+   puede cambiar de significado en una regeneración del modelo. */
+function resumenDescartesProyectivo(){
+  if(!state.descartesProyectivo.length) return '';
+  return '\n\nTRANSFORMACIONES DESCARTADAS POR EL USUARIO EN ESTA SESIÓN:\n' +
+    state.descartesProyectivo.map(function(d){ return '- ' + d.nombre + ': ' + d.transformacion; }).join('\n') +
+    '\nNo vuelvas a proponer estas transformaciones salvo que el usuario lo pida explícitamente.';
+}
+
+function PROMPT_PROYECTIVO(){
+  return 'Tenés el diagnóstico integral ya confirmado de este negocio. Tu trabajo ahora es explorar qué transformaciones posibles emergen si se interviene sobre las relaciones que hoy organizan el sistema -- NO es un plan de acción ni una lista de recomendaciones.\n\n' +
+    'MARCO DEL NEGOCIO (del Core):\n' + resumenMarcoTexto() + '\n\n' +
+    'DIMENSIONES CONFIRMADAS:\n' + resumenDimensionesConfirmadasParaIntegral() + '\n\n' +
+    'DIAGNÓSTICO INTEGRAL VIGENTE:\n' + resumenDiagnosticoIntegralParaProyectivo() +
+    resumenDescartesProyectivo() + '\n\n' +
+    'TAREA:\n' +
+    '1. Para cada transformación, seguí la secuencia: relación a intervenir -> transformación posible -> efectos directos -> efectos de segundo orden (OBLIGATORIO: qué puede pasar después del efecto inmediato, incluyendo posible desplazamiento de la tensión a otro lugar) -> riesgos -> condiciones necesarias. Máximo 5 transformaciones, cada una con al menos una dimensión confirmada afectada.\n' +
+    '2. Antes de proponer incorporar recursos externos (personal, capital, herramientas), evaluá si alguna capacidad ya confirmada del negocio puede reorganizarse o amplificarse. Preferí esa vía cuando tenga sentido.\n' +
+    '3. El punto de apalancamiento del diagnóstico integral NO es automáticamente "la respuesta correcta": evaluá qué otras dimensiones recibirían el efecto de intervenir ahí, y si existe riesgo de desplazar la tensión a otro lugar en vez de resolverla.\n' +
+    '4. Armá hasta 3 escenarios -- Continuidad (poco o ningún cambio), Reorganización focal (interviene sobre el apalancamiento principal), Reorganización ampliada (varias relaciones coordinadas). No generes los tres si la información no alcanza para alguno.\n' +
+    '5. Hablá en términos de posibilidad, nunca de certeza: "podría", "es esperable que", "este escenario supone", "el principal riesgo sería" -- nunca "deberías" ni "la mejor opción es".\n' +
+    '6. Nunca muestres códigos internos (B1-B6, T01-T14, M01-M09) en el texto visible: referite a las dimensiones por nombre.\n\n' +
+    'Cerrá con el marcador exacto (JSON válido, sin comentarios ni texto extra adentro):\n' +
+    '[[PROYECTIVO_NEGOCIO:{\n' +
+    '  "sintesis_proyectiva": "...",\n' +
+    '  "transformaciones": [ { "id": "TR1", "nombre": "...", "origen_estructural": "...", "relaciones_origen": [0,2], "transformacion": "...", "mecanismo": "...", "dimensiones_afectadas": ["B3","B4"], "efectos_esperados": ["..."], "efectos_segundo_orden": ["..."], "riesgos": ["..."], "condiciones": ["..."], "horizonte": "inmediato|corto|medio|largo", "reversibilidad": "alta|media|baja" } ],\n' +
+    '  "escenarios": [ { "tipo": "continuidad|reorganizacion_focal|reorganizacion_ampliada", "nombre": "...", "logica": "...", "transformaciones": ["TR1"], "efectos_probables": ["..."], "capacidades_reforzadas": ["..."], "fragilidades_reducidas": ["..."], "fragilidades_emergentes": ["..."], "dependencias_nuevas": ["..."], "condiciones_criticas": ["..."], "incertidumbres": ["..."] } ],\n' +
+    '  "palanca_prioritaria": { "transformacion_id": "TR1", "por_que": "...", "impacto_sistemico": "...", "riesgo_desplazamiento": "..." },\n' +
+    '  "faltantes_para_decidir": ["..."]\n' +
+    '}]]\n' +
+    'seguido de un texto visible de 2 a 4 líneas con la idea central en criollo. Si el usuario corrige, profundiza o pide una variante de escenario, incorporalo y volvé a cerrar con el mismo marcador completo.';
+}
+
+function llamarIAProyectivo(mensajes){
+  return fetch('/api/anthropic', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 3400,
+      system: PROMPT_PROYECTIVO(),
+      messages: mensajes
+    })
+  }).then(function(res){
+    return res.json().catch(function(){ return {}; }).then(function(data){
+      if(!res.ok){
+        var err = new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+        err.codigo = data && data.error && data.error.codigo;
+        throw err;
+      }
+      var texto = (data.content || []).map(function(b){ return b.text || ''; }).join('');
+      return texto;
+    });
+  });
+}
+
+/* ---- validadores defensivos, pieza por pieza -- mismo criterio que N2.3 ---- */
+function validarTransformacion(t, confirmadas, nRelacionesOrigen){
+  if(!t || typeof t !== 'object') return null;
+  if(!t.id || typeof t.id !== 'string') return null;
+  if(!t.nombre || !t.origen_estructural || !t.transformacion || !t.mecanismo) return null;
+  var dims = Array.isArray(t.dimensiones_afectadas) ? t.dimensiones_afectadas.filter(function(c){ return confirmadas.indexOf(c) > -1; }) : [];
+  if(!dims.length) return null;   // Ajuste 2: sin ninguna dimensión confirmada afectada, la transformación no tiene sentido acá
+  var efectos2 = Array.isArray(t.efectos_segundo_orden) ? t.efectos_segundo_orden.filter(function(s){ return typeof s === 'string' && s.trim(); }) : [];
+  if(!efectos2.length) return null;   // obligatorio: no hay "solo beneficio directo"
+  var riesgos = Array.isArray(t.riesgos) ? t.riesgos.filter(function(s){ return typeof s === 'string' && s.trim(); }) : [];
+  if(!riesgos.length) return null;    // obligatorio
+  if(HORIZONTES.indexOf(t.horizonte) === -1) return null;
+  if(NIVELES_REVERSIBILIDAD.indexOf(t.reversibilidad) === -1) return null;
+  var relOrigen = Array.isArray(t.relaciones_origen)
+    ? t.relaciones_origen.filter(function(i){ return Number.isInteger(i) && i >= 0 && i < nRelacionesOrigen; })
+    : [];
+  var efectos1 = Array.isArray(t.efectos_esperados) ? t.efectos_esperados.filter(function(s){ return typeof s === 'string' && s.trim(); }) : [];
+  var condiciones = Array.isArray(t.condiciones) ? t.condiciones.filter(function(s){ return typeof s === 'string' && s.trim(); }) : [];
+  return {
+    id: t.id, nombre: t.nombre, origen_estructural: t.origen_estructural, relaciones_origen: relOrigen,
+    transformacion: t.transformacion, mecanismo: t.mecanismo, dimensiones_afectadas: dims,
+    efectos_esperados: efectos1, efectos_segundo_orden: efectos2, riesgos: riesgos, condiciones: condiciones,
+    horizonte: t.horizonte, reversibilidad: t.reversibilidad
+  };
+}
+function validarEscenario(e, idsValidos){
+  if(!e || typeof e !== 'object') return null;
+  if(TIPOS_ESCENARIO.indexOf(e.tipo) === -1) return null;
+  if(!e.nombre || !e.logica) return null;
+  var trans = Array.isArray(e.transformaciones) ? e.transformaciones.filter(function(id){ return idsValidos.indexOf(id) > -1; }) : [];
+  if(!trans.length && e.tipo !== 'continuidad') return null;   // continuidad es el único que puede quedar sin transformaciones
+  return {
+    tipo: e.tipo, nombre: e.nombre, logica: e.logica, transformaciones: trans,
+    efectos_probables: listaStringsIntegral(e.efectos_probables),
+    capacidades_reforzadas: listaStringsIntegral(e.capacidades_reforzadas),
+    fragilidades_reducidas: listaStringsIntegral(e.fragilidades_reducidas),
+    fragilidades_emergentes: listaStringsIntegral(e.fragilidades_emergentes),
+    dependencias_nuevas: listaStringsIntegral(e.dependencias_nuevas),
+    condiciones_criticas: listaStringsIntegral(e.condiciones_criticas),
+    incertidumbres: listaStringsIntegral(e.incertidumbres)
+  };
+}
+function validarPalancaPrioritaria(p, idsValidos){
+  if(!p || typeof p !== 'object') return null;
+  if(!p.transformacion_id || idsValidos.indexOf(p.transformacion_id) === -1) return null;
+  if(!p.por_que || !p.impacto_sistemico) return null;
+  return {
+    transformacion_id: p.transformacion_id,
+    por_que: p.por_que,
+    impacto_sistemico: p.impacto_sistemico,
+    riesgo_desplazamiento: (typeof p.riesgo_desplazamiento === 'string') ? p.riesgo_desplazamiento : ''
+  };
+}
+
+/* Parser chico y aparte, igual que parseDiagnosticoIntegral: no toca parseMotor(),
+   parseLecturaDim() ni parseDiagnosticoIntegral(). Si no sobrevive ninguna transformación
+   válida después de filtrar, toda la propuesta se descarta -- no se puede confirmar un
+   proyectivo vacío. */
+function parseProyectivoNegocio(texto){
+  var re = /\[\[PROYECTIVO_NEGOCIO:([\s\S]*?)\]\]/;
+  var m = texto.match(re);
+  if(!m) return { visible: texto.trim(), propuesta: null };
+  var visible = (texto.slice(0, m.index) + texto.slice(m.index + m[0].length)).trim();
+  var datos;
+  try{ datos = JSON.parse(m[1]); }catch(e){ return { visible: visible, propuesta: null }; }
+  if(!datos || typeof datos !== 'object') return { visible: visible, propuesta: null };
+  if(!datos.sintesis_proyectiva) return { visible: visible, propuesta: null };
+
+  var confirmadas = codigosConfirmados();
+  var diVigente = ultimoDiagnosticoIntegralConfirmado();
+  var nRelacionesOrigen = (diVigente && diVigente.contenido && Array.isArray(diVigente.contenido.relaciones)) ? diVigente.contenido.relaciones.length : 0;
+
+  var vistos = {};
+  var transformaciones = (Array.isArray(datos.transformaciones) ? datos.transformaciones : [])
+    .map(function(t){ return validarTransformacion(t, confirmadas, nRelacionesOrigen); })
+    .filter(Boolean)
+    .filter(function(t){
+      if(vistos[t.id]) return false;   // IDs duplicados: se queda la primera aparición
+      vistos[t.id] = true;
+      return true;
+    })
+    .slice(0, 5);
+
+  if(!transformaciones.length) return { visible: visible, propuesta: null };
+
+  var idsValidos = transformaciones.map(function(t){ return t.id; });
+  var escenarios = (Array.isArray(datos.escenarios) ? datos.escenarios : [])
+    .map(function(e){ return validarEscenario(e, idsValidos); })
+    .filter(Boolean)
+    .slice(0, 3);
+
+  var palanca = validarPalancaPrioritaria(datos.palanca_prioritaria, idsValidos);
+
+  return {
+    visible: visible,
+    propuesta: {
+      sintesis_proyectiva: datos.sintesis_proyectiva,
+      transformaciones: transformaciones,
+      escenarios: escenarios,
+      palanca_prioritaria: palanca,
+      faltantes_para_decidir: listaStringsIntegral(datos.faltantes_para_decidir)
+    }
+  };
+}
+
+function irAProyectivo(){
+  if(!ultimoDiagnosticoIntegralConfirmado()) return;
+  abrirProyectivo();
+}
+
+function abrirProyectivo(){
+  state.historialProyectivo = [];
+  state.propuestaProyectivo = null;
+  document.getElementById('proyPropuestaCard').style.display = 'none';
+  document.getElementById('proyCorreccionBox').style.display = 'none';
+  document.getElementById('proyHilo').innerHTML = '';
+  document.getElementById('proyInput').value = '';
+  document.getElementById('proyVista1').style.display = 'block';
+  document.getElementById('proyVista2').style.display = 'none';
+
+  var di = ultimoDiagnosticoIntegralConfirmado();
+  var box = document.getElementById('proyResumenVigente');
+  box.innerHTML = '';
+  if(di){
+    var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '8px';
+    h.textContent = 'Diagnóstico integral vigente (v' + di.version + ')';
+    var p1 = document.createElement('div'); p1.style.fontSize = '.85rem'; p1.style.marginBottom = '6px';
+    p1.textContent = 'Tensión sistémica: ' + di.contenido.tension_sistemica;
+    var p2 = document.createElement('div'); p2.style.fontSize = '.85rem'; p2.style.marginBottom = '6px';
+    p2.textContent = 'Punto de apalancamiento: ' + di.contenido.apalancamiento;
+    box.appendChild(h); box.appendChild(p1); box.appendChild(p2);
+    if(di.contenido.capacidades && di.contenido.capacidades.length){
+      var p3 = document.createElement('div'); p3.style.fontSize = '.85rem';
+      p3.textContent = 'Capacidades disponibles: ' + di.contenido.capacidades.join('; ');
+      box.appendChild(p3);
+    }
+  }
+  var vigenteProy = ultimoProyectivoConfirmado();
+  var boxProyVigente = document.getElementById('proyVigente');
+  if(vigenteProy){
+    boxProyVigente.style.display = 'block';
+    boxProyVigente.innerHTML = '';
+    var hv = document.createElement('div'); hv.style.fontWeight = '500'; hv.style.marginBottom = '6px';
+    hv.textContent = 'Vigente: proyectivo v' + vigenteProy.version + ' (' + new Date(vigenteProy.fecha).toLocaleDateString('es-AR') + ')';
+    var pv = document.createElement('div'); pv.style.fontSize = '.85rem'; pv.style.color = 'var(--texto-suave)';
+    pv.textContent = vigenteProy.contenido.sintesis_proyectiva;
+    boxProyVigente.appendChild(hv); boxProyVigente.appendChild(pv);
+  } else {
+    boxProyVigente.style.display = 'none';
+  }
+
+  mostrarPantalla('pantallaProyectivo');
+}
+
+function explorarTransformaciones(){
+  document.getElementById('proyVista1').style.display = 'none';
+  document.getElementById('proyVista2').style.display = 'block';
+  enviarTurnoProyectivo(null);
+}
+
+function enviarTurnoProyectivo(textoUsuario){
+  if(state.llamandoProyectivo) return;
+  var esInicio = (textoUsuario === null);
+  if(!esInicio){
+    state.historialProyectivo.push({ role: 'user', content: textoUsuario });
+    agregarBurbuja('usuario', textoUsuario, 'proyHilo');
+  }
+  var mensajes = esInicio
+    ? [{ role: 'user', content: '(explorá transformaciones y escenarios a partir del diagnóstico integral vigente)' }]
+    : state.historialProyectivo.slice();
+  state.llamandoProyectivo = true;
+  document.getElementById('proyCargando').style.display = 'block';
+  document.getElementById('btnEnviarProy').disabled = true;
+  llamarIAProyectivo(mensajes).then(function(texto){
+    state.llamandoProyectivo = false;
+    document.getElementById('proyCargando').style.display = 'none';
+    document.getElementById('btnEnviarProy').disabled = false;
+    state.historialProyectivo.push({ role: 'assistant', content: texto });
+    var parsed = parseProyectivoNegocio(texto);
+    agregarBurbuja('ia', parsed.visible, 'proyHilo');
+    if(parsed.propuesta){
+      state.propuestaProyectivo = parsed.propuesta;
+      mostrarPropuestaProyectivo(parsed.propuesta);
+    }
+  }).catch(function(err){
+    state.llamandoProyectivo = false;
+    document.getElementById('proyCargando').style.display = 'none';
+    document.getElementById('btnEnviarProy').disabled = false;
+    mostrarErrorIA(err, 'proyHilo');
+  });
+}
+function enviarTurnoDesdeInputProyectivo(){
+  var ta = document.getElementById('proyInput');
+  var texto = ta.value.trim();
+  if(!texto || state.llamandoProyectivo) return;
+  ta.value = '';
+  enviarTurnoProyectivo(texto);
+}
+
+function renderTransformacionesVisual(transformaciones){
+  var cont = document.getElementById('proyTransformaciones');
+  cont.innerHTML = '';
+  var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '8px';
+  h.textContent = 'Transformaciones posibles';
+  cont.appendChild(h);
+  (transformaciones || []).forEach(function(t){
+    var card = document.createElement('div'); card.className = 'tr-card';
+    var head = document.createElement('div'); head.className = 'tr-head';
+    var izq = document.createElement('span'); izq.textContent = t.nombre;
+    var der = document.createElement('span'); der.className = 'tr-meta';
+    der.textContent = (HORIZONTE_LABEL[t.horizonte] || t.horizonte) + ' · ' + (REVERSIBILIDAD_LABEL[t.reversibilidad] || t.reversibilidad);
+    head.appendChild(izq); head.appendChild(der);
+    head.addEventListener('click', function(){ card.classList.toggle('abierta'); });
+
+    var detalle = document.createElement('div'); detalle.className = 'tr-detalle';
+    var partes = [];
+    partes.push('Qué cambia: ' + t.transformacion);
+    partes.push('Por qué (origen estructural): ' + t.origen_estructural);
+    if(t.mecanismo) partes.push('Mecanismo esperado: ' + t.mecanismo);
+    if(t.dimensiones_afectadas && t.dimensiones_afectadas.length){
+      partes.push('Dónde impacta: ' + t.dimensiones_afectadas.map(function(c){ return DIMENSIONES_NEGOCIO_MODO[c] || c; }).join(', '));
+    }
+    if(t.efectos_esperados && t.efectos_esperados.length) partes.push('Efectos esperados: ' + t.efectos_esperados.join('; '));
+    if(t.efectos_segundo_orden && t.efectos_segundo_orden.length) partes.push('Segundo orden: ' + t.efectos_segundo_orden.join('; '));
+    if(t.riesgos && t.riesgos.length) partes.push('Riesgos: ' + t.riesgos.join('; '));
+    if(t.condiciones && t.condiciones.length) partes.push('Condiciones necesarias: ' + t.condiciones.join('; '));
+    detalle.textContent = partes.join('  —  ');
+
+    var btnDesc = document.createElement('button'); btnDesc.className = 'tr-descartar'; btnDesc.textContent = 'Descartar';
+    btnDesc.addEventListener('click', function(e){ e.stopPropagation(); descartarTransformacion(t.id); });
+
+    card.appendChild(head); card.appendChild(detalle); card.appendChild(btnDesc);
+    cont.appendChild(card);
+  });
+}
+
+function renderEscenariosVisual(escenarios){
+  var cont = document.getElementById('proyEscenarios');
+  cont.innerHTML = '';
+  if(!escenarios || !escenarios.length) return;
+  var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '8px';
+  h.textContent = 'Escenarios';
+  cont.appendChild(h);
+  escenarios.forEach(function(e){
+    var card = document.createElement('div'); card.className = 'esc-card';
+    var tit = document.createElement('div'); tit.className = 'esc-titulo';
+    tit.textContent = (TIPO_ESCENARIO_LABEL[e.tipo] || e.tipo) + ' — ' + e.nombre;
+    var cuerpo = document.createElement('div'); cuerpo.className = 'esc-cuerpo';
+    var partes = [e.logica];
+    if(e.efectos_probables && e.efectos_probables.length) partes.push('Efectos probables: ' + e.efectos_probables.join('; '));
+    if(e.capacidades_reforzadas && e.capacidades_reforzadas.length) partes.push('Capacidades que se fortalecen: ' + e.capacidades_reforzadas.join('; '));
+    if(e.fragilidades_reducidas && e.fragilidades_reducidas.length) partes.push('Fragilidades que disminuyen: ' + e.fragilidades_reducidas.join('; '));
+    if(e.fragilidades_emergentes && e.fragilidades_emergentes.length) partes.push('Fragilidades que podrían aparecer: ' + e.fragilidades_emergentes.join('; '));
+    if(e.dependencias_nuevas && e.dependencias_nuevas.length) partes.push('Dependencias nuevas: ' + e.dependencias_nuevas.join('; '));
+    if(e.condiciones_criticas && e.condiciones_criticas.length) partes.push('Condiciones críticas: ' + e.condiciones_criticas.join('; '));
+    if(e.incertidumbres && e.incertidumbres.length) partes.push('Incertidumbres: ' + e.incertidumbres.join('; '));
+    cuerpo.textContent = partes.join('  —  ');
+
+    var btnVar = document.createElement('button'); btnVar.className = 'esc-variante'; btnVar.textContent = 'Pedir otra variante';
+    btnVar.addEventListener('click', function(){ pedirVarianteEscenario(e.tipo); });
+
+    card.appendChild(tit); card.appendChild(cuerpo); card.appendChild(btnVar);
+    cont.appendChild(card);
+  });
+}
+
+function mostrarPropuestaProyectivo(propuesta){
+  document.getElementById('proySintesis').textContent = propuesta.sintesis_proyectiva;
+  renderTransformacionesVisual(propuesta.transformaciones);
+  renderEscenariosVisual(propuesta.escenarios);
+
+  var palancaBox = document.getElementById('proyPalanca');
+  if(propuesta.palanca_prioritaria){
+    var p = propuesta.palanca_prioritaria;
+    var t = (propuesta.transformaciones || []).find(function(x){ return x.id === p.transformacion_id; });
+    palancaBox.innerHTML = '';
+    var caja = document.createElement('div'); caja.className = 'palanca-box';
+    var tit = document.createElement('div'); tit.style.fontWeight = '500'; tit.style.marginBottom = '6px';
+    tit.textContent = 'Palanca prioritaria' + (t ? ': ' + t.nombre : '');
+    var por = document.createElement('div'); por.textContent = 'Por qué: ' + p.por_que;
+    var imp = document.createElement('div'); imp.textContent = 'Impacto sistémico: ' + p.impacto_sistemico;
+    caja.appendChild(tit); caja.appendChild(por); caja.appendChild(imp);
+    if(p.riesgo_desplazamiento){
+      var rd = document.createElement('div'); rd.textContent = 'Riesgo de desplazamiento: ' + p.riesgo_desplazamiento;
+      caja.appendChild(rd);
+    }
+    palancaBox.appendChild(caja);
+    palancaBox.style.display = 'block';
+  } else {
+    palancaBox.style.display = 'none';
+    palancaBox.innerHTML = '';
+  }
+
+  var falt = document.getElementById('proyFaltantes');
+  falt.innerHTML = '';
+  if(propuesta.faltantes_para_decidir && propuesta.faltantes_para_decidir.length){
+    var hf = document.createElement('div'); hf.style.fontWeight = '500'; hf.style.margin = '6px 0 4px';
+    hf.textContent = 'Información faltante para decidir';
+    falt.appendChild(hf);
+    propuesta.faltantes_para_decidir.forEach(function(f){
+      var p = document.createElement('div'); p.textContent = '— ' + f; falt.appendChild(p);
+    });
+  }
+
+  document.getElementById('proyCorreccionBox').style.display = 'none';
+  document.getElementById('proyPropuestaCard').style.display = 'block';
+  var btnConfirmar = document.getElementById('btnConfirmarProyectivo');
+  if(btnConfirmar) btnConfirmar.disabled = !propuesta.transformaciones || propuesta.transformaciones.length === 0;
+}
+
+/* Ajuste 1 (ChatGPT/Javier, 11/08): descartar una transformación limpia sus referencias en
+   cascada -- nunca queda un escenario o una palanca prioritaria apuntando a algo que ya no
+   existe. Todo esto es local: no dispara una nueva llamada a la IA. */
+function descartarTransformacion(id){
+  if(!state.propuestaProyectivo) return;
+  var t = state.propuestaProyectivo.transformaciones.find(function(x){ return x.id === id; });
+  if(t) state.descartesProyectivo.push({ id: t.id, nombre: t.nombre, transformacion: t.transformacion });
+
+  state.propuestaProyectivo.transformaciones = state.propuestaProyectivo.transformaciones.filter(function(x){ return x.id !== id; });
+
+  state.propuestaProyectivo.escenarios = state.propuestaProyectivo.escenarios
+    .map(function(e){
+      var nuevasT = e.transformaciones.filter(function(tid){ return tid !== id; });
+      return Object.assign({}, e, { transformaciones: nuevasT });
+    })
+    .filter(function(e){ return e.tipo === 'continuidad' || e.transformaciones.length > 0; });
+
+  if(state.propuestaProyectivo.palanca_prioritaria && state.propuestaProyectivo.palanca_prioritaria.transformacion_id === id){
+    state.propuestaProyectivo.palanca_prioritaria = null;
+  }
+
+  mostrarPropuestaProyectivo(state.propuestaProyectivo);
+}
+
+function pedirVarianteEscenario(tipo){
+  document.getElementById('proyPropuestaCard').style.display = 'none';
+  state.propuestaProyectivo = null;
+  enviarTurnoProyectivo('Pedí una variante distinta para el escenario de ' + (TIPO_ESCENARIO_LABEL[tipo] || tipo) + '.');
+}
+
+function confirmarProyectivo(){
+  if(!state.propuestaProyectivo || !state.propuestaProyectivo.transformaciones.length) return;
+  var di = ultimoDiagnosticoIntegralConfirmado();
+  var version = state.proyectivos.length + 1;
+  state.proyectivos.push({
+    version: version,
+    fecha: new Date().toISOString(),
+    diagnostico_origen: di ? { version: di.version, fecha: di.fecha, tension_sistemica: di.contenido.tension_sistemica } : null,
+    contenido: state.propuestaProyectivo,
+    confirmado: true
+  });
+  state.propuestaProyectivo = null;
+  volverASelectorDesdeProyectivo();
+}
+function mostrarCorreccionProyectivo(){
+  document.getElementById('proyCorreccionBox').style.display = 'block';
+  var ta = document.getElementById('proyCorreccionInput');
+  ta.value = '';
+  setTimeout(function(){ ta.focus(); }, 0);
+}
+function enviarCorreccionProyectivo(){
+  var ta = document.getElementById('proyCorreccionInput');
+  var texto = ta.value.trim();
+  if(!texto) return;
+  document.getElementById('proyPropuestaCard').style.display = 'none';
+  state.propuestaProyectivo = null;
+  enviarTurnoProyectivo('No estoy de acuerdo con ese proyectivo: ' + texto);
+}
+function seguirProfundizandoProyectivo(){
+  document.getElementById('proyPropuestaCard').style.display = 'none';
+  state.propuestaProyectivo = null;
+  document.getElementById('proyInput').focus();
+}
+function volverASelectorDesdeProyectivo(){
+  construirSelectorDimensiones();
+  mostrarPantalla('pantallaDiagnostico');
+}
+
 function cerrarEvaluacion(){
   var dims = ORDEN_DIMENSIONES_NEGOCIO.map(function(cod){
     var d = state.dimensiones[cod];
@@ -2582,7 +3152,8 @@ function cerrarEvaluacion(){
       estado: 'cerrada',
       dimensiones: dims,
       sintesis: sintesisEl ? sintesisEl.value.trim() : '',
-      diagnosticos_integrales: state.diagnosticosIntegrales.slice()   // N2.3: siempre array, puede ir vacío
+      diagnosticos_integrales: state.diagnosticosIntegrales.slice(),  // N2.3: siempre array, puede ir vacío
+      proyectivos: state.proyectivos.slice()   // N2.4: siempre array, puede ir vacío
     }
   });
   mostrarExportacion(payload);

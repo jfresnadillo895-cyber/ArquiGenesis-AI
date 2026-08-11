@@ -3759,12 +3759,17 @@ function adjuntarEvaluacionNegocioPro(datos, silencioso, forzarDestino){
   const ultimoDI = (dis && dis.length) ? dis[dis.length - 1]
     : (ev.diagnostico_integral && ev.diagnostico_integral.confirmado ? ev.diagnostico_integral : null);
   const tensionSistemica = ultimoDI ? ((ultimoDI.contenido && ultimoDI.contenido.tension_sistemica) || ultimoDI.tension_sistemica) : null;
+  // N2.4: proyectivos[] sigue el mismo criterio -- array que nunca se pisa, vigente es el último.
+  const proys = Array.isArray(ev.proyectivos) ? ev.proyectivos : null;
+  const ultimoProy = (proys && proys.length) ? proys[proys.length - 1] : null;
+  const sintesisProyectiva = ultimoProy && ultimoProy.contenido ? ultimoProy.contenido.sintesis_proyectiva : null;
   const resumen = PRODUCTO_NEGOCIOS_PRO + ' — diagnóstico rápido: ' +
     dims.map(function(d){
       return d.cod + ' ' + (d.estado || 'desconocida') + (d.tension_principal ? ' (' + d.tension_principal + ')' : '');
     }).join(' · ') +
     (ev.sintesis ? '. Síntesis: ' + ev.sintesis : '') +
-    (tensionSistemica ? '. Diagnóstico integral (v' + ultimoDI.version + '): ' + tensionSistemica : '');
+    (tensionSistemica ? '. Diagnóstico integral (v' + ultimoDI.version + '): ' + tensionSistemica : '') +
+    (sintesisProyectiva ? '. Proyectivo (v' + ultimoProy.version + '): ' + sintesisProyectiva : '');
   destino.evaluaciones_negocio_pro.push({ version: version, fecha: new Date().toISOString(), resumen: resumen, datos: datos });
   destino.actualizado = new Date().toISOString();
   guardarOrganismo(destino);
@@ -6796,6 +6801,44 @@ function correrPruebasAuto(){
         adjuntarEvaluacionNegocioPro(payload, true);
         var r = o.evaluaciones_negocio_pro[0].resumen;
         return r.indexOf('Diagnóstico integral') === -1 && r.indexOf('B1 estable') > -1;
+      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('IMP·6 · resumen incluye el último proyectivos[] confirmado (N2.4)', (function(){
+      var o = { id:'org_imp6_test', nombre:'Proyectivo Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
+      var origGuardar = guardarOrganismo, origState = state.organismo;
+      try{
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = null;
+        var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp6_test',
+          evaluacion: { alcance:'rapida', version:1, estado:'cerrada', dimensiones: [
+            { cod:'B1', nombre:'Identidad y dirección', estado:'estable' }
+          ], sintesis:'', diagnosticos_integrales: [
+            { version:1, fecha:'x', confirmado:true, contenido:{ tension_sistemica:'la presión de margen se transfiere desde mercado a economía' } }
+          ], proyectivos: [
+            { version:1, fecha:'x', confirmado:true, contenido:{ sintesis_proyectiva:'primera exploración' } },
+            { version:2, fecha:'y', confirmado:true, contenido:{ sintesis_proyectiva:'reorganizar la relación comercial reduciría la dependencia de pocos clientes' } }
+          ] } };
+        adjuntarEvaluacionNegocioPro(payload, true);
+        var r = o.evaluaciones_negocio_pro[0].resumen;
+        // tiene que usar la ÚLTIMA versión (v2), no la primera, y no perder el diagnóstico integral
+        return r.indexOf('Proyectivo (v2): reorganizar la relación comercial reduciría la dependencia de pocos clientes') > -1
+          && r.indexOf('primera exploración') === -1
+          && r.indexOf('Diagnóstico integral (v1)') > -1;
+      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('IMP·7 · resumen se comporta igual que N2.3 cuando no hay proyectivo confirmado', (function(){
+      var o = { id:'org_imp7_test', nombre:'Sin Proyectivo Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
+      var origGuardar = guardarOrganismo, origState = state.organismo;
+      try{
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = null;
+        var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp7_test',
+          evaluacion: { alcance:'rapida', version:1, estado:'cerrada', dimensiones: [
+            { cod:'B1', nombre:'Identidad y dirección', estado:'estable' }
+          ], sintesis:'', diagnosticos_integrales: [], proyectivos: [] } };
+        adjuntarEvaluacionNegocioPro(payload, true);
+        var r = o.evaluaciones_negocio_pro[0].resumen;
+        return r.indexOf('Proyectivo') === -1 && r.indexOf('B1 estable') > -1;
       } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
 
