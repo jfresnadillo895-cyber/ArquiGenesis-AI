@@ -107,7 +107,7 @@ main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
 .dec-btn{font-size:.72rem;background:none;border:1px solid var(--linea);border-radius:6px;padding:4px 9px;cursor:pointer;}
 .dec-condicion-box{margin-top:10px;border-top:1px solid var(--linea);padding-top:10px;}
 .dec-condicion-box textarea{width:100%;font-size:.8rem;margin-bottom:6px;}
-.dec-relacion{font-size:.78rem;color:var(--texto-suave);padding:4px 0;font-family:'IBM Plex Mono',monospace;}
+.dec-relacion{font-size:.78rem;color:var(--texto-suave);padding:4px 0;}
 .export-box{width:100%;min-height:220px;max-height:44vh;background:var(--fondo-card);border:1px solid var(--linea);border-radius:6px;padding:12px;color:var(--texto);font-family:'IBM Plex Mono',monospace;font-size:.72rem;line-height:1.5;resize:vertical;}
 footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:.65rem;color:var(--texto-suave);letter-spacing:.06em;line-height:2;}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
@@ -3731,6 +3731,10 @@ function renderDecisionesVisual(decisiones, relaciones){
   var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '8px';
   h.textContent = 'Decisiones';
   cont.appendChild(h);
+  // los ids D1/D2/... son internos (para que la IA pueda referenciar dependencias y relaciones) --
+  // nunca deben llegar al texto visible, ni acá ni en relaciones: siempre se muestra el título.
+  var tituloPorId = {};
+  (decisiones || []).forEach(function(d){ tituloPorId[d.id] = d.titulo; });
   (decisiones || []).forEach(function(d){
     var card = document.createElement('div'); card.className = 'dec-card';
     var head = document.createElement('div'); head.className = 'dec-head';
@@ -3744,7 +3748,9 @@ function renderDecisionesVisual(decisiones, relaciones){
     var partes = [d.decision, 'Criterio principal: ' + d.criterio_principal];
     if(d.riesgos_aceptados && d.riesgos_aceptados.length) partes.push('Riesgos aceptados: ' + d.riesgos_aceptados.join('; '));
     if(d.condiciones_activacion && d.condiciones_activacion.length) partes.push('Condiciones: ' + d.condiciones_activacion.join('; '));
-    if(d.dependencias && d.dependencias.length) partes.push('Depende de: ' + d.dependencias.join(', '));
+    if(d.dependencias && d.dependencias.length){
+      partes.push('Depende de: ' + d.dependencias.map(function(id){ return tituloPorId[id] || id; }).join(', '));
+    }
     cuerpo.textContent = partes.join('  —  ');
     card.appendChild(cuerpo);
 
@@ -3812,9 +3818,11 @@ function renderDecisionesVisual(decisiones, relaciones){
     var hr = document.createElement('div'); hr.style.fontWeight = '500'; hr.style.marginBottom = '6px';
     hr.textContent = 'Relaciones entre decisiones';
     contRel.appendChild(hr);
+    var tituloPorIdRel = {};
+    (decisiones || []).forEach(function(d){ tituloPorIdRel[d.id] = d.titulo; });
     relaciones.forEach(function(r){
       var linea = document.createElement('div'); linea.className = 'dec-relacion';
-      linea.textContent = r.origen + ' → ' + (TIPO_RELACION_DECISION_LABEL[r.tipo] || r.tipo).toLowerCase() + ' → ' + r.destino + ' (' + r.explicacion + ')';
+      linea.textContent = (tituloPorIdRel[r.origen] || r.origen) + ' → ' + (TIPO_RELACION_DECISION_LABEL[r.tipo] || r.tipo).toLowerCase() + ' → ' + (tituloPorIdRel[r.destino] || r.destino) + ' (' + r.explicacion + ')';
       contRel.appendChild(linea);
     });
   }
