@@ -3782,6 +3782,31 @@ function adjuntarEvaluacionNegocioPro(datos, silencioso, forzarDestino){
     if(sinResolver) partes.push(sinResolver + ' sin resolver');
     resumenDecisiones = partes.length ? partes.join(', ') : null;
   }
+  // N2.6: ejecucion_actual (ciclo VIVO) o, si no hay, el último de ejecuciones[] (cerrado) --
+  // nunca se mezclan en la persistencia, pero el resumen sí necesita mostrar cuál está vigente.
+  // Breve a propósito (punto 26 del diff): solo estado general, acciones críticas, bloqueos,
+  // desvíos y señal de recomprensión -- el detalle completo queda en la evaluación, no acá.
+  const ejecucionesArr = Array.isArray(ev.ejecuciones) ? ev.ejecuciones : [];
+  const ejecucionAbierta = ev.ejecucion_actual || null;
+  const ejecucionVigenteResumen = ejecucionAbierta || (ejecucionesArr.length ? ejecucionesArr[ejecucionesArr.length - 1] : null);
+  let resumenEjecucion = null;
+  if(ejecucionVigenteResumen){
+    const accs = Array.isArray(ejecucionVigenteResumen.acciones) ? ejecucionVigenteResumen.acciones : [];
+    const enCurso = accs.filter(function(a){ return a.estado === 'en_curso'; }).length;
+    const bloqueadas = accs.filter(function(a){ return a.estado === 'bloqueada'; }).length;
+    const completadas = accs.filter(function(a){ return a.estado === 'completada'; }).length;
+    const desvios = Array.isArray(ejecucionVigenteResumen.desvios) ? ejecucionVigenteResumen.desvios : [];
+    const ultimoDesvio = desvios.length ? desvios[desvios.length - 1] : null;
+    const senales = Array.isArray(ejecucionVigenteResumen.senales_recomprension) ? ejecucionVigenteResumen.senales_recomprension : [];
+    const partesEjec = [(ejecucionAbierta ? 'Ejecución activa' : 'Ejecución cerrada') + ' · ' + accs.length + ' acción(es)'];
+    if(enCurso) partesEjec.push(enCurso + ' en curso');
+    if(bloqueadas) partesEjec.push(bloqueadas + ' bloqueada(s)');
+    if(completadas) partesEjec.push(completadas + ' completada(s)');
+    if(ultimoDesvio) partesEjec.push('principal desvío: ' + ultimoDesvio.descripcion);
+    if(senales.length) partesEjec.push('requiere recomprensión (' + senales.length + ' señal(es))');
+    partesEjec.push(ejecucionAbierta ? 'sin cierre todavía' : 'ciclo cerrado');
+    resumenEjecucion = partesEjec.join(' · ');
+  }
   const resumen = PRODUCTO_NEGOCIOS_PRO + ' — diagnóstico rápido: ' +
     dims.map(function(d){
       return d.cod + ' ' + (d.estado || 'desconocida') + (d.tension_principal ? ' (' + d.tension_principal + ')' : '');
@@ -3789,6 +3814,7 @@ function adjuntarEvaluacionNegocioPro(datos, silencioso, forzarDestino){
     (ev.sintesis ? '. Síntesis: ' + ev.sintesis : '') +
     (tensionSistemica ? '. Diagnóstico integral (v' + ultimoDI.version + '): ' + tensionSistemica : '') +
     (sintesisProyectiva ? '. Proyectivo (v' + ultimoProy.version + '): ' + sintesisProyectiva : '') +
+    (resumenEjecucion ? '. ' + resumenEjecucion : '') +
     (resumenDecisiones ? '. Campo de decisiones (v' + ultimoCD.version + '): ' + resumenDecisiones : '');
   destino.evaluaciones_negocio_pro.push({ version: version, fecha: new Date().toISOString(), resumen: resumen, datos: datos });
   destino.actualizado = new Date().toISOString();
@@ -6900,6 +6926,57 @@ function correrPruebasAuto(){
         adjuntarEvaluacionNegocioPro(payload, true);
         var r = o.evaluaciones_negocio_pro[0].resumen;
         return r.indexOf('Campo de decisiones') === -1 && r.indexOf('B1 estable') > -1;
+      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('IMP·10 · resumen refleja una ejecución en curso (ejecucion_actual, no ejecuciones[]) con desvío y señal de recomprensión (N2.6)', (function(){
+      var o = { id:'org_imp10_test', nombre:'Ejecución Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
+      var origGuardar = guardarOrganismo, origState = state.organismo;
+      try{
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = null;
+        var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp10_test',
+          evaluacion: { alcance:'rapida', version:1, estado:'cerrada', dimensiones: [
+            { cod:'B1', nombre:'Identidad y dirección', estado:'estable' }
+          ], sintesis:'', diagnosticos_integrales: [], proyectivos: [], campos_decisiones: [],
+          ejecuciones: [ { version:1, fecha_creacion:'x', fecha_cierre:'y', confirmado:true, acciones:[{estado:'completada'}], desvios:[], senales_recomprension:[] } ],
+          ejecucion_actual: {
+            version: null, fecha_creacion: 'z', fecha_cierre: null, confirmado: false,
+            acciones: [ { estado:'en_curso' }, { estado:'bloqueada' } ],
+            desvios: [ { accion_id:'A1', tipo:'demora', descripcion:'el ciclo comercial es más largo de lo previsto', impacto:'medio' } ],
+            senales_recomprension: [ { fecha:'x', accion_id:'A1', motivo:'la dependencia comercial sigue siendo crítica', lectura_seguimiento_id:'LS_1' } ]
+          } } };
+        adjuntarEvaluacionNegocioPro(payload, true);
+        var r = o.evaluaciones_negocio_pro[0].resumen;
+        console.log('IMP10 resumen:', r);
+        // tiene que usar ejecucion_actual (la ABIERTA), no la cerrada v1 del array histórico
+        return r.indexOf('Ejecución activa') > -1 && r.indexOf('1 en curso') > -1 && r.indexOf('1 bloqueada') > -1
+          && r.indexOf('principal desvío: el ciclo comercial es más largo de lo previsto') > -1
+          && r.indexOf('requiere recomprensión (1 señal') > -1 && r.indexOf('sin cierre todavía') > -1;
+      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('IMP·11 · sin ejecucion_actual, el resumen usa el último ejecuciones[] cerrado; sin ninguna, no menciona ejecución', (function(){
+      var o1 = { id:'org_imp11a_test', nombre:'Ejecución Cerrada Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
+      var o2 = { id:'org_imp11b_test', nombre:'Sin Ejecución Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
+      var origGuardar = guardarOrganismo, origState = state.organismo;
+      try{
+        state.organismo = null;
+        guardarOrganismo = function(org){ o1 = org; };
+        adjuntarEvaluacionNegocioPro({ producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp11a_test',
+          evaluacion: { alcance:'rapida', version:1, estado:'cerrada', dimensiones:[{cod:'B1',nombre:'x',estado:'estable'}], sintesis:'',
+            diagnosticos_integrales:[], proyectivos:[], campos_decisiones:[],
+            ejecuciones: [ { version:1, fecha_creacion:'x', fecha_cierre:'y', confirmado:true, acciones:[{estado:'completada'}], desvios:[], senales_recomprension:[] } ],
+            ejecucion_actual: null } }, true);
+        var r1 = o1.evaluaciones_negocio_pro[0].resumen;
+        var ok1 = r1.indexOf('Ejecución cerrada') > -1 && r1.indexOf('ciclo cerrado') > -1 && r1.indexOf('Ejecución activa') === -1;
+
+        guardarOrganismo = function(org){ o2 = org; };
+        adjuntarEvaluacionNegocioPro({ producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp11b_test',
+          evaluacion: { alcance:'rapida', version:1, estado:'cerrada', dimensiones:[{cod:'B1',nombre:'x',estado:'estable'}], sintesis:'',
+            diagnosticos_integrales:[], proyectivos:[], campos_decisiones:[], ejecuciones:[], ejecucion_actual:null } }, true);
+        var r2 = o2.evaluaciones_negocio_pro[0].resumen;
+        var ok2 = r2.indexOf('Ejecución') === -1 && r2.indexOf('B1 estable') > -1;
+
+        return ok1 && ok2;
       } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
 

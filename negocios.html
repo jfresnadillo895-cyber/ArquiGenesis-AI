@@ -108,6 +108,20 @@ main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
 .dec-condicion-box{margin-top:10px;border-top:1px solid var(--linea);padding-top:10px;}
 .dec-condicion-box textarea{width:100%;font-size:.8rem;margin-bottom:6px;}
 .dec-relacion{font-size:.78rem;color:var(--texto-suave);padding:4px 0;}
+/* ---- N2.6: ejecución y seguimiento -- reutiliza .dec-card/.dec-head/.dec-titulo/.dec-cuerpo/
+   .dec-acciones/.dec-btn/.dec-estado-badge de N2.5 (misma forma visual), suma los estados propios
+   de una acción (alfabeto disjunto del de una decisión, así que no colisiona). ---- */
+.dec-estado-badge.est-pendiente{background:none;color:var(--texto-suave);border-color:var(--linea);}
+.dec-estado-badge.est-en_curso{background:#e8eef7;color:#2b4c6f;border-color:#cdd9ea;}
+.dec-estado-badge.est-bloqueada{background:#fff3d6;color:#8a6100;border-color:#f0dda3;}
+.dec-estado-badge.est-completada{background:#e3f3e6;color:#1f6b34;border-color:#bfe3c6;}
+.dec-estado-badge.est-cancelada{background:#f7e6e6;color:#8a2f2f;border-color:#eec6c6;}
+.ejec-indicador{border:1px solid var(--linea);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:.8rem;background:var(--fondo-card);}
+.ejec-evidencia{border-left:2px solid var(--linea);padding:4px 0 4px 10px;margin-bottom:6px;font-size:.8rem;color:var(--texto-suave);}
+.ejec-seguimiento{border-top:1px solid var(--linea);padding:10px 0;font-size:.82rem;}
+.ejec-seguimiento .fecha{font-family:'IBM Plex Mono',monospace;font-size:.68rem;color:var(--texto-suave);}
+.ejec-lectura-card{border:1px solid var(--linea);border-radius:8px;padding:12px 14px;margin:10px 0;background:var(--acento-suave);}
+.ejec-senal{border-left:2px solid var(--presion,#a33);padding:4px 0 4px 10px;margin-bottom:6px;font-size:.78rem;color:var(--texto-suave);}
 .export-box{width:100%;min-height:220px;max-height:44vh;background:var(--fondo-card);border:1px solid var(--linea);border-radius:6px;padding:12px;color:var(--texto);font-family:'IBM Plex Mono',monospace;font-size:.72rem;line-height:1.5;resize:vertical;}
 footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:.65rem;color:var(--texto-suave);letter-spacing:.06em;line-height:2;}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
@@ -183,7 +197,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 <div id="modulosMenu"></div>
 
 <header>
-  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Negocios</b></div><div class="cai-baja">Pro · N2.5</div></div></div>
+  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Negocios</b></div><div class="cai-baja">Pro · N2.6</div></div></div>
   <span style="flex:1"></span>
   <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
   <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
@@ -232,11 +246,13 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
       <button class="btn secundario" id="btnVerIntegral" onclick="irADiagnosticoIntegral()" disabled>Ver diagnóstico integral</button>
       <button class="btn secundario" id="btnVerProyectivo" onclick="irAProyectivo()" disabled>Explorar proyectivo</button>
       <button class="btn secundario" id="btnVerDecisiones" onclick="irACampoDecisiones()" disabled>Abrir Campo de Decisiones</button>
+      <button class="btn secundario" id="btnVerEjecucion" onclick="irAEjecucion()" disabled>Abrir Ejecución y Seguimiento</button>
       <button class="btn" id="btnCerrarDiagnostico" onclick="cerrarEvaluacion()">Cerrar evaluación</button>
     </div>
     <p class="hint" id="hintIntegral" style="margin-top:10px">Confirmá al menos dos dimensiones para ver relaciones entre ellas.</p>
     <p class="hint" id="hintProyectivo" style="margin-top:4px">Confirmá un diagnóstico integral para explorar el proyectivo.</p>
     <p class="hint" id="hintDecisiones" style="margin-top:4px">Confirmá un proyectivo para abrir el Campo de Decisiones.</p>
+    <p class="hint" id="hintEjecucion" style="margin-top:4px">Adoptá o condicioná al menos una decisión para abrir Ejecución y Seguimiento.</p>
   </div>
 </section>
 
@@ -434,6 +450,74 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
   </div>
 </section>
 
+<!-- ============ EJECUCIÓN Y SEGUIMIENTO (N2.6) ============ -->
+<section id="pantallaEjecucion" class="pantalla">
+  <div class="form-card">
+    <h3>Ejecución y seguimiento</h3>
+
+    <div id="ejecVistaLista">
+      <p class="hint" style="margin-bottom:16px">A partir de las decisiones adoptadas o condicionadas, este espacio convierte esas decisiones en acciones observables y registra su evolución real -- esperado vs. ocurrido. La IA ayuda a preparar y a leer; el usuario confirma cada acción, cada estado y cada cierre.</p>
+      <div id="ejecResumenGeneral" style="border:1px solid var(--linea);border-radius:8px;padding:14px 16px;margin-bottom:18px"></div>
+
+      <h4 style="font-size:.88rem;font-weight:500;margin-bottom:8px">Decisiones activas</h4>
+      <div id="ejecDecisionesActivas" style="margin-bottom:18px"></div>
+
+      <h4 style="font-size:.88rem;font-weight:500;margin-bottom:8px">Acciones</h4>
+      <div id="ejecAccionesExistentes" style="margin-bottom:10px"></div>
+
+      <div class="acciones">
+        <button class="btn secundario" onclick="volverASelectorDesdeEjecucion()">Volver</button>
+        <button class="btn secundario" id="btnCerrarEjecucion" onclick="abrirCierreEjecucion()" disabled>Cerrar ejecución</button>
+      </div>
+    </div>
+
+    <div id="ejecVistaPreparar" style="display:none">
+      <div id="ejecPrepararContexto" style="margin-bottom:14px;border:1px solid var(--linea);border-radius:8px;padding:14px 16px"></div>
+      <div id="ejecHilo" class="dimhilo"></div>
+      <div id="ejecCargando" class="hint" style="display:none;margin:6px 0">Pensando…</div>
+      <div class="campo" style="margin-top:10px">
+        <textarea id="ejecInput" placeholder="Escribí acá si querés agregar algo…" rows="2"></textarea>
+      </div>
+      <div class="acciones">
+        <button class="btn secundario" onclick="volverAListaEjecucion()">Volver</button>
+        <button class="btn" id="btnEnviarEjec" onclick="enviarTurnoDesdeInputEjecucion()">Enviar</button>
+      </div>
+
+      <div id="ejecPropuestaCard" style="display:none;margin-top:22px;border-top:1px solid var(--linea);padding-top:18px">
+        <h4 style="font-size:.95rem;font-weight:500;margin-bottom:10px">Acciones propuestas</h4>
+        <p class="hint" style="margin-bottom:12px">Cada una se agrega por separado -- ninguna se incorpora sola.</p>
+        <div id="ejecAccionesPropuestas" style="margin-bottom:14px"></div>
+        <div id="ejecFaltantes" style="font-size:.85rem;color:var(--texto-suave);margin-bottom:6px"></div>
+        <div class="acciones">
+          <button class="btn secundario" onclick="seguirProfundizandoEjecucion()">Seguir profundizando</button>
+          <button class="btn secundario" onclick="mostrarCorreccionEjecucion()">Corregir</button>
+        </div>
+        <div id="ejecCorreccionBox" class="campo" style="display:none;margin-top:12px">
+          <textarea id="ejecCorreccionInput" placeholder="Qué corregirías de estas acciones…" rows="2"></textarea>
+          <div class="acciones" style="margin-top:8px">
+            <button class="btn" onclick="enviarCorreccionEjecucion()">Enviar corrección</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ejecVistaAccion" style="display:none">
+      <div id="ejecAccionDetalle"></div>
+      <div class="acciones" style="margin-top:14px">
+        <button class="btn secundario" onclick="volverAListaEjecucion()">Volver</button>
+      </div>
+    </div>
+
+    <div id="ejecVistaCierre" style="display:none">
+      <div id="ejecResumenCierre"></div>
+      <div class="acciones" style="margin-top:14px">
+        <button class="btn secundario" onclick="volverAListaEjecucion()">Volver</button>
+        <button class="btn" onclick="confirmarCierreEjecucion()">Confirmar cierre</button>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ CIERRE / EXPORTACIÓN ============ -->
 <section id="pantallaCierre" class="pantalla">
   <div class="form-card">
@@ -449,7 +533,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 
 </main>
 
-<footer>COMPRENDER · NEGOCIOS PRO — versión profesional (N2.5) · Un producto de ARQUIGÉNESIS</footer>
+<footer>COMPRENDER · NEGOCIOS PRO — versión profesional (N2.6) · Un producto de ARQUIGÉNESIS</footer>
 
 <script>
 /* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
@@ -2054,7 +2138,18 @@ var state = {
   propuestaDecisiones: null,   // "contenido" pendiente de confirmar -- decisiones acá llevan ademas estado_propuesto (transitorio, nunca persiste)
   historialDecisiones: [],     // [{role,content}] turnos de la conversación del campo de decisiones
   llamandoDecisiones: false,   // lock propio
-  criteriosUsuario: []         // [{nombre,peso,definicion_usuario,propio}] elegidos por chips -- fuente humana primaria, nunca pisada por la IA
+  criteriosUsuario: [],        // [{nombre,peso,definicion_usuario,propio}] elegidos por chips -- fuente humana primaria, nunca pisada por la IA
+
+  // ---- N2.6: ejecución y seguimiento ----
+  ejecuciones: [],             // [{version,fecha_creacion,fecha_cierre,campo_decisiones_origen,acciones,indicadores,evidencias,desvios,senales_recomprension,estado_general,confirmado:true}] -- ciclos CERRADOS, array que nunca se pisa
+  ejecucionActual: null,       // ciclo operativo VIVO mientras está abierto -- nunca entra a ejecuciones[] hasta el cierre explícito (no es una "versión sin confirmar", es estado operativo real)
+  propuestaEjecucion: null,    // acciones candidatas de [[PLAN_EJECUCION]] pendientes de confirmación una por una
+  historialEjecucion: [],      // [{role,content}] turnos de la conversación para preparar el plan
+  llamandoEjecucion: false,    // lock propio
+  accionActiva: null,          // id de la acción abierta en la vista de seguimiento
+  propuestaSeguimiento: null,  // lectura de [[LECTURA_SEGUIMIENTO]] pendiente de aceptar/descartar
+  historialSeguimiento: [],    // [{role,content}] turnos de la conversación de seguimiento de la acción activa
+  llamandoSeguimiento: false   // lock propio
 };
 
 /* ---- N2.3: vocabulario de relaciones -- alfabeto cerrado, mismo criterio defensivo que
@@ -2102,6 +2197,33 @@ var TIPOS_RELACION_DECISION = ['compatible', 'condicionada', 'secuencial', 'inco
 var TIPO_RELACION_DECISION_LABEL = { compatible: 'Compatible', condicionada: 'Condicionada', secuencial: 'Secuencial', incompatible: 'Incompatible' };
 /* topes por versión del Campo (no acumulan contra el historial) -- decisión de diseño, no del documento original */
 var TOPE_DECISIONES = 6, TOPE_COMPARACIONES = 4, TOPE_CRITERIOS = 8, TOPE_RELACIONES_DECISION = 10;
+
+/* ---- N2.6: vocabulario de ejecución y seguimiento -- mismos criterios de alfabeto cerrado.
+   HORIZONTES/NIVELES_REVERSIBILIDAD no se reutilizan acá: una acción usa su propio alfabeto de
+   estado operativo, distinto del alfabeto cognitivo de una decisión. ---- */
+var ESTADOS_ACCION = ['pendiente', 'en_curso', 'bloqueada', 'completada', 'cancelada'];
+var ESTADO_ACCION_LABEL = { pendiente: 'Pendiente', en_curso: 'En curso', bloqueada: 'Bloqueada', completada: 'Completada', cancelada: 'Cancelada' };
+var PRIORIDADES_ACCION = ['alta', 'media', 'baja'];
+var PRIORIDAD_ACCION_LABEL = { alta: 'Alta', media: 'Media', baja: 'Baja' };
+var TIPOS_INDICADOR = ['cuantitativo', 'cualitativo'];
+var TIPO_INDICADOR_LABEL = { cuantitativo: 'Cuantitativo', cualitativo: 'Cualitativo' };
+var TIPOS_DESVIO = ['demora', 'bloqueo', 'resultado_inesperado', 'efecto_secundario', 'nueva_dependencia', 'supuesto_no_cumplido', 'indicador_contradice'];
+var TIPO_DESVIO_LABEL = {
+  demora: 'Demora', bloqueo: 'Bloqueo', resultado_inesperado: 'Resultado inesperado', efecto_secundario: 'Efecto secundario',
+  nueva_dependencia: 'Nueva dependencia', supuesto_no_cumplido: 'Supuesto no cumplido', indicador_contradice: 'Indicador que contradice la expectativa'
+};
+var IMPACTOS_DESVIO = ['alto', 'medio', 'bajo'];
+var TIPOS_EVIDENCIA = ['dato', 'observacion', 'documento', 'evento', 'feedback'];
+var TIPO_EVIDENCIA_LABEL = { dato: 'Dato', observacion: 'Observación', documento: 'Documento', evento: 'Evento', feedback: 'Feedback' };
+var ESTADOS_GENERALES_EJECUCION = ['no_iniciada', 'activa', 'bloqueada', 'parcialmente_completada', 'completada', 'cancelada', 'requiere_revision'];
+var ESTADO_GENERAL_EJECUCION_LABEL = {
+  no_iniciada: 'No iniciada', activa: 'Activa', bloqueada: 'Bloqueada', parcialmente_completada: 'Parcialmente completada',
+  completada: 'Completada', cancelada: 'Cancelada', requiere_revision: 'Requiere revisión'
+};
+/* topes de UNA generación/turno de la IA, no límite histórico de la ejecución -- ajuste de Javier (11/08) */
+var TOPE_ACCIONES = 6, TOPE_INDICADORES_TURNO = 4, TOPE_DESVIOS_LECTURA = 4;
+/* tope real del servidor (api/anthropic.js: MAX_TOKENS_TOPE=4000) -- N2.6 pide con margen, nunca lo excede */
+var MAX_TOKENS_PLAN_EJECUCION = 3400, MAX_TOKENS_LECTURA_SEGUIMIENTO = 2400;
 
 /* ---- C-06 · marco pendiente dejado por el Core (mismo mecanismo de un solo uso
    que usan Urbanismo/Contextos: se lee y se borra, no se reaplica en cada carga). */
@@ -2214,6 +2336,20 @@ function construirSelectorDimensiones(){
       : (state.camposDecisiones.length
           ? 'Campo de decisiones vigente: v' + state.camposDecisiones[state.camposDecisiones.length - 1].version + '.'
           : 'Ya podés abrir el Campo de Decisiones a partir del proyectivo confirmado.');
+  }
+  /* N2.6: Ejecución y Seguimiento necesita al menos una decisión activa (adoptada o
+     condicionada) en el Campo vigente -- una decisión descartada/postergada/en revisión no
+     genera ejecución. */
+  var btnEjec = document.getElementById('btnVerEjecucion');
+  var hintEjec = document.getElementById('hintEjecucion');
+  var activas = decisionesActivasDelCampoVigente();
+  if(btnEjec) btnEjec.disabled = activas.length === 0;
+  if(hintEjec){
+    hintEjec.textContent = activas.length === 0
+      ? 'Adoptá o condicioná al menos una decisión para abrir Ejecución y Seguimiento.'
+      : (ejecucionVigente()
+          ? 'Ejecución vigente: ' + (state.ejecucionActual ? 'ciclo en curso' : ('v' + state.ejecuciones[state.ejecuciones.length - 1].version + ' (cerrado)')) + '.'
+          : 'Ya podés abrir Ejecución y Seguimiento a partir de las decisiones activas.');
   }
 }
 function volverASelectorDimensiones(){
@@ -3958,6 +4094,1054 @@ function volverASelectorDesdeDecisiones(){
   mostrarPantalla('pantallaDiagnostico');
 }
 
+/* ================= N2.6 · Ejecución y Seguimiento =================
+   Convierte decisiones activas (adoptada, o condicionada) en acciones observables y registra su
+   evolución real. Distinción dura respecto de N2.5: acá la "confirmación" de una decisión ya
+   pasó -- lo que se agrega es estado OPERATIVO, no cognitivo. La IA nunca ejecuta nada: prepara
+   candidatas de acción y, más adelante, lee evidencia ya registrada por el usuario -- pero
+   "responsable", "participantes", "fecha_inicio", "fecha_objetivo" y toda evidencia SOLO nacen
+   de una interacción humana en la UI; ni siquiera existen como campos en el esquema que el parser
+   acepta del marcador de la IA (frontera estructural, no una validación que se pueda saltear).
+
+   Persistencia (ajuste de Javier, 11/08): a diferencia de N2.1-N2.5 (que confirman una foto
+   completa de una sola vez), la ejecución es un ciclo operativo largo -- state.ejecucionActual
+   es el ciclo VIVO mientras está abierto (no es una "propuesta sin confirmar", es estado
+   operativo real todavía no cerrado). Recién al cerrar explícitamente se archiva una copia en
+   evaluacion.ejecuciones[] con confirmado:true y fecha_cierre, y ejecucionActual vuelve a null.
+   Nunca se mezclan en el mismo array. */
+
+function decisionesActivasDelCampoVigente(){
+  var campo = ultimoCampoDecisionesConfirmado();
+  if(!campo) return [];
+  return (campo.contenido.decisiones || []).filter(function(d){ return d.estado === 'adoptada' || d.estado === 'condicionada'; });
+}
+function ejecucionVigente(){
+  if(state.ejecucionActual) return state.ejecucionActual;
+  return state.ejecuciones.length ? state.ejecuciones[state.ejecuciones.length - 1] : null;
+}
+/* Ajuste de Javier (11/08): nunca un booleano independiente -- se deriva siempre de
+   senales_recomprension[], así no puede haber dos fuentes de verdad desincronizadas. Una lectura
+   posterior con requiere_recomprension:false NUNCA borra una señal ya aceptada. */
+function ejecucionRequiereRecomprension(ejecucion){
+  return !!(ejecucion && ejecucion.senales_recomprension && ejecucion.senales_recomprension.length > 0);
+}
+function asegurarEjecucionActual(){
+  if(!state.ejecucionActual){
+    var campo = ultimoCampoDecisionesConfirmado();
+    if(!campo) return null;
+    state.ejecucionActual = {
+      version: null,   // se asigna recién al cerrar -- mientras está vivo no tiene "número histórico"
+      fecha_creacion: new Date().toISOString(),
+      fecha_cierre: null,
+      campo_decisiones_origen: {
+        version: campo.version, fecha: campo.fecha,
+        ids_decisiones_activas: decisionesActivasDelCampoVigente().map(function(d){ return d.id; })
+      },
+      acciones: [], indicadores: [], evidencias: [], desvios: [], senales_recomprension: [],
+      estado_general: 'no_iniciada',
+      confirmado: false
+    };
+  }
+  return state.ejecucionActual;
+}
+function recalcularEstadoGeneralEjecucion(ejec){
+  if(!ejec) return;
+  if(ejecucionRequiereRecomprension(ejec)){ ejec.estado_general = 'requiere_revision'; return; }
+  var acciones = ejec.acciones;
+  if(!acciones.length){ ejec.estado_general = 'no_iniciada'; return; }
+  var activas = acciones.filter(function(a){ return a.estado !== 'cancelada'; });
+  if(!activas.length){ ejec.estado_general = 'cancelada'; return; }
+  var completadas = activas.filter(function(a){ return a.estado === 'completada'; });
+  if(completadas.length === activas.length){ ejec.estado_general = 'completada'; return; }
+  var bloqueadas = activas.filter(function(a){ return a.estado === 'bloqueada'; });
+  if(bloqueadas.length === activas.length){ ejec.estado_general = 'bloqueada'; return; }
+  ejec.estado_general = completadas.length > 0 ? 'parcialmente_completada' : 'activa';
+}
+
+/* ---- resúmenes para el prompt ---- */
+function resumenDecisionesActivasParaEjecucion(){
+  var activas = decisionesActivasDelCampoVigente();
+  if(!activas.length) return 'Sin decisiones activas.';
+  var campo = ultimoCampoDecisionesConfirmado();
+  var partes = ['Campo de decisiones vigente: v' + campo.version + '.'];
+  activas.forEach(function(d){
+    partes.push('  [' + d.id + '] ' + d.titulo + ' -- ' + d.decision + ' (criterio: ' + d.criterio_principal + ', prioridad: ' + (d.prioridad || 'sin definir') + ', horizonte: ' + (d.horizonte || 'sin definir') + ')');
+    if(d.riesgos_aceptados && d.riesgos_aceptados.length) partes.push('    riesgos aceptados: ' + d.riesgos_aceptados.join('; '));
+    if(d.estado === 'condicionada' && d.condicion_detalle){
+      partes.push('    CONDICIONADA -- condición: ' + d.condicion_detalle.condicion + ' (evidencia necesaria: ' + d.condicion_detalle.evidencia_necesaria + ')');
+    }
+  });
+  return partes.join('\n');
+}
+function resumenAccionesExistentesParaEjecucion(){
+  var ejec = state.ejecucionActual;
+  if(!ejec || !ejec.acciones.length) return '';
+  return '\n\nACCIONES YA EXISTENTES EN ESTA EJECUCIÓN (no las propongas de nuevo; podés referenciarlas por id en depende_de):\n' +
+    ejec.acciones.map(function(a){ return '  [' + a.id + '] ' + a.titulo + ' (decisión ' + a.decision_id + ', estado: ' + a.estado + ')'; }).join('\n');
+}
+function resumenAccionParaSeguimiento(accion){
+  var ejec = state.ejecucionActual || ejecucionVigente();
+  var partes = [];
+  partes.push('Acción: ' + accion.titulo + ' -- objetivo: ' + accion.objetivo);
+  partes.push('Estado actual: ' + accion.estado + (accion.criterio_cierre.length ? '. Criterio de cierre: ' + accion.criterio_cierre.join('; ') : ''));
+  var campo = ultimoCampoDecisionesConfirmado();
+  var decision = campo ? (campo.contenido.decisiones || []).find(function(d){ return d.id === accion.decision_id; }) : null;
+  if(decision) partes.push('Decisión de origen: ' + decision.titulo + ' -- ' + decision.decision);
+  var evidenciasAccion = ejec ? ejec.evidencias.filter(function(e){ return e.accion_id === accion.id; }) : [];
+  if(evidenciasAccion.length){
+    partes.push('Evidencia registrada:');
+    evidenciasAccion.forEach(function(e){ partes.push('  - (' + e.tipo + ') ' + e.descripcion + (e.valor ? ' = ' + e.valor : '')); });
+  } else {
+    partes.push('Todavía no hay evidencia registrada para esta acción.');
+  }
+  if(accion.seguimientos.length){
+    partes.push('Seguimientos previos:');
+    accion.seguimientos.forEach(function(s){ partes.push('  - ' + s.fecha + ': ' + (s.avance || '(sin avance descripto)') + (s.bloqueos.length ? ' -- bloqueos: ' + s.bloqueos.join('; ') : '')); });
+  }
+  return partes.join('\n');
+}
+
+/* ---- PLAN_EJECUCION: prompt y llamada -- max_tokens respeta el tope real del servidor
+   (api/anthropic.js: MAX_TOKENS_TOPE=4000); no se pide más de lo que el servidor va a dar. ---- */
+function PROMPT_PLAN_EJECUCION(){
+  var campo = ultimoCampoDecisionesConfirmado();
+  var versionCampo = campo ? campo.version : 1;
+  return 'Tenés decisiones ya adoptadas o condicionadas de este negocio. Tu trabajo es ayudar a traducirlas en acciones concretas y observables -- vos no ejecutás nada, ni inventás quién ni cuándo.\n\n' +
+    'MARCO DEL NEGOCIO (del Core):\n' + resumenMarcoTexto() + '\n\n' +
+    'DECISIONES ACTIVAS:\n' + resumenDecisionesActivasParaEjecucion() +
+    resumenAccionesExistentesParaEjecucion() + '\n\n' +
+    'TAREA:\n' +
+    '1. Para cada decisión activa que todavía no tenga acciones, proponé 1 a 2 acciones concretas y observables -- nunca repitas la decisión con otras palabras: una acción es algo que se hace y se puede verificar.\n' +
+    '2. Si una decisión está CONDICIONADA: la primera acción siempre tiene que ser de comprobación de esa condición puntual; cualquier acción principal depende de esa comprobación ("depende_de") y su estado_propuesto tiene que ser "pendiente" o "bloqueada" -- nunca "en_curso" ni "completada".\n' +
+    '3. Nunca pongas responsable, participantes, fecha_inicio ni fecha_objetivo en el marcador -- esos campos no existen en este esquema. Si hace falta saber quién o cuándo, preguntalo en el texto visible.\n' +
+    '4. Los indicadores que propongas (indicadores_propuestos) tienen que servir para observar una hipótesis concreta de la decisión, no para llenar un tablero -- está bien que sean cualitativos y sin valor_objetivo si no corresponde.\n' +
+    '5. Nunca muestres códigos internos (B1-B6, TR1, D1, A1) en el texto visible: referite por título.\n' +
+    '6. PRIORIDAD DE FORMATO: empezá con el marcador. Cerralo completo -- una oración por campo, listas de máximo 2 ítems, hasta 4 acciones por turno (no fuerces una acción por cada decisión activa si son muchas). Recién después va el texto visible, breve.\n\n' +
+    'Cerrá con el marcador exacto (JSON válido, sin comentarios ni texto extra adentro):\n' +
+    '[[PLAN_EJECUCION:{\n' +
+    '  "acciones": [ { "id":"A1", "decision_id":"D1", "titulo":"...", "objetivo":"...", "estado_propuesto":"pendiente|en_curso|bloqueada|completada|cancelada", "prioridad":"alta|media|baja|null", "depende_de":["A0"], "condiciones_inicio":["..."], "criterio_cierre":["..."], "indicadores_propuestos":[{"nombre":"...","que_observa":"...","tipo":"cuantitativo|cualitativo","unidad":"...","valor_objetivo":"...","fuente":"...","frecuencia_revision":"..."}], "riesgos_operativos":["..."], "notas":"..." } ],\n' +
+    '  "faltantes_para_ejecutar": ["..."]\n' +
+    '}]]\n' +
+    'seguido, recién ahí, de un texto visible de 2 a 4 líneas. Versión del Campo de decisiones vigente: ' + versionCampo + '.';
+}
+function llamarIAPlanEjecucion(mensajes){
+  return fetch('/api/anthropic', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: MAX_TOKENS_PLAN_EJECUCION, system: PROMPT_PLAN_EJECUCION(), messages: mensajes })
+  }).then(function(res){
+    return res.json().catch(function(){ return {}; }).then(function(data){
+      if(!res.ok){
+        var err = new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+        err.codigo = data && data.error && data.error.codigo;
+        throw err;
+      }
+      return (data.content || []).map(function(b){ return b.text || ''; }).join('');
+    });
+  });
+}
+
+/* ---- validadores defensivos ---- */
+function validarIndicadorPropuesto(i){
+  if(!i || typeof i !== 'object') return null;
+  if(!i.nombre || !i.que_observa) return null;
+  var tipo = TIPOS_INDICADOR.indexOf(i.tipo) > -1 ? i.tipo : null;
+  if(!tipo) return null;
+  return {
+    nombre: i.nombre, que_observa: i.que_observa, tipo: tipo,
+    unidad: (typeof i.unidad === 'string') ? i.unidad : '',
+    valor_objetivo: (i.valor_objetivo !== undefined && i.valor_objetivo !== null) ? String(i.valor_objetivo) : '',
+    fuente: (typeof i.fuente === 'string') ? i.fuente : '',
+    frecuencia_revision: (typeof i.frecuencia_revision === 'string') ? i.frecuencia_revision : ''
+  };
+}
+/* Trazabilidad: decision_id tiene que ser una decisión activa real del Campo vigente, si no la
+   acción entera se descarta. responsable/participantes/fecha_inicio/fecha_objetivo NO se leen acá
+   -- ni existen como propiedad esperada -- así no hay ningún camino estructural para que un dato
+   alucinado por el modelo llegue a persistencia (ajuste de Javier, 11/08). */
+function validarAccionPropuesta(a, idsDecisionesActivas){
+  if(!a || typeof a !== 'object') return null;
+  if(!a.id || typeof a.id !== 'string') return null;
+  if(!a.titulo || !a.objetivo) return null;
+  if(!a.decision_id || idsDecisionesActivas.indexOf(a.decision_id) === -1) return null;
+
+  var estadoPropuesto = ESTADOS_ACCION.indexOf(a.estado_propuesto) > -1 ? a.estado_propuesto : null;
+  var prioridad = PRIORIDADES_ACCION.indexOf(a.prioridad) > -1 ? a.prioridad : null;
+  var dependenciasRaw = Array.isArray(a.depende_de) ? a.depende_de.filter(function(x){ return typeof x === 'string' && x !== a.id; }) : [];
+  var indicadoresPropuestos = (Array.isArray(a.indicadores_propuestos) ? a.indicadores_propuestos : [])
+    .map(validarIndicadorPropuesto).filter(Boolean).slice(0, TOPE_INDICADORES_TURNO);
+
+  return {
+    id: a.id, decision_id: a.decision_id, titulo: a.titulo, objetivo: a.objetivo,
+    estado_propuesto: estadoPropuesto, prioridad: prioridad,
+    dependencias_propuestas: dependenciasRaw,   // sin resolver todavía -- ver resolverDependenciasAcciones()
+    condiciones_inicio: listaStringsIntegral(a.condiciones_inicio),
+    criterio_cierre: listaStringsIntegral(a.criterio_cierre),
+    indicadores_propuestos: indicadoresPropuestos,
+    riesgos_operativos: listaStringsIntegral(a.riesgos_operativos),
+    notas: (typeof a.notas === 'string') ? a.notas : ''
+  };
+}
+/* Ajuste de Javier (11/08): una dependencia hacia una acción todavía no confirmada se conserva
+   como "propuesta" (dependencias_propuestas) -- no se descarta de entrada ni se persiste como
+   depende_de operativo hasta que la acción objetivo exista de verdad (ya persistida, o parte de
+   la misma tanda de propuesta). Si nunca llega a confirmarse, no queda una referencia huérfana. */
+function resolverDependenciasAcciones(depsRaw, idsConfirmados, idsEnEstaPropuesta, propioId){
+  var dependeDe = [], dependenciasPropuestas = [];
+  (depsRaw || []).forEach(function(id){
+    if(id === propioId) return;
+    if(idsConfirmados.indexOf(id) > -1){ dependeDe.push(id); return; }
+    if(idsEnEstaPropuesta.indexOf(id) > -1){ dependenciasPropuestas.push(id); return; }
+    // no existe en ningún lado conocido -- se descarta, nunca queda huérfana
+  });
+  return { depende_de: dependeDe, dependencias_propuestas: dependenciasPropuestas };
+}
+function parsePlanEjecucion(texto){
+  var re = /\[\[PLAN_EJECUCION:([\s\S]*?)\]\]/;
+  var m = texto.match(re);
+  if(!m){
+    var apertura = texto.indexOf('[[PLAN_EJECUCION:');
+    var visibleSinCierre = (apertura > -1 ? texto.slice(0, apertura) : texto).trim();
+    return { visible: visibleSinCierre, propuesta: null };
+  }
+  var visible = (texto.slice(0, m.index) + texto.slice(m.index + m[0].length)).trim();
+  var datos;
+  try{ datos = JSON.parse(m[1]); }catch(e){ return { visible: visible, propuesta: null }; }
+  if(!datos || typeof datos !== 'object' || !Array.isArray(datos.acciones)) return { visible: visible, propuesta: null };
+
+  var idsDecisionesActivas = decisionesActivasDelCampoVigente().map(function(d){ return d.id; });
+  if(!idsDecisionesActivas.length) return { visible: visible, propuesta: null };
+
+  var vistos = {};
+  var acciones = datos.acciones
+    .map(function(a){ return validarAccionPropuesta(a, idsDecisionesActivas); })
+    .filter(Boolean)
+    .filter(function(a){ if(vistos[a.id]) return false; vistos[a.id] = true; return true; })
+    .slice(0, TOPE_ACCIONES);
+  if(!acciones.length) return { visible: visible, propuesta: null };
+
+  return { visible: visible, propuesta: { acciones: acciones, faltantes_para_ejecutar: listaStringsIntegral(datos.faltantes_para_ejecutar) } };
+}
+
+/* ---- confirmación individual de cada acción -- nunca un "confirmar todo" (ajuste de Javier) ---- */
+function encontrarAccionPropuesta(id){
+  if(!state.propuestaEjecucion) return null;
+  return state.propuestaEjecucion.acciones.find(function(a){ return a.id === id; }) || null;
+}
+function registrarCambioAccion(accion, campo, anterior, nuevo, motivo){
+  if(anterior === nuevo) return;
+  accion.cambios.push({ fecha: new Date().toISOString(), campo: campo, anterior: anterior, nuevo: nuevo, motivo: motivo || '' });
+}
+function confirmarAccion(accionPropuestaId, datos){
+  var propuesta = encontrarAccionPropuesta(accionPropuestaId);
+  if(!propuesta) return;
+  var ejec = asegurarEjecucionActual();
+  if(!ejec) return;
+
+  var idsConfirmados = ejec.acciones.map(function(a){ return a.id; });
+  var idsEnEstaPropuesta = state.propuestaEjecucion.acciones.map(function(a){ return a.id; });
+  var resuelto = resolverDependenciasAcciones(propuesta.dependencias_propuestas, idsConfirmados, idsEnEstaPropuesta, propuesta.id);
+
+  var accion = {
+    id: propuesta.id, decision_id: propuesta.decision_id, titulo: propuesta.titulo, objetivo: propuesta.objetivo,
+    estado: (ESTADOS_ACCION.indexOf(datos.estadoInicial) > -1) ? datos.estadoInicial : 'pendiente',
+    prioridad: propuesta.prioridad,
+    responsable: (typeof datos.responsable === 'string' && datos.responsable.trim()) ? datos.responsable.trim() : null,
+    participantes: Array.isArray(datos.participantes) ? datos.participantes.filter(Boolean) : [],
+    fecha_inicio: datos.fecha_inicio || null,
+    fecha_objetivo: datos.fecha_objetivo || null,
+    fecha_cierre_real: null,
+    depende_de: resuelto.depende_de,
+    dependencias_propuestas: resuelto.dependencias_propuestas,
+    condiciones_inicio: propuesta.condiciones_inicio,
+    criterio_cierre: propuesta.criterio_cierre,
+    riesgos_operativos: propuesta.riesgos_operativos,
+    notas: propuesta.notas,
+    resultado: null,
+    resultado_esperado_cumplido: null,   // separado de "estado: completada" (ajuste de Javier)
+    seguimientos: [],
+    cambios: [],
+    fecha_alta: new Date().toISOString()
+  };
+  ejec.acciones.push(accion);
+
+  // indicadores: SOLO los que el usuario marcó explícitamente en este mismo formulario -- ninguno
+  // se incorpora automáticamente por el solo hecho de confirmar la acción (ajuste de Javier).
+  (datos.indicadoresConfirmados || []).forEach(function(ind){
+    var base = propuesta.indicadores_propuestos[ind.idx];
+    if(!base) return;
+    ejec.indicadores.push({
+      id: 'I' + (ejec.indicadores.length + 1) + '_' + Date.now().toString(36),
+      accion_id: accion.id, nombre: base.nombre, que_observa: base.que_observa, tipo: base.tipo,
+      unidad: base.unidad, valor_inicial: ind.valor_inicial || '', valor_objetivo: ind.valor_objetivo || base.valor_objetivo || '',
+      valor_actual: ind.valor_inicial || '', fuente: base.fuente, frecuencia_revision: base.frecuencia_revision,
+      fecha_ultima_medicion: null
+    });
+  });
+
+  // promueve dependencias_propuestas pendientes en OTRAS acciones ya confirmadas que apuntaban a ésta
+  ejec.acciones.forEach(function(otra){
+    if(otra.id === accion.id) return;
+    var idx = otra.dependencias_propuestas.indexOf(accion.id);
+    if(idx > -1){
+      otra.dependencias_propuestas.splice(idx, 1);
+      if(otra.depende_de.indexOf(accion.id) === -1) otra.depende_de.push(accion.id);
+    }
+  });
+
+  state.propuestaEjecucion.acciones = state.propuestaEjecucion.acciones.filter(function(a){ return a.id !== accionPropuestaId; });
+  recalcularEstadoGeneralEjecucion(ejec);
+}
+function descartarAccionPropuesta(id){
+  if(!state.propuestaEjecucion) return;
+  state.propuestaEjecucion.acciones = state.propuestaEjecucion.acciones.filter(function(a){ return a.id !== id; });
+  // limpia referencias pendientes hacia esta id en acciones YA confirmadas -- nunca queda huérfana
+  if(state.ejecucionActual){
+    state.ejecucionActual.acciones.forEach(function(otra){
+      var idx = otra.dependencias_propuestas.indexOf(id);
+      if(idx > -1) otra.dependencias_propuestas.splice(idx, 1);
+    });
+  }
+}
+function cambiarEstadoAccion(accionId, nuevoEstado, motivo){
+  var ejec = state.ejecucionActual;
+  if(!ejec) return;
+  var accion = ejec.acciones.find(function(a){ return a.id === accionId; });
+  if(!accion || ESTADOS_ACCION.indexOf(nuevoEstado) === -1) return;
+  registrarCambioAccion(accion, 'estado', accion.estado, nuevoEstado, motivo);
+  accion.estado = nuevoEstado;
+  recalcularEstadoGeneralEjecucion(ejec);
+}
+
+/* ---- evidencia: exclusivamente humana -- ni PLAN_EJECUCION ni LECTURA_SEGUIMIENTO pueden
+   crear entradas acá (ajuste de Javier, 11/08). ---- */
+function registrarEvidencia(accionId, datos){
+  var ejec = state.ejecucionActual;
+  if(!ejec || !datos || !datos.descripcion) return null;
+  var tipo = TIPOS_EVIDENCIA.indexOf(datos.tipo) > -1 ? datos.tipo : 'observacion';
+  var evidencia = {
+    id: 'E' + (ejec.evidencias.length + 1) + '_' + Date.now().toString(36),
+    fecha: new Date().toISOString(), accion_id: accionId, indicador_id: datos.indicador_id || null,
+    tipo: tipo, descripcion: datos.descripcion, valor: datos.valor || '', fuente: datos.fuente || '',
+    aportado_por_usuario: true
+  };
+  ejec.evidencias.push(evidencia);
+  if(evidencia.indicador_id && datos.valor){
+    var ind = ejec.indicadores.find(function(i){ return i.id === evidencia.indicador_id; });
+    if(ind){ ind.valor_actual = datos.valor; ind.fecha_ultima_medicion = evidencia.fecha; }
+  }
+  return evidencia.id;
+}
+/* ---- seguimiento: append-only, nunca reemplaza un registro anterior ---- */
+function registrarSeguimiento(accionId, datos){
+  var ejec = state.ejecucionActual;
+  if(!ejec) return;
+  var accion = ejec.acciones.find(function(a){ return a.id === accionId; });
+  if(!accion) return;
+  accion.seguimientos.push({
+    fecha: new Date().toISOString(), estado: accion.estado, avance: datos.avance || '',
+    evidencia: Array.isArray(datos.evidencia) ? datos.evidencia.slice() : [],
+    bloqueos: listaStringsIntegral(datos.bloqueos), cambios_contexto: listaStringsIntegral(datos.cambios_contexto),
+    observacion_usuario: datos.observacion_usuario || '', lectura_ia: null
+  });
+}
+
+/* ---- LECTURA_SEGUIMIENTO: prompt y llamada, siempre sobre UNA acción puntual ---- */
+function PROMPT_LECTURA_SEGUIMIENTO(accion){
+  return 'Estás leyendo la evolución real de UNA acción puntual, no de todo el ciclo de ejecución. Tu trabajo es comparar lo esperado contra lo que la evidencia realmente muestra -- nunca afirmes causalidad solo porque dos hechos coinciden en el tiempo.\n\n' +
+    'CONTEXTO:\n' + resumenAccionParaSeguimiento(accion) + '\n\n' +
+    'TAREA:\n' +
+    '1. Compará esperado vs. ocurrido con honestidad -- "consistente", "mejor de lo esperado", "peor de lo esperado", "diferente" o "insuficiente evidencia" son todas lecturas válidas.\n' +
+    '2. Señalá desvíos concretos (demora, bloqueo, resultado inesperado, efecto secundario, nueva dependencia, supuesto no cumplido, indicador que contradice) con su impacto.\n' +
+    '3. Marcá requiere_recomprension:true solo si esta evidencia realmente cuestiona el diagnóstico, el proyectivo o la decisión de origen -- no por cualquier demora operativa.\n' +
+    '4. Esto es una propuesta de lectura: el usuario decide si la acepta. No la presentes como un hecho ya asentado.\n' +
+    '5. Nunca muestres códigos internos (B1-B6, TR1, D1, A1) en el texto visible: referite por nombre.\n' +
+    '6. PRIORIDAD DE FORMATO: marcador primero, cerralo completo, listas de máximo 2 ítems.\n\n' +
+    'Cerrá con el marcador exacto:\n' +
+    '[[LECTURA_SEGUIMIENTO:{\n' +
+    '  "sintesis":"...", "esperado_vs_ocurrido":"...",\n' +
+    '  "desvios":[ { "tipo":"demora|bloqueo|resultado_inesperado|efecto_secundario|nueva_dependencia|supuesto_no_cumplido|indicador_contradice", "descripcion":"...", "impacto":"alto|medio|bajo" } ],\n' +
+    '  "nuevas_tensiones":["..."], "capacidades_confirmadas":["..."], "supuestos_cuestionados":["..."],\n' +
+    '  "requiere_recomprension":true|false, "motivo_recomprension":"..."\n' +
+    '}]]\n' +
+    'seguido, recién ahí, de un texto visible de 2 a 3 líneas.';
+}
+function llamarIALecturaSeguimiento(mensajes, accion){
+  return fetch('/api/anthropic', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: MAX_TOKENS_LECTURA_SEGUIMIENTO, system: PROMPT_LECTURA_SEGUIMIENTO(accion), messages: mensajes })
+  }).then(function(res){
+    return res.json().catch(function(){ return {}; }).then(function(data){
+      if(!res.ok){
+        var err = new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+        err.codigo = data && data.error && data.error.codigo;
+        throw err;
+      }
+      return (data.content || []).map(function(b){ return b.text || ''; }).join('');
+    });
+  });
+}
+function validarDesvio(d){
+  if(!d || typeof d !== 'object') return null;
+  if(TIPOS_DESVIO.indexOf(d.tipo) === -1) return null;
+  if(!d.descripcion) return null;
+  var impacto = IMPACTOS_DESVIO.indexOf(d.impacto) > -1 ? d.impacto : 'medio';
+  return { tipo: d.tipo, descripcion: d.descripcion, impacto: impacto };
+}
+function parseLecturaSeguimiento(texto){
+  var re = /\[\[LECTURA_SEGUIMIENTO:([\s\S]*?)\]\]/;
+  var m = texto.match(re);
+  if(!m){
+    var apertura = texto.indexOf('[[LECTURA_SEGUIMIENTO:');
+    var visibleSinCierre = (apertura > -1 ? texto.slice(0, apertura) : texto).trim();
+    return { visible: visibleSinCierre, propuesta: null };
+  }
+  var visible = (texto.slice(0, m.index) + texto.slice(m.index + m[0].length)).trim();
+  var datos;
+  try{ datos = JSON.parse(m[1]); }catch(e){ return { visible: visible, propuesta: null }; }
+  if(!datos || typeof datos !== 'object' || !datos.sintesis) return { visible: visible, propuesta: null };
+
+  var desvios = (Array.isArray(datos.desvios) ? datos.desvios : []).map(validarDesvio).filter(Boolean).slice(0, TOPE_DESVIOS_LECTURA);
+  return {
+    visible: visible,
+    propuesta: {
+      sintesis: datos.sintesis, esperado_vs_ocurrido: datos.esperado_vs_ocurrido || '',
+      desvios: desvios,
+      nuevas_tensiones: listaStringsIntegral(datos.nuevas_tensiones),
+      capacidades_confirmadas: listaStringsIntegral(datos.capacidades_confirmadas),
+      supuestos_cuestionados: listaStringsIntegral(datos.supuestos_cuestionados),
+      requiere_recomprension: datos.requiere_recomprension === true,
+      motivo_recomprension: (typeof datos.motivo_recomprension === 'string') ? datos.motivo_recomprension : ''
+    }
+  };
+}
+/* Aceptar una lectura es la ÚNICA vía por la que una interpretación de IA se vuelve estado
+   operativo -- crea un seguimiento con lectura_ia, suma los desvíos aceptados a ejec.desvios[], y
+   si requiere_recomprension viene true agrega una señal trazable (nunca resetea las anteriores). */
+function aceptarLecturaSeguimiento(accionId){
+  var ejec = state.ejecucionActual;
+  var lectura = state.propuestaSeguimiento;
+  if(!ejec || !lectura) return;
+  var accion = ejec.acciones.find(function(a){ return a.id === accionId; });
+  if(!accion) return;
+
+  accion.seguimientos.push({
+    fecha: new Date().toISOString(), estado: accion.estado, avance: '',
+    evidencia: ejec.evidencias.filter(function(e){ return e.accion_id === accionId; }).map(function(e){ return e.id; }),
+    bloqueos: [], cambios_contexto: [], observacion_usuario: '',
+    lectura_ia: lectura.sintesis + ' -- ' + lectura.esperado_vs_ocurrido
+  });
+
+  lectura.desvios.forEach(function(d){
+    ejec.desvios.push({ accion_id: accionId, tipo: d.tipo, descripcion: d.descripcion, impacto: d.impacto, requiere_revision: lectura.requiere_recomprension, fecha: new Date().toISOString() });
+  });
+
+  if(lectura.requiere_recomprension){
+    ejec.senales_recomprension.push({
+      fecha: new Date().toISOString(), accion_id: accionId,
+      motivo: lectura.motivo_recomprension || lectura.esperado_vs_ocurrido,
+      lectura_seguimiento_id: 'LS_' + Date.now().toString(36)
+    });
+  }
+
+  state.propuestaSeguimiento = null;
+  recalcularEstadoGeneralEjecucion(ejec);
+}
+function descartarLecturaSeguimiento(){
+  state.propuestaSeguimiento = null;
+}
+
+/* ---- cierre de acción: "completada" nunca implica "la hipótesis se confirmó" -- son dos
+   campos separados (ajuste de Javier, 11/08). ---- */
+function confirmarCierreAccion(accionId, datos){
+  var ejec = state.ejecucionActual;
+  if(!ejec) return;
+  var accion = ejec.acciones.find(function(a){ return a.id === accionId; });
+  if(!accion) return;
+  var nuevoEstado = (datos.estadoFinal === 'cancelada') ? 'cancelada' : 'completada';
+  registrarCambioAccion(accion, 'estado', accion.estado, nuevoEstado, 'cierre de acción');
+  accion.estado = nuevoEstado;
+  accion.fecha_cierre_real = new Date().toISOString();
+  accion.resultado = datos.resultado || '';
+  accion.resultado_esperado_cumplido = (datos.resultado_esperado_cumplido === true || datos.resultado_esperado_cumplido === false) ? datos.resultado_esperado_cumplido : null;
+  if(datos.aprendizajes) accion.notas = accion.notas ? (accion.notas + ' | Aprendizajes: ' + datos.aprendizajes) : ('Aprendizajes: ' + datos.aprendizajes);
+  recalcularEstadoGeneralEjecucion(ejec);
+}
+
+/* ================= flujo de pantallas ================= */
+function irAEjecucion(){
+  if(decisionesActivasDelCampoVigente().length === 0) return;
+  abrirEjecucion();
+}
+function abrirEjecucion(){
+  document.getElementById('ejecVistaPreparar').style.display = 'none';
+  document.getElementById('ejecVistaAccion').style.display = 'none';
+  document.getElementById('ejecVistaCierre').style.display = 'none';
+  document.getElementById('ejecVistaLista').style.display = 'block';
+  renderVistaListaEjecucion();
+  mostrarPantalla('pantallaEjecucion');
+}
+function volverAListaEjecucion(){
+  state.propuestaEjecucion = null;
+  state.historialEjecucion = [];
+  state.accionActiva = null;
+  state.propuestaSeguimiento = null;
+  state.historialSeguimiento = [];
+  document.getElementById('ejecVistaPreparar').style.display = 'none';
+  document.getElementById('ejecVistaAccion').style.display = 'none';
+  document.getElementById('ejecVistaCierre').style.display = 'none';
+  document.getElementById('ejecVistaLista').style.display = 'block';
+  renderVistaListaEjecucion();
+}
+function volverASelectorDesdeEjecucion(){
+  construirSelectorDimensiones();
+  mostrarPantalla('pantallaDiagnostico');
+}
+function renderTarjetaAccion(a){
+  var card = document.createElement('div'); card.className = 'dec-card'; card.style.cursor = 'pointer';
+  var head = document.createElement('div'); head.className = 'dec-head';
+  var tit = document.createElement('span'); tit.className = 'dec-titulo'; tit.textContent = a.titulo;
+  var badge = document.createElement('span'); badge.className = 'dec-estado-badge est-' + a.estado;
+  badge.textContent = ESTADO_ACCION_LABEL[a.estado] || a.estado;
+  head.appendChild(tit); head.appendChild(badge);
+  card.appendChild(head);
+  var cuerpo = document.createElement('div'); cuerpo.className = 'dec-cuerpo';
+  var partes = ['Responsable: ' + (a.responsable || 'sin definir')];
+  if(a.prioridad) partes.push('Prioridad: ' + (PRIORIDAD_ACCION_LABEL[a.prioridad] || a.prioridad));
+  if(a.fecha_objetivo) partes.push('Fecha objetivo: ' + a.fecha_objetivo);
+  var ultimoSeg = a.seguimientos.length ? a.seguimientos[a.seguimientos.length - 1] : null;
+  if(ultimoSeg && ultimoSeg.bloqueos.length) partes.push('Bloqueos: ' + ultimoSeg.bloqueos.join('; '));
+  cuerpo.textContent = partes.join('  —  ');
+  card.appendChild(cuerpo);
+  card.addEventListener('click', function(){ abrirVistaAccion(a.id); });
+  return card;
+}
+function renderVistaListaEjecucion(){
+  var ejec = ejecucionVigente();
+  var boxResumen = document.getElementById('ejecResumenGeneral');
+  boxResumen.innerHTML = '';
+  if(ejec){
+    var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '6px';
+    h.textContent = state.ejecucionActual ? 'Ejecución en curso' : ('Ejecución cerrada · v' + ejec.version);
+    var p = document.createElement('div'); p.style.fontSize = '.85rem'; p.style.color = 'var(--texto-suave)';
+    var nAcciones = ejec.acciones.length;
+    var nActivas = ejec.acciones.filter(function(a){ return a.estado === 'en_curso'; }).length;
+    var nBloqueadas = ejec.acciones.filter(function(a){ return a.estado === 'bloqueada'; }).length;
+    var nCompletadas = ejec.acciones.filter(function(a){ return a.estado === 'completada'; }).length;
+    p.textContent = 'Estado general: ' + (ESTADO_GENERAL_EJECUCION_LABEL[ejec.estado_general] || ejec.estado_general) +
+      ' · ' + nAcciones + ' acción(es) · ' + nActivas + ' en curso · ' + nBloqueadas + ' bloqueada(s) · ' + nCompletadas + ' completada(s)';
+    boxResumen.appendChild(h); boxResumen.appendChild(p);
+    if(ejecucionRequiereRecomprension(ejec)){
+      var pr = document.createElement('div'); pr.style.fontSize = '.82rem'; pr.style.color = 'var(--presion,#a33)'; pr.style.marginTop = '6px';
+      pr.textContent = 'Requiere recomprensión: ' + ejec.senales_recomprension.length + ' señal(es) aceptada(s).';
+      boxResumen.appendChild(pr);
+    }
+  } else {
+    boxResumen.textContent = 'Todavía no hay ninguna ejecución para este Campo de decisiones.';
+  }
+
+  var boxDecisiones = document.getElementById('ejecDecisionesActivas');
+  boxDecisiones.innerHTML = '';
+  var activas = decisionesActivasDelCampoVigente();
+  activas.forEach(function(d){
+    var card = document.createElement('div'); card.className = 'dec-card';
+    var head = document.createElement('div'); head.className = 'dec-head';
+    var tit = document.createElement('span'); tit.className = 'dec-titulo'; tit.textContent = d.titulo;
+    var badge = document.createElement('span'); badge.className = 'dec-estado-badge est-' + d.estado;
+    badge.textContent = ESTADO_DECISION_LABEL[d.estado] || d.estado;
+    head.appendChild(tit); head.appendChild(badge);
+    card.appendChild(head);
+    var cuerpo = document.createElement('div'); cuerpo.className = 'dec-cuerpo'; cuerpo.textContent = d.decision;
+    card.appendChild(cuerpo);
+    var tieneAcciones = ejec && ejec.acciones.some(function(a){ return a.decision_id === d.id; });
+    var acciones = document.createElement('div'); acciones.className = 'dec-acciones';
+    var btn = document.createElement('button'); btn.className = 'dec-btn';
+    btn.textContent = tieneAcciones ? 'Preparar más acciones' : 'Preparar ejecución';
+    btn.addEventListener('click', function(){ prepararEjecucionParaDecision(d.id); });
+    acciones.appendChild(btn);
+    card.appendChild(acciones);
+    boxDecisiones.appendChild(card);
+  });
+  if(!activas.length) boxDecisiones.textContent = 'Sin decisiones activas en el Campo vigente.';
+
+  var boxAcciones = document.getElementById('ejecAccionesExistentes');
+  boxAcciones.innerHTML = '';
+  if(ejec && ejec.acciones.length){
+    ejec.acciones.forEach(function(a){ boxAcciones.appendChild(renderTarjetaAccion(a)); });
+  } else {
+    boxAcciones.textContent = 'Todavía no hay acciones confirmadas.';
+  }
+
+  var btnCerrar = document.getElementById('btnCerrarEjecucion');
+  btnCerrar.disabled = !state.ejecucionActual || state.ejecucionActual.acciones.length === 0;
+}
+function prepararEjecucionParaDecision(decisionId){
+  asegurarEjecucionActual();
+  state.historialEjecucion = [];
+  state.propuestaEjecucion = null;
+  document.getElementById('ejecPropuestaCard').style.display = 'none';
+  document.getElementById('ejecCorreccionBox').style.display = 'none';
+  document.getElementById('ejecHilo').innerHTML = '';
+  document.getElementById('ejecInput').value = '';
+  var d = decisionesActivasDelCampoVigente().find(function(x){ return x.id === decisionId; });
+  var box = document.getElementById('ejecPrepararContexto');
+  box.innerHTML = '';
+  if(d){
+    var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '6px';
+    h.textContent = 'Preparando ejecución para: ' + d.titulo;
+    var p = document.createElement('div'); p.style.fontSize = '.85rem'; p.style.color = 'var(--texto-suave)';
+    p.textContent = d.decision;
+    box.appendChild(h); box.appendChild(p);
+  }
+  document.getElementById('ejecVistaLista').style.display = 'none';
+  document.getElementById('ejecVistaPreparar').style.display = 'block';
+  enviarTurnoEjecucion(null);
+}
+function enviarTurnoEjecucion(textoUsuario){
+  if(state.llamandoEjecucion) return;
+  var esInicio = (textoUsuario === null);
+  if(!esInicio){
+    state.historialEjecucion.push({ role: 'user', content: textoUsuario });
+    agregarBurbuja('usuario', textoUsuario, 'ejecHilo');
+  }
+  var mensajes = esInicio
+    ? [{ role: 'user', content: '(ayudame a preparar acciones a partir de las decisiones activas)' }]
+    : state.historialEjecucion.slice();
+  state.llamandoEjecucion = true;
+  document.getElementById('ejecCargando').style.display = 'block';
+  document.getElementById('btnEnviarEjec').disabled = true;
+  llamarIAPlanEjecucion(mensajes).then(function(texto){
+    state.llamandoEjecucion = false;
+    document.getElementById('ejecCargando').style.display = 'none';
+    document.getElementById('btnEnviarEjec').disabled = false;
+    state.historialEjecucion.push({ role: 'assistant', content: texto });
+    var parsed = parsePlanEjecucion(texto);
+    agregarBurbuja('ia', parsed.visible, 'ejecHilo');
+    if(parsed.propuesta){
+      state.propuestaEjecucion = parsed.propuesta;
+      mostrarPropuestaEjecucion(parsed.propuesta);
+    }
+  }).catch(function(err){
+    state.llamandoEjecucion = false;
+    document.getElementById('ejecCargando').style.display = 'none';
+    document.getElementById('btnEnviarEjec').disabled = false;
+    mostrarErrorIA(err, 'ejecHilo');
+  });
+}
+function enviarTurnoDesdeInputEjecucion(){
+  var ta = document.getElementById('ejecInput');
+  var texto = ta.value.trim();
+  if(!texto || state.llamandoEjecucion) return;
+  ta.value = '';
+  enviarTurnoEjecucion(texto);
+}
+function mostrarPropuestaEjecucion(propuesta){
+  renderAccionesPropuestasVisual(propuesta.acciones);
+  var falt = document.getElementById('ejecFaltantes');
+  falt.innerHTML = '';
+  if(propuesta.faltantes_para_ejecutar && propuesta.faltantes_para_ejecutar.length){
+    var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.margin = '6px 0 4px';
+    h.textContent = 'Información faltante para ejecutar';
+    falt.appendChild(h);
+    propuesta.faltantes_para_ejecutar.forEach(function(f){ var p = document.createElement('div'); p.textContent = '— ' + f; falt.appendChild(p); });
+  }
+  document.getElementById('ejecCorreccionBox').style.display = 'none';
+  document.getElementById('ejecPropuestaCard').style.display = 'block';
+}
+function renderAccionesPropuestasVisual(acciones){
+  var cont = document.getElementById('ejecAccionesPropuestas');
+  cont.innerHTML = '';
+  var campo = ultimoCampoDecisionesConfirmado();
+  acciones.forEach(function(a){
+    var card = document.createElement('div'); card.className = 'dec-card';
+    var head = document.createElement('div'); head.className = 'dec-head';
+    var tit = document.createElement('span'); tit.className = 'dec-titulo'; tit.textContent = a.titulo;
+    head.appendChild(tit);
+    if(a.estado_propuesto){
+      var badge = document.createElement('span'); badge.className = 'dec-estado-badge est-' + a.estado_propuesto;
+      badge.textContent = 'IA sugiere: ' + (ESTADO_ACCION_LABEL[a.estado_propuesto] || a.estado_propuesto);
+      head.appendChild(badge);
+    }
+    card.appendChild(head);
+    var decision = campo && (campo.contenido.decisiones || []).find(function(d){ return d.id === a.decision_id; });
+    var cuerpo = document.createElement('div'); cuerpo.className = 'dec-cuerpo';
+    var partes = [a.objetivo];
+    if(decision) partes.push('Decisión: ' + decision.titulo);
+    if(a.condiciones_inicio.length) partes.push('Condiciones de inicio: ' + a.condiciones_inicio.join('; '));
+    if(a.criterio_cierre.length) partes.push('Criterio de cierre: ' + a.criterio_cierre.join('; '));
+    if(a.riesgos_operativos.length) partes.push('Riesgos operativos: ' + a.riesgos_operativos.join('; '));
+    if(a.indicadores_propuestos.length) partes.push('Indicadores propuestos: ' + a.indicadores_propuestos.map(function(i){ return i.nombre; }).join(', '));
+    cuerpo.textContent = partes.join('  —  ');
+    card.appendChild(cuerpo);
+    var acc = document.createElement('div'); acc.className = 'dec-acciones';
+    var btnAgregar = document.createElement('button'); btnAgregar.className = 'dec-btn'; btnAgregar.textContent = 'Agregar esta acción';
+    btnAgregar.addEventListener('click', function(){ abrirConfirmarAccion(a.id); });
+    var btnDescartar = document.createElement('button'); btnDescartar.className = 'dec-btn'; btnDescartar.textContent = 'Descartar';
+    btnDescartar.addEventListener('click', function(){ descartarAccionPropuesta(a.id); renderAccionesPropuestasVisual(state.propuestaEjecucion.acciones); });
+    acc.appendChild(btnAgregar); acc.appendChild(btnDescartar);
+    card.appendChild(acc);
+    if(a._confirmando) card.appendChild(renderFormularioConfirmarAccion(a));
+    cont.appendChild(card);
+  });
+}
+function abrirConfirmarAccion(id){
+  var a = encontrarAccionPropuesta(id);
+  if(!a) return;
+  a._confirmando = true;
+  renderAccionesPropuestasVisual(state.propuestaEjecucion.acciones);
+}
+function renderFormularioConfirmarAccion(a){
+  var box = document.createElement('div'); box.className = 'dec-condicion-box';
+  var fResp = document.createElement('input'); fResp.type = 'text'; fResp.placeholder = 'Responsable (opcional)'; fResp.style.width = '100%'; fResp.style.marginBottom = '6px';
+  var fPart = document.createElement('input'); fPart.type = 'text'; fPart.placeholder = 'Participantes, separados por coma (opcional)'; fPart.style.width = '100%'; fPart.style.marginBottom = '6px';
+  var fIni = document.createElement('input'); fIni.type = 'text'; fIni.placeholder = 'Fecha de inicio (opcional)'; fIni.style.width = '100%'; fIni.style.marginBottom = '6px';
+  var fObj = document.createElement('input'); fObj.type = 'text'; fObj.placeholder = 'Fecha objetivo (opcional)'; fObj.style.width = '100%'; fObj.style.marginBottom = '6px';
+  [fResp, fPart, fIni, fObj].forEach(function(f){ box.appendChild(f); });
+
+  var selEstado = document.createElement('select'); selEstado.style.marginBottom = '6px';
+  ESTADOS_ACCION.forEach(function(e){
+    var op = document.createElement('option'); op.value = e; op.textContent = ESTADO_ACCION_LABEL[e];
+    if(e === 'pendiente') op.selected = true;
+    selEstado.appendChild(op);
+  });
+  box.appendChild(selEstado);
+  if(a.estado_propuesto && a.estado_propuesto !== 'pendiente'){
+    var hintSug = document.createElement('div'); hintSug.className = 'dec-sugerencia';
+    hintSug.textContent = 'La IA había sugerido: ' + (ESTADO_ACCION_LABEL[a.estado_propuesto] || a.estado_propuesto) + ' (no se aplica sola).';
+    box.appendChild(hintSug);
+  }
+
+  var indicadoresChecks = [];
+  if(a.indicadores_propuestos.length){
+    var hInd = document.createElement('div'); hInd.style.fontWeight = '500'; hInd.style.margin = '8px 0 4px';
+    hInd.textContent = 'Indicadores propuestos -- marcá los que querés incorporar';
+    box.appendChild(hInd);
+    a.indicadores_propuestos.forEach(function(ind, idx){
+      var row = document.createElement('div'); row.style.marginBottom = '6px';
+      var chk = document.createElement('input'); chk.type = 'checkbox';
+      var lbl = document.createElement('label'); lbl.textContent = ' ' + ind.nombre + ' -- ' + ind.que_observa;
+      var vIni = document.createElement('input'); vIni.type = 'text'; vIni.placeholder = 'Valor inicial'; vIni.style.marginLeft = '6px'; vIni.style.width = '120px';
+      var vObj = document.createElement('input'); vObj.type = 'text'; vObj.placeholder = 'Valor objetivo'; vObj.value = ind.valor_objetivo || ''; vObj.style.marginLeft = '6px'; vObj.style.width = '140px';
+      row.appendChild(chk); row.appendChild(lbl); row.appendChild(vIni); row.appendChild(vObj);
+      box.appendChild(row);
+      indicadoresChecks.push({ idx: idx, chk: chk, vObj: vObj, vIni: vIni });
+    });
+  }
+
+  var btnOk = document.createElement('button'); btnOk.className = 'dec-btn'; btnOk.textContent = 'Confirmar acción';
+  btnOk.addEventListener('click', function(){
+    var indicadoresConfirmados = indicadoresChecks.filter(function(c){ return c.chk.checked; })
+      .map(function(c){ return { idx: c.idx, valor_inicial: c.vIni.value.trim(), valor_objetivo: c.vObj.value.trim() }; });
+    confirmarAccion(a.id, {
+      responsable: fResp.value.trim(), participantes: fPart.value.split(',').map(function(s){ return s.trim(); }).filter(Boolean),
+      fecha_inicio: fIni.value.trim() || null, fecha_objetivo: fObj.value.trim() || null,
+      estadoInicial: selEstado.value, indicadoresConfirmados: indicadoresConfirmados
+    });
+    renderAccionesPropuestasVisual(state.propuestaEjecucion.acciones);
+    renderVistaListaEjecucion();
+  });
+  box.appendChild(btnOk);
+  return box;
+}
+function seguirProfundizandoEjecucion(){
+  document.getElementById('ejecPropuestaCard').style.display = 'none';
+  document.getElementById('ejecInput').focus();
+}
+function mostrarCorreccionEjecucion(){
+  document.getElementById('ejecCorreccionBox').style.display = 'block';
+  var ta = document.getElementById('ejecCorreccionInput'); ta.value = '';
+  setTimeout(function(){ ta.focus(); }, 0);
+}
+function enviarCorreccionEjecucion(){
+  var ta = document.getElementById('ejecCorreccionInput');
+  var texto = ta.value.trim();
+  if(!texto) return;
+  document.getElementById('ejecPropuestaCard').style.display = 'none';
+  enviarTurnoEjecucion('No estoy de acuerdo con estas acciones: ' + texto);
+}
+
+/* ---- vista de una acción puntual: evidencia, indicadores, seguimiento, lectura, cierre ---- */
+function abrirVistaAccion(accionId){
+  state.accionActiva = accionId;
+  state.propuestaSeguimiento = null;
+  state.historialSeguimiento = [];
+  document.getElementById('ejecVistaLista').style.display = 'none';
+  document.getElementById('ejecVistaPreparar').style.display = 'none';
+  document.getElementById('ejecVistaCierre').style.display = 'none';
+  document.getElementById('ejecVistaAccion').style.display = 'block';
+  renderVistaAccion();
+}
+function accionActivaObj(){
+  var ejec = state.ejecucionActual || ejecucionVigente();
+  if(!ejec) return null;
+  return ejec.acciones.find(function(a){ return a.id === state.accionActiva; }) || null;
+}
+function renderFormularioEvidencia(a, indicadores){
+  var box = document.createElement('div'); box.className = 'dec-condicion-box';
+  var selTipo = document.createElement('select'); selTipo.style.marginBottom = '6px';
+  TIPOS_EVIDENCIA.forEach(function(t){ var op = document.createElement('option'); op.value = t; op.textContent = TIPO_EVIDENCIA_LABEL[t]; selTipo.appendChild(op); });
+  var desc = document.createElement('textarea'); desc.placeholder = 'Descripción de la evidencia'; desc.rows = 2; desc.style.width = '100%'; desc.style.marginBottom = '6px';
+  var valor = document.createElement('input'); valor.type = 'text'; valor.placeholder = 'Valor (opcional, ej.: 12)'; valor.style.width = '100%'; valor.style.marginBottom = '6px';
+  var fuente = document.createElement('input'); fuente.type = 'text'; fuente.placeholder = 'Fuente (opcional)'; fuente.style.width = '100%'; fuente.style.marginBottom = '6px';
+  var selInd = document.createElement('select'); selInd.style.marginBottom = '6px';
+  var opNone = document.createElement('option'); opNone.value = ''; opNone.textContent = '(sin indicador asociado)'; selInd.appendChild(opNone);
+  indicadores.forEach(function(i){ var op = document.createElement('option'); op.value = i.id; op.textContent = i.nombre; selInd.appendChild(op); });
+  [selTipo, desc, valor, fuente, selInd].forEach(function(f){ box.appendChild(f); });
+  var btn = document.createElement('button'); btn.className = 'dec-btn'; btn.textContent = 'Registrar evidencia';
+  btn.addEventListener('click', function(){
+    if(!desc.value.trim()) return;
+    registrarEvidencia(a.id, { tipo: selTipo.value, descripcion: desc.value.trim(), valor: valor.value.trim(), fuente: fuente.value.trim(), indicador_id: selInd.value || null });
+    renderVistaAccion();
+  });
+  box.appendChild(btn);
+  return box;
+}
+function renderFormularioAvance(a){
+  var box = document.createElement('div'); box.className = 'dec-condicion-box';
+  var avance = document.createElement('textarea'); avance.placeholder = 'Avance'; avance.rows = 2; avance.style.width = '100%'; avance.style.marginBottom = '6px';
+  var bloqueos = document.createElement('input'); bloqueos.type = 'text'; bloqueos.placeholder = 'Bloqueos, separados por coma (opcional)'; bloqueos.style.width = '100%'; bloqueos.style.marginBottom = '6px';
+  var cambiosCtx = document.createElement('input'); cambiosCtx.type = 'text'; cambiosCtx.placeholder = 'Cambios de contexto, separados por coma (opcional)'; cambiosCtx.style.width = '100%'; cambiosCtx.style.marginBottom = '6px';
+  var obs = document.createElement('textarea'); obs.placeholder = 'Observación'; obs.rows = 2; obs.style.width = '100%'; obs.style.marginBottom = '6px';
+  [avance, bloqueos, cambiosCtx, obs].forEach(function(f){ box.appendChild(f); });
+  var btn = document.createElement('button'); btn.className = 'dec-btn'; btn.textContent = 'Registrar avance';
+  btn.addEventListener('click', function(){
+    registrarSeguimiento(a.id, {
+      avance: avance.value.trim(),
+      bloqueos: bloqueos.value.split(',').map(function(s){ return s.trim(); }).filter(Boolean),
+      cambios_contexto: cambiosCtx.value.split(',').map(function(s){ return s.trim(); }).filter(Boolean),
+      observacion_usuario: obs.value.trim()
+    });
+    renderVistaAccion();
+  });
+  box.appendChild(btn);
+  return box;
+}
+function renderFormularioCierreAccion(a){
+  var box = document.createElement('div'); box.className = 'dec-condicion-box';
+  var selEstado = document.createElement('select'); selEstado.style.marginBottom = '6px';
+  ['completada', 'cancelada'].forEach(function(e){ var op = document.createElement('option'); op.value = e; op.textContent = ESTADO_ACCION_LABEL[e]; selEstado.appendChild(op); });
+  var resultado = document.createElement('textarea'); resultado.placeholder = 'Resultado'; resultado.rows = 2; resultado.style.width = '100%'; resultado.style.marginBottom = '6px';
+  var selCumplido = document.createElement('select'); selCumplido.style.marginBottom = '6px';
+  [['', 'Resultado esperado: sin definir'], ['true', 'Resultado esperado: cumplido'], ['false', 'Resultado esperado: NO cumplido']].forEach(function(o){
+    var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; selCumplido.appendChild(op);
+  });
+  var aprendizajes = document.createElement('textarea'); aprendizajes.placeholder = 'Aprendizajes'; aprendizajes.rows = 2; aprendizajes.style.width = '100%'; aprendizajes.style.marginBottom = '6px';
+  [selEstado, resultado, selCumplido, aprendizajes].forEach(function(f){ box.appendChild(f); });
+  var hintSep = document.createElement('div'); hintSep.className = 'hint'; hintSep.textContent = '"Completada" no implica que la hipótesis se haya confirmado -- son dos cosas distintas.';
+  box.appendChild(hintSep);
+  var btn = document.createElement('button'); btn.className = 'dec-btn'; btn.textContent = 'Confirmar cierre de acción';
+  btn.addEventListener('click', function(){
+    confirmarCierreAccion(a.id, {
+      estadoFinal: selEstado.value, resultado: resultado.value.trim(),
+      resultado_esperado_cumplido: selCumplido.value === 'true' ? true : (selCumplido.value === 'false' ? false : null),
+      aprendizajes: aprendizajes.value.trim()
+    });
+    a._cerrando = false;
+    renderVistaAccion(); renderVistaListaEjecucion();
+  });
+  box.appendChild(btn);
+  return box;
+}
+function pedirLecturaSeguimiento(accionId){
+  if(state.llamandoSeguimiento) return;
+  var a = accionActivaObj();
+  if(!a) return;
+  state.llamandoSeguimiento = true;
+  var cargando = document.getElementById('ejecLecturaCargando');
+  if(cargando) cargando.style.display = 'inline';
+  var mensajes = [{ role: 'user', content: '(pedime una lectura de esta acción a partir de la evidencia y el seguimiento registrados)' }];
+  llamarIALecturaSeguimiento(mensajes, a).then(function(texto){
+    state.llamandoSeguimiento = false;
+    var parsed = parseLecturaSeguimiento(texto);
+    if(parsed.propuesta) state.propuestaSeguimiento = parsed.propuesta;
+    renderVistaAccion();
+  }).catch(function(err){
+    state.llamandoSeguimiento = false;
+    console.error('lectura de seguimiento:', err);
+    renderVistaAccion();
+  });
+}
+function renderVistaAccion(){
+  var a = accionActivaObj();
+  var cont = document.getElementById('ejecAccionDetalle');
+  cont.innerHTML = '';
+  if(!a){ cont.textContent = 'Acción no encontrada.'; return; }
+  var ejec = state.ejecucionActual;
+
+  var head = document.createElement('div'); head.className = 'dec-head';
+  var tit = document.createElement('span'); tit.className = 'dec-titulo'; tit.style.fontSize = '1rem'; tit.textContent = a.titulo;
+  var badge = document.createElement('span'); badge.className = 'dec-estado-badge est-' + a.estado;
+  badge.textContent = ESTADO_ACCION_LABEL[a.estado] || a.estado;
+  head.appendChild(tit); head.appendChild(badge);
+  cont.appendChild(head);
+
+  var cuerpo = document.createElement('div'); cuerpo.className = 'dec-cuerpo';
+  cuerpo.textContent = a.objetivo + (a.responsable ? '  —  Responsable: ' + a.responsable : '') + (a.fecha_objetivo ? '  —  Fecha objetivo: ' + a.fecha_objetivo : '');
+  cont.appendChild(cuerpo);
+
+  if(ejec){
+    var accEstado = document.createElement('div'); accEstado.className = 'dec-acciones'; accEstado.style.marginBottom = '10px';
+    ESTADOS_ACCION.forEach(function(e){
+      if(e === a.estado || e === 'completada' || e === 'cancelada') return;
+      var btn = document.createElement('button'); btn.className = 'dec-btn'; btn.textContent = 'Marcar ' + ESTADO_ACCION_LABEL[e].toLowerCase();
+      btn.addEventListener('click', function(){ cambiarEstadoAccion(a.id, e); renderVistaAccion(); });
+      accEstado.appendChild(btn);
+    });
+    var btnCompletar = document.createElement('button'); btnCompletar.className = 'dec-btn'; btnCompletar.textContent = 'Completar / cerrar acción';
+    btnCompletar.addEventListener('click', function(){ a._cerrando = true; renderVistaAccion(); });
+    accEstado.appendChild(btnCompletar);
+    cont.appendChild(accEstado);
+  }
+  if(a._cerrando) cont.appendChild(renderFormularioCierreAccion(a));
+
+  var indicadores = ejec ? ejec.indicadores.filter(function(i){ return i.accion_id === a.id; }) : [];
+  if(indicadores.length){
+    var hInd = document.createElement('h4'); hInd.style.fontSize = '.85rem'; hInd.style.fontWeight = '500'; hInd.style.margin = '14px 0 6px'; hInd.textContent = 'Indicadores';
+    cont.appendChild(hInd);
+    indicadores.forEach(function(ind){
+      var box = document.createElement('div'); box.className = 'ejec-indicador';
+      box.textContent = ind.nombre + ' (' + TIPO_INDICADOR_LABEL[ind.tipo] + ') -- ' + ind.que_observa + '. Valor actual: ' + (ind.valor_actual || 'sin medir') + (ind.valor_objetivo ? ' / objetivo: ' + ind.valor_objetivo : '');
+      cont.appendChild(box);
+    });
+  }
+
+  var hEv = document.createElement('h4'); hEv.style.fontSize = '.85rem'; hEv.style.fontWeight = '500'; hEv.style.margin = '14px 0 6px'; hEv.textContent = 'Evidencia';
+  cont.appendChild(hEv);
+  var evidenciasAccion = ejec ? ejec.evidencias.filter(function(e){ return e.accion_id === a.id; }) : [];
+  if(evidenciasAccion.length){
+    evidenciasAccion.forEach(function(e){
+      var linea = document.createElement('div'); linea.className = 'ejec-evidencia';
+      linea.textContent = '(' + TIPO_EVIDENCIA_LABEL[e.tipo] + ') ' + e.descripcion + (e.valor ? ' = ' + e.valor : '');
+      cont.appendChild(linea);
+    });
+  } else {
+    var vacio = document.createElement('div'); vacio.className = 'hint'; vacio.textContent = 'Sin evidencia registrada todavía.';
+    cont.appendChild(vacio);
+  }
+  if(ejec) cont.appendChild(renderFormularioEvidencia(a, indicadores));
+
+  var hSeg = document.createElement('h4'); hSeg.style.fontSize = '.85rem'; hSeg.style.fontWeight = '500'; hSeg.style.margin = '14px 0 6px'; hSeg.textContent = 'Seguimiento';
+  cont.appendChild(hSeg);
+  a.seguimientos.forEach(function(s){
+    var box = document.createElement('div'); box.className = 'ejec-seguimiento';
+    var f = document.createElement('div'); f.className = 'fecha'; f.textContent = new Date(s.fecha).toLocaleString('es-AR');
+    box.appendChild(f);
+    var cuerpo2 = document.createElement('div');
+    var partes = [];
+    if(s.avance) partes.push('Avance: ' + s.avance);
+    if(s.bloqueos.length) partes.push('Bloqueos: ' + s.bloqueos.join('; '));
+    if(s.observacion_usuario) partes.push('Observación: ' + s.observacion_usuario);
+    if(s.lectura_ia) partes.push('Lectura de la IA: ' + s.lectura_ia);
+    cuerpo2.textContent = partes.join('  —  ') || '(sin detalle)';
+    box.appendChild(cuerpo2);
+    cont.appendChild(box);
+  });
+  if(ejec) cont.appendChild(renderFormularioAvance(a));
+
+  if(ejec){
+    var boxLectura = document.createElement('div'); boxLectura.style.marginTop = '14px';
+    var btnPedir = document.createElement('button'); btnPedir.className = 'dec-btn'; btnPedir.textContent = 'Pedir lectura de la IA';
+    btnPedir.addEventListener('click', function(){ pedirLecturaSeguimiento(a.id); });
+    boxLectura.appendChild(btnPedir);
+    var cargando = document.createElement('span'); cargando.id = 'ejecLecturaCargando'; cargando.className = 'hint'; cargando.style.display = 'none'; cargando.style.marginLeft = '10px'; cargando.textContent = 'Pensando…';
+    boxLectura.appendChild(cargando);
+    cont.appendChild(boxLectura);
+
+    if(state.propuestaSeguimiento){
+      var lect = state.propuestaSeguimiento;
+      var card = document.createElement('div'); card.className = 'ejec-lectura-card';
+      var s1 = document.createElement('div'); s1.style.fontWeight = '500'; s1.style.marginBottom = '6px'; s1.textContent = lect.sintesis;
+      var s2 = document.createElement('div'); s2.style.fontSize = '.85rem'; s2.style.marginBottom = '6px'; s2.textContent = 'Esperado vs. ocurrido: ' + lect.esperado_vs_ocurrido;
+      card.appendChild(s1); card.appendChild(s2);
+      lect.desvios.forEach(function(d){
+        var dline = document.createElement('div'); dline.style.fontSize = '.8rem'; dline.style.color = 'var(--texto-suave)';
+        dline.textContent = '— (' + TIPO_DESVIO_LABEL[d.tipo] + ', impacto ' + d.impacto + ') ' + d.descripcion;
+        card.appendChild(dline);
+      });
+      if(lect.requiere_recomprension){
+        var rec = document.createElement('div'); rec.style.fontSize = '.82rem'; rec.style.color = 'var(--presion,#a33)'; rec.style.marginTop = '6px';
+        rec.textContent = 'La IA sugiere que esto requiere recomprensión: ' + lect.motivo_recomprension;
+        card.appendChild(rec);
+      }
+      var accLect = document.createElement('div'); accLect.className = 'dec-acciones'; accLect.style.marginTop = '8px';
+      var btnAceptar = document.createElement('button'); btnAceptar.className = 'dec-btn'; btnAceptar.textContent = 'Aceptar esta lectura';
+      btnAceptar.addEventListener('click', function(){ aceptarLecturaSeguimiento(a.id); renderVistaAccion(); renderVistaListaEjecucion(); });
+      var btnDescartar = document.createElement('button'); btnDescartar.className = 'dec-btn'; btnDescartar.textContent = 'Descartar';
+      btnDescartar.addEventListener('click', function(){ descartarLecturaSeguimiento(); renderVistaAccion(); });
+      accLect.appendChild(btnAceptar); accLect.appendChild(btnDescartar);
+      card.appendChild(accLect);
+      cont.appendChild(card);
+    }
+  }
+
+  if(a.depende_de.length || a.dependencias_propuestas.length){
+    var hDep = document.createElement('div'); hDep.style.fontSize = '.8rem'; hDep.style.color = 'var(--texto-suave)'; hDep.style.marginTop = '10px';
+    var tituloPorId = {}; (ejec ? ejec.acciones : []).forEach(function(x){ tituloPorId[x.id] = x.titulo; });
+    var partesDep = [];
+    if(a.depende_de.length) partesDep.push('Depende de: ' + a.depende_de.map(function(id){ return tituloPorId[id] || id; }).join(', '));
+    if(a.dependencias_propuestas.length) partesDep.push('Dependencia pendiente de confirmar: ' + a.dependencias_propuestas.length);
+    hDep.textContent = partesDep.join('  —  ');
+    cont.appendChild(hDep);
+  }
+}
+
+/* ---- cierre de ciclo: resumen humano-legible antes de archivar (sección 24) ---- */
+function renderResumenCierreEjecucion(ejec){
+  var cont = document.getElementById('ejecResumenCierre');
+  cont.innerHTML = '';
+  var h = document.createElement('h4'); h.style.fontSize = '.95rem'; h.style.fontWeight = '500'; h.style.marginBottom = '10px';
+  h.textContent = 'Cerrar ciclo de ejecución';
+  cont.appendChild(h);
+
+  var decididoTxt = decisionesActivasDelCampoVigente().map(function(d){ return d.titulo; }).join('; ');
+  var hechoTxt = ejec.acciones.map(function(a){ return a.titulo + ' (' + ESTADO_ACCION_LABEL[a.estado] + ')'; }).join('; ');
+  var ocurrioTxt = ejec.evidencias.length ? (ejec.evidencias.length + ' evidencia(s) registrada(s)') : 'sin evidencia registrada';
+  var noOcurrioTxt = ejec.acciones.filter(function(a){ return a.estado === 'pendiente' || a.estado === 'bloqueada'; }).map(function(a){ return a.titulo; }).join('; ') || 'ninguna acción quedó pendiente o bloqueada';
+  var cambioTxt = ejec.acciones.reduce(function(n, a){ return n + a.cambios.length; }, 0) + ' cambio(s) registrado(s) sobre acciones';
+  var aprendimosTxt = ejec.acciones.filter(function(a){ return a.notas; }).map(function(a){ return a.notas; }).join(' | ') || 'sin aprendizajes registrados todavía';
+  var abiertoTxt = ejec.acciones.filter(function(a){ return a.estado !== 'completada' && a.estado !== 'cancelada'; }).map(function(a){ return a.titulo; }).join('; ') || 'nada queda abierto';
+  var recomprensionTxt = ejecucionRequiereRecomprension(ejec) ? ('Sí -- ' + ejec.senales_recomprension.length + ' señal(es): ' + ejec.senales_recomprension.map(function(s){ return s.motivo; }).join(' | ')) : 'No por ahora';
+
+  [
+    ['Qué se decidió', decididoTxt || '(sin decisiones activas registradas)'],
+    ['Qué se hizo', hechoTxt || '(sin acciones)'],
+    ['Qué ocurrió', ocurrioTxt],
+    ['Qué no ocurrió / queda abierto', noOcurrioTxt],
+    ['Qué cambió', cambioTxt],
+    ['Qué aprendimos', aprendimosTxt],
+    ['Qué queda abierto', abiertoTxt],
+    ['Requiere recomprensión', recomprensionTxt]
+  ].forEach(function(par){
+    var p = document.createElement('div'); p.style.marginBottom = '8px'; p.style.fontSize = '.85rem';
+    var strong = document.createElement('strong'); strong.textContent = par[0] + ': ';
+    p.appendChild(strong); p.appendChild(document.createTextNode(par[1]));
+    cont.appendChild(p);
+  });
+}
+function abrirCierreEjecucion(){
+  var ejec = state.ejecucionActual;
+  if(!ejec) return;
+  renderResumenCierreEjecucion(ejec);
+  document.getElementById('ejecVistaLista').style.display = 'none';
+  document.getElementById('ejecVistaPreparar').style.display = 'none';
+  document.getElementById('ejecVistaAccion').style.display = 'none';
+  document.getElementById('ejecVistaCierre').style.display = 'block';
+}
+/* Cierre real (sección 15/24 de Javier): snapshot final a ejecuciones[], ejecucionActual vuelve a
+   null. Nunca se mezclan -- ejecuciones[] son SOLO ciclos cerrados. */
+function confirmarCierreEjecucion(){
+  var ejec = state.ejecucionActual;
+  if(!ejec) return;
+  var version = state.ejecuciones.length + 1;
+  ejec.version = version;
+  ejec.fecha_cierre = new Date().toISOString();
+  ejec.confirmado = true;
+  state.ejecuciones.push(ejec);
+  state.ejecucionActual = null;
+  volverASelectorDesdeEjecucion();
+}
+
 function cerrarEvaluacion(){
   var dims = ORDEN_DIMENSIONES_NEGOCIO.map(function(cod){
     var d = state.dimensiones[cod];
@@ -3980,7 +5164,9 @@ function cerrarEvaluacion(){
       sintesis: sintesisEl ? sintesisEl.value.trim() : '',
       diagnosticos_integrales: state.diagnosticosIntegrales.slice(),  // N2.3: siempre array, puede ir vacío
       proyectivos: state.proyectivos.slice(),   // N2.4: siempre array, puede ir vacío
-      campos_decisiones: state.camposDecisiones.slice()   // N2.5: siempre array, puede ir vacío
+      campos_decisiones: state.camposDecisiones.slice(),  // N2.5: siempre array, puede ir vacío
+      ejecuciones: state.ejecuciones.slice(),   // N2.6: ciclos CERRADOS -- nunca se pisa
+      ejecucion_actual: state.ejecucionActual   // N2.6: ciclo VIVO si existe, o null -- nunca mezclado con ejecuciones[]
     }
   });
   mostrarExportacion(payload);
