@@ -51,6 +51,18 @@ main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
 .dim-fila:first-of-type{border-top:none;}
 .dim-nombre{font-size:.9rem;font-weight:500;padding-top:9px;}
 .dim-estado-chip{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;}
+/* N3.0-A.7: navegación persistente de 6 etapas -- misma barra en todas las pantallas de trabajo,
+   oculta en Inicio y en Cierre (no son "una etapa", son el punto de entrada y el punto final). */
+.navnegocio{display:none;gap:6px;padding:9px 18px;border-bottom:1px solid var(--linea);position:sticky;top:53px;background:rgba(247,246,243,.97);backdrop-filter:blur(8px);z-index:19;overflow-x:auto;}
+.navnegocio.visible{display:flex;}
+.navnegocio-pill{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-family:'IBM Plex Sans',sans-serif;font-size:.76rem;padding:6px 11px;border-radius:20px;border:1px solid var(--linea);background:var(--fondo-card);color:var(--texto-suave);cursor:pointer;flex-shrink:0;}
+.navnegocio-pill:disabled{cursor:not-allowed;opacity:.5;}
+.navnegocio-pill.actual{border-color:var(--acento);color:var(--texto);font-weight:500;background:var(--acento-suave);}
+.navnegocio-punto{display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.navnegocio-punto.sin_iniciar{background:var(--tenue);}
+.navnegocio-punto.en_curso{background:#D4A95B;}
+.navnegocio-punto.completa{background:#4FAE7E;}
+.navnegocio-punto.requiere_revision{background:#D4756B;}
 @media(max-width:700px){
   .dim-fila{grid-template-columns:1fr;gap:6px;}
   .selector-tipo{grid-template-columns:1fr;}
@@ -197,11 +209,14 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 <div id="modulosMenu"></div>
 
 <header>
-  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Negocios</b></div><div class="cai-baja">Pro · N2.6</div></div></div>
+  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Negocios</b></div><div class="cai-baja">Pro</div></div></div>
   <span style="flex:1"></span>
   <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
   <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
 </header>
+
+<!-- N3.0-A.7: contenido armado por renderNavNegocio(), llamada desde mostrarPantalla() -->
+<nav id="navNegocio" class="navnegocio" aria-label="Progreso de la evaluación"></nav>
 
 <main>
 
@@ -243,14 +258,14 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
     </div>
     <div class="acciones">
       <button class="btn secundario" onclick="volverAInicio()">Volver</button>
-      <button class="btn secundario" id="btnVerIntegral" onclick="irADiagnosticoIntegral()" disabled>Ver diagnóstico integral</button>
+      <button class="btn secundario" id="btnVerIntegral" onclick="irADiagnosticoIntegral()" disabled>Ver relaciones</button>
       <button class="btn secundario" id="btnVerProyectivo" onclick="irAProyectivo()" disabled>Explorar proyectivo</button>
       <button class="btn secundario" id="btnVerDecisiones" onclick="irACampoDecisiones()" disabled>Abrir Campo de Decisiones</button>
       <button class="btn secundario" id="btnVerEjecucion" onclick="irAEjecucion()" disabled>Abrir Ejecución y Seguimiento</button>
       <button class="btn" id="btnCerrarDiagnostico" onclick="cerrarEvaluacion()">Cerrar evaluación</button>
     </div>
     <p class="hint" id="hintIntegral" style="margin-top:10px">Confirmá al menos dos dimensiones para ver relaciones entre ellas.</p>
-    <p class="hint" id="hintProyectivo" style="margin-top:4px">Confirmá un diagnóstico integral para explorar el proyectivo.</p>
+    <p class="hint" id="hintProyectivo" style="margin-top:4px">Confirmá relaciones entre dimensiones para explorar el proyectivo.</p>
     <p class="hint" id="hintDecisiones" style="margin-top:4px">Confirmá un proyectivo para abrir el Campo de Decisiones.</p>
     <p class="hint" id="hintEjecucion" style="margin-top:4px">Adoptá o condicioná al menos una decisión para abrir Ejecución y Seguimiento.</p>
   </div>
@@ -293,7 +308,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 <!-- ============ DIAGNÓSTICO INTEGRAL (N2.3) ============ -->
 <section id="pantallaIntegral" class="pantalla">
   <div class="form-card">
-    <h3>Diagnóstico integral</h3>
+    <h3>Relaciones</h3>
     <p class="hint" id="intIntro" style="margin-bottom:16px"></p>
 
     <div id="intVigente" style="display:none;margin-bottom:18px;border:1px solid var(--linea);border-radius:8px;padding:14px 16px"></div>
@@ -309,7 +324,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
     </div>
 
     <div id="intPropuestaCard" style="display:none;margin-top:22px;border-top:1px solid var(--linea);padding-top:18px">
-      <h4 style="font-size:.95rem;font-weight:500;margin-bottom:10px">Diagnóstico integral propuesto</h4>
+      <h4 style="font-size:.95rem;font-weight:500;margin-bottom:10px">Relaciones propuestas</h4>
       <p id="intSintesis" style="font-size:.9rem;margin-bottom:10px"></p>
       <p id="intTensionSistemica" style="font-size:.88rem;font-weight:500;margin-bottom:14px"></p>
 
@@ -325,7 +340,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
         <button class="btn" onclick="confirmarDiagnosticoIntegral()">Confirmar</button>
       </div>
       <div id="intCorreccionBox" class="campo" style="display:none;margin-top:12px">
-        <textarea id="intCorreccionInput" placeholder="Qué corregirías de este diagnóstico…" rows="2"></textarea>
+        <textarea id="intCorreccionInput" placeholder="Qué corregirías de estas relaciones…" rows="2"></textarea>
         <div class="acciones" style="margin-top:8px">
           <button class="btn" onclick="enviarCorreccionIntegral()">Enviar corrección</button>
         </div>
@@ -340,7 +355,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
     <h3>Proyectivo</h3>
 
     <div id="proyVista1">
-      <p class="hint" style="margin-bottom:16px">A partir del diagnóstico integral vigente, explorá qué transformaciones posibles emergen si se interviene sobre las relaciones que hoy organizan el sistema. Esto no es un plan de acción: explora posibilidades, no las prescribe.</p>
+      <p class="hint" style="margin-bottom:16px">A partir de las relaciones vigentes entre dimensiones, explorá qué transformaciones posibles emergen si se interviene sobre las relaciones que hoy organizan el sistema. Esto no es un plan de acción: explora posibilidades, no las prescribe.</p>
       <div id="proyResumenVigente" style="border:1px solid var(--linea);border-radius:8px;padding:14px 16px;margin-bottom:18px"></div>
       <div class="acciones">
         <button class="btn secundario" onclick="volverASelectorDesdeProyectivo()">Volver</button>
@@ -523,6 +538,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
   <div class="form-card">
     <h3>Evaluación lista</h3>
     <p class="hint" style="margin-bottom:14px">Copiá este texto y pegalo en Comprender AI: <b>Tu espacio → Configuración y ayuda → Importar respaldo</b> (o en el menú "⋯" del organismo → "Pegar evaluación Pro"). La ficha confirmada del organismo no se modifica — esto se incorpora como evaluación aparte, para que el chat la retome.</p>
+    <div id="cierreIntegridadAviso" style="display:none;margin-bottom:14px"></div>
     <textarea id="cajaExportacion" class="export-box" readonly></textarea>
     <div class="acciones">
       <button class="btn secundario" onclick="volverAInicio()">Nueva evaluación</button>
@@ -533,7 +549,9 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 
 </main>
 
-<footer>COMPRENDER · NEGOCIOS PRO — versión profesional (N2.6) · Un producto de ARQUIGÉNESIS</footer>
+<!-- N3.0-A: se saca el código de versión interno (era "(N2.6)") del texto visible; el
+     historial de incrementos queda documentado en PENDIENTES.md, no en la interfaz. -->
+<footer>COMPRENDER · NEGOCIOS PRO — versión profesional · Un producto de ARQUIGÉNESIS</footer>
 
 <script>
 /* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
@@ -2148,6 +2166,7 @@ var state = {
   llamandoEjecucion: false,    // lock propio
   accionActiva: null,          // id de la acción abierta en la vista de seguimiento
   propuestaSeguimiento: null,  // lectura de [[LECTURA_SEGUIMIENTO]] pendiente de aceptar/descartar
+  errorSeguimiento: null,      // N3.0-A: texto de error de la última "Pedir lectura de la IA" -- antes se perdía en consola, ahora se ve junto al botón
   historialSeguimiento: [],    // [{role,content}] turnos de la conversación de seguimiento de la acción activa
   llamandoSeguimiento: false   // lock propio
 };
@@ -2224,6 +2243,104 @@ var ESTADO_GENERAL_EJECUCION_LABEL = {
 var TOPE_ACCIONES = 6, TOPE_INDICADORES_TURNO = 4, TOPE_DESVIOS_LECTURA = 4;
 /* tope real del servidor (api/anthropic.js: MAX_TOKENS_TOPE=4000) -- N2.6 pide con margen, nunca lo excede */
 var MAX_TOKENS_PLAN_EJECUCION = 3400, MAX_TOKENS_LECTURA_SEGUIMIENTO = 2400;
+/* N3.0-A: N2.4 y N2.5 pedían max_tokens:16000, muy por encima del tope real del servidor de arriba.
+   El servidor igual lo recortaba en silencio (nunca hubo riesgo de truncamiento distinto del que ya
+   existía), pero el número pedido no reflejaba la realidad -- deuda documentada desde N2.6, corregida
+   acá con el mismo criterio: constante nombrada, con margen real bajo el tope. */
+var MAX_TOKENS_PROYECTIVO = 3800, MAX_TOKENS_CAMPO_DECISIONES = 3800;
+
+/* ================= N3.0-A · estado único de Negocios Pro =================
+   Antes cada pantalla (construirSelectorDimensiones, y cada botón "Ver X") calculaba su propio
+   gate mirando arrays distintos, cada uno a su manera. Acá no se agrega ningún dato nuevo al
+   organismo ni a `state` -- se lee exactamente lo mismo que ya se leía disperso, pero en un solo
+   lugar, puro (no muta `s`, no llama a la IA, no toca localStorage), para que la navegación
+   persistente y los gates de los botones usen la misma fuente. Asume la forma real de `state`
+   (dimensiones como mapa cod->objeto, arrays camelCase) -- leer un `evaluacion` ya exportado
+   (snake_case, dimensiones como array) es un problema distinto que corresponde a N3.0-B
+   (continuidad), no se resuelve acá todavía. */
+var ETAPAS_NEGOCIO = ['diagnostico', 'dimensiones', 'relaciones', 'proyectivo', 'decisiones', 'ejecucion'];
+var ETAPA_NEGOCIO_LABEL = {
+  diagnostico: 'Diagnóstico', dimensiones: 'Dimensiones', relaciones: 'Relaciones',
+  proyectivo: 'Proyectivo', decisiones: 'Decisiones', ejecucion: 'Ejecución'
+};
+/* alfabeto cerrado de estados UX -- capa de orientación nada más. No reemplaza ni duplica los
+   estados internos ya existentes (estado_general de una ejecución, estado de una decisión,
+   estado de una dimensión): son una lectura de más alto nivel sobre esos mismos datos. */
+var ESTADOS_ETAPA_UX = ['sin_iniciar', 'en_curso', 'completa', 'requiere_revision'];
+var ESTADO_ETAPA_UX_LABEL = { sin_iniciar: 'Sin iniciar', en_curso: 'En curso', completa: 'Completa', requiere_revision: 'Requiere revisión' };
+
+function estadoNegociosPro(s){
+  s = s || state;
+  var confirmadas = ORDEN_DIMENSIONES_NEGOCIO.filter(function(c){ return s.dimensiones[c] && s.dimensiones[c].confirmada; });
+  var nConfirmadas = confirmadas.length;
+
+  var diVigente = s.diagnosticosIntegrales.length ? s.diagnosticosIntegrales[s.diagnosticosIntegrales.length - 1] : null;
+  var proyVigente = s.proyectivos.length ? s.proyectivos[s.proyectivos.length - 1] : null;
+  var campoVigente = s.camposDecisiones.length ? s.camposDecisiones[s.camposDecisiones.length - 1] : null;
+  var decisionesActivas = campoVigente
+    ? (campoVigente.contenido.decisiones || []).filter(function(d){ return d.estado === 'adoptada' || d.estado === 'condicionada'; })
+    : [];
+  var ejecVigente = s.ejecucionActual || (s.ejecuciones.length ? s.ejecuciones[s.ejecuciones.length - 1] : null);
+  var requiereRecomprension = !!(ejecVigente && ejecVigente.senales_recomprension && ejecVigente.senales_recomprension.length > 0);
+
+  var estados = {}, disponibles = {};
+
+  /* Diagnóstico y Dimensiones leen la misma data (las 6 lecturas B1-B6) con dos umbrales
+     distintos a propósito: "Diagnóstico" es el mínimo real para poder avanzar (2 confirmadas,
+     el mismo número que ya exigía el botón "Ver relaciones"); "Dimensiones" es la vuelta
+     completa a las seis, sin exigir que estén todas para considerar el diagnóstico rápido
+     "hecho" -- el producto siempre permitió dejar dimensiones sin evaluar a propósito
+     ("Desconocida" es una respuesta válida, distinta de nunca haberla visitado). */
+  estados.diagnostico = nConfirmadas >= 2 ? 'completa' : (nConfirmadas >= 1 ? 'en_curso' : 'sin_iniciar');
+  disponibles.diagnostico = true;
+
+  estados.dimensiones = nConfirmadas === ORDEN_DIMENSIONES_NEGOCIO.length ? 'completa' : (nConfirmadas > 0 ? 'en_curso' : 'sin_iniciar');
+  disponibles.dimensiones = true;
+
+  estados.relaciones = diVigente ? 'completa' : ((s.propuestaIntegral || (s.historialIntegral && s.historialIntegral.length)) ? 'en_curso' : 'sin_iniciar');
+  disponibles.relaciones = nConfirmadas >= 2;
+
+  estados.proyectivo = proyVigente ? 'completa' : ((s.propuestaProyectivo || (s.historialProyectivo && s.historialProyectivo.length)) ? 'en_curso' : 'sin_iniciar');
+  disponibles.proyectivo = !!diVigente;
+
+  estados.decisiones = campoVigente ? 'completa' : ((s.propuestaDecisiones || (s.historialDecisiones && s.historialDecisiones.length)) ? 'en_curso' : 'sin_iniciar');
+  disponibles.decisiones = !!proyVigente;
+
+  if(requiereRecomprension) estados.ejecucion = 'requiere_revision';
+  else if(ejecVigente) estados.ejecucion = 'completa';   // "tiene contenido", no necesariamente cerrada
+  else estados.ejecucion = 'sin_iniciar';
+  disponibles.ejecucion = decisionesActivas.length > 0;
+
+  // primera etapa disponible que todavía no está "completa" -- sugerencia de "seguí por acá"
+  var siguienteSugerida = null;
+  for(var i = 0; i < ETAPAS_NEGOCIO.length; i++){
+    var et = ETAPAS_NEGOCIO[i];
+    if(disponibles[et] && estados[et] !== 'completa'){ siguienteSugerida = et; break; }
+  }
+
+  var propuestasPendientes = {
+    dimension: !!s.propuestaActual,
+    relaciones: !!s.propuestaIntegral,
+    proyectivo: !!s.propuestaProyectivo,
+    decisiones: !!s.propuestaDecisiones,
+    ejecucion: !!s.propuestaEjecucion,
+    seguimiento: !!s.propuestaSeguimiento
+  };
+  var hayPropuestaPendiente = propuestasPendientes.dimension || propuestasPendientes.relaciones ||
+    propuestasPendientes.proyectivo || propuestasPendientes.decisiones ||
+    propuestasPendientes.ejecucion || propuestasPendientes.seguimiento;
+
+  return {
+    etapas: ETAPAS_NEGOCIO.slice(),
+    estados: estados,                      // etapa -> 'sin_iniciar'|'en_curso'|'completa'|'requiere_revision'
+    disponibles: disponibles,               // etapa -> bool (gate técnico cumplido)
+    siguienteSugerida: siguienteSugerida,   // etapa recomendada para continuar, o null si no queda ninguna disponible sin completar
+    propuestasPendientes: propuestasPendientes,
+    hayPropuestaPendiente: hayPropuestaPendiente,
+    ejecucionAbierta: !!s.ejecucionActual,
+    requiereRecomprension: requiereRecomprension
+  };
+}
 
 /* ---- C-06 · marco pendiente dejado por el Core (mismo mecanismo de un solo uso
    que usan Urbanismo/Contextos: se lee y se borra, no se reaplica en cada carga). */
@@ -2264,9 +2381,52 @@ function escaparHtml(s){
   return d.innerHTML;
 }
 
+/* N3.0-A.7: qué etapa de estadoNegociosPro() corresponde a cada pantalla real. "Diagnóstico" y
+   "Dimensiones" son dos etapas separadas en el vocabulario del helper (distinto umbral -- ver
+   comentario dentro de estadoNegociosPro()) pero hoy comparten una sola pantalla física
+   (pantallaDiagnostico/pantallaDimension): no hay una pantalla "Dimensiones" aparte. Acá se
+   resuelve mostrando las DOS píldoras como actuales cuando se está en esa pantalla, y haciendo
+   que ambas lleven al mismo lugar -- es una discrepancia real entre el modelo de 6 etapas pedido
+   y las pantallas existentes, señalada en el informe para que Javier la confirme o la corrija,
+   no decidida en silencio acá. Inicio y Cierre no son "una etapa": quedan fuera del mapa a
+   propósito y ahí la barra se oculta. */
+var PANTALLAS_A_ETAPA_NEGOCIO = {
+  pantallaDiagnostico: 'diagnostico', pantallaDimension: 'diagnostico',
+  pantallaIntegral: 'relaciones', pantallaProyectivo: 'proyectivo',
+  pantallaDecisiones: 'decisiones', pantallaEjecucion: 'ejecucion'
+};
+var ETAPA_NEGOCIO_IR = {
+  diagnostico: irASelectorDimensiones, dimensiones: irASelectorDimensiones,
+  relaciones: irADiagnosticoIntegral, proyectivo: irAProyectivo,
+  decisiones: irACampoDecisiones, ejecucion: irAEjecucion
+};
+function renderNavNegocio(pantallaId){
+  var nav = document.getElementById('navNegocio');
+  if(!nav) return;
+  var etapaActual = PANTALLAS_A_ETAPA_NEGOCIO[pantallaId];
+  if(!etapaActual){ nav.classList.remove('visible'); nav.innerHTML = ''; return; }
+  var eNP = estadoNegociosPro();
+  nav.innerHTML = '';
+  ETAPAS_NEGOCIO.forEach(function(etapa){
+    var esActual = etapa === etapaActual || (etapaActual === 'diagnostico' && etapa === 'dimensiones');
+    var pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'navnegocio-pill' + (esActual ? ' actual' : '');
+    var punto = document.createElement('span');
+    punto.className = 'navnegocio-punto ' + eNP.estados[etapa];
+    pill.appendChild(punto);
+    pill.appendChild(document.createTextNode(ETAPA_NEGOCIO_LABEL[etapa]));
+    pill.title = ESTADO_ETAPA_UX_LABEL[eNP.estados[etapa]];
+    pill.disabled = !eNP.disponibles[etapa];
+    pill.addEventListener('click', function(){ if(eNP.disponibles[etapa]) ETAPA_NEGOCIO_IR[etapa](); });
+    nav.appendChild(pill);
+  });
+  nav.classList.add('visible');
+}
 function mostrarPantalla(id){
   document.querySelectorAll('.pantalla').forEach(function(p){ p.classList.remove('activa'); });
   document.getElementById(id).classList.add('activa');
+  renderNavNegocio(id);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function volverAInicio(){ pintarInicio(); mostrarPantalla('pantallaInicio'); }
@@ -2298,40 +2458,44 @@ function construirSelectorDimensiones(){
     row.addEventListener('click', function(){ abrirDimension(cod); });
     cont.appendChild(row);
   });
+  /* N3.0-A.6: los cuatro gates de abajo antes recalculaban cada uno su propia condición
+     (codigosConfirmados().length, ultimoDiagnosticoIntegralConfirmado(), etc.) por separado.
+     Ahora leen `eNP.disponibles.*`, la misma fuente que usará la navegación persistente (A.7) y
+     que ya está alineada, campo a campo, con estas mismas funciones (ver comentario dentro de
+     estadoNegociosPro()). El texto de los hints que ya dice "vigente: vN" se deja tal cual --
+     sigue leyendo los arrays de state directamente, que es exactamente lo que necesita mostrar. */
+  var eNP = estadoNegociosPro();
   // N2.3: el botón de diagnóstico integral necesita al menos dos dimensiones confirmadas --
   // una sola no puede tener relaciones con otra.
   var btnInt = document.getElementById('btnVerIntegral');
   var hintInt = document.getElementById('hintIntegral');
-  var n = codigosConfirmados().length;
-  if(btnInt) btnInt.disabled = n < 2;
+  if(btnInt) btnInt.disabled = !eNP.disponibles.relaciones;
   if(hintInt){
-    hintInt.textContent = n < 2
+    hintInt.textContent = !eNP.disponibles.relaciones
       ? 'Confirmá al menos dos dimensiones para ver relaciones entre ellas.'
       : (state.diagnosticosIntegrales.length
-          ? 'Diagnóstico integral vigente: v' + state.diagnosticosIntegrales[state.diagnosticosIntegrales.length - 1].version + '.'
-          : 'Ya podés ver el diagnóstico integral entre las dimensiones confirmadas.');
+          ? 'Relaciones vigentes: v' + state.diagnosticosIntegrales[state.diagnosticosIntegrales.length - 1].version + '.'
+          : 'Ya podés ver las relaciones entre las dimensiones confirmadas.');
   }
   // N2.4: el proyectivo necesita un diagnóstico integral ya confirmado -- explora
   // transformaciones sobre relaciones ya detectadas, no vuelve a evaluar nada por su cuenta.
   var btnProy = document.getElementById('btnVerProyectivo');
   var hintProy = document.getElementById('hintProyectivo');
-  var diVigente = ultimoDiagnosticoIntegralConfirmado();
-  if(btnProy) btnProy.disabled = !diVigente;
+  if(btnProy) btnProy.disabled = !eNP.disponibles.proyectivo;
   if(hintProy){
-    hintProy.textContent = !diVigente
-      ? 'Confirmá un diagnóstico integral para explorar el proyectivo.'
+    hintProy.textContent = !eNP.disponibles.proyectivo
+      ? 'Confirmá relaciones entre dimensiones para explorar el proyectivo.'
       : (state.proyectivos.length
           ? 'Proyectivo vigente: v' + state.proyectivos[state.proyectivos.length - 1].version + '.'
-          : 'Ya podés explorar el proyectivo a partir del diagnóstico integral confirmado.');
+          : 'Ya podés explorar el proyectivo a partir de las relaciones confirmadas.');
   }
   // N2.5: el Campo de Decisiones necesita un proyectivo ya confirmado -- convierte parte de esas
   // posibilidades en decisiones explícitas, nunca decide a partir de una propuesta sin confirmar.
   var btnDec = document.getElementById('btnVerDecisiones');
   var hintDec = document.getElementById('hintDecisiones');
-  var proyVigente = ultimoProyectivoConfirmado();
-  if(btnDec) btnDec.disabled = !proyVigente;
+  if(btnDec) btnDec.disabled = !eNP.disponibles.decisiones;
   if(hintDec){
-    hintDec.textContent = !proyVigente
+    hintDec.textContent = !eNP.disponibles.decisiones
       ? 'Confirmá un proyectivo para abrir el Campo de Decisiones.'
       : (state.camposDecisiones.length
           ? 'Campo de decisiones vigente: v' + state.camposDecisiones[state.camposDecisiones.length - 1].version + '.'
@@ -2342,10 +2506,9 @@ function construirSelectorDimensiones(){
      genera ejecución. */
   var btnEjec = document.getElementById('btnVerEjecucion');
   var hintEjec = document.getElementById('hintEjecucion');
-  var activas = decisionesActivasDelCampoVigente();
-  if(btnEjec) btnEjec.disabled = activas.length === 0;
+  if(btnEjec) btnEjec.disabled = !eNP.disponibles.ejecucion;
   if(hintEjec){
-    hintEjec.textContent = activas.length === 0
+    hintEjec.textContent = !eNP.disponibles.ejecucion
       ? 'Adoptá o condicioná al menos una decisión para abrir Ejecución y Seguimiento.'
       : (ejecucionVigente()
           ? 'Ejecución vigente: ' + (state.ejecucionActual ? 'ciclo en curso' : ('v' + state.ejecuciones[state.ejecuciones.length - 1].version + ' (cerrado)')) + '.'
@@ -2375,6 +2538,44 @@ function resumenConfirmadasTexto(codActual){
     return c + ' ' + d.estado + (d.tension_principal ? ' (' + d.tension_principal + ')' : '');
   }).join(' · ');
 }
+
+/* ================= N3.0-A · instrumentación de consumo real =================
+   index.html ya tiene un registro de uso real (registrarUso() -> localStorage['ag_core_uso']),
+   pero vive únicamente ahí. negocios.html se abre en una pestaña aparte (window.open) y no debe
+   depender de window.opener para usarlo -- se rompería si el usuario llega por URL directa o si
+   la pestaña del Core ya se cerró. En vez de eso: mismo esquema, misma clave de localStorage,
+   helper propio acá. El resumen de consumo del Core (resumenUso()) suma estos registros sin
+   necesitar saber que vinieron de otra pestaña -- mismo origen, misma clave. */
+var USO_MAX_NEGOCIO = 500;
+var _ultimoUsoIA = null;   // dejado por cada llamarIA* justo antes de resolver -- ver nota ahí
+function cargarUsoNegocio(){
+  try{
+    var raw = JSON.parse(localStorage.getItem('ag_core_uso') || 'null');
+    if(!raw || !Array.isArray(raw.registros)) return { version_uso: 1, registros: [] };
+    return raw;
+  }catch(e){ return { version_uso: 1, registros: [] }; }
+}
+function registrarUsoNegocio(tipo, usage, historialLen){
+  try{
+    if(!usage) return null;
+    var r = cargarUsoNegocio();
+    var reg = {
+      f: new Date().toISOString(),
+      tipo: tipo,
+      org: state.organismoId || null,
+      turno: historialLen ? Math.ceil(historialLen / 2) : 0,
+      ent: usage.input_tokens || 0,
+      sal: usage.output_tokens || 0,
+      cle: usage.cache_read_input_tokens || 0,
+      ces: usage.cache_creation_input_tokens || 0
+    };
+    r.registros.push(reg);
+    if(r.registros.length > USO_MAX_NEGOCIO) r.registros = r.registros.slice(r.registros.length - USO_MAX_NEGOCIO);
+    localStorage.setItem('ag_core_uso', JSON.stringify(r));
+    return reg;
+  }catch(e){ return null; }
+}
+
 function PROMPT_DIMENSION(cod){
   var nombre = DIMENSIONES_NEGOCIO_MODO[cod];
   return 'Estás ayudando a comprender una sola dimensión del negocio activo: ' + nombre + '.\n' +
@@ -2405,6 +2606,7 @@ function llamarIADimension(mensajes){
         throw err;
       }
       var texto = (data.content || []).map(function(b){ return b.text || ''; }).join('');
+      _ultimoUsoIA = data.usage || null;   // N3.0-A: lo toma registrarUsoNegocio() en el call site
       return texto;
     });
   });
@@ -2449,7 +2651,13 @@ function agregarBurbuja(tipo, texto, hiloId){
   hilo.scrollTop = hilo.scrollHeight;
 }
 
-function mostrarErrorIA(err, hiloId){
+/* N3.0-A: mapeo de error centralizado, separado de cómo se muestra (antes vivía adentro de
+   mostrarErrorIA, pero pedirLecturaSeguimiento() no tiene un hilo de chat donde poner una
+   burbuja -- necesita el mismo texto en otro lugar de la pantalla). Se agrega acá el caso de
+   "sin conexión": un fetch() que falla a nivel de red (offline, DNS, etc.) nunca llega a tener
+   res.ok/err.codigo -- tira un TypeError liso, sin esa forma. Antes cualquiera de los seis
+   flujos mostraba ese TypeError crudo como si fuera el mensaje del servidor; ahora se distingue. */
+function textoErrorIA(err){
   var mensajes = {
     sin_saldo: 'Te quedaste sin créditos. Revisá tu plan desde el Core, en Cuenta.',
     requiere_plan: 'Tu plan actual no incluye este módulo.',
@@ -2458,8 +2666,13 @@ function mostrarErrorIA(err, hiloId){
     sin_sesion: 'No encontramos tu sesión. Volvé a entrar desde el Core.',
     servicio_no_disponible: 'El servicio no está disponible en este momento. Probá de nuevo en unos minutos.'
   };
-  var texto = (err && mensajes[err.codigo]) || (err && err.message) || 'No se pudo completar la consulta.';
-  agregarBurbuja('ia', texto, hiloId);
+  if(err && !err.codigo && err instanceof TypeError){
+    return 'No se pudo conectar. Revisá tu conexión a internet y probá de nuevo.';
+  }
+  return (err && mensajes[err.codigo]) || (err && err.message) || 'No se pudo completar la consulta. Probá de nuevo.';
+}
+function mostrarErrorIA(err, hiloId){
+  agregarBurbuja('ia', textoErrorIA(err), hiloId);
 }
 
 function abrirDimension(cod){
@@ -2498,6 +2711,7 @@ function enviarTurnoDimension(textoUsuario){
     state.llamando = false;
     document.getElementById('dimCargando').style.display = 'none';
     document.getElementById('btnEnviarDim').disabled = false;
+    registrarUsoNegocio('negocio_dimension', _ultimoUsoIA, state.historialDim.length);
     state.historialDim.push({ role: 'assistant', content: texto });
     var parsed = parseLecturaDim(texto);
     agregarBurbuja('ia', parsed.visible);
@@ -2642,6 +2856,7 @@ function llamarIADiagnosticoIntegral(mensajes){
         throw err;
       }
       var texto = (data.content || []).map(function(b){ return b.text || ''; }).join('');
+      _ultimoUsoIA = data.usage || null;   // N3.0-A: lo toma registrarUsoNegocio() en el call site
       return texto;
     });
   });
@@ -2752,11 +2967,11 @@ function abrirDiagnosticoIntegral(){
     vigenteBox.style.display = 'block';
     vigenteBox.innerHTML = '';
     var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '6px';
-    h.textContent = 'Vigente: diagnóstico integral v' + vigente.version + ' (' + new Date(vigente.fecha).toLocaleDateString('es-AR') + ')';
+    h.textContent = 'Vigente: relaciones v' + vigente.version + ' (' + new Date(vigente.fecha).toLocaleDateString('es-AR') + ')';
     var p = document.createElement('div'); p.style.fontSize = '.85rem'; p.style.color = 'var(--texto-suave)';
     p.textContent = vigente.contenido.tension_sistemica;
     vigenteBox.appendChild(h); vigenteBox.appendChild(p);
-    document.getElementById('intIntro').textContent = 'Ya hay un diagnóstico integral confirmado. Si generás uno nuevo y lo confirmás, se agrega como versión nueva -- este no se pierde.';
+    document.getElementById('intIntro').textContent = 'Ya hay relaciones confirmadas entre las dimensiones. Si generás una versión nueva y la confirmás, se agrega aparte -- esta no se pierde.';
   } else {
     vigenteBox.style.display = 'none';
     document.getElementById('intIntro').textContent = 'La IA va a proponer qué relaciones entre las dimensiones ya evaluadas explican el estado global del negocio.';
@@ -2782,6 +2997,7 @@ function enviarTurnoIntegral(textoUsuario){
     state.llamandoIntegral = false;
     document.getElementById('intCargando').style.display = 'none';
     document.getElementById('btnEnviarInt').disabled = false;
+    registrarUsoNegocio('negocio_relaciones', _ultimoUsoIA, state.historialIntegral.length);
     state.historialIntegral.push({ role: 'assistant', content: texto });
     var parsed = parseDiagnosticoIntegral(texto);
     agregarBurbuja('ia', parsed.visible, 'intHilo');
@@ -2914,7 +3130,7 @@ function enviarCorreccionIntegral(){
   if(!texto) return;
   document.getElementById('intPropuestaCard').style.display = 'none';
   state.propuestaIntegral = null;
-  enviarTurnoIntegral('No estoy de acuerdo con ese diagnóstico integral: ' + texto);
+  enviarTurnoIntegral('No estoy de acuerdo con esas relaciones: ' + texto);
 }
 function seguirProfundizandoIntegral(){
   document.getElementById('intPropuestaCard').style.display = 'none';
@@ -3009,7 +3225,7 @@ function llamarIAProyectivo(mensajes){
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
+      max_tokens: MAX_TOKENS_PROYECTIVO,
       system: PROMPT_PROYECTIVO(),
       messages: mensajes
     })
@@ -3021,6 +3237,7 @@ function llamarIAProyectivo(mensajes){
         throw err;
       }
       var texto = (data.content || []).map(function(b){ return b.text || ''; }).join('');
+      _ultimoUsoIA = data.usage || null;   // N3.0-A: lo toma registrarUsoNegocio() en el call site
       return texto;
     });
   });
@@ -3157,7 +3374,7 @@ function abrirProyectivo(){
   box.innerHTML = '';
   if(di){
     var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '8px';
-    h.textContent = 'Diagnóstico integral vigente (v' + di.version + ')';
+    h.textContent = 'Relaciones vigentes (v' + di.version + ')';
     var p1 = document.createElement('div'); p1.style.fontSize = '.85rem'; p1.style.marginBottom = '6px';
     p1.textContent = 'Tensión sistémica: ' + di.contenido.tension_sistemica;
     var p2 = document.createElement('div'); p2.style.fontSize = '.85rem'; p2.style.marginBottom = '6px';
@@ -3209,6 +3426,7 @@ function enviarTurnoProyectivo(textoUsuario){
     state.llamandoProyectivo = false;
     document.getElementById('proyCargando').style.display = 'none';
     document.getElementById('btnEnviarProy').disabled = false;
+    registrarUsoNegocio('negocio_proyectivo', _ultimoUsoIA, state.historialProyectivo.length);
     state.historialProyectivo.push({ role: 'assistant', content: texto });
     var parsed = parseProyectivoNegocio(texto);
     agregarBurbuja('ia', parsed.visible, 'proyHilo');
@@ -3507,7 +3725,7 @@ function llamarIACampoDecisiones(mensajes){
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
+      max_tokens: MAX_TOKENS_CAMPO_DECISIONES,
       system: PROMPT_CAMPO_DECISIONES(),
       messages: mensajes
     })
@@ -3519,6 +3737,7 @@ function llamarIACampoDecisiones(mensajes){
         throw err;
       }
       var texto = (data.content || []).map(function(b){ return b.text || ''; }).join('');
+      _ultimoUsoIA = data.usage || null;   // N3.0-A: lo toma registrarUsoNegocio() en el call site
       return texto;
     });
   });
@@ -3814,6 +4033,7 @@ function enviarTurnoDecisiones(textoUsuario){
     state.llamandoDecisiones = false;
     document.getElementById('decCargando').style.display = 'none';
     document.getElementById('btnEnviarDec').disabled = false;
+    registrarUsoNegocio('negocio_decisiones', _ultimoUsoIA, state.historialDecisiones.length);
     state.historialDecisiones.push({ role: 'assistant', content: texto });
     var parsed = parseCampoDecisiones(texto);
     agregarBurbuja('ia', parsed.visible, 'decHilo');
@@ -4236,6 +4456,7 @@ function llamarIAPlanEjecucion(mensajes){
         err.codigo = data && data.error && data.error.codigo;
         throw err;
       }
+      _ultimoUsoIA = data.usage || null;   // N3.0-A: lo toma registrarUsoNegocio() en el call site
       return (data.content || []).map(function(b){ return b.text || ''; }).join('');
     });
   });
@@ -4478,6 +4699,7 @@ function llamarIALecturaSeguimiento(mensajes, accion){
         err.codigo = data && data.error && data.error.codigo;
         throw err;
       }
+      _ultimoUsoIA = data.usage || null;   // N3.0-A: lo toma registrarUsoNegocio() en el call site
       return (data.content || []).map(function(b){ return b.text || ''; }).join('');
     });
   });
@@ -4715,6 +4937,7 @@ function enviarTurnoEjecucion(textoUsuario){
     state.llamandoEjecucion = false;
     document.getElementById('ejecCargando').style.display = 'none';
     document.getElementById('btnEnviarEjec').disabled = false;
+    registrarUsoNegocio('negocio_plan_ejecucion', _ultimoUsoIA, state.historialEjecucion.length);
     state.historialEjecucion.push({ role: 'assistant', content: texto });
     var parsed = parsePlanEjecucion(texto);
     agregarBurbuja('ia', parsed.visible, 'ejecHilo');
@@ -4865,6 +5088,7 @@ function enviarCorreccionEjecucion(){
 function abrirVistaAccion(accionId){
   state.accionActiva = accionId;
   state.propuestaSeguimiento = null;
+  state.errorSeguimiento = null;
   state.historialSeguimiento = [];
   document.getElementById('ejecVistaLista').style.display = 'none';
   document.getElementById('ejecVistaPreparar').style.display = 'none';
@@ -4948,17 +5172,25 @@ function pedirLecturaSeguimiento(accionId){
   var a = accionActivaObj();
   if(!a) return;
   state.llamandoSeguimiento = true;
+  state.errorSeguimiento = null;
   var cargando = document.getElementById('ejecLecturaCargando');
   if(cargando) cargando.style.display = 'inline';
+  var btnPedir = document.getElementById('btnPedirLectura');
+  if(btnPedir) btnPedir.disabled = true;
   var mensajes = [{ role: 'user', content: '(pedime una lectura de esta acción a partir de la evidencia y el seguimiento registrados)' }];
   llamarIALecturaSeguimiento(mensajes, a).then(function(texto){
     state.llamandoSeguimiento = false;
+    registrarUsoNegocio('negocio_seguimiento', _ultimoUsoIA, state.historialSeguimiento.length);
     var parsed = parseLecturaSeguimiento(texto);
     if(parsed.propuesta) state.propuestaSeguimiento = parsed.propuesta;
     renderVistaAccion();
   }).catch(function(err){
     state.llamandoSeguimiento = false;
-    console.error('lectura de seguimiento:', err);
+    /* N3.0-A: antes esto solo quedaba en consola -- el usuario veía "Pensando..." desaparecer
+       sin ninguna explicación. Ahora se guarda un texto de error legible y se re-renderiza para
+       mostrarlo junto al botón; "Pedir lectura de la IA" nunca queda deshabilitado, así que
+       reintentar es simplemente volver a tocarlo. */
+    state.errorSeguimiento = textoErrorIA(err);
     renderVistaAccion();
   });
 }
@@ -5041,12 +5273,17 @@ function renderVistaAccion(){
 
   if(ejec){
     var boxLectura = document.createElement('div'); boxLectura.style.marginTop = '14px';
-    var btnPedir = document.createElement('button'); btnPedir.className = 'dec-btn'; btnPedir.textContent = 'Pedir lectura de la IA';
+    var btnPedir = document.createElement('button'); btnPedir.id = 'btnPedirLectura'; btnPedir.className = 'dec-btn'; btnPedir.textContent = 'Pedir lectura de la IA';
     btnPedir.addEventListener('click', function(){ pedirLecturaSeguimiento(a.id); });
     boxLectura.appendChild(btnPedir);
     var cargando = document.createElement('span'); cargando.id = 'ejecLecturaCargando'; cargando.className = 'hint'; cargando.style.display = 'none'; cargando.style.marginLeft = '10px'; cargando.textContent = 'Pensando…';
     boxLectura.appendChild(cargando);
     cont.appendChild(boxLectura);
+    if(state.errorSeguimiento){
+      var errBox = document.createElement('div'); errBox.className = 'hint'; errBox.style.color = '#B23A3A'; errBox.style.marginTop = '6px';
+      errBox.textContent = state.errorSeguimiento;
+      cont.appendChild(errBox);
+    }
 
     if(state.propuestaSeguimiento){
       var lect = state.propuestaSeguimiento;
@@ -5142,6 +5379,153 @@ function confirmarCierreEjecucion(){
   volverASelectorDesdeEjecucion();
 }
 
+/* ================= N3.0-A.8 · validarIntegridadEvaluacionNegocio() =================
+   Diagnóstico puro sobre la FORMA PERSISTIDA de la evaluación (la misma forma que arma
+   cerrarEvaluacion() más abajo, y que index.html lee en adjuntarEvaluacionNegocioPro()):
+   dimensiones[], diagnosticos_integrales[], proyectivos[], campos_decisiones[], ejecuciones[],
+   ejecucion_actual. No es el `state` en memoria -- por eso recibe `evaluacion` como parámetro en
+   vez de leer `state` directamente, y así sirve igual para la evaluación recién armada acá como
+   para una ya importada.
+   Nunca autorrepara nada (mandato explícito de Javier, punto 9): solo devuelve una lista de
+   problemas encontrados, cada uno con severidad, para que el usuario (o un desarrollo futuro)
+   decida qué hacer. Lista vacía = integridad OK. */
+function validarIntegridadEvaluacionNegocio(evaluacion){
+  var problemas = [];
+  function marcar(codigo, severidad, mensaje){ problemas.push({ codigo: codigo, severidad: severidad, mensaje: mensaje }); }
+  if(!evaluacion || typeof evaluacion !== 'object'){
+    marcar('EVALUACION_VACIA', 'error', 'No hay una evaluación para validar.');
+    return problemas;
+  }
+
+  var dims = Array.isArray(evaluacion.dimensiones) ? evaluacion.dimensiones : [];
+  var dis = Array.isArray(evaluacion.diagnosticos_integrales) ? evaluacion.diagnosticos_integrales : [];
+  var proys = Array.isArray(evaluacion.proyectivos) ? evaluacion.proyectivos : [];
+  var campos = Array.isArray(evaluacion.campos_decisiones) ? evaluacion.campos_decisiones : [];
+  var ejecs = Array.isArray(evaluacion.ejecuciones) ? evaluacion.ejecuciones : [];
+  var ejecActual = evaluacion.ejecucion_actual || null;
+
+  // ---- 9: campos confirmados imposibles (dimensiones con estado fuera del alfabeto conocido) ----
+  dims.forEach(function(d){
+    if(d.confirmada && ORDEN_ESTADOS.indexOf(d.estado) === -1){
+      marcar('DIMENSION_ESTADO_INVALIDO', 'error', 'Dimensión ' + (d.cod || '?') + ' está confirmada con un estado no reconocido: "' + d.estado + '".');
+    }
+  });
+
+  // ---- 8: versiones duplicadas dentro de cada capa cerrada ----
+  function chequearVersionesDuplicadas(lista, etiqueta){
+    var vistas = {};
+    lista.forEach(function(item){
+      var v = item && item.version;
+      if(v === undefined || v === null) return;
+      if(vistas[v]) marcar('VERSION_DUPLICADA', 'error', etiqueta + ': la versión ' + v + ' aparece más de una vez.');
+      vistas[v] = true;
+    });
+  }
+  chequearVersionesDuplicadas(dis, 'Relaciones');
+  chequearVersionesDuplicadas(proys, 'Proyectivo');
+  chequearVersionesDuplicadas(campos, 'Campo de decisiones');
+  chequearVersionesDuplicadas(ejecs, 'Ejecución');
+
+  // ---- 9: capas cerradas con confirmado !== true, o sin contenido/version (estado imposible) ----
+  function chequearCerradosConfirmados(lista, etiqueta){
+    lista.forEach(function(item){
+      if(!item) return;
+      if(item.confirmado !== true) marcar('CERRADO_SIN_CONFIRMAR', 'error', etiqueta + ' v' + item.version + ' está en el histórico pero no tiene confirmado:true.');
+      if(item.version === undefined || item.version === null) marcar('CERRADO_SIN_VERSION', 'error', etiqueta + ' tiene una entrada histórica sin número de versión.');
+    });
+  }
+  chequearCerradosConfirmados(dis, 'Relaciones');
+  chequearCerradosConfirmados(proys, 'Proyectivo');
+  chequearCerradosConfirmados(campos, 'Campo de decisiones');
+  chequearCerradosConfirmados(ejecs, 'Ejecución');
+
+  // ---- 2: decisiones sin proyectivo de origen ----
+  var versionesProyectivo = {};
+  proys.forEach(function(p){ versionesProyectivo[p.version] = true; });
+  var idsDecisionPorCampo = {};   // version_campo -> set de ids de decisión (para 1/3/6 más abajo)
+  var todosLosIdsDecision = {};   // id -> true, sin importar de qué campo (para 3)
+  campos.forEach(function(campo){
+    var ds = (campo.contenido && Array.isArray(campo.contenido.decisiones)) ? campo.contenido.decisiones : [];
+    var idsEsteCampo = {};
+    ds.forEach(function(d){
+      idsEsteCampo[d.id] = true;
+      todosLosIdsDecision[d.id] = true;
+      var pv = d.origen && d.origen.proyectivo_version;
+      if(!pv || !versionesProyectivo[pv]){
+        marcar('DECISION_SIN_PROYECTIVO_ORIGEN', 'error', 'Decisión ' + d.id + ' (campo v' + campo.version + ') no referencia un proyectivo confirmado real (origen.proyectivo_version: ' + (pv || 'ausente') + ').');
+      }
+      // ---- 6 (parcial): dependencias entre decisiones del mismo campo ----
+      (Array.isArray(d.dependencias) ? d.dependencias : []).forEach(function(depId){
+        if(!idsEsteCampo[depId] && ds.every(function(otra){ return otra.id !== depId; })){
+          marcar('DEPENDENCIA_ROTA', 'aviso', 'Decisión ' + d.id + ' (campo v' + campo.version + ') depende de "' + depId + '", que no existe en el mismo campo.');
+        }
+      });
+    });
+    idsDecisionPorCampo[campo.version] = idsEsteCampo;
+  });
+
+  // ---- 1/3/4/5/6: integridad dentro de cada ejecución (cerradas + la abierta) ----
+  function chequearEjecucion(ejec, etiqueta){
+    if(!ejec) return;
+    var accs = Array.isArray(ejec.acciones) ? ejec.acciones : [];
+    var inds = Array.isArray(ejec.indicadores) ? ejec.indicadores : [];
+    var evs = Array.isArray(ejec.evidencias) ? ejec.evidencias : [];
+    var desv = Array.isArray(ejec.desvios) ? ejec.desvios : [];
+    var idsAccion = {};
+    accs.forEach(function(a){ idsAccion[a.id] = true; });
+
+    accs.forEach(function(a){
+      // ---- 3: acciones sin decisión real detrás ----
+      if(!a.decision_id || !todosLosIdsDecision[a.decision_id]){
+        marcar('ACCION_SIN_DECISION', 'error', etiqueta + ': acción ' + a.id + ' no referencia ninguna decisión existente (decision_id: ' + (a.decision_id || 'ausente') + ').');
+      }
+      // ---- 6: dependencias de la acción hacia otras acciones de la misma ejecución ----
+      (Array.isArray(a.depende_de) ? a.depende_de : []).concat(Array.isArray(a.dependencias_propuestas) ? a.dependencias_propuestas : [])
+        .forEach(function(depId){
+          if(!idsAccion[depId]) marcar('DEPENDENCIA_ROTA', 'aviso', etiqueta + ': acción ' + a.id + ' depende de "' + depId + '", que no existe en la misma ejecución.');
+        });
+    });
+
+    // ---- 4: indicadores huérfanos (accion_id no existe en esta ejecución) ----
+    inds.forEach(function(i){
+      if(!idsAccion[i.accion_id]) marcar('INDICADOR_HUERFANO', 'error', etiqueta + ': indicador ' + i.id + ' referencia una acción inexistente (' + i.accion_id + ').');
+    });
+    var idsIndicador = {}; inds.forEach(function(i){ idsIndicador[i.id] = true; });
+
+    // ---- 5: evidencias con acción (o indicador) inexistente ----
+    evs.forEach(function(e){
+      if(!idsAccion[e.accion_id]) marcar('EVIDENCIA_SIN_ACCION', 'error', etiqueta + ': evidencia ' + e.id + ' referencia una acción inexistente (' + e.accion_id + ').');
+      if(e.indicador_id && !idsIndicador[e.indicador_id]) marcar('EVIDENCIA_SIN_INDICADOR', 'aviso', etiqueta + ': evidencia ' + e.id + ' referencia un indicador inexistente (' + e.indicador_id + ').');
+    });
+
+    // ---- 1: desvíos con acción inexistente ----
+    desv.forEach(function(d){
+      if(!idsAccion[d.accion_id]) marcar('DESVIO_SIN_ACCION', 'error', etiqueta + ': un desvío referencia una acción inexistente (' + d.accion_id + ').');
+    });
+  }
+  ejecs.forEach(function(ejec){ chequearEjecucion(ejec, 'Ejecución v' + ejec.version + ' (cerrada)'); });
+  chequearEjecucion(ejecActual, 'Ejecución activa');
+
+  // ---- 7: ejecución abierta + histórica inconsistente ----
+  if(ejecActual){
+    if(ejecActual.confirmado === true){
+      marcar('EJECUCION_ABIERTA_MARCADA_CONFIRMADA', 'error', 'La ejecución activa (ejecucion_actual) tiene confirmado:true -- un ciclo vivo nunca debería estarlo.');
+    }
+    var origen = ejecActual.campo_decisiones_origen;
+    if(!origen || !idsDecisionPorCampo[origen.version]){
+      marcar('EJECUCION_SIN_CAMPO_ORIGEN', 'error', 'La ejecución activa no referencia un Campo de decisiones confirmado real (campo_decisiones_origen.version: ' + (origen && origen.version) + ').');
+    } else {
+      (Array.isArray(origen.ids_decisiones_activas) ? origen.ids_decisiones_activas : []).forEach(function(id){
+        if(!idsDecisionPorCampo[origen.version][id]){
+          marcar('EJECUCION_DECISION_ACTIVA_INEXISTENTE', 'aviso', 'La ejecución activa lista la decisión activa "' + id + '", que no existe en el campo v' + origen.version + '.');
+        }
+      });
+    }
+  }
+
+  return problemas;
+}
+
 function cerrarEvaluacion(){
   var dims = ORDEN_DIMENSIONES_NEGOCIO.map(function(cod){
     var d = state.dimensiones[cod];
@@ -5172,9 +5556,36 @@ function cerrarEvaluacion(){
   mostrarExportacion(payload);
 }
 
+/* N3.0-A.8: se corre acá, justo antes de mostrar el texto a exportar -- es el único punto donde
+   ya existe la forma persistida completa. Puramente informativo: si hay problemas se muestran
+   como aviso, pero la exportación sigue disponible igual (nunca se bloquea ni se autorrepara). */
 function mostrarExportacion(payload){
   var caja = document.getElementById('cajaExportacion');
   caja.value = JSON.stringify(payload, null, 2);
+  var avisoBox = document.getElementById('cierreIntegridadAviso');
+  if(avisoBox){
+    var problemas = validarIntegridadEvaluacionNegocio(payload.evaluacion);
+    if(problemas.length){
+      var errores = problemas.filter(function(p){ return p.severidad === 'error'; }).length;
+      avisoBox.style.display = 'block';
+      avisoBox.innerHTML = '';
+      var titulo = document.createElement('p');
+      titulo.className = 'hint';
+      titulo.style.color = '#B23A3A';
+      titulo.textContent = 'Se detectaron ' + problemas.length + ' inconsistencia(s) en los datos (' + errores + ' de integridad) -- la exportación de todas formas queda disponible:';
+      avisoBox.appendChild(titulo);
+      var lista = document.createElement('ul');
+      lista.style.margin = '4px 0 0 18px'; lista.style.fontSize = '.82rem'; lista.style.color = '#B23A3A';
+      problemas.forEach(function(p){
+        var li = document.createElement('li'); li.textContent = p.mensaje;
+        lista.appendChild(li);
+      });
+      avisoBox.appendChild(lista);
+    } else {
+      avisoBox.style.display = 'none';
+      avisoBox.innerHTML = '';
+    }
+  }
   mostrarPantalla('pantallaCierre');
 }
 function copiarExportacion(){

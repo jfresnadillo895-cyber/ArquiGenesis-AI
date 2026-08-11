@@ -3812,7 +3812,7 @@ function adjuntarEvaluacionNegocioPro(datos, silencioso, forzarDestino){
       return d.cod + ' ' + (d.estado || 'desconocida') + (d.tension_principal ? ' (' + d.tension_principal + ')' : '');
     }).join(' · ') +
     (ev.sintesis ? '. Síntesis: ' + ev.sintesis : '') +
-    (tensionSistemica ? '. Diagnóstico integral (v' + ultimoDI.version + '): ' + tensionSistemica : '') +
+    (tensionSistemica ? '. Relaciones (v' + ultimoDI.version + '): ' + tensionSistemica : '') +
     (sintesisProyectiva ? '. Proyectivo (v' + ultimoProy.version + '): ' + sintesisProyectiva : '') +
     (resumenEjecucion ? '. ' + resumenEjecucion : '') +
     (resumenDecisiones ? '. Campo de decisiones (v' + ultimoCD.version + '): ' + resumenDecisiones : '');
@@ -6830,7 +6830,7 @@ function correrPruebasAuto(){
         adjuntarEvaluacionNegocioPro(payload, true);
         var r = o.evaluaciones_negocio_pro[0].resumen;
         // tiene que usar la ÚLTIMA versión (v2), no la primera
-        return r.indexOf('Diagnóstico integral (v2): la presión de margen se transfiere desde mercado a economía') > -1
+        return r.indexOf('Relaciones (v2): la presión de margen se transfiere desde mercado a economía') > -1
           && r.indexOf('primera lectura') === -1;
       } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
@@ -6846,7 +6846,7 @@ function correrPruebasAuto(){
           ], sintesis:'', diagnosticos_integrales: [] } };
         adjuntarEvaluacionNegocioPro(payload, true);
         var r = o.evaluaciones_negocio_pro[0].resumen;
-        return r.indexOf('Diagnóstico integral') === -1 && r.indexOf('B1 estable') > -1;
+        return r.indexOf('Relaciones (v') === -1 && r.indexOf('B1 estable') > -1;
       } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
     chk('IMP·6 · resumen incluye el último proyectivos[] confirmado (N2.4)', (function(){
@@ -6869,7 +6869,7 @@ function correrPruebasAuto(){
         // tiene que usar la ÚLTIMA versión (v2), no la primera, y no perder el diagnóstico integral
         return r.indexOf('Proyectivo (v2): reorganizar la relación comercial reduciría la dependencia de pocos clientes') > -1
           && r.indexOf('primera exploración') === -1
-          && r.indexOf('Diagnóstico integral (v1)') > -1;
+          && r.indexOf('Relaciones (v1)') > -1;
       } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
     chk('IMP·7 · resumen se comporta igual que N2.3 cuando no hay proyectivo confirmado', (function(){
@@ -6910,7 +6910,7 @@ function correrPruebasAuto(){
         var r = o.evaluaciones_negocio_pro[0].resumen;
         // tiene que usar la ÚLTIMA versión (v2), no la primera, y no perder proyectivo/diagnóstico integral
         return r.indexOf('Campo de decisiones (v2): 1 adoptada, 1 condicionada, 1 sin resolver') > -1
-          && r.indexOf('Proyectivo (v1)') > -1 && r.indexOf('Diagnóstico integral (v1)') > -1;
+          && r.indexOf('Proyectivo (v1)') > -1 && r.indexOf('Relaciones (v1)') > -1;
       } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
     chk('IMP·9 · resumen se comporta igual que N2.4 cuando no hay campo de decisiones confirmado', (function(){
