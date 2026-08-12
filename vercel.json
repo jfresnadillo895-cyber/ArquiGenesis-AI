@@ -8,5 +8,10 @@
       "path": "/api/comm-cron",
       "schedule": "30 10 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "api/anthropic.js": {
+      "maxDuration": 60
+    }
+  }
 }
