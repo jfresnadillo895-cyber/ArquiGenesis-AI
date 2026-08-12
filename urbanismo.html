@@ -2870,20 +2870,35 @@ let cDiag=null, cProy=null, starRating=0;
 // ══════════════════════════════════════════
 // PROMPT
 // ══════════════════════════════════════════
-function buildPrompt(ciudad, pasivo, c2, ref){
+function promptEncabezado(){
   return `Eres un experto en análisis sistémico aplicando la metodología ArquiGenesis AI.
 
 CONTEXTO DE ANÁLISIS: ${contextoApp === 'urban' ? 'URBANISMO — analizás un territorio o ciudad' : contextoApp === 'business' ? 'ORGANIZACIONES — analizás una empresa, estudio profesional o PYME' : 'INVESTIGACIÓN — analizás un proyecto de investigación o tesis'}
 
 ${FIRMA_METODOLOGICA}
-${contextoParaPrompt(false)}${marcoCoreParaPrompt()}
-PRINCIPIOS DEL SISTEMA:
+${contextoParaPrompt(false)}${marcoCoreParaPrompt()}PRINCIPIOS DEL SISTEMA:
 El sistema lee cualquier organismo complejo como una red de relaciones. Las 6 dimensiones son 2 tríadas paralelas (Ambiente × Sujeto), organizadas por Espacio · Energía · Transformación:
 - Ambiente/Sistema: ${contextoApp === 'business' ? 'GOBERNANZA(E) · CULTURA ORGANIZACIONAL(En) · TRAYECTORIA CORPORATIVA(T)' : 'MARCO INSTITUCIONAL(E) · PATRIMONIO Y EXPRESIÓN(En) · DINÁMICA TERRITORIAL(T)'}
 - Sujeto/Actor: ${contextoApp === 'business' ? 'VISIÓN E INNOVACIÓN(E) · CLIMA Y VÍNCULOS(En) · CAPACIDADES OPERATIVAS(T)' : 'INTENCIÓN PROYECTUAL(E) · COHESIÓN SOCIAL(En) · ACTOR TERRITORIAL(T)'}
 
 INSTRUCCIÓN CLAVE: Evaluá las RELACIONES entre dimensiones. La tensión entre Ambiente y Sujeto es el diagnóstico real. Si la Gobernanza es alta pero la Visión es baja, hay una organización que tiene estructura pero no dirección. Esa es la lectura sistémica que importa.
+`;
+}
 
+/* N3.0-URB-1 (12/08): "Analizar la ciudad" hacía UNA sola llamada pidiendo los 36 indicadores
+   Y la síntesis completa en el mismo JSON, max_tokens efectivo 4000 (tope real del servidor,
+   ver api/anthropic.js). En Vercel Hobby maxDuration tope 60s -- confirmado por el log real de
+   Javier: "Vercel Runtime Timeout Error: Task timed out after 60 seconds". La generación
+   completa (36 items + dims + tensiones + 3 receptivos con 4 acciones cada uno + espiral +
+   síntesis) es demasiado contenido para una sola respuesta dentro de ese margen.
+   Partido en dos llamadas secuenciales, mismo patrón que ya usa Negocios Pro (varias llamadas
+   por evaluación, cada una acotada): primero los 36 indicadores (dato compacto, mayoría campos
+   cortos), después la síntesis sistémica LEYENDO esos indicadores ya resueltos como contexto
+   (no los vuelve a inventar). Cada llamada individual entra cómoda en 60s. Javier eligió este
+   camino en vez de subir a Vercel Pro (que hubiera resuelto lo mismo solo subiendo maxDuration,
+   sin tocar código, pero con costo mensual) -- decisión suya, documentada acá. */
+function buildPromptItems(ciudad,pasivo,c2,ref){
+  return `${promptEncabezado()}
 36 INDICADORES — evaluá los 36 en ESTE ORDEN EXACTO (n° | dimensión | indicador | grafo | grupo):
 ${ITEMS_36.map((it,i)=>`${i+1}|${it.e}|${it.n}|${it.a}|${it.g}`).join('\n')}
 En "items" devolvé EXACTAMENTE 36 objetos en el mismo orden, SIN repetir nombres ni dimensiones: solo los campos de valor.
@@ -2892,7 +2907,6 @@ EJES: CIVILIZACIÓN(Institucional)·MENTE(Cognitiva)·CULTURA(Cultural)·EMOCIÓ
 PONDERACIÓN PT×AP: AA=1.0 AM=0.75 AB=0.50 MA=0.75 MM=0.50 MB=0.30 BA=0.50 BM=0.30 BB=0.15
 CLASIFICADOR: encapsulá cualquier info adicional en el indicador más apropiado.
 CONFIANZA (conf): Para cada ítem indicá A=Alta (información verificable y abundante), M=Media (información parcial o inferida), B=Baja (estimación con datos escasos). Sé honesto — los ítems con conf=B son candidatos al refinamiento con información local.
-9 DIMS(0-10): Principio rector·Tensión reguladora·Patrones organizadores·Inteligencia colectiva·Energía integradora·Carácter propio·Orientación estratégica·Manifestación concreta·Horizonte proyectual
 ESCALA: 0-2=ausente 3-4=incipiente 5-6=funcional 7-8=desarrollado 9-10=excepcional
 ${pasivo?`ABORDAJE PASIVO — OBSERVACIÓN DIRECTA DEL TERRITORIO:
 ${pasivo}
@@ -2902,24 +2916,46 @@ INSTRUCCIÓN: Cada nivel del abordaje pasivo afecta indicadores específicos:
 - NIVEL INSTINTIVO → ajusta los valores de los ítems de EMOCIÓN y CULTURA  
 - NIVEL INTUITIVO → ajusta los valores de los ítems de MENTE y CIVILIZACIÓN
 Incorporá estas observaciones como información de primera fuente que puede modificar los valores que asignarías solo con información pública. Si la observación contradice la información pública, priorizá la observación directa.
-`:''}${c2?'INFO LOCAL:\n'+c2+'\n':''}${ref?'REFINAMIENTO:\n'+ref+'\n':''}${intencionSeleccionada?`INTENCIÓN DEL DIAGNÓSTICO: ${intencionSeleccionada}
-INSTRUCCIÓN: El Abordaje Proyectivo debe estar orientado específicamente hacia este objetivo. Priorizá las dimensiones, indicadores y acciones más relevantes para "${intencionSeleccionada}". El proyectivo no es genérico — es intencionado.
-`:''}
+`:''}${c2?'INFO LOCAL:\n'+c2+'\n':''}${ref?'REFINAMIENTO:\n'+ref+'\n':''}
 ${contextoApp === 'urban' ? 'Ciudad o territorio' : contextoApp === 'business' ? 'Organización o empresa' : 'Proyecto de investigación'}: ${ciudad}
 
 ESPECIFICIDAD OBLIGATORIA para ${ciudad}:
-1. HAIKU: elementos concretos y únicos del territorio. NUNCA genérico.
-2. RECEPTIVOS: acciones específicas con instituciones y problemáticas reales.
-3. SÍNTESIS: nombrá la TENSIÓN RAÍZ del territorio (del repertorio del núcleo metodológico, en lenguaje llano) y la FUNCIÓN que la resuelve — la raíz es la que, resuelta, reordena a las demás. Desde esa raíz revelá el patrón sistémico, la paradoja y la oportunidad única del territorio. Mencioná específicamente los subtítulos bloqueados más críticos y qué función del ciclo (ser/relacionarse/transformarse) está más comprometida.
-4. ESPIRAL: hoja de ruta concreta y secuencial para este territorio.
-5. SUBTÍTULO BLOQUEADO (sb): Para cada ítem identificá cuál de los 9 subtítulos es el mayor bloqueo:
+SUBTÍTULO BLOQUEADO (sb): Para cada ítem identificá cuál de los 9 subtítulos es el mayor bloqueo:
    - Espacio: "Eterno Infinito" (falta principio ordenador) · "Equilibrio" (tensión desregulada) · "Codificada" (sin patrones transmisibles)
    - Energía: "Instinto Conjunto" (sin inteligencia colectiva) · "Fuerza de Cohesión" (energía sin unidad) · "Diferenciado" (sin carácter propio)
    - Transformación: "Conducción" (sin orientación) · "Actividades" (sin manifestación concreta) · "Distancias" (sin horizonte proyectual)
    El campo "sb" debe contener SOLO el nombre del subtítulo más bloqueado para ese ítem específico en ${ciudad}.
 
 JSON compacto SOLO (sin espacios extra):
-{"ciudad":"...","descripcion":"...","items":[{"v":0,"pt":"A","ap":"A","conf":"A|M|B","sb":"subtítulo más bloqueado"},... 36 objetos en el orden indicado],"dims":[9nums],"tens":["t1","t2","t3","p1","p2"],"lagunas":[{"i":"nombre","q":"pregunta"},{"i":"...","q":"..."},{"i":"...","q":"..."}],"haiku":"v1·v2·v3","hexp":"...","r1t":"Intuición Receptiva","r1p":"Institucional↔Cognitivo","r1d":"...","r1a":["a1","a2","a3","a4"],"r2t":"Instinto Receptivo","r2p":"Social+Cultural↔Expresión","r2d":"...","r2a":["a1","a2","a3","a4"],"r3t":"Percepción Receptiva","r3p":"Histórico↔Físico","r3d":"...","r3a":["a1","a2","a3","a4"],"da":0.0,"dh":0.0,"esp":[{"p":"...","s":"logrado|proceso|pendiente"},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."}],"sust":"...","sint":"..."}`;
+{"ciudad":"...","descripcion":"...","items":[{"v":0,"pt":"A","ap":"A","conf":"A|M|B","sb":"subtítulo más bloqueado"},... 36 objetos en el orden indicado]}`;
+}
+
+function buildPromptSintesis(ciudad,pasivo,c2,ref,itemsResueltos){
+  const resumenItems=(itemsResueltos||[]).map((it,i)=>{
+    const base=ITEMS_36[i]||ITEMS_36[0];
+    return `${i+1}|${base.e}|${base.n}|v=${it.v!=null?it.v:5}|pt=${it.pt||'M'}|ap=${it.ap||'M'}|conf=${it.conf||'M'}|sb=${it.sb||''}`;
+  }).join('\n');
+  return `${promptEncabezado()}
+9 DIMS(0-10): Principio rector·Tensión reguladora·Patrones organizadores·Inteligencia colectiva·Energía integradora·Carácter propio·Orientación estratégica·Manifestación concreta·Horizonte proyectual
+ESCALA: 0-2=ausente 3-4=incipiente 5-6=funcional 7-8=desarrollado 9-10=excepcional
+${pasivo?`ABORDAJE PASIVO — OBSERVACIÓN DIRECTA DEL TERRITORIO:
+${pasivo}
+`:''}${c2?'INFO LOCAL:\n'+c2+'\n':''}${ref?'REFINAMIENTO:\n'+ref+'\n':''}${intencionSeleccionada?`INTENCIÓN DEL DIAGNÓSTICO: ${intencionSeleccionada}
+INSTRUCCIÓN: El Abordaje Proyectivo debe estar orientado específicamente hacia este objetivo. Priorizá las dimensiones, indicadores y acciones más relevantes para "${intencionSeleccionada}". El proyectivo no es genérico — es intencionado.
+`:''}
+${contextoApp === 'urban' ? 'Ciudad o territorio' : contextoApp === 'business' ? 'Organización o empresa' : 'Proyecto de investigación'}: ${ciudad}
+
+EVALUACIÓN DE LOS 36 INDICADORES YA REALIZADA (n°|dimensión|indicador|v=valor 0-10|pt=potencial|ap=apalancamiento|conf=confianza|sb=subtítulo bloqueado) — es la base real sobre la que tenés que construir la lectura sistémica, no la vuelvas a inventar, léela:
+${resumenItems}
+
+ESPECIFICIDAD OBLIGATORIA para ${ciudad}, a partir de la evaluación de arriba:
+1. HAIKU: elementos concretos y únicos del territorio. NUNCA genérico.
+2. RECEPTIVOS: acciones específicas con instituciones y problemáticas reales.
+3. SÍNTESIS: nombrá la TENSIÓN RAÍZ del territorio (del repertorio del núcleo metodológico, en lenguaje llano) y la FUNCIÓN que la resuelve — la raíz es la que, resuelta, reordena a las demás. Desde esa raíz revelá el patrón sistémico, la paradoja y la oportunidad única del territorio. Mencioná específicamente los subtítulos bloqueados más críticos y qué función del ciclo (ser/relacionarse/transformarse) está más comprometida.
+4. ESPIRAL: hoja de ruta concreta y secuencial para este territorio.
+
+JSON compacto SOLO (sin espacios extra):
+{"dims":[9nums],"tens":["t1","t2","t3","p1","p2"],"lagunas":[{"i":"nombre","q":"pregunta"},{"i":"...","q":"..."},{"i":"...","q":"..."}],"haiku":"v1·v2·v3","hexp":"...","r1t":"Intuición Receptiva","r1p":"Institucional↔Cognitivo","r1d":"...","r1a":["a1","a2","a3","a4"],"r2t":"Instinto Receptivo","r2p":"Social+Cultural↔Expresión","r2d":"...","r2a":["a1","a2","a3","a4"],"r3t":"Percepción Receptiva","r3p":"Histórico↔Físico","r3d":"...","r3a":["a1","a2","a3","a4"],"da":0.0,"dh":0.0,"esp":[{"p":"...","s":"logrado|proceso|pendiente"},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."}],"sust":"...","sint":"..."}`;
 }
 
 // ══════════════════════════════════════════
@@ -3045,7 +3081,9 @@ async function ejecutar(){
   modoCarga = 'diagnostico';
   mostrarCarga(true);
 
-  // Timeout de 90 segundos
+  // Timeout de 180 segundos (red de seguridad del lado del cliente; el limite real hoy lo pone
+  // maxDuration:60 de api/anthropic.js en vercel.json -- si el servidor corta la funcion antes,
+  // el fetch() falla con NetworkError bastante antes de llegar a este timeout)
   const timeoutId = setTimeout(()=>{
     mostrarCarga(false);
     document.getElementById('p-inicio').style.display='flex';
@@ -3082,49 +3120,53 @@ function apiEndpoint(){
   return 'https://api.anthropic.com/v1/messages';
 }
 
-async function llamarAPI(ciudad,pasivo,c2,ref){
-  // setSt manejado por mostrarCarga
+/* Helper compartido: llama al proxy con un prompt y devuelve el texto crudo de la respuesta.
+   No parsea JSON aca -- eso lo hace parsearJSONIA(), reutilizado por las dos llamadas. */
+async function llamarAnthropicUrbanismo(prompt,maxTokens){
   const res=await fetch(apiEndpoint(),{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:16000,messages:[{role:'user',content:buildPrompt(ciudad,pasivo,c2,ref)}]})
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens,messages:[{role:'user',content:prompt}]})
   });
   if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error('Error '+res.status+': '+(e.error?.message||''))}
   const data=await res.json();
-  const raw=data.content.map(i=>i.text||'').join('');
-  const m=raw.match(/\{[\s\S]*\}/);
-  if(!m) throw new Error('Respuesta inválida');
+  return data.content.map(i=>i.text||'').join('');
+}
 
+/* Mismo parser de siempre (3 estrategias de recuperacion ante JSON truncado o con caracteres
+   problematicos), separado en funcion propia para que lo usen las dos llamadas de llamarAPI()
+   sin duplicar la logica. */
+function parsearJSONIA(raw){
+  const m=raw.match(/\{[\s\S]*\}/);
+  if(!m) throw new Error('Respuesta invalida');
   let parsed=null;
   let jsonStr=m[0];
 
   // Estrategia 1: parseo directo
   try{ parsed=JSON.parse(jsonStr); }
   catch(e1){
-    // Estrategia 2: limpiar caracteres problemáticos
+    // Estrategia 2: limpiar caracteres problematicos
     try{
       const clean=jsonStr
-        .replace(/[\u0000-\u001F\u007F-\u009F]/g,' ')
+        .replace(/[\x00-\x1F\x7F-\x9F]/g,' ')
         .replace(/,\s*([}\]])/g,'$1')
         .replace(/([{,]\s*)(\w+)(\s*:)/g,'$1"$2"$3');
       parsed=JSON.parse(clean);
     }
     catch(e2){
-      // Estrategia 3: truncar hasta el último } o ] válido
+      // Estrategia 3: truncar hasta el ultimo } o ] valido
       try{
         let truncado = jsonStr;
-        // Intentar cerrar el JSON en el último punto válido
         for(let i=jsonStr.length-1;i>0;i--){
           if(jsonStr[i]==='}' || jsonStr[i]===']'){
             truncado = jsonStr.slice(0,i+1);
-            // Balancear llaves y corchetes
             let opens = (truncado.match(/\{/g)||[]).length - (truncado.match(/\}/g)||[]).length;
             let openBr = (truncado.match(/\[/g)||[]).length - (truncado.match(/\]/g)||[]).length;
             while(openBr>0){ truncado+=']'; openBr--; }
             while(opens>0){ truncado+='}'; opens--; }
             try{
               parsed=JSON.parse(truncado);
-              console.warn('JSON recuperado por truncado en posición '+i);
+              console.warn('JSON recuperado por truncado en posicion '+i);
               break;
             }catch(e){}
           }
@@ -3132,14 +3174,31 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
         if(!parsed) throw new Error('No se pudo recuperar el JSON');
       }
       catch(e3){
-        throw new Error('JSON inválido: '+e2.message);
+        throw new Error('JSON invalido: '+e2.message);
       }
     }
   }
+  return parsed;
+}
 
-  // Normalizar claves
-  if(parsed.items&&parsed.items.length>0){
-    parsed.items=parsed.items.map(function(it,ii){
+/* N3.0-URB-1 (12/08): antes era una sola llamada. Ahora son dos, secuenciales -- ver el
+   comentario completo junto a buildPromptItems()/buildPromptSintesis(). max_tokens de cada
+   llamada quedan bien por debajo del tope real del servidor (MAX_TOKENS_TOPE=4000 en
+   api/anthropic.js), con margen: 2000 para los 36 indicadores (dato compacto), 3200 para la
+   sintesis (la parte con mas prosa: haiku, 3 receptivos con 4 acciones cada uno, espiral,
+   sintesis). Si la primera llamada falla, se corta ahi -- no tiene sentido pedir la sintesis
+   sin datos reales para basarla. */
+async function llamarAPI(ciudad,pasivo,c2,ref){
+  // setSt manejado por mostrarCarga
+
+  // ---- Llamada 1: los 36 indicadores ----
+  const rawItems=await llamarAnthropicUrbanismo(buildPromptItems(ciudad,pasivo,c2,ref),2000);
+  const parsedItems=parsearJSONIA(rawItems);
+
+  // Normalizar items (misma logica de siempre) ANTES de pasarlos a la sintesis, asi la
+  // sintesis lee los mismos valores normalizados que despues se van a renderizar.
+  if(parsedItems.items&&parsedItems.items.length>0){
+    parsedItems.items=parsedItems.items.map(function(it,ii){
       var base=ITEMS_36[ii]||ITEMS_36[0];
       return {
         eje:  base.e,
@@ -3156,6 +3215,17 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
       };
     });
   }
+  // Avanza la barra de carga a un paso real: los indicadores ya estan, arranca la sintesis.
+  if(typeof actualizarPasoCarga==='function'){ cargaPasoActual=Math.max(cargaPasoActual,4); actualizarPasoCarga(cargaPasoActual); }
+
+  // ---- Llamada 2: sintesis, leyendo los 36 indicadores ya resueltos como contexto ----
+  const rawSintesis=await llamarAnthropicUrbanismo(buildPromptSintesis(ciudad,pasivo,c2,ref,parsedItems.items),3200);
+  const parsedSintesis=parsearJSONIA(rawSintesis);
+
+  // Fusion: mismo objeto final que antes armaba una sola llamada -- todo el codigo de abajo
+  // (normalizacion de alias, render, refinamiento) queda exactamente igual.
+  const parsed=Object.assign({},parsedItems,parsedSintesis);
+
   if(parsed.dims&&!parsed.dimensiones) parsed.dimensiones=parsed.dims;
   if(parsed.tens&&!parsed.tensiones) parsed.tensiones=parsed.tens;
   if(parsed.sint&&!parsed.sintesis) parsed.sintesis=parsed.sint;
