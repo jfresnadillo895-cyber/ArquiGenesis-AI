@@ -2930,7 +2930,16 @@ JSON compacto SOLO (sin espacios extra):
 {"ciudad":"...","descripcion":"...","items":[{"v":0,"pt":"A","ap":"A","conf":"A|M|B","sb":"subtítulo más bloqueado"},... 36 objetos en el orden indicado]}`;
 }
 
-function buildPromptSintesis(ciudad,pasivo,c2,ref,itemsResueltos){
+/* N3.0-URB-2 (12/08): buildPromptSintesis() (nucleo + receptivos + espiral en una sola
+   llamada, max_tokens:3200) SEGUIA topando el limite de 60s de Vercel Hobby -- confirmado por
+   Javier: la llamada 1 (items) daba 200 OK, la llamada 2 (sintesis completa) seguia con
+   "Task timed out after 60 seconds". El bloque mas pesado ahi eran los 3 receptivos
+   (titulo+par+descripcion+4 acciones cada uno) mas el espiral de 6 pasos -- puro texto, sin
+   nada compacto. Se separa en dos llamadas propias: nucleo (numeros + 2 textos cortos: haiku
+   explicado, sintesis, sustentabilidad) y receptivos+espiral (la parte 100% prosa). La segunda
+   recibe el nucleo ya resuelto como contexto (tension/sintesis), para que los receptivos y el
+   espiral sigan coherentes con la lectura sistemica en vez de inventarla de nuevo. */
+function buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,itemsResueltos){
   const resumenItems=(itemsResueltos||[]).map((it,i)=>{
     const base=ITEMS_36[i]||ITEMS_36[0];
     return `${i+1}|${base.e}|${base.n}|v=${it.v!=null?it.v:5}|pt=${it.pt||'M'}|ap=${it.ap||'M'}|conf=${it.conf||'M'}|sb=${it.sb||''}`;
@@ -2940,9 +2949,7 @@ function buildPromptSintesis(ciudad,pasivo,c2,ref,itemsResueltos){
 ESCALA: 0-2=ausente 3-4=incipiente 5-6=funcional 7-8=desarrollado 9-10=excepcional
 ${pasivo?`ABORDAJE PASIVO — OBSERVACIÓN DIRECTA DEL TERRITORIO:
 ${pasivo}
-`:''}${c2?'INFO LOCAL:\n'+c2+'\n':''}${ref?'REFINAMIENTO:\n'+ref+'\n':''}${intencionSeleccionada?`INTENCIÓN DEL DIAGNÓSTICO: ${intencionSeleccionada}
-INSTRUCCIÓN: El Abordaje Proyectivo debe estar orientado específicamente hacia este objetivo. Priorizá las dimensiones, indicadores y acciones más relevantes para "${intencionSeleccionada}". El proyectivo no es genérico — es intencionado.
-`:''}
+`:''}${c2?'INFO LOCAL:\n'+c2+'\n':''}${ref?'REFINAMIENTO:\n'+ref+'\n':''}
 ${contextoApp === 'urban' ? 'Ciudad o territorio' : contextoApp === 'business' ? 'Organización o empresa' : 'Proyecto de investigación'}: ${ciudad}
 
 EVALUACIÓN DE LOS 36 INDICADORES YA REALIZADA (n°|dimensión|indicador|v=valor 0-10|pt=potencial|ap=apalancamiento|conf=confianza|sb=subtítulo bloqueado) — es la base real sobre la que tenés que construir la lectura sistémica, no la vuelvas a inventar, léela:
@@ -2950,12 +2957,39 @@ ${resumenItems}
 
 ESPECIFICIDAD OBLIGATORIA para ${ciudad}, a partir de la evaluación de arriba:
 1. HAIKU: elementos concretos y únicos del territorio. NUNCA genérico.
-2. RECEPTIVOS: acciones específicas con instituciones y problemáticas reales.
-3. SÍNTESIS: nombrá la TENSIÓN RAÍZ del territorio (del repertorio del núcleo metodológico, en lenguaje llano) y la FUNCIÓN que la resuelve — la raíz es la que, resuelta, reordena a las demás. Desde esa raíz revelá el patrón sistémico, la paradoja y la oportunidad única del territorio. Mencioná específicamente los subtítulos bloqueados más críticos y qué función del ciclo (ser/relacionarse/transformarse) está más comprometida.
-4. ESPIRAL: hoja de ruta concreta y secuencial para este territorio.
+2. SÍNTESIS: nombrá la TENSIÓN RAÍZ del territorio (del repertorio del núcleo metodológico, en lenguaje llano) y la FUNCIÓN que la resuelve — la raíz es la que, resuelta, reordena a las demás. Desde esa raíz revelá el patrón sistémico, la paradoja y la oportunidad única del territorio. Mencioná específicamente los subtítulos bloqueados más críticos y qué función del ciclo (ser/relacionarse/transformarse) está más comprometida.
 
 JSON compacto SOLO (sin espacios extra):
-{"dims":[9nums],"tens":["t1","t2","t3","p1","p2"],"lagunas":[{"i":"nombre","q":"pregunta"},{"i":"...","q":"..."},{"i":"...","q":"..."}],"haiku":"v1·v2·v3","hexp":"...","r1t":"Intuición Receptiva","r1p":"Institucional↔Cognitivo","r1d":"...","r1a":["a1","a2","a3","a4"],"r2t":"Instinto Receptivo","r2p":"Social+Cultural↔Expresión","r2d":"...","r2a":["a1","a2","a3","a4"],"r3t":"Percepción Receptiva","r3p":"Histórico↔Físico","r3d":"...","r3a":["a1","a2","a3","a4"],"da":0.0,"dh":0.0,"esp":[{"p":"...","s":"logrado|proceso|pendiente"},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."}],"sust":"...","sint":"..."}`;
+{"dims":[9nums],"tens":["t1","t2","t3","p1","p2"],"lagunas":[{"i":"nombre","q":"pregunta"},{"i":"...","q":"..."},{"i":"...","q":"..."}],"haiku":"v1·v2·v3","hexp":"...","da":0.0,"dh":0.0,"sust":"...","sint":"..."}`;
+}
+
+function buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,itemsResueltos,nucleo){
+  const resumenItems=(itemsResueltos||[]).map((it,i)=>{
+    const base=ITEMS_36[i]||ITEMS_36[0];
+    return `${i+1}|${base.e}|${base.n}|v=${it.v!=null?it.v:5}|sb=${it.sb||''}`;
+  }).join('\n');
+  const tensTxt=Array.isArray(nucleo&&nucleo.tens)?nucleo.tens.join(' · '):'';
+  return `${promptEncabezado()}
+${pasivo?`ABORDAJE PASIVO — OBSERVACIÓN DIRECTA DEL TERRITORIO:
+${pasivo}
+`:''}${c2?'INFO LOCAL:\n'+c2+'\n':''}${ref?'REFINAMIENTO:\n'+ref+'\n':''}${intencionSeleccionada?`INTENCIÓN DEL DIAGNÓSTICO: ${intencionSeleccionada}
+INSTRUCCIÓN: El Abordaje Proyectivo debe estar orientado específicamente hacia este objetivo. Priorizá las acciones más relevantes para "${intencionSeleccionada}". El proyectivo no es genérico — es intencionado.
+`:''}
+${contextoApp === 'urban' ? 'Ciudad o territorio' : contextoApp === 'business' ? 'Organización o empresa' : 'Proyecto de investigación'}: ${ciudad}
+
+INDICADORES (n°|dimensión|indicador|valor|subtítulo bloqueado):
+${resumenItems}
+
+LECTURA SISTÉMICA YA HECHA (base real para los receptivos y el espiral, no la reinterpretes de cero):
+Tensiones: ${tensTxt}
+Síntesis: ${(nucleo&&nucleo.sint)||''}
+
+ESPECIFICIDAD OBLIGATORIA para ${ciudad}, a partir de la lectura de arriba:
+1. RECEPTIVOS: acciones específicas con instituciones y problemáticas reales de ${ciudad}, coherentes con la tensión raíz identificada.
+2. ESPIRAL: hoja de ruta concreta y secuencial para este territorio, que resuelva progresivamente esa misma tensión raíz.
+
+JSON compacto SOLO (sin espacios extra):
+{"r1t":"Intuición Receptiva","r1p":"Institucional↔Cognitivo","r1d":"...","r1a":["a1","a2","a3","a4"],"r2t":"Instinto Receptivo","r2p":"Social+Cultural↔Expresión","r2d":"...","r2a":["a1","a2","a3","a4"],"r3t":"Percepción Receptiva","r3p":"Histórico↔Físico","r3d":"...","r3a":["a1","a2","a3","a4"],"esp":[{"p":"...","s":"logrado|proceso|pendiente"},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."}]}`;
 }
 
 // ══════════════════════════════════════════
@@ -3195,8 +3229,8 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   const rawItems=await llamarAnthropicUrbanismo(buildPromptItems(ciudad,pasivo,c2,ref),2000);
   const parsedItems=parsearJSONIA(rawItems);
 
-  // Normalizar items (misma logica de siempre) ANTES de pasarlos a la sintesis, asi la
-  // sintesis lee los mismos valores normalizados que despues se van a renderizar.
+  // Normalizar items (misma logica de siempre) ANTES de pasarlos a las otras dos llamadas, asi
+  // leen los mismos valores normalizados que despues se van a renderizar.
   if(parsedItems.items&&parsedItems.items.length>0){
     parsedItems.items=parsedItems.items.map(function(it,ii){
       var base=ITEMS_36[ii]||ITEMS_36[0];
@@ -3215,16 +3249,23 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
       };
     });
   }
-  // Avanza la barra de carga a un paso real: los indicadores ya estan, arranca la sintesis.
+  // Avanza la barra de carga a un paso real: los indicadores ya estan, arranca el nucleo.
+  if(typeof actualizarPasoCarga==='function'){ cargaPasoActual=Math.max(cargaPasoActual,3); actualizarPasoCarga(cargaPasoActual); }
+
+  // ---- Llamada 2: nucleo de la sintesis (numeros + haiku + sintesis + sustentabilidad) ----
+  const rawNucleo=await llamarAnthropicUrbanismo(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800);
+  const parsedNucleo=parsearJSONIA(rawNucleo);
+
+  // Avanza a "Generando sintesis diagnostica" -- arranca la parte mas pesada (receptivos+espiral).
   if(typeof actualizarPasoCarga==='function'){ cargaPasoActual=Math.max(cargaPasoActual,4); actualizarPasoCarga(cargaPasoActual); }
 
-  // ---- Llamada 2: sintesis, leyendo los 36 indicadores ya resueltos como contexto ----
-  const rawSintesis=await llamarAnthropicUrbanismo(buildPromptSintesis(ciudad,pasivo,c2,ref,parsedItems.items),3200);
-  const parsedSintesis=parsearJSONIA(rawSintesis);
+  // ---- Llamada 3: receptivos + espiral, leyendo el nucleo ya resuelto como contexto ----
+  const rawRecEsp=await llamarAnthropicUrbanismo(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200);
+  const parsedRecEsp=parsearJSONIA(rawRecEsp);
 
   // Fusion: mismo objeto final que antes armaba una sola llamada -- todo el codigo de abajo
   // (normalizacion de alias, render, refinamiento) queda exactamente igual.
-  const parsed=Object.assign({},parsedItems,parsedSintesis);
+  const parsed=Object.assign({},parsedItems,parsedNucleo,parsedRecEsp);
 
   if(parsed.dims&&!parsed.dimensiones) parsed.dimensiones=parsed.dims;
   if(parsed.tens&&!parsed.tensiones) parsed.tensiones=parsed.tens;
