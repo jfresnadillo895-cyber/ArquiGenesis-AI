@@ -53,13 +53,20 @@ const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // --- Llamada a Supabase con reintentos y tiempo limite -------------------------
 // Devuelve { ok, estado, datos }  o  lanza si se agotaron los reintentos.
-async function pedirASupabase(ruta, opciones) {
+// tiempoLimiteMs/reintentos son opcionales -- default = las constantes de siempre. Se usan
+// acotados (ver mas abajo, hallazgo del 12/08) para consumir/liberar_reserva: esas dos corren
+// DESPUES de ya tener la respuesta de la IA lista, con poco presupuesto de tiempo restante
+// antes del maxDuration de Vercel -- ahi vale mas fallar rapido (y liberar/perder el credito
+// vía el catch existente) que perder la respuesta entera reintentando contra una Supabase lenta.
+async function pedirASupabase(ruta, opciones, tiempoLimiteMs, reintentos) {
+  const limite = (typeof tiempoLimiteMs === 'number') ? tiempoLimiteMs : TIEMPO_LIMITE_MS;
+  const intentosMax = (typeof reintentos === 'number') ? reintentos : REINTENTOS;
   const base = String(process.env.SUPABASE_URL || '').replace(/\/+$/, '');
   let ultimoError = null;
 
-  for (let intento = 0; intento <= REINTENTOS; intento++) {
+  for (let intento = 0; intento <= intentosMax; intento++) {
     const aborto = new AbortController();
-    const reloj = setTimeout(() => aborto.abort(), TIEMPO_LIMITE_MS);
+    const reloj = setTimeout(() => aborto.abort(), limite);
     try {
       const r = await fetch(base + ruta, { ...opciones, signal: aborto.signal });
       clearTimeout(reloj);
@@ -67,7 +74,7 @@ async function pedirASupabase(ruta, opciones) {
       // 540 = proyecto pausado por inactividad. 5xx = tropiezo. Ambos se reintentan.
       if (r.status >= 500) {
         ultimoError = new Error('supabase respondio ' + r.status);
-        if (intento < REINTENTOS) { await dormir(ESPERA_MS * (intento + 1)); continue; }
+        if (intento < intentosMax) { await dormir(ESPERA_MS * (intento + 1)); continue; }
         throw ultimoError;
       }
       let datos = null;
@@ -76,7 +83,7 @@ async function pedirASupabase(ruta, opciones) {
     } catch (e) {
       clearTimeout(reloj);
       ultimoError = e;
-      if (intento < REINTENTOS) { await dormir(ESPERA_MS * (intento + 1)); continue; }
+      if (intento < intentosMax) { await dormir(ESPERA_MS * (intento + 1)); continue; }
       throw ultimoError;
     }
   }
@@ -97,7 +104,7 @@ async function identificar(token, secreta) {
 }
 
 // --- Llamada a una funcion de la base ----------------------------------------
-async function rpc(nombre, cuerpo, secreta) {
+async function rpc(nombre, cuerpo, secreta, tiempoLimiteMs, reintentos) {
   const r = await pedirASupabase('/rest/v1/rpc/' + nombre, {
     method: 'POST',
     headers: {
@@ -106,7 +113,7 @@ async function rpc(nombre, cuerpo, secreta) {
       'content-type': 'application/json',
     },
     body: JSON.stringify(cuerpo),
-  });
+  }, tiempoLimiteMs, reintentos);
   if (!r.ok) throw new Error('rpc ' + nombre + ' devolvio ' + r.estado);
   return Array.isArray(r.datos) ? r.datos[0] : r.datos;
 }
@@ -116,13 +123,20 @@ async function rpc(nombre, cuerpo, secreta) {
 // tambien falla, ya no hay mas red de seguridad que gritar en los logs -- pero no
 // se le devuelve un error distinto al usuario por eso, ya tiene bastante con que
 // la operacion no le salio.
-async function liberarSeguro(usuario, modulo, estimado, secreta, res) {
+// Presupuesto de tiempo acotado (hallazgo del 12/08, ver comentario en pedirASupabase): esto
+// corre DESPUES de la respuesta de Anthropic, con poco tiempo restante antes del maxDuration.
+// Un solo intento de 4s en vez del default (hasta 3 intentos de 6s = ~19s) -- si falla, ya
+// quedo el RESERVA_NO_LIBERADA en los logs para revisar a mano, pero no se juega el resto del
+// presupuesto de tiempo de la funcion en reintentar.
+async function liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog) {
   try {
-    const lib = await rpc('liberar_reserva', { p_perfil: usuario, p_estimado: estimado || 0 }, secreta);
+    const lib = await rpc('liberar_reserva', { p_perfil: usuario, p_estimado: estimado || 0 }, secreta, 4000, 0);
+    if (_tlog) _tlog('liberar_reserva_listo');
     if (lib && typeof lib.saldo === 'number') {
       res.setHeader('x-comprender-saldo', String(lib.saldo));
     }
   } catch (e) {
+    if (_tlog) _tlog('liberar_reserva_fallo');
     console.error(JSON.stringify({
       evento: 'RESERVA_NO_LIBERADA',
       usuario: String(usuario).slice(0, 8),
@@ -225,11 +239,11 @@ export default async function handler(req, res) {
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = null; } }
   if (!body || !Array.isArray(body.messages)) {
-    await liberarSeguro(usuario, modulo, estimado, secreta, res);
+    await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
     return res.status(400).json({ error: { message: 'Cuerpo invalido: se esperaba { model, max_tokens, messages }.' } });
   }
   if (MODELOS_PERMITIDOS && MODELOS_PERMITIDOS.indexOf(body.model) === -1) {
-    await liberarSeguro(usuario, modulo, estimado, secreta, res);
+    await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
     return res.status(400).json({ error: { message: 'Modelo no permitido.' } });
   }
   if (typeof body.max_tokens === 'number' && body.max_tokens > MAX_TOKENS_TOPE) {
@@ -256,16 +270,29 @@ export default async function handler(req, res) {
     _tlog('anthropic_fallo');
     // No se pudo ni contactar a Anthropic: la reserva se libera entera, no se
     // intento nada que haya costado algo.
-    await liberarSeguro(usuario, modulo, estimado, secreta, res);
+    await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
     return res.status(502).json({
       error: { message: 'No se pudo contactar al proveedor de IA.', detalle: String((e && e.message) || e) },
     });
   }
 
   // --- 4 · Liquidar la reserva: cobrar lo real, o devolver todo si no hay resultado ---
+  // Presupuesto de tiempo acotado en consumir() (hallazgo del 12/08): un intento real contra
+  // Vercel Hobby mostro los logs "identificar_listo" a los 496ms, "reservar_listo" a los 867ms,
+  // "anthropic_body_leido" a los 15212ms -- TODO el trabajo real (auth + reserva + la llamada a
+  // la IA) resuelto en 15 segundos, sobre un presupuesto de 60 -- y despues, silencio total
+  // hasta que Vercel mato la funcion a los 60s. La unica llamada sin instrumentar entre
+  // "anthropic_body_leido" y el final era exactamente esta: rpc('consumir', ...), con el
+  // default de hasta 3 intentos de 6s (~19s) si Supabase responde lento o falla. La respuesta
+  // de la IA ya estaba lista y el usuario se quedaba sin ella igual, por una llamada de
+  // CONTABILIDAD que no tiene nada que ver con generarla. Un solo intento de 4s (en vez de
+  // hasta 19s) para no jugarse el resto del presupuesto de la funcion en esto -- si falla,
+  // el catch de abajo ya libera la reserva (tambien acotado) y el usuario igual recibe su
+  // analisis completo.
   if (r.ok && data && data.usage) {
     const u = data.usage;
     try {
+      _tlog('arrancando_consumir');
       const cobro = await rpc('consumir', {
         p_perfil:          usuario,
         p_modulo:          modulo,
@@ -274,7 +301,8 @@ export default async function handler(req, res) {
         p_cache_lectura:   u.cache_read_input_tokens || 0,
         p_cache_escritura: u.cache_creation_input_tokens || 0,
         p_estimado:        estimado,
-      }, secreta);
+      }, secreta, 4000, 0);
+      _tlog('consumir_listo');
 
       if (cobro) {
         res.setHeader('x-comprender-saldo', String(cobro.saldo));
@@ -283,6 +311,7 @@ export default async function handler(req, res) {
           'x-comprender-plan, x-comprender-saldo, x-comprender-factor, x-comprender-estimado, x-comprender-cobrado');
       }
     } catch (e) {
+      _tlog('consumir_fallo');
       // La respuesta ya existe y el usuario la merece: no se le niega por un
       // fallo de contabilidad. La reserva ya estaba tomada -- mejor liberarla
       // entera (best-effort) a dejar el credito retenido sin motivo.
@@ -294,13 +323,14 @@ export default async function handler(req, res) {
         salida: u.output_tokens || 0,
         detalle: String((e && e.message) || e),
       }));
-      await liberarSeguro(usuario, modulo, estimado, secreta, res);
+      await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
     }
   } else {
     // Sin resultado utilizable (fallo del modelo, respuesta sin usage, etc.):
     // se devuelve integra la reserva. Una operacion fallida no consume creditos.
-    await liberarSeguro(usuario, modulo, estimado, secreta, res);
+    await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
   }
 
+  _tlog('respondiendo_al_cliente');
   return res.status(r.status).json(data);
 }
