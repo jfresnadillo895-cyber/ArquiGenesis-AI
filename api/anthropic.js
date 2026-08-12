@@ -156,15 +156,28 @@ export default async function handler(req, res) {
 
   const modulo = String(req.headers['x-comprender-modulo'] || 'core').trim().toLowerCase() || 'core';
 
+  /* Instrumentacion de tiempos (12/08): Javier reporto timeouts de 60s en Vercel Hobby que
+     persistian incluso reduciendo mucho el tamano del pedido a la IA (de una llamada gigante a
+     tres chicas), y ademas sin patron claro de que el cuello de botella fuera el volumen de
+     tokens de salida. Sin ver DONDE se va el tiempo dentro de los 60s, seguir adivinando que
+     recortar no tiene sentido. Estos console.log quedan aunque la funcion termine matada por
+     timeout -- Vercel captura la salida a medida que se genera, no solo al final -- asi que el
+     ultimo log visto antes de un timeout dice hasta donde llego. */
+  const _t0 = Date.now();
+  const _tlog = (fase) => { try { console.log(JSON.stringify({ evento: 'tiempo', fase, modulo, ms: Date.now() - _t0 })); } catch (e) {} };
+
   // --- 1 y 2 · Identidad y reserva ---
   let usuario, permiso;
   try {
     usuario = await identificar(token, secreta);
+    _tlog('identificar_listo');
     if (!usuario) {
       return res.status(401).json({ error: { message: 'Sesion vencida o invalida. Volve a iniciar sesion.', codigo: 'sesion_invalida' } });
     }
     permiso = await rpc('reservar', { p_perfil: usuario, p_modulo: modulo }, secreta);
+    _tlog('reservar_listo');
   } catch (e) {
+    _tlog('identidad_o_reserva_fallo');
     // FALLA CERRADO. 503, no 401: el problema es el servicio, no el usuario.
     console.error(JSON.stringify({ evento: 'base_inalcanzable', detalle: String((e && e.message) || e) }));
     return res.status(503).json({
@@ -224,6 +237,7 @@ export default async function handler(req, res) {
   }
 
   // --- 3 · Anthropic ---
+  _tlog('arrancando_llamada_anthropic');
   let r, data;
   try {
     r = await fetch(ANTHROPIC_URL, {
@@ -235,8 +249,11 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify(body),
     });
+    _tlog('anthropic_respondio_headers');
     data = await r.json();
+    _tlog('anthropic_body_leido');
   } catch (e) {
+    _tlog('anthropic_fallo');
     // No se pudo ni contactar a Anthropic: la reserva se libera entera, no se
     // intento nada que haya costado algo.
     await liberarSeguro(usuario, modulo, estimado, secreta, res);
