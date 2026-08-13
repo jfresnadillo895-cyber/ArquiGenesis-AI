@@ -1622,13 +1622,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
       incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
       excluye:[],
       boton:'Elegir Comprender · Estudio',
-      destacado:true },
-    { id:'magister', nombre:'Magister', precio:'$160.000', creditos:'9.000 créditos por mes', precioUsd:79,
-      lema:'Para investigaciones extensas, profundas y sostenidas',
-      incluye:['Todo lo incluido en Comprender · Estudio','Mayor capacidad para procesos prolongados','Continuidad sobre organismos complejos','Memoria, trazabilidad y exploración relacional intensivas'],
-      excluye:[],
-      boton:'Elegir Magister',
-      destacado:false }
+      destacado:true }
   ];
 
   var planesAbierto = false;
@@ -1665,18 +1659,18 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
         '<div style="font-size:17px;font-weight:600;color:#1a1a1a;">' + p.nombre + '</div>' +
         '<div style="font-size:13px;color:#777;margin-bottom:14px;">' + p.lema + '</div>' +
         '<div style="font-size:27px;font-weight:600;color:#1a1a1a;">' +
-          '<span data-plan-precio="' + p.id + '">' + p.precio + '</span>' +
+          '<span data-plan-precio="' + p.id + '">USD ' + (p.precioUsd ? '$' + p.precioUsd : '') + '</span>' +
           '<span style="font-size:14px;font-weight:400;color:#888;"> /mes</span></div>' +
         '<ul style="list-style:none;padding:0;margin:14px 0 20px;">' + creditosItem + items + no + '</ul>' +
-        '<button data-plan="' + p.id + '" style="width:100%;padding:11px;font-size:15px;font-weight:600;' +
-          'border:0;border-radius:8px;cursor:pointer;' +
+        '<a href="#" data-ls="' + p.id + '" style="display:block;box-sizing:border-box;width:100%;padding:11px;font-size:15px;font-weight:600;' +
+          'border:0;border-radius:8px;cursor:pointer;text-align:center;text-decoration:none;' +
           (p.destacado ? 'background:#1a1a1a;color:#fff;' : 'background:#f0eeea;color:#1a1a1a;') +
-          '">' + p.boton + '</button>' +
+          '">' + p.boton + '</a>' +
         '<div style="margin-top:8px;text-align:center;">' +
-          '<a href="#" data-ls="' + p.id + '" style="font-size:12px;color:#888;text-decoration:underline;">' +
-            '¿Pagás desde afuera de Argentina? Pagar en ' +
-            '<span data-plan-usd="' + p.id + '">USD ' + (p.precioUsd ? '$' + p.precioUsd : '') + '</span>' +
-          '</a></div>' +
+          '<button data-plan="' + p.id + '" style="background:none;border:0;font-size:12px;color:#888;text-decoration:underline;cursor:pointer;padding:0;">' +
+            '¿Estás en Argentina? Pagá en pesos ' +
+            '<span data-plan-ars="' + p.id + '">' + p.precio + '</span>' +
+          '</button></div>' +
         '</div>';
     }).join('');
 
@@ -1692,9 +1686,9 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
         '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;">' + tarjetas + '</div>' +
         '<div id="cpEstado" style="font-size:13px;color:#b4441f;margin-top:16px;min-height:18px;"></div>' +
         '<div style="font-size:12px;color:#999;margin-top:20px;line-height:1.5;">' +
-          'Se cobra por Mercado Pago, todos los meses. Podés cancelar cuando quieras: ' +
+          'Se cobra por Lemon Squeezy, en USD, todos los meses. Podés cancelar cuando quieras: ' +
           'los créditos del período ya pagado siguen disponibles hasta que termine. ' +
-          'Pago internacional en USD a través de Lemon Squeezy, mismo criterio de cancelación.' +
+          'Si estás en Argentina, podés pagar en pesos a través de Mercado Pago, mismo criterio de cancelación.' +
         '</div>' +
       '</div>';
     document.body.appendChild(capa);
@@ -1708,15 +1702,15 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
         if(!real) return;
         var elP = capa.querySelector('[data-plan-precio="' + p.id + '"]');
         var elC = capa.querySelector('[data-plan-creditos="' + p.id + '"]');
-        if(elP && typeof real.precio_ars === 'number'){
-          elP.textContent = '$' + real.precio_ars.toLocaleString('es-AR');
+        if(elP && typeof real.precio_usd === 'number'){
+          elP.textContent = 'USD $' + real.precio_usd;
         }
         if(elC && typeof real.creditos === 'number'){
           elC.textContent = real.creditos.toLocaleString('es-AR') + ' créditos por mes';
         }
-        var elU = capa.querySelector('[data-plan-usd="' + p.id + '"]');
-        if(elU && typeof real.precio_usd === 'number'){
-          elU.textContent = 'USD $' + real.precio_usd;
+        var elA = capa.querySelector('[data-plan-ars="' + p.id + '"]');
+        if(elA && typeof real.precio_ars === 'number'){
+          elA.textContent = '$' + real.precio_ars.toLocaleString('es-AR');
         }
       });
     });
@@ -2285,16 +2279,31 @@ function estadoNegociosPro(s){
 
   var estados = {}, disponibles = {};
 
-  /* Diagnóstico y Dimensiones leen la misma data (las 6 lecturas B1-B6) con dos umbrales
-     distintos a propósito: "Diagnóstico" es el mínimo real para poder avanzar (2 confirmadas,
-     el mismo número que ya exigía el botón "Ver relaciones"); "Dimensiones" es la vuelta
-     completa a las seis, sin exigir que estén todas para considerar el diagnóstico rápido
-     "hecho" -- el producto siempre permitió dejar dimensiones sin evaluar a propósito
-     ("Desconocida" es una respuesta válida, distinta de nunca haberla visitado). */
-  estados.diagnostico = nConfirmadas >= 2 ? 'completa' : (nConfirmadas >= 1 ? 'en_curso' : 'sin_iniciar');
+  /* Corrección de Javier (11/08) sobre el primer borrador de N3.0-A.5: "Diagnóstico" y
+     "Dimensiones" son dos etapas semánticamente distintas, no dos lecturas del mismo contador de
+     confirmadas -- aunque hoy compartan una sola pantalla física (`pantallaDiagnostico`), eso es
+     un detalle de HTML que la navegación NO debe filtrar hacia el estado conceptual.
+       - "Diagnóstico" = la entrada / el diagnóstico rápido en sí. Termina (pasa a "completa") en
+         el momento en que el usuario empieza a profundizar en una dimensión -- no cuando se
+         acumulan N confirmadas.
+       - "Dimensiones" = la profundización asistida B1-B6 propiamente dicha. Arranca ("en_curso")
+         justo cuando "Diagnóstico" termina, y solo llega a "completa" con las seis confirmadas --
+         tener 3, 4 o 5 confirmadas NO la completa, aunque para entonces Relaciones ya pueda estar
+         disponible (ver `disponibles.relaciones` más abajo: depende de nConfirmadas, no de si
+         Dimensiones está completa).
+     La señal de "empezó a profundizar" es `s.dimensionActual` (se pone en `abrirDimension()` y
+     nunca vuelve a `null` -- ver comentario en su declaración dentro de `state`): una vez que el
+     usuario entró a conversar sobre una dimensión, conceptualmente ya no está "antes de empezar",
+     aunque después vuelva al selector sin confirmar nada. El `|| nConfirmadas > 0` es el mismo
+     hecho visto desde una evaluación ya cargada/importada en esta pestaña, donde `dimensionActual`
+     arranca en `null` aunque ya haya confirmadas de antes. */
+  var entroDimension = !!s.dimensionActual || nConfirmadas > 0;
+
+  estados.diagnostico = entroDimension ? 'completa' : 'en_curso';
   disponibles.diagnostico = true;
 
-  estados.dimensiones = nConfirmadas === ORDEN_DIMENSIONES_NEGOCIO.length ? 'completa' : (nConfirmadas > 0 ? 'en_curso' : 'sin_iniciar');
+  estados.dimensiones = nConfirmadas === ORDEN_DIMENSIONES_NEGOCIO.length ? 'completa'
+    : (entroDimension ? 'en_curso' : 'sin_iniciar');
   disponibles.dimensiones = true;
 
   estados.relaciones = diVigente ? 'completa' : ((s.propuestaIntegral || (s.historialIntegral && s.historialIntegral.length)) ? 'en_curso' : 'sin_iniciar');
@@ -2311,12 +2320,24 @@ function estadoNegociosPro(s){
   else estados.ejecucion = 'sin_iniciar';
   disponibles.ejecucion = decisionesActivas.length > 0;
 
-  // primera etapa disponible que todavía no está "completa" -- sugerencia de "seguí por acá"
-  var siguienteSugerida = null;
+  /* `actual`: la ÚNICA etapa que la navegación debe marcar como posición actual -- nunca dos a
+     la vez (mandato explícito de Javier: "actual" ≠ "disponible" ≠ "completa", son tres cosas
+     distintas y no deben confundirse ni resolverse con excepciones visuales en la barra). Es,
+     en orden, la primera etapa que todavía no está "completa": como Diagnóstico se marca
+     "completa" apenas arranca la profundización (ver arriba), esto ya alcanza solo para que
+     "actual" salte de Diagnóstico a Dimensiones en el momento correcto, y de ahí en más hacia
+     Relaciones/Proyectivo/Decisiones/Ejecución a medida que cada una se completa -- sin ningún
+     caso especial adicional acá. Si en algún momento las seis etapas están "completa" (ciclo
+     cerrado sin nada pendiente), "actual" cae en la última (Ejecución) en vez de quedar sin
+     ninguna marcada. */
+  var actual = 'ejecucion';
   for(var i = 0; i < ETAPAS_NEGOCIO.length; i++){
-    var et = ETAPAS_NEGOCIO[i];
-    if(disponibles[et] && estados[et] !== 'completa'){ siguienteSugerida = et; break; }
+    if(estados[ETAPAS_NEGOCIO[i]] !== 'completa'){ actual = ETAPAS_NEGOCIO[i]; break; }
   }
+  // "siguiente sugerida" = la etapa actual, pero solo si además es una que el usuario ya puede
+  // abrir -- si "actual" todavía no está disponible (ej. Relaciones antes de 2 confirmadas), no
+  // hay nada que sugerir todavía.
+  var siguienteSugerida = disponibles[actual] ? actual : null;
 
   var propuestasPendientes = {
     dimension: !!s.propuestaActual,
@@ -2334,7 +2355,8 @@ function estadoNegociosPro(s){
     etapas: ETAPAS_NEGOCIO.slice(),
     estados: estados,                      // etapa -> 'sin_iniciar'|'en_curso'|'completa'|'requiere_revision'
     disponibles: disponibles,               // etapa -> bool (gate técnico cumplido)
-    siguienteSugerida: siguienteSugerida,   // etapa recomendada para continuar, o null si no queda ninguna disponible sin completar
+    actual: actual,                         // LA única etapa que la navegación debe marcar como posición actual
+    siguienteSugerida: siguienteSugerida,   // = actual, pero null si actual todavía no es disponible
     propuestasPendientes: propuestasPendientes,
     hayPropuestaPendiente: hayPropuestaPendiente,
     ejecucionAbierta: !!s.ejecucionActual,
@@ -2390,10 +2412,18 @@ function escaparHtml(s){
    y las pantallas existentes, señalada en el informe para que Javier la confirme o la corrija,
    no decidida en silencio acá. Inicio y Cierre no son "una etapa": quedan fuera del mapa a
    propósito y ahí la barra se oculta. */
-var PANTALLAS_A_ETAPA_NEGOCIO = {
-  pantallaDiagnostico: 'diagnostico', pantallaDimension: 'diagnostico',
-  pantallaIntegral: 'relaciones', pantallaProyectivo: 'proyectivo',
-  pantallaDecisiones: 'decisiones', pantallaEjecucion: 'ejecucion'
+/* N3.0-A.7: qué pantallas físicas muestran la barra de navegación (Inicio y Cierre quedan
+   afuera a propósito -- no son "una etapa", son el punto de entrada y el punto final). Esto es
+   SOLO para decidir si la barra se muestra u oculta -- ya NO se usa para calcular qué píldora es
+   "actual" (corrección de Javier, 11/08): eso ahora sale enteramente de
+   estadoNegociosPro().actual, que lee el estado conceptual de la evaluación, no en qué pantalla
+   HTML está parado el usuario. Diagnóstico y Dimensiones comparten pantallaDiagnostico/
+   pantallaDimension como antes -- eso no cambió -- pero ya no hace falta ningún caso especial
+   acá para eso: `actual` nunca puede valer dos cosas a la vez. */
+var PANTALLAS_CON_NAV_NEGOCIO = {
+  pantallaDiagnostico: true, pantallaDimension: true,
+  pantallaIntegral: true, pantallaProyectivo: true,
+  pantallaDecisiones: true, pantallaEjecucion: true
 };
 var ETAPA_NEGOCIO_IR = {
   diagnostico: irASelectorDimensiones, dimensiones: irASelectorDimensiones,
@@ -2403,15 +2433,13 @@ var ETAPA_NEGOCIO_IR = {
 function renderNavNegocio(pantallaId){
   var nav = document.getElementById('navNegocio');
   if(!nav) return;
-  var etapaActual = PANTALLAS_A_ETAPA_NEGOCIO[pantallaId];
-  if(!etapaActual){ nav.classList.remove('visible'); nav.innerHTML = ''; return; }
+  if(!PANTALLAS_CON_NAV_NEGOCIO[pantallaId]){ nav.classList.remove('visible'); nav.innerHTML = ''; return; }
   var eNP = estadoNegociosPro();
   nav.innerHTML = '';
   ETAPAS_NEGOCIO.forEach(function(etapa){
-    var esActual = etapa === etapaActual || (etapaActual === 'diagnostico' && etapa === 'dimensiones');
     var pill = document.createElement('button');
     pill.type = 'button';
-    pill.className = 'navnegocio-pill' + (esActual ? ' actual' : '');
+    pill.className = 'navnegocio-pill' + (etapa === eNP.actual ? ' actual' : '');
     var punto = document.createElement('span');
     punto.className = 'navnegocio-punto ' + eNP.estados[etapa];
     pill.appendChild(punto);

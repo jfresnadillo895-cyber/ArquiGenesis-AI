@@ -1063,13 +1063,7 @@
       incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
       excluye:[],
       boton:'Elegir Comprender · Estudio',
-      destacado:true },
-    { id:'magister', nombre:'Magister', precio:'$160.000', creditos:'9.000 créditos por mes', precioUsd:79,
-      lema:'Para investigaciones extensas, profundas y sostenidas',
-      incluye:['Todo lo incluido en Comprender · Estudio','Mayor capacidad para procesos prolongados','Continuidad sobre organismos complejos','Memoria, trazabilidad y exploración relacional intensivas'],
-      excluye:[],
-      boton:'Elegir Magister',
-      destacado:false }
+      destacado:true }
   ];
 
   var planesAbierto = false;
@@ -1106,18 +1100,18 @@
         '<div style="font-size:17px;font-weight:600;color:#1a1a1a;">' + p.nombre + '</div>' +
         '<div style="font-size:13px;color:#777;margin-bottom:14px;">' + p.lema + '</div>' +
         '<div style="font-size:27px;font-weight:600;color:#1a1a1a;">' +
-          '<span data-plan-precio="' + p.id + '">' + p.precio + '</span>' +
+          '<span data-plan-precio="' + p.id + '">USD ' + (p.precioUsd ? '$' + p.precioUsd : '') + '</span>' +
           '<span style="font-size:14px;font-weight:400;color:#888;"> /mes</span></div>' +
         '<ul style="list-style:none;padding:0;margin:14px 0 20px;">' + creditosItem + items + no + '</ul>' +
-        '<button data-plan="' + p.id + '" style="width:100%;padding:11px;font-size:15px;font-weight:600;' +
-          'border:0;border-radius:8px;cursor:pointer;' +
+        '<a href="#" data-ls="' + p.id + '" style="display:block;box-sizing:border-box;width:100%;padding:11px;font-size:15px;font-weight:600;' +
+          'border:0;border-radius:8px;cursor:pointer;text-align:center;text-decoration:none;' +
           (p.destacado ? 'background:#1a1a1a;color:#fff;' : 'background:#f0eeea;color:#1a1a1a;') +
-          '">' + p.boton + '</button>' +
+          '">' + p.boton + '</a>' +
         '<div style="margin-top:8px;text-align:center;">' +
-          '<a href="#" data-ls="' + p.id + '" style="font-size:12px;color:#888;text-decoration:underline;">' +
-            '¿Pagás desde afuera de Argentina? Pagar en ' +
-            '<span data-plan-usd="' + p.id + '">USD ' + (p.precioUsd ? '$' + p.precioUsd : '') + '</span>' +
-          '</a></div>' +
+          '<button data-plan="' + p.id + '" style="background:none;border:0;font-size:12px;color:#888;text-decoration:underline;cursor:pointer;padding:0;">' +
+            '¿Estás en Argentina? Pagá en pesos ' +
+            '<span data-plan-ars="' + p.id + '">' + p.precio + '</span>' +
+          '</button></div>' +
         '</div>';
     }).join('');
 
@@ -1133,9 +1127,9 @@
         '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;">' + tarjetas + '</div>' +
         '<div id="cpEstado" style="font-size:13px;color:#b4441f;margin-top:16px;min-height:18px;"></div>' +
         '<div style="font-size:12px;color:#999;margin-top:20px;line-height:1.5;">' +
-          'Se cobra por Mercado Pago, todos los meses. Podés cancelar cuando quieras: ' +
+          'Se cobra por Lemon Squeezy, en USD, todos los meses. Podés cancelar cuando quieras: ' +
           'los créditos del período ya pagado siguen disponibles hasta que termine. ' +
-          'Pago internacional en USD a través de Lemon Squeezy, mismo criterio de cancelación.' +
+          'Si estás en Argentina, podés pagar en pesos a través de Mercado Pago, mismo criterio de cancelación.' +
         '</div>' +
       '</div>';
     document.body.appendChild(capa);
@@ -1149,15 +1143,15 @@
         if(!real) return;
         var elP = capa.querySelector('[data-plan-precio="' + p.id + '"]');
         var elC = capa.querySelector('[data-plan-creditos="' + p.id + '"]');
-        if(elP && typeof real.precio_ars === 'number'){
-          elP.textContent = '$' + real.precio_ars.toLocaleString('es-AR');
+        if(elP && typeof real.precio_usd === 'number'){
+          elP.textContent = 'USD $' + real.precio_usd;
         }
         if(elC && typeof real.creditos === 'number'){
           elC.textContent = real.creditos.toLocaleString('es-AR') + ' créditos por mes';
         }
-        var elU = capa.querySelector('[data-plan-usd="' + p.id + '"]');
-        if(elU && typeof real.precio_usd === 'number'){
-          elU.textContent = 'USD $' + real.precio_usd;
+        var elA = capa.querySelector('[data-plan-ars="' + p.id + '"]');
+        if(elA && typeof real.precio_ars === 'number'){
+          elA.textContent = '$' + real.precio_ars.toLocaleString('es-AR');
         }
       });
     });
