@@ -233,6 +233,8 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
   </div>
   <!-- N3.0-B: banner de borrador recuperable, construido en JS por renderCajaBorrador() -->
   <div id="cajaBorrador" class="aviso" style="display:none"></div>
+  <!-- N3.2: lista de evaluaciones cerradas continuables/visibles, construida en JS por renderListaContinuidad() -->
+  <div id="cajaContinuidad" style="display:none"></div>
 
   <div class="form-card">
     <h3>Tipo de evaluación</h3>
@@ -2164,7 +2166,11 @@ var state = {
   propuestaSeguimiento: null,  // lectura de [[LECTURA_SEGUIMIENTO]] pendiente de aceptar/descartar
   errorSeguimiento: null,      // N3.0-A: texto de error de la última "Pedir lectura de la IA" -- antes se perdía en consola, ahora se ve junto al botón
   historialSeguimiento: [],    // [{role,content}] turnos de la conversación de seguimiento de la acción activa
-  llamandoSeguimiento: false   // lock propio
+  llamandoSeguimiento: false,  // lock propio
+
+  // ---- N3.2: continuidad longitudinal y Modo Ver ----
+  continuidad_origen: null,    // {organismo_id,version} si esta sesión viene de "Continuar" sobre una evaluación cerrada -- null en una evaluación nueva
+  modoSoloLectura: false       // true en "Ver": puedeMutarNegocio() la lee para bloquear toda escritura y toda llamada IA
 };
 
 /* ---- N2.3: vocabulario de relaciones -- alfabeto cerrado, mismo criterio defensivo que
@@ -2387,6 +2393,113 @@ function leerMarcoPendiente(){
   return false;
 }
 
+/* ================= N3.2 · continuidad longitudinal y reapertura (14/08) =================
+   Diseño aprobado por Javier sobre diff previo, con 4 correcciones que él mismo evaluó y decidió
+   (no se adoptaron ideas externas a ciegas -- ver PENDIENTES.md, entrada N3.2, para el detalle de
+   cada corrección y el refinamiento que Javier agregó sobre la de elegibilidad).
+
+   Hallazgo de arranque: index.html guarda los organismos (con evaluaciones_negocio_pro[]) en
+   localStorage['ag_core_organismos']. negocios.html corre en la misma pestaña/origen -- puede
+   leer esa clave directo, sin ningún handoff nuevo desde el Core. Espejo de solo lectura de
+   cargarOrganismos() (index.html): nunca escribe esta clave, no es su dueño. */
+function cargarOrganismosNegocio(){
+  try{ return JSON.parse(localStorage.getItem('ag_core_organismos') || '[]'); }catch(e){ return []; }
+}
+
+/* Elegibilidad por CADA entrada de evaluaciones_negocio_pro[], no solo la última (corrección de
+   Javier sobre la propuesta original, que solo miraba la última versión). Una entrada es
+   "continuable" si trae un ejecucion_actual vivo (existe y confirmado !== true) -- ese es
+   exactamente el estado C del diseño aprobado. Se oculta (queda "superada") solo si otra entrada
+   posterior ya declaró continuidad_origen apuntando a ella: eso significa que ese mismo ciclo ya
+   se retomó y una versión más nueva tiene evidencia más reciente -- continuar desde la vieja
+   perdería lo ya cargado ahí. Un ciclo vivo que nunca se continuó no se oculta nunca, sin
+   importar cuántas evaluaciones nuevas se hayan generado después sobre el mismo organismo. */
+function estadoLongitudinalEvaluacion(entrada, todas){
+  var ev = (entrada.datos && entrada.datos.evaluacion) || {};
+  var ejecAbierta = ev.ejecucion_actual || null;
+  var tieneCicloVivo = !!ejecAbierta && ejecAbierta.confirmado !== true;
+  if(!tieneCicloVivo) return { estado: 'no_continuable', ver: true, continuar: false };
+  var superada = (todas || []).some(function(otra){
+    var co = otra.datos && otra.datos.evaluacion && otra.datos.evaluacion.continuidad_origen;
+    return co && co.version === entrada.version;
+  });
+  return { estado: superada ? 'superada' : 'continuable', ver: true, continuar: !superada };
+}
+
+/* Arma un draft con la MISMA forma que consume hidratarDesdeBorrador() (N3.0-B), pero la fuente
+   es una evaluación YA cerrada e importada -- nunca un borrador de localStorage. Nunca escribe
+   sobre `entrada`: lo que devuelve es una copia nueva armada en memoria. Cerrar de nuevo desde acá
+   agrega una entrada MÁS al array (cerrarEvaluacion() -> adjuntarEvaluacionNegocioPro() -> push());
+   la entrada de origen queda intacta siempre (regla dura del punto 3 del diff).
+   dimensiones viaja como array en el export (cerrarEvaluacion()) pero state.dimensiones es un
+   objeto cod->dimensión (ver declaración de `state`) -- se convierte acá, único lugar donde hace
+   falta. El resto de los campos (diagnosticosIntegrales, proyectivos, camposDecisiones,
+   ejecuciones, ejecucionActual) ya tienen la misma forma en el export que en `state`. Los campos
+   que no se listan en el objeto devuelto (dimensionActual, historial*, propuestas, etc.) quedan
+   afuera a propósito: hidratarDesdeBorrador() solo toca lo que existe en draft.state
+   (hasOwnProperty), así que el resto arranca limpio, como una sesión nueva. */
+function draftDesdeEvaluacionHistorica(org, entrada){
+  var ev = (entrada.datos && entrada.datos.evaluacion) || {};
+  var dimsObj = {};
+  (Array.isArray(ev.dimensiones) ? ev.dimensiones : []).forEach(function(d){
+    if(d && d.cod) dimsObj[d.cod] = d;
+  });
+  return {
+    state: {
+      dimensiones: dimsObj,
+      diagnosticosIntegrales: Array.isArray(ev.diagnosticos_integrales) ? ev.diagnosticos_integrales.slice() : [],
+      proyectivos: Array.isArray(ev.proyectivos) ? ev.proyectivos.slice() : [],
+      camposDecisiones: Array.isArray(ev.campos_decisiones) ? ev.campos_decisiones.slice() : [],
+      ejecuciones: Array.isArray(ev.ejecuciones) ? ev.ejecuciones.slice() : [],
+      ejecucionActual: ev.ejecucion_actual || null,
+      // Viaja en el draft (CAMPOS_BORRADOR_RESTAURABLES la incluye) y de ahí al payload cuando se
+      // vuelva a cerrar -- cerrarEvaluacion() arma continuidad_origen con la versión EXTERNA real
+      // (evaluaciones_negocio_pro[].version), nunca con evaluacion.version (que vale siempre 1,
+      // hallazgo confirmado en esta investigación -- ver PENDIENTES.md).
+      continuidad_origen: { organismo_id: org.id, version: entrada.version }
+    },
+    borradorTexto: {},
+    rev: 0
+  };
+}
+
+/* Entrada real de "Continuar" -- mismo patrón que continuarBorrador() (N3.0-B): hidratar y
+   rutear con estadoNegociosPro()+ETAPA_NEGOCIO_IR, que ya están escritos para aceptar cualquier
+   estado hidratado, no solo el de una sesión en memoria. */
+function continuarEvaluacionHistorica(organismoId, version){
+  var org = cargarOrganismosNegocio().find(function(o){ return o.id === organismoId; });
+  if(!org) return;
+  var entrada = (org.evaluaciones_negocio_pro || []).find(function(e){ return e.version === version; });
+  if(!entrada) return;
+  state.modoSoloLectura = false;
+  hidratarDesdeBorrador(draftDesdeEvaluacionHistorica(org, entrada));
+  var eNP = estadoNegociosPro();
+  var ir = ETAPA_NEGOCIO_IR[eNP.actual];
+  if(ir) ir(); else mostrarPantalla('pantallaDiagnostico');
+}
+
+/* "Ver" -- misma hidratación, pero deja la sesión en modoSoloLectura:true. La navegación real que
+   arma pantallas sin controles de edición se resuelve en irAModoVer() más abajo (junto con
+   puedeMutarNegocio()), después de que ETAPA_NEGOCIO_IR esté declarado. */
+function verEvaluacionHistorica(organismoId, version){
+  var org = cargarOrganismosNegocio().find(function(o){ return o.id === organismoId; });
+  if(!org) return;
+  var entrada = (org.evaluaciones_negocio_pro || []).find(function(e){ return e.version === version; });
+  if(!entrada) return;
+  hidratarDesdeBorrador(draftDesdeEvaluacionHistorica(org, entrada));
+  state.modoSoloLectura = true;
+  var eNP = estadoNegociosPro();
+  var ir = ETAPA_NEGOCIO_IR[eNP.actual];
+  if(ir) ir(); else mostrarPantalla('pantallaDiagnostico');
+}
+
+/* Guarda común de mutación -- corrección 3 de Javier sobre la propuesta original (que solo
+   deshabilitaba inputs/botones, algo que no es una garantía real). Se llama al principio de
+   TODA función que escribe sobre estado confirmado/operativo, y de las 6 que disparan una
+   llamada a la IA -- si devuelve false, la función corta ahí, sin excepción y sin aviso ruidoso
+   (el usuario ya sabe que está en modo Ver, no hace falta repetírselo en cada click). */
+function puedeMutarNegocio(){ return state.modoSoloLectura !== true; }
+
 /* ================= N3.0-B · borrador persistente (14/08) =================
    Hasta acá, `state` vivía solo en memoria: cerrar la pestaña, recargar o un cuelgue del
    navegador antes de llegar a "Cerrar evaluación" perdía TODA la evaluación en curso, así
@@ -2420,7 +2533,8 @@ function claveBorrador(organismoId){ return 'ag_negocio_borrador_' + organismoId
 
 // Candados transitorios y errores de una sesión anterior: nunca tiene sentido persistirlos.
 var CAMPOS_BORRADOR_EXCLUIDOS = ['llamando', 'llamandoIntegral', 'llamandoProyectivo',
-  'llamandoDecisiones', 'llamandoEjecucion', 'llamandoSeguimiento', 'errorSeguimiento'];
+  'llamandoDecisiones', 'llamandoEjecucion', 'llamandoSeguimiento', 'errorSeguimiento',
+  'modoSoloLectura'];   // N3.2: candado transitorio de esta pestaña -- nunca se persiste como true
 
 // Único punto que decide qué SÍ se restaura de un borrador -- corrección 2 de Javier: nunca un
 // Object.assign crudo. organismoId/marco/organismoNombre quedan afuera a propósito: esos los fija
@@ -2431,7 +2545,8 @@ var CAMPOS_BORRADOR_RESTAURABLES = [
   'proyectivos', 'propuestaProyectivo', 'historialProyectivo', 'descartesProyectivo',
   'camposDecisiones', 'propuestaDecisiones', 'historialDecisiones', 'criteriosUsuario',
   'ejecuciones', 'ejecucionActual', 'propuestaEjecucion', 'historialEjecucion', 'accionActiva',
-  'propuestaSeguimiento', 'historialSeguimiento'
+  'propuestaSeguimiento', 'historialSeguimiento',
+  'continuidad_origen'   // N3.2: de dónde viene esta sesión, si viene de "Continuar" (ver draftDesdeEvaluacionHistorica)
 ];
 
 // Los 11 textareas estáticos de conversación -- cubren las seis conversaciones con la IA
@@ -2467,6 +2582,7 @@ function _snapshotStateParaBorrador(){
    práctica no hay hoy ningún botón que permita seguir editando después de "Cerrar evaluación",
    pero si en el futuro lo hay, no queda pisado en silencio por el próximo guardado automático. */
 function guardarBorrador(forzarReapertura){
+  if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca genera ni actualiza un draft
   try{
     if(!state.organismoId) return;   // sin organismo no hay a qué atar el borrador
     var clave = claveBorrador(state.organismoId);
@@ -2689,6 +2805,62 @@ function renderCajaBorrador(){
   caja.style.display = 'block';
 }
 
+/* N3.2, punto 5 del diff aprobado: sección de "Continuar / Ver" en la pantalla de Inicio, debajo
+   del banner de borrador de N3.0-B (que sigue intacto). No es una pantalla nueva -- una sección
+   más de pantallaInicio, mismo criterio que renderCajaBorrador(). Por organismo se muestra
+   siempre la última entrada (recomendada) y, además, cualquier entrada anterior que siga
+   "continuable" sin estar superada (corrección de Javier sobre elegibilidad, punto 2) -- nunca se
+   oculta un ciclo vivo que nadie retomó todavía. */
+function renderListaContinuidad(){
+  var caja = document.getElementById('cajaContinuidad');
+  if(!caja) return;
+  var organismos = cargarOrganismosNegocio().filter(function(o){
+    return Array.isArray(o.evaluaciones_negocio_pro) && o.evaluaciones_negocio_pro.length;
+  });
+  if(!organismos.length){ caja.style.display = 'none'; caja.innerHTML = ''; return; }
+
+  caja.innerHTML = '';
+  var titulo = document.createElement('h3');
+  titulo.textContent = 'Evaluaciones anteriores';
+  caja.appendChild(titulo);
+
+  organismos.forEach(function(org){
+    var todas = org.evaluaciones_negocio_pro;
+    var ultima = todas[todas.length - 1];
+    var filas = [];
+    todas.forEach(function(entrada, i){
+      var esUltima = (i === todas.length - 1);
+      var st = estadoLongitudinalEvaluacion(entrada, todas);
+      if(esUltima || (st.continuar && entrada.version !== ultima.version)) filas.push({ entrada: entrada, st: st, recomendada: esUltima });
+    });
+    filas.forEach(function(f){
+      var fila = document.createElement('div');
+      fila.className = 'fila-continuidad';
+      fila.style.cssText = 'border-top:1px solid #eee;padding:10px 0;';
+      var p = document.createElement('p');
+      p.className = 'hint';
+      var fecha = new Date(f.entrada.fecha).toLocaleString('es-AR');
+      p.innerHTML = '<b>' + escaparHtml(org.nombre) + '</b> · v' + f.entrada.version + (f.recomendada ? ' (última)' : '')
+        + ' · ' + fecha + (f.st.continuar ? ' · ciclo de ejecución sin cerrar' : '') + '<br>' + escaparHtml(f.entrada.resumen || '');
+      fila.appendChild(p);
+      var acciones = document.createElement('div'); acciones.className = 'acciones';
+      var bVer = document.createElement('button'); bVer.className = 'btn secundario';
+      bVer.textContent = 'Ver';
+      bVer.onclick = (function(orgId, v){ return function(){ verEvaluacionHistorica(orgId, v); }; })(org.id, f.entrada.version);
+      acciones.appendChild(bVer);
+      if(f.st.continuar){
+        var bCont = document.createElement('button'); bCont.className = 'btn';
+        bCont.textContent = 'Continuar';
+        bCont.onclick = (function(orgId, v){ return function(){ continuarEvaluacionHistorica(orgId, v); }; })(org.id, f.entrada.version);
+        acciones.appendChild(bCont);
+      }
+      fila.appendChild(acciones);
+      caja.appendChild(fila);
+    });
+  });
+  caja.style.display = 'block';
+}
+
 function pintarInicio(){
   var cajaOk = document.getElementById('cajaOrganismo');
   var cajaNo = document.getElementById('cajaSinOrganismo');
@@ -2703,6 +2875,7 @@ function pintarInicio(){
     cajaNo.style.display = 'block';
   }
   renderCajaBorrador();   // N3.0-B: banner de "continuar / empezar de cero" si hay borrador
+  renderListaContinuidad();   // N3.2: evaluaciones cerradas continuables/visibles
 }
 function escaparHtml(s){
   var d = document.createElement('div');
@@ -2762,8 +2935,27 @@ function mostrarPantalla(id){
   document.querySelectorAll('.pantalla').forEach(function(p){ p.classList.remove('activa'); });
   document.getElementById(id).classList.add('activa');
   renderNavNegocio(id);
+  renderBannerModoVer();   // N3.2: aviso visual -- la garantía real es puedeMutarNegocio(), esto es solo UX
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  guardarBorrador();   // N3.0-B: gancho general -- toda transición de pantalla guarda
+  guardarBorrador();   // N3.0-B: gancho general -- toda transición de pantalla guarda (no-op en Modo Ver)
+}
+
+/* N3.2: banner fijo, mismo criterio visual que avisarConflictoBorrador(). No deshabilita nada por
+   sí solo -- los botones de cada pantalla siguen tal cual estaban (deuda de UX reconocida y
+   documentada en PENDIENTES.md: deshabilitar cada botón/input pantalla por pantalla queda para un
+   corte aparte). Lo que SÍ garantiza que no pase nada si igual se clickea es puedeMutarNegocio(),
+   ya insertado en cada función que muta o llama IA -- esa es la protección real, no esta UI. */
+function renderBannerModoVer(){
+  var el = document.getElementById('bannerModoVer');
+  if(!state.modoSoloLectura){ if(el) el.style.display = 'none'; return; }
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'bannerModoVer';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;background:#2A2A2A;color:#fff;text-align:center;font-size:.82rem;padding:6px 10px;';
+    el.textContent = 'Modo Ver -- estás mirando una evaluación cerrada, sin editar. Volvé a Inicio para continuar otra.';
+    document.body.appendChild(el);
+  }
+  el.style.display = 'block';
 }
 function volverAInicio(){ pintarInicio(); mostrarPantalla('pantallaInicio'); }
 
@@ -2884,6 +3076,14 @@ function resumenConfirmadasTexto(codActual){
    necesitar saber que vinieron de otra pestaña -- mismo origen, misma clave. */
 var USO_MAX_NEGOCIO = 500;
 var _ultimoUsoIA = null;   // dejado por cada llamarIA* justo antes de resolver -- ver nota ahí
+// N3.2, punto 21 del diseño aprobado: mismo criterio que _ultimoUsoIA, dos variables hermanas.
+// _ultimoCobradoIA: el valor real de x-comprender-cobrado (api/anthropic.js ya lo expone vía
+// Access-Control-Expose-Headers, solo faltaba leerlo del lado del cliente). _ultimaDuracionIA:
+// ms entre el momento en que se dispara el fetch y el momento en que responde -- hoy no existía
+// ningún timestamp de inicio, así que este dato no se podía sacar (limitación señalada en el
+// informe N3.1). Ambas pueden quedar null (fetch fallido, o servidor viejo sin el header) --
+// registrarUsoNegocio() las trata como opcionales, nunca bloquea el registro si faltan.
+var _ultimoCobradoIA = null, _ultimaDuracionIA = null;
 function cargarUsoNegocio(){
   try{
     var raw = JSON.parse(localStorage.getItem('ag_core_uso') || 'null');
@@ -2903,7 +3103,11 @@ function registrarUsoNegocio(tipo, usage, historialLen){
       ent: usage.input_tokens || 0,
       sal: usage.output_tokens || 0,
       cle: usage.cache_read_input_tokens || 0,
-      ces: usage.cache_creation_input_tokens || 0
+      ces: usage.cache_creation_input_tokens || 0,
+      // N3.2: opcionales -- créditos reales cobrados (x-comprender-cobrado) y duración real de
+      // la llamada en ms. Quedan afuera del registro si no se pudieron capturar (nunca bloquean).
+      cr: (_ultimoCobradoIA !== null && _ultimoCobradoIA !== undefined) ? Number(_ultimoCobradoIA) : undefined,
+      dur: (typeof _ultimaDuracionIA === 'number') ? Math.round(_ultimaDuracionIA) : undefined
     };
     r.registros.push(reg);
     if(r.registros.length > USO_MAX_NEGOCIO) r.registros = r.registros.slice(r.registros.length - USO_MAX_NEGOCIO);
@@ -2925,6 +3129,7 @@ function PROMPT_DIMENSION(cod){
 }
 
 function llamarIADimension(mensajes){
+  var _t0 = performance.now();   // N3.2: instrumentación de duración real (punto 21)
   return fetch('/api/anthropic', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2943,6 +3148,8 @@ function llamarIADimension(mensajes){
       }
       var texto = (data.content || []).map(function(b){ return b.text || ''; }).join('');
       _ultimoUsoIA = data.usage || null;   // N3.0-A: lo toma registrarUsoNegocio() en el call site
+      _ultimoCobradoIA = res.headers.get('x-comprender-cobrado');   // N3.2: puede venir null, registrarUsoNegocio() lo tolera
+      _ultimaDuracionIA = performance.now() - _t0;
       return texto;
     });
   });
@@ -3030,6 +3237,7 @@ function abrirDimension(cod){
 }
 
 function enviarTurnoDimension(textoUsuario){
+  if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca llama a la IA
   if(state.llamando) return;
   var esInicio = (textoUsuario === null);
   if(!esInicio){
@@ -3084,6 +3292,7 @@ function mostrarLecturaPropuesta(propuesta){
   card.style.display = 'block';
 }
 function confirmarLectura(){
+  if(!puedeMutarNegocio()) return;
   if(!state.propuestaActual || !state.dimensionActual) return;
   var cod = state.dimensionActual;
   var p = state.propuestaActual;
@@ -3175,6 +3384,7 @@ function PROMPT_DIAGNOSTICO_INTEGRAL(){
 }
 
 function llamarIADiagnosticoIntegral(mensajes){
+  var _t0 = performance.now();   // N3.2: instrumentación de duración real (punto 21)
   return fetch('/api/anthropic', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -3193,6 +3403,8 @@ function llamarIADiagnosticoIntegral(mensajes){
       }
       var texto = (data.content || []).map(function(b){ return b.text || ''; }).join('');
       _ultimoUsoIA = data.usage || null;   // N3.0-A: lo toma registrarUsoNegocio() en el call site
+      _ultimoCobradoIA = res.headers.get('x-comprender-cobrado');
+      _ultimaDuracionIA = performance.now() - _t0;
       return texto;
     });
   });
@@ -3317,6 +3529,7 @@ function abrirDiagnosticoIntegral(){
 }
 
 function enviarTurnoIntegral(textoUsuario){
+  if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca llama a la IA
   if(state.llamandoIntegral) return;
   var esInicio = (textoUsuario === null);
   if(!esInicio){
@@ -3443,6 +3656,7 @@ function mostrarPropuestaIntegral(propuesta){
 }
 
 function confirmarDiagnosticoIntegral(){
+  if(!puedeMutarNegocio()) return;
   if(!state.propuestaIntegral) return;
   var version = state.diagnosticosIntegrales.length + 1;
   state.diagnosticosIntegrales.push({
@@ -3556,6 +3770,7 @@ function PROMPT_PROYECTIVO(){
 }
 
 function llamarIAProyectivo(mensajes){
+  var _t0 = performance.now();   // N3.2: instrumentación de duración real (punto 21)
   return fetch('/api/anthropic', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -3574,6 +3789,8 @@ function llamarIAProyectivo(mensajes){
       }
       var texto = (data.content || []).map(function(b){ return b.text || ''; }).join('');
       _ultimoUsoIA = data.usage || null;   // N3.0-A: lo toma registrarUsoNegocio() en el call site
+      _ultimoCobradoIA = res.headers.get('x-comprender-cobrado');
+      _ultimaDuracionIA = performance.now() - _t0;
       return texto;
     });
   });
@@ -3746,6 +3963,7 @@ function explorarTransformaciones(){
 }
 
 function enviarTurnoProyectivo(textoUsuario){
+  if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca llama a la IA
   if(state.llamandoProyectivo) return;
   var esInicio = (textoUsuario === null);
   if(!esInicio){
@@ -3900,6 +4118,7 @@ function mostrarPropuestaProyectivo(propuesta){
    cascada -- nunca queda un escenario o una palanca prioritaria apuntando a algo que ya no
    existe. Todo esto es local: no dispara una nueva llamada a la IA. */
 function descartarTransformacion(id){
+  if(!puedeMutarNegocio()) return;
   if(!state.propuestaProyectivo) return;
   var t = state.propuestaProyectivo.transformaciones.find(function(x){ return x.id === id; });
   if(t) state.descartesProyectivo.push({ id: t.id, nombre: t.nombre, transformacion: t.transformacion });
@@ -3927,6 +4146,7 @@ function pedirVarianteEscenario(tipo){
 }
 
 function confirmarProyectivo(){
+  if(!puedeMutarNegocio()) return;
   if(!state.propuestaProyectivo || !state.propuestaProyectivo.transformaciones.length) return;
   var di = ultimoDiagnosticoIntegralConfirmado();
   var version = state.proyectivos.length + 1;
@@ -4056,6 +4276,7 @@ function PROMPT_CAMPO_DECISIONES(){
 }
 
 function llamarIACampoDecisiones(mensajes){
+  var _t0 = performance.now();   // N3.2: instrumentación de duración real (punto 21)
   return fetch('/api/anthropic', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -4074,6 +4295,8 @@ function llamarIACampoDecisiones(mensajes){
       }
       var texto = (data.content || []).map(function(b){ return b.text || ''; }).join('');
       _ultimoUsoIA = data.usage || null;   // N3.0-A: lo toma registrarUsoNegocio() en el call site
+      _ultimoCobradoIA = res.headers.get('x-comprender-cobrado');
+      _ultimaDuracionIA = performance.now() - _t0;
       return texto;
     });
   });
@@ -4353,6 +4576,7 @@ function iniciarComparacionYDecision(){
   enviarTurnoDecisiones(null);
 }
 function enviarTurnoDecisiones(textoUsuario){
+  if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca llama a la IA
   if(state.llamandoDecisiones) return;
   var esInicio = (textoUsuario === null);
   if(!esInicio){
@@ -4545,6 +4769,7 @@ function encontrarDecision(id){
   return state.propuestaDecisiones.decisiones.find(function(d){ return d.id === id; }) || null;
 }
 function fijarEstadoDecision(id, estado){
+  if(!puedeMutarNegocio()) return;   // N3.2: chokepoint real de "cambiar decisión" -- cubre descartarDecision() y toda otra vía
   var d = encontrarDecision(id);
   if(!d) return;
   d.estado = estado;
@@ -4560,6 +4785,7 @@ function descartarDecision(id){ fijarEstadoDecision(id, 'descartada'); }
 function postergarDecision(id){ fijarEstadoDecision(id, 'postergada'); }
 function marcarEnRevisionDecision(id){ fijarEstadoDecision(id, 'en_revision'); }
 function aceptarSugerenciaEstado(id){
+  if(!puedeMutarNegocio()) return;
   var d = encontrarDecision(id);
   if(!d || !d.estado_propuesto) return;
   if(d.estado_propuesto === 'condicionada'){ abrirCondicionarDecision(id); return; }
@@ -4572,6 +4798,7 @@ function abrirCondicionarDecision(id){
   mostrarPropuestaDecisiones(state.propuestaDecisiones);
 }
 function confirmarCondicionDecision(id, detalle){
+  if(!puedeMutarNegocio()) return;
   var d = encontrarDecision(id);
   if(!d || !detalle || !detalle.condicion) return;
   d.condicion_detalle = detalle;
@@ -4611,6 +4838,7 @@ function seguirProfundizandoDecisiones(){
    D2 todavía en revisión -- eso está autorizado explícitamente. estado_propuesto y _condicionando
    son transitorios y NUNCA llegan al objeto persistido. */
 function confirmarCampoDecisiones(){
+  if(!puedeMutarNegocio()) return;
   if(!state.propuestaDecisiones) return;
   var proy = ultimoProyectivoConfirmado();
   if(!proy) return;
@@ -4731,11 +4959,36 @@ function resumenDecisionesActivasParaEjecucion(){
   });
   return partes.join('\n');
 }
+/* N3.2, punto 20/22 del diseño aprobado (corrección de Javier: priorizado, no "últimas N" a
+   ciegas). Con ejecuciones que ahora pueden vivir semanas (ese es el sentido de N3.2), estas dos
+   funciones son las que más riesgo real tienen de repetir el patrón que causó los 504 de N3.1 en
+   Proyectivo/Decisiones -- ahí el problema era el ALCANCE PEDIDO a la IA en un solo turno; acá el
+   problema sería la ACUMULACIÓN de datos reales turno tras turno, sesión tras sesión. */
+var TOPE_ACCIONES_ACTIVAS_RESUMEN = 12, VENTANA_ACCIONES_CERRADAS_RESUMEN = 5;
+var TOPE_EVIDENCIAS_SEGUIMIENTO = 10, TOPE_SEGUIMIENTOS_SEGUIMIENTO = 8;
+
 function resumenAccionesExistentesParaEjecucion(){
   var ejec = state.ejecucionActual;
   if(!ejec || !ejec.acciones.length) return '';
-  return '\n\nACCIONES YA EXISTENTES EN ESTA EJECUCIÓN (no las propongas de nuevo; podés referenciarlas por id en depende_de):\n' +
-    ejec.acciones.map(function(a){ return '  [' + a.id + '] ' + a.titulo + ' (decisión ' + a.decision_id + ', estado: ' + a.estado + ')'; }).join('\n');
+  function linea(a){ return '  [' + a.id + '] ' + a.titulo + ' (decisión ' + a.decision_id + ', estado: ' + a.estado + ')'; }
+  // Prioridad real: pendiente/en_curso/bloqueada son las que importa no repetir -- van completas
+  // (con un tope defensivo propio, por si algún día son muchas). completada/cancelada solo dan
+  // contexto -- alcanza con una ventana chica de las más recientes.
+  var activas = ejec.acciones.filter(function(a){ return a.estado === 'pendiente' || a.estado === 'en_curso' || a.estado === 'bloqueada'; });
+  var cerradas = ejec.acciones.filter(function(a){ return a.estado === 'completada' || a.estado === 'cancelada'; });
+  var activasMostradas = activas.slice(0, TOPE_ACCIONES_ACTIVAS_RESUMEN);
+  var omitidasActivas = activas.length - activasMostradas.length;
+  var cerradasMostradas = cerradas.slice(-VENTANA_ACCIONES_CERRADAS_RESUMEN);
+  var omitidasCerradas = cerradas.length - cerradasMostradas.length;
+  var partes = ['\n\nACCIONES YA EXISTENTES EN ESTA EJECUCIÓN (no las propongas de nuevo; podés referenciarlas por id en depende_de):'];
+  partes = partes.concat(activasMostradas.map(linea));
+  if(omitidasActivas > 0) partes.push('  ... y ' + omitidasActivas + ' acción(es) activa(s) más, no mostradas acá.');
+  if(cerradasMostradas.length){
+    partes.push('  -- últimas cerradas, solo como contexto:');
+    partes = partes.concat(cerradasMostradas.map(linea));
+    if(omitidasCerradas > 0) partes.push('  ... y ' + omitidasCerradas + ' acción(es) cerrada(s) más, no mostradas acá.');
+  }
+  return partes.join('\n');
 }
 function resumenAccionParaSeguimiento(accion){
   var ejec = state.ejecucionActual || ejecucionVigente();
@@ -4745,16 +4998,37 @@ function resumenAccionParaSeguimiento(accion){
   var campo = ultimoCampoDecisionesConfirmado();
   var decision = campo ? (campo.contenido.decisiones || []).find(function(d){ return d.id === accion.decision_id; }) : null;
   if(decision) partes.push('Decisión de origen: ' + decision.titulo + ' -- ' + decision.decision);
+
+  // Siempre presentes, sin tope -- son chicas por naturaleza, no crecen turno a turno como
+  // evidencias/seguimientos (punto 20 aprobado por Javier: indicadores actuales + bloqueos vigentes).
+  var indicadoresAccion = ejec ? ejec.indicadores.filter(function(i){ return i.accion_id === accion.id; }) : [];
+  partes.push(indicadoresAccion.length
+    ? 'Indicadores actuales: ' + indicadoresAccion.map(function(i){ return i.nombre + ' = ' + (i.valor_actual || 'sin medir') + (i.valor_objetivo ? ' (objetivo: ' + i.valor_objetivo + ')' : ''); }).join('; ')
+    : 'Sin indicadores definidos para esta acción.');
+  var ultimoSeguimientoConBloqueos = accion.seguimientos.length
+    ? accion.seguimientos.slice().reverse().find(function(s){ return s.bloqueos && s.bloqueos.length; })
+    : null;
+  partes.push(ultimoSeguimientoConBloqueos
+    ? 'Bloqueos vigentes (del seguimiento más reciente que los reportó): ' + ultimoSeguimientoConBloqueos.bloqueos.join('; ')
+    : 'Sin bloqueos vigentes reportados.');
+
+  // Acá sí hace falta tope: con ejecuciones de semanas esto crece turno a turno. Se muestran las
+  // más recientes -- son las que más importan para leer la evolución real -- y se indica cuántas
+  // quedaron afuera, nunca se ocultan en silencio.
   var evidenciasAccion = ejec ? ejec.evidencias.filter(function(e){ return e.accion_id === accion.id; }) : [];
-  if(evidenciasAccion.length){
-    partes.push('Evidencia registrada:');
-    evidenciasAccion.forEach(function(e){ partes.push('  - (' + e.tipo + ') ' + e.descripcion + (e.valor ? ' = ' + e.valor : '')); });
+  var evidenciasMostradas = evidenciasAccion.slice(-TOPE_EVIDENCIAS_SEGUIMIENTO);
+  var evidenciasOmitidas = evidenciasAccion.length - evidenciasMostradas.length;
+  if(evidenciasMostradas.length){
+    partes.push('Evidencia registrada' + (evidenciasOmitidas > 0 ? ' (' + evidenciasOmitidas + ' más antigua(s) no mostrada(s) acá)' : '') + ':');
+    evidenciasMostradas.forEach(function(e){ partes.push('  - (' + e.tipo + ') ' + e.descripcion + (e.valor ? ' = ' + e.valor : '')); });
   } else {
     partes.push('Todavía no hay evidencia registrada para esta acción.');
   }
-  if(accion.seguimientos.length){
-    partes.push('Seguimientos previos:');
-    accion.seguimientos.forEach(function(s){ partes.push('  - ' + s.fecha + ': ' + (s.avance || '(sin avance descripto)') + (s.bloqueos.length ? ' -- bloqueos: ' + s.bloqueos.join('; ') : '')); });
+  var seguimientosMostrados = accion.seguimientos.slice(-TOPE_SEGUIMIENTOS_SEGUIMIENTO);
+  var seguimientosOmitidos = accion.seguimientos.length - seguimientosMostrados.length;
+  if(seguimientosMostrados.length){
+    partes.push('Seguimientos previos' + (seguimientosOmitidos > 0 ? ' (' + seguimientosOmitidos + ' más antiguo(s) no mostrado(s) acá)' : '') + ':');
+    seguimientosMostrados.forEach(function(s){ partes.push('  - ' + s.fecha + ': ' + (s.avance || '(sin avance descripto)') + (s.bloqueos.length ? ' -- bloqueos: ' + s.bloqueos.join('; ') : '')); });
   }
   return partes.join('\n');
 }
@@ -4783,6 +5057,7 @@ function PROMPT_PLAN_EJECUCION(){
     'seguido, recién ahí, de un texto visible de 2 a 4 líneas. Versión del Campo de decisiones vigente: ' + versionCampo + '.';
 }
 function llamarIAPlanEjecucion(mensajes){
+  var _t0 = performance.now();   // N3.2: instrumentación de duración real (punto 21)
   return fetch('/api/anthropic', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -4795,6 +5070,8 @@ function llamarIAPlanEjecucion(mensajes){
         throw err;
       }
       _ultimoUsoIA = data.usage || null;   // N3.0-A: lo toma registrarUsoNegocio() en el call site
+      _ultimoCobradoIA = res.headers.get('x-comprender-cobrado');
+      _ultimaDuracionIA = performance.now() - _t0;
       return (data.content || []).map(function(b){ return b.text || ''; }).join('');
     });
   });
@@ -4892,6 +5169,7 @@ function registrarCambioAccion(accion, campo, anterior, nuevo, motivo){
   accion.cambios.push({ fecha: new Date().toISOString(), campo: campo, anterior: anterior, nuevo: nuevo, motivo: motivo || '' });
 }
 function confirmarAccion(accionPropuestaId, datos){
+  if(!puedeMutarNegocio()) return;
   var propuesta = encontrarAccionPropuesta(accionPropuestaId);
   if(!propuesta) return;
   var ejec = asegurarEjecucionActual();
@@ -4953,6 +5231,7 @@ function confirmarAccion(accionPropuestaId, datos){
   guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
 function descartarAccionPropuesta(id){
+  if(!puedeMutarNegocio()) return;
   if(!state.propuestaEjecucion) return;
   state.propuestaEjecucion.acciones = state.propuestaEjecucion.acciones.filter(function(a){ return a.id !== id; });
   // limpia referencias pendientes hacia esta id en acciones YA confirmadas -- nunca queda huérfana
@@ -4965,6 +5244,7 @@ function descartarAccionPropuesta(id){
   guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
 function cambiarEstadoAccion(accionId, nuevoEstado, motivo){
+  if(!puedeMutarNegocio()) return;
   var ejec = state.ejecucionActual;
   if(!ejec) return;
   var accion = ejec.acciones.find(function(a){ return a.id === accionId; });
@@ -4978,6 +5258,7 @@ function cambiarEstadoAccion(accionId, nuevoEstado, motivo){
 /* ---- evidencia: exclusivamente humana -- ni PLAN_EJECUCION ni LECTURA_SEGUIMIENTO pueden
    crear entradas acá (ajuste de Javier, 11/08). ---- */
 function registrarEvidencia(accionId, datos){
+  if(!puedeMutarNegocio()) return null;
   var ejec = state.ejecucionActual;
   if(!ejec || !datos || !datos.descripcion) return null;
   var tipo = TIPOS_EVIDENCIA.indexOf(datos.tipo) > -1 ? datos.tipo : 'observacion';
@@ -4997,6 +5278,7 @@ function registrarEvidencia(accionId, datos){
 }
 /* ---- seguimiento: append-only, nunca reemplaza un registro anterior ---- */
 function registrarSeguimiento(accionId, datos){
+  if(!puedeMutarNegocio()) return;
   var ejec = state.ejecucionActual;
   if(!ejec) return;
   var accion = ejec.acciones.find(function(a){ return a.id === accionId; });
@@ -5031,6 +5313,7 @@ function PROMPT_LECTURA_SEGUIMIENTO(accion){
     'seguido, recién ahí, de un texto visible de 2 a 3 líneas.';
 }
 function llamarIALecturaSeguimiento(mensajes, accion){
+  var _t0 = performance.now();   // N3.2: instrumentación de duración real (punto 21)
   return fetch('/api/anthropic', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -5043,6 +5326,8 @@ function llamarIALecturaSeguimiento(mensajes, accion){
         throw err;
       }
       _ultimoUsoIA = data.usage || null;   // N3.0-A: lo toma registrarUsoNegocio() en el call site
+      _ultimoCobradoIA = res.headers.get('x-comprender-cobrado');
+      _ultimaDuracionIA = performance.now() - _t0;
       return (data.content || []).map(function(b){ return b.text || ''; }).join('');
     });
   });
@@ -5085,6 +5370,7 @@ function parseLecturaSeguimiento(texto){
    operativo -- crea un seguimiento con lectura_ia, suma los desvíos aceptados a ejec.desvios[], y
    si requiere_recomprension viene true agrega una señal trazable (nunca resetea las anteriores). */
 function aceptarLecturaSeguimiento(accionId){
+  if(!puedeMutarNegocio()) return;
   var ejec = state.ejecucionActual;
   var lectura = state.propuestaSeguimiento;
   if(!ejec || !lectura) return;
@@ -5115,6 +5401,7 @@ function aceptarLecturaSeguimiento(accionId){
   guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
 function descartarLecturaSeguimiento(){
+  if(!puedeMutarNegocio()) return;
   state.propuestaSeguimiento = null;
   guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
@@ -5122,6 +5409,7 @@ function descartarLecturaSeguimiento(){
 /* ---- cierre de acción: "completada" nunca implica "la hipótesis se confirmó" -- son dos
    campos separados (ajuste de Javier, 11/08). ---- */
 function confirmarCierreAccion(accionId, datos){
+  if(!puedeMutarNegocio()) return;
   var ejec = state.ejecucionActual;
   if(!ejec) return;
   var accion = ejec.acciones.find(function(a){ return a.id === accionId; });
@@ -5267,6 +5555,7 @@ function prepararEjecucionParaDecision(decisionId){
   enviarTurnoEjecucion(null);
 }
 function enviarTurnoEjecucion(textoUsuario){
+  if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca llama a la IA
   if(state.llamandoEjecucion) return;
   var esInicio = (textoUsuario === null);
   if(!esInicio){
@@ -5515,6 +5804,7 @@ function renderFormularioCierreAccion(a){
   return box;
 }
 function pedirLecturaSeguimiento(accionId){
+  if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca llama a la IA
   if(state.llamandoSeguimiento) return;
   var a = accionActivaObj();
   if(!a) return;
@@ -5715,6 +6005,7 @@ function abrirCierreEjecucion(){
 /* Cierre real (sección 15/24 de Javier): snapshot final a ejecuciones[], ejecucionActual vuelve a
    null. Nunca se mezclan -- ejecuciones[] son SOLO ciclos cerrados. */
 function confirmarCierreEjecucion(){
+  if(!puedeMutarNegocio()) return;
   var ejec = state.ejecucionActual;
   if(!ejec) return;
   var version = state.ejecuciones.length + 1;
@@ -5736,7 +6027,7 @@ function confirmarCierreEjecucion(){
    Nunca autorrepara nada (mandato explícito de Javier, punto 9): solo devuelve una lista de
    problemas encontrados, cada uno con severidad, para que el usuario (o un desarrollo futuro)
    decida qué hacer. Lista vacía = integridad OK. */
-function validarIntegridadEvaluacionNegocio(evaluacion){
+function validarIntegridadEvaluacionNegocio(evaluacion, organismoOrigen){
   var problemas = [];
   function marcar(codigo, severidad, mensaje){ problemas.push({ codigo: codigo, severidad: severidad, mensaje: mensaje }); }
   if(!evaluacion || typeof evaluacion !== 'object'){
@@ -5870,10 +6161,39 @@ function validarIntegridadEvaluacionNegocio(evaluacion){
     }
   }
 
+  // ---- N3.2, punto 26 del diseño aprobado: continuidad longitudinal ----
+  // continuidad_origen.version tiene que referenciar la versión EXTERNA real
+  // (evaluaciones_negocio_pro[].version del organismo), nunca evaluacion.version (que vale
+  // siempre 1 -- ver el comentario en cerrarEvaluacion()). organismoOrigen es opcional: solo se
+  // puede cruzar contra el organismo real cuando quien llama lo tiene a mano (mostrarExportacion(),
+  // que corre en la misma pestaña y puede leer ag_core_organismos vía cargarOrganismosNegocio()).
+  // Si no viene, esta verificación puntual se omite -- el resto de la función sigue igual.
+  var co = evaluacion.continuidad_origen;
+  if(co){
+    if(!co.version || !co.organismo_id){
+      marcar('CONTINUIDAD_ORIGEN_INCOMPLETO', 'error', 'continuidad_origen está presente pero no trae version u organismo_id.');
+    } else if(organismoOrigen){
+      if(organismoOrigen.id !== co.organismo_id){
+        marcar('CONTINUIDAD_ORIGEN_ORGANISMO_DISTINTO', 'error', 'continuidad_origen.organismo_id (' + co.organismo_id + ') no coincide con el organismo real (' + organismoOrigen.id + ').');
+      } else {
+        var existeVersionOrigen = (organismoOrigen.evaluaciones_negocio_pro || []).some(function(e){ return e.version === co.version; });
+        if(!existeVersionOrigen){
+          marcar('CONTINUIDAD_ORIGEN_VERSION_INEXISTENTE', 'error', 'continuidad_origen.version (' + co.version + ') no existe en evaluaciones_negocio_pro[] de este organismo.');
+        }
+      }
+    }
+  }
+  // Nota sobre ids de acción (punto 10, ya decidido por Javier -- NO namespacing): esta función ya
+  // valida cada ejecución (cerrada o actual) por separado, vía chequearEjecucion() más arriba --
+  // nunca compara ids de acción ENTRE ejecuciones distintas. Eso es exactamente lo que hace que el
+  // scope "único dentro de su ejecución" sea seguro: no hace falta ningún chequeo nuevo acá, el
+  // aislamiento ya existe por construcción.
+
   return problemas;
 }
 
 function cerrarEvaluacion(){
+  if(!puedeMutarNegocio()) return;
   var dims = ORDEN_DIMENSIONES_NEGOCIO.map(function(cod){
     var d = state.dimensiones[cod];
     if(d) return d;
@@ -5889,6 +6209,12 @@ function cerrarEvaluacion(){
     marco_origen: state.marco ? { generado: state.marcoGenerado, organismo: state.organismoNombre } : null,
     evaluacion: {
       alcance: 'rapida',
+      // N3.2, hallazgo confirmado en la investigación previa: este "version" interno queda
+      // hardcodeado en 1 desde siempre -- NO es la identidad longitudinal real. La versión que
+      // importa (la que ve Javier como "v3" al importar, y la que usa continuidad_origen más
+      // abajo) es evaluaciones_negocio_pro[].version, calculada aparte en
+      // adjuntarEvaluacionNegocioPro() (index.html). Javier decidió explícitamente NO
+      // corregir/migrar este campo en N3.2 -- queda documentado como deuda técnica, no se toca.
       version: 1,
       estado: 'cerrada',
       dimensiones: dims,
@@ -5897,7 +6223,13 @@ function cerrarEvaluacion(){
       proyectivos: state.proyectivos.slice(),   // N2.4: siempre array, puede ir vacío
       campos_decisiones: state.camposDecisiones.slice(),  // N2.5: siempre array, puede ir vacío
       ejecuciones: state.ejecuciones.slice(),   // N2.6: ciclos CERRADOS -- nunca se pisa
-      ejecucion_actual: state.ejecucionActual   // N2.6: ciclo VIVO si existe, o null -- nunca mezclado con ejecuciones[]
+      ejecucion_actual: state.ejecucionActual,  // N2.6: ciclo VIVO si existe, o null -- nunca mezclado con ejecuciones[]
+      // N3.2: null en una evaluación nueva. Si esta sesión vino de "Continuar" (ver
+      // continuarEvaluacionHistorica() / draftDesdeEvaluacionHistorica()), viaja acá con la
+      // versión EXTERNA real del organismo de origen -- nunca con evaluacion.version (ver arriba).
+      // estadoLongitudinalEvaluacion() usa este campo, en la entrada que resulte de este cierre,
+      // para marcar la entrada de origen como "superada" y que deje de ofrecerse para continuar.
+      continuidad_origen: state.continuidad_origen || null
     }
   });
   // N3.0-B, corrección 1 de Javier: cerrar NO borra el borrador -- lo marca
@@ -5916,7 +6248,13 @@ function mostrarExportacion(payload){
   caja.value = JSON.stringify(payload, null, 2);
   var avisoBox = document.getElementById('cierreIntegridadAviso');
   if(avisoBox){
-    var problemas = validarIntegridadEvaluacionNegocio(payload.evaluacion);
+    // N3.2: si esta evaluación viene de "Continuar", se le pasa el organismo real (misma
+    // pestaña, mismo origen, vía cargarOrganismosNegocio()) para poder cruzar continuidad_origen
+    // contra la versión externa real -- ver los checks nuevos dentro de la función.
+    var organismoOrigen = (payload.evaluacion && payload.evaluacion.continuidad_origen)
+      ? cargarOrganismosNegocio().find(function(o){ return o.id === payload.evaluacion.continuidad_origen.organismo_id; })
+      : null;
+    var problemas = validarIntegridadEvaluacionNegocio(payload.evaluacion, organismoOrigen);
     if(problemas.length){
       var errores = problemas.filter(function(p){ return p.severidad === 'error'; }).length;
       avisoBox.style.display = 'block';
