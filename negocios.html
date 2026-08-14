@@ -2472,6 +2472,17 @@ function continuarEvaluacionHistorica(organismoId, version){
   var entrada = (org.evaluaciones_negocio_pro || []).find(function(e){ return e.version === version; });
   if(!entrada) return;
   state.modoSoloLectura = false;
+  // Bug real encontrado en la verificación en vivo (14/08): hidratarDesdeBorrador() preserva a
+  // propósito el organismoId/marco/organismoNombre que YA estaban en `state` al entrar (así debe
+  // ser para el "Continuar donde quedaste" normal de N3.0-B, que siempre continúa el organismo ya
+  // abierto). Acá el organismo puede ser uno DISTINTO al que estaba activo en la pestaña -- si no
+  // se fija esto ANTES de hidratar, la sesión de continuidad queda con el organismoId viejo y
+  // guardarBorrador() termina escribiendo sobre el draft del organismo equivocado (se detectó
+  // escribiendo encima del draft real de Lácteos al probar con un organismo de prueba distinto).
+  state.organismoId = organismoId;
+  state.organismoNombre = org.nombre;
+  state.marco = { organismo_id: organismoId, marco: null };
+  state.marcoGenerado = entrada.fecha || null;
   hidratarDesdeBorrador(draftDesdeEvaluacionHistorica(org, entrada));
   var eNP = estadoNegociosPro();
   var ir = ETAPA_NEGOCIO_IR[eNP.actual];
@@ -2486,6 +2497,14 @@ function verEvaluacionHistorica(organismoId, version){
   if(!org) return;
   var entrada = (org.evaluaciones_negocio_pro || []).find(function(e){ return e.version === version; });
   if(!entrada) return;
+  // Mismo fix que continuarEvaluacionHistorica() -- ver el comentario ahí. En Modo Ver esto no
+  // llega a escribir ningún draft (guardarBorrador() está bloqueado por puedeMutarNegocio()), pero
+  // igual hace falta para que organismoId/organismoNombre mostrados sean los correctos, no los del
+  // organismo que estuviera activo en la pestaña antes de entrar acá.
+  state.organismoId = organismoId;
+  state.organismoNombre = org.nombre;
+  state.marco = { organismo_id: organismoId, marco: null };
+  state.marcoGenerado = entrada.fecha || null;
   hidratarDesdeBorrador(draftDesdeEvaluacionHistorica(org, entrada));
   state.modoSoloLectura = true;
   var eNP = estadoNegociosPro();
