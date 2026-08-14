@@ -3077,6 +3077,9 @@ function resumenMarcoTexto(){
   if(m.abierto && m.abierto.length) partes.push('Abierto: ' + m.abierto.join('. '));
   return partes.length ? partes.join('\n') : 'Marco recibido, sin contenido todavía.';
 }
+// N3.3: ya no la usa PROMPT_DIMENSION() -- la reemplazó resumenEvidenciaCruzadaParaDimension(),
+// más rica (agrega oportunidad, lectura y evidencia podada). Se deja sin borrar, sin uso activo,
+// por si hace falta comparar o volver atrás (punto 14, rollback, del informe N3.3).
 function resumenConfirmadasTexto(codActual){
   var claves = Object.keys(state.dimensiones).filter(function(c){ return c !== codActual && state.dimensiones[c].confirmada; });
   if(!claves.length) return 'ninguna todavía';
@@ -3084,6 +3087,42 @@ function resumenConfirmadasTexto(codActual){
     var d = state.dimensiones[c];
     return c + ' ' + d.estado + (d.tension_principal ? ' (' + d.tension_principal + ')' : '');
   }).join(' · ');
+}
+
+/* ================= N3.3 · contexto cruzado acotado para Dimensiones (14/08) =================
+   Diseño aprobado por Javier con una corrección dura sobre la propuesta original: esto es
+   CONTEXTO para orientar la pregunta de apertura, nunca evidencia propia de la dimensión actual.
+   `evidencias` de cada dimensión sigue llenándose exactamente igual que siempre -- solo con lo
+   que el usuario escribe en ESA conversación (ver enviarTurnoDimension() / state.evidenciasDim,
+   sin cambios) -- esta función nunca escribe ahí, solo arma texto para el prompt.
+   Poda defensiva explícita (punto 4 de su aprobación, "no enviar indiscriminadamente el array
+   completo"): tope total de evidencias cruzadas incluidas (no por dimensión, total), cada una
+   recortada a un largo razonable, con conteo de lo omitido -- mismo criterio de N3.2 en
+   Ejecución/Seguimiento. Objetivo explícito: que PROMPT_DIMENSION() siga siendo liviano incluso
+   con las cinco dimensiones restantes ya confirmadas (medir después del cambio, punto 4). */
+var TOPE_EVIDENCIA_CRUZADA_ENTRADAS = 6, TOPE_EVIDENCIA_CRUZADA_CHARS = 140;
+function resumenEvidenciaCruzadaParaDimension(codActual){
+  var claves = Object.keys(state.dimensiones).filter(function(c){ return c !== codActual && state.dimensiones[c].confirmada; });
+  if(!claves.length) return 'Ninguna otra dimensión confirmada todavía -- no hay contexto cruzado disponible.';
+
+  var partes = [];
+  var evidenciasIncluidas = 0, evidenciasOmitidas = 0;
+  claves.forEach(function(c){
+    var d = state.dimensiones[c];
+    var linea = c + ' · ' + d.nombre + ' (' + (ESTADO_LABEL[d.estado] || d.estado) + ')';
+    if(d.tension_principal) linea += ' -- tensión: ' + d.tension_principal;
+    if(d.oportunidad) linea += ' -- oportunidad: ' + d.oportunidad;
+    if(d.lectura) linea += '\n    lectura: ' + d.lectura;
+    partes.push(linea);
+    (d.evidencias || []).forEach(function(ev){
+      if(evidenciasIncluidas >= TOPE_EVIDENCIA_CRUZADA_ENTRADAS){ evidenciasOmitidas++; return; }
+      var recorte = ev.length > TOPE_EVIDENCIA_CRUZADA_CHARS ? ev.slice(0, TOPE_EVIDENCIA_CRUZADA_CHARS) + '...' : ev;
+      partes.push('    evidencia dicha en ' + c + ': "' + recorte + '"');
+      evidenciasIncluidas++;
+    });
+  });
+  if(evidenciasOmitidas > 0) partes.push('  (' + evidenciasOmitidas + ' evidencia(s) más de otras dimensiones, no incluida(s) acá por espacio)');
+  return partes.join('\n');
 }
 
 /* ================= N3.0-A · instrumentación de consumo real =================
@@ -3140,8 +3179,19 @@ function PROMPT_DIMENSION(cod){
   return 'Estás ayudando a comprender una sola dimensión del negocio activo: ' + nombre + '.\n' +
     'No sos un consultor: tu trabajo es entender qué relación organiza esta dimensión antes de proponer un estado.\n\n' +
     'MARCO DEL NEGOCIO (del Core):\n' + resumenMarcoTexto() + '\n\n' +
-    'DIMENSIONES YA CONFIRMADAS EN ESTA EVALUACIÓN: ' + resumenConfirmadasTexto(cod) + '\n\n' +
-    'CONDUCCIÓN: hacé una pregunta concreta por turno, en lenguaje llano, sobre ' + nombre + '. Entre 2 y 4 intercambios normalmente. No pidas números si no hacen falta: la evidencia cualitativa también sirve. Cuando ya comprendas lo suficiente, cerrá con el marcador exacto:\n' +
+    'CONTEXTO CRUZADO DE OTRAS DIMENSIONES YA CONFIRMADAS (para orientar tu pregunta -- NUNCA para fabricar evidencia de ' + nombre + '):\n' + resumenEvidenciaCruzadaParaDimension(cod) + '\n\n' +
+    /* N3.3, diseño aprobado por Javier (14/08) sobre el hallazgo de N3.1 (30 llamadas de
+       Dimensiones para 6 dimensiones, la etapa de menor valor percibido): la meta es que el
+       motor tienda naturalmente a preguntar una vez bien y cerrar, sin volverse un tope duro de
+       turnos ni sacrificar evidencia real -- ver PENDIENTES.md para el diseño completo y las
+       correcciones que Javier hizo sobre la propuesta original. */
+    'CONDUCCIÓN:\n' +
+    '1. No inicies una cadena de preguntas por defecto. Primero evaluá si ya existe evidencia real, dicha explícitamente por el usuario (en esta conversación, o en otra dimensión confirmada) sobre ' + nombre + ' en particular -- no una inferencia tuya a partir del estado de otra dimensión. Si esa evidencia propia alcanza para sostener una lectura con confianza, cerrá directo con el marcador, sin preguntar nada.\n' +
+    '2. Si no alcanza, hacé UNA sola pregunta concentrada -- la que capture el dato de mayor valor que falta, no la primera de una serie. Revisá el contexto cruzado antes de preguntar: nunca repitas algo que el usuario ya contestó en el marco o en otra dimensión.\n' +
+    '3. Después de esa respuesta, cerrá con el marcador si ya comprendés lo suficiente. Solo hagas una segunda pregunta si podés nombrar con precisión qué dato crítico sigue faltando -- una tercera pregunta generada por vos tiene que ser la excepción, nunca la norma.\n' +
+    '4. El contexto cruzado es solo para no repreguntar y para preguntar mejor: nunca lo trates como si fuera evidencia de ' + nombre + ', y nunca lo repitas dentro de tu lectura como si el usuario lo hubiera dicho acá.\n' +
+    '5. No pidas números si no hacen falta: la evidencia cualitativa también sirve.\n\n' +
+    'Cuando cierres, usá el marcador exacto:\n' +
     '[[LECTURA_DIM:ESTADO=<desconocida|estable|tensionada|critica|potencia>|TENSION=<tensión principal, lenguaje de negocio, una frase>|OPORTUNIDAD=<oportunidad o capacidad asociada, una frase>]]\n' +
     'seguido del texto visible: la lectura propuesta en 2 a 4 líneas, lenguaje llano, explicando por qué proponés ese estado -- no solo el nombre del estado.\n' +
     'Nunca muestres códigos internos, ni la palabra "alfabeto", ni el nombre de otras dimensiones por su código (B1-B6): referite a ellas por su nombre si hace falta.';
