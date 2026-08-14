@@ -2447,6 +2447,7 @@ var TEXTAREAS_BORRADOR = ['dimInput', 'dimCorreccionInput', 'intInput', 'intCorr
 
 var _borradorRev = 0;              // último rev que ESTA pestaña escribió -- base para detectar conflicto
 var _borradorTexto = {};           // texto tipeado sin enviar todavía, separado de state
+var _borradorTextoPendienteAplicar = null;   // copia de un solo uso: ver _textoBorradorPendiente()
 var _borradorAvisoConflicto = false;  // para no repetir el aviso de "otra pestaña escribió" en cada tecla
 var _debounceTextoBorrador = null;
 var _borradorPendienteOfrecido = null;   // {draft} mientras se muestra el banner de "continuar / empezar de cero"
@@ -2555,6 +2556,23 @@ function hidratarDesdeBorrador(draft){
     var el = document.getElementById(id);
     if(el && _borradorTexto[id]) el.value = _borradorTexto[id];
   });
+  // N3.0-B, hallazgo de la verificación en vivo (14/08): las cinco pantallas de conversación
+  // (dimensión / relaciones / proyectivo / decisiones / ejecución) siempre arrancan su hilo de
+  // cero al abrirse -- eso ya pasaba antes de N3.0-B y queda igual a propósito, no es parte de
+  // este corte. Pero como abrirDimension()/abrirDiagnosticoIntegral()/abrirProyectivo()/
+  // abrirCampoDecisiones()/prepararEjecucionParaDecision() también borran su textarea sin
+  // condición, el texto recién restaurado arriba se perdía en cuanto el usuario volvía a entrar
+  // a esa pantalla -- justo el caso que el borrador existe para cubrir. _textoBorradorPendiente()
+  // guarda una copia de un solo uso para que esa primera reapertura, después de "Continuar donde
+  // quedaste", reponga el texto en vez de vaciarlo; cualquier apertura posterior (de esa u otra
+  // pantalla) se comporta como siempre.
+  _borradorTextoPendienteAplicar = Object.assign({}, _borradorTexto);
+}
+
+function _textoBorradorPendiente(id){
+  var v = _borradorTextoPendienteAplicar && _borradorTextoPendienteAplicar[id];
+  if(_borradorTextoPendienteAplicar) delete _borradorTextoPendienteAplicar[id];
+  return v || '';
 }
 
 function avisarConflictoBorrador(){
@@ -3006,7 +3024,7 @@ function abrirDimension(cod){
   document.getElementById('dimLecturaCard').style.display = 'none';
   document.getElementById('dimCorreccionBox').style.display = 'none';
   document.getElementById('dimHilo').innerHTML = '';
-  document.getElementById('dimInput').value = '';
+  document.getElementById('dimInput').value = _textoBorradorPendiente('dimInput');
   mostrarPantalla('pantallaDimension');
   enviarTurnoDimension(null);   // la IA abre la conversación con la primera pregunta
 }
@@ -3278,7 +3296,7 @@ function abrirDiagnosticoIntegral(){
   document.getElementById('intPropuestaCard').style.display = 'none';
   document.getElementById('intCorreccionBox').style.display = 'none';
   document.getElementById('intHilo').innerHTML = '';
-  document.getElementById('intInput').value = '';
+  document.getElementById('intInput').value = _textoBorradorPendiente('intInput');
   var vigente = ultimoDiagnosticoIntegralConfirmado();
   var vigenteBox = document.getElementById('intVigente');
   if(vigente){
@@ -3683,7 +3701,7 @@ function abrirProyectivo(){
   document.getElementById('proyPropuestaCard').style.display = 'none';
   document.getElementById('proyCorreccionBox').style.display = 'none';
   document.getElementById('proyHilo').innerHTML = '';
-  document.getElementById('proyInput').value = '';
+  document.getElementById('proyInput').value = _textoBorradorPendiente('proyInput');
   document.getElementById('proyVista1').style.display = 'block';
   document.getElementById('proyVista2').style.display = 'none';
 
@@ -4293,7 +4311,7 @@ function abrirCampoDecisiones(){
   document.getElementById('decPropuestaCard').style.display = 'none';
   document.getElementById('decCorreccionBox').style.display = 'none';
   document.getElementById('decHilo').innerHTML = '';
-  document.getElementById('decInput').value = '';
+  document.getElementById('decInput').value = _textoBorradorPendiente('decInput');
   document.getElementById('decVista1').style.display = 'block';
   document.getElementById('decVista2').style.display = 'none';
 
@@ -5233,7 +5251,7 @@ function prepararEjecucionParaDecision(decisionId){
   document.getElementById('ejecPropuestaCard').style.display = 'none';
   document.getElementById('ejecCorreccionBox').style.display = 'none';
   document.getElementById('ejecHilo').innerHTML = '';
-  document.getElementById('ejecInput').value = '';
+  document.getElementById('ejecInput').value = _textoBorradorPendiente('ejecInput');
   var d = decisionesActivasDelCampoVigente().find(function(x){ return x.id === decisionId; });
   var box = document.getElementById('ejecPrepararContexto');
   box.innerHTML = '';
