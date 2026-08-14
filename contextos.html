@@ -366,11 +366,12 @@ header header .cai-ham{flex-shrink:0}
 <div class="modal-fondo" id="modalExport">
   <div class="modal-caja" role="dialog" aria-label="Exportar capa de contexto">
     <h3>Capa de contexto para Urbanismo — contrato v2.1</h3>
-    <p class="modal-ayuda">Copiá el JSON y guardalo, o descargalo si tu navegador lo permite. Este archivo se importa en Comprender · Urbanismo como capa de contexto, o en Comprender AI para la ficha del organismo.</p>
+    <p class="modal-ayuda">Copiá el JSON y guardalo, o descargalo si tu navegador lo permite. Este archivo se importa en Comprender · Urbanismo como capa de contexto, o en Comprender AI para la ficha del organismo. Si esta pestaña vino de Comprender AI, ya quedó lista para incorporar apenas volvés a abrir Tu espacio ahí -- no hace falta copiar nada.</p>
     <textarea id="exportTexto" readonly spellcheck="false"></textarea>
     <div class="modal-estado" id="exportEstado"></div>
     <div class="acciones">
-      <button class="btn" onclick="copiarExport()">Copiar</button>
+      <button class="btn" onclick="irAIncorporarEnCore()">Volver a Comprender AI e incorporar</button>
+      <button class="btn secundario" onclick="copiarExport()">Copiar</button>
       <button class="btn secundario" onclick="descargarExport()">Descargar .json</button>
       <button class="btn secundario" onclick="cerrarExport()">Cerrar</button>
     </div>
@@ -2400,6 +2401,11 @@ function construirSalida(){
     version_contrato:'2.1', lenguaje:'universal', ontology_version:'3.0',
     version:'2.1',
     producto:PRODUCTO_CONTEXTOS,
+    // 14/08, unificación del handoff automático: viaja acá si el marco vino del Core con id
+    // (ag_marco_pendiente -> p.marco.organismo_id, capturado al arrancar). Permite rutear por
+    // id igual que ya hacía adjuntarDiagnosticoPro() en index.html -- ese chequeo ya existía,
+    // solo faltaba que el export lo llevara.
+    organismo_id: __organismoIdCoreContextos || null,
     deriva_campo:(state.proyectivoA||state.proyectivoB)?{escenarios:state.proyectivoA||null,ventanas:state.proyectivoB||null}:null,
     generado:new Date().toISOString(),
     ciudad:t.nombre, tipo_territorio:t.tipo, pais:t.pais, region:t.region,
@@ -2630,9 +2636,29 @@ function copiarAlPortapapeles(txt, mensajeOk){
 }
 
 function exportarJSON(){
-  document.getElementById('exportTexto').value=JSON.stringify(construirSalida(),null,2);
+  var salida = construirSalida();
+  document.getElementById('exportTexto').value=JSON.stringify(salida,null,2);
   document.getElementById('exportEstado').textContent='';
   document.getElementById('modalExport').classList.add('visible');
+  dejarListoParaIncorporarEnCoreContextos(salida);
+}
+/* Handoff automático Contextos -> Core (14/08), mismo mecanismo unificado que ya usan Negocios
+   Pro y Urbanismo (ag_export_pendiente_incorporar). Si el marco no vino con organismo_id (por
+   ejemplo, esta pestaña se abrió suelta, sin pasar por el Core), no se deja nada pendiente --
+   el camino manual (Copiar / Descargar .json) sigue disponible como respaldo, tal cual. */
+function dejarListoParaIncorporarEnCoreContextos(payload){
+  if(!__organismoIdCoreContextos) return;
+  try{
+    localStorage.setItem('ag_export_pendiente_incorporar', JSON.stringify({
+      generado: new Date().toISOString(),
+      organismo_id: __organismoIdCoreContextos,
+      organismo_nombre: (state.territorio && state.territorio.nombre) || null,
+      payload: payload
+    }));
+  }catch(e){}
+}
+function irAIncorporarEnCore(){
+  try{ window.open('index.html', '_blank'); }catch(e){ location.href = 'index.html'; }
 }
 function cerrarExport(){ document.getElementById('modalExport').classList.remove('visible'); }
 async function copiarExport(){
@@ -3476,6 +3502,7 @@ function permitirOperacion(tipo){
 /* ---- C-06 · marco pendiente dejado por el Core ----
    El Core guarda el marco del organismo activo al abrir este módulo.
    Se toma una sola vez y se descarta, para no reaplicarlo en cada recarga. */
+var __organismoIdCoreContextos = null;   // 14/08: capturado acá para el handoff automático de vuelta
 (function(){
   try{
     var raw = localStorage.getItem('ag_marco_pendiente');
@@ -3483,6 +3510,7 @@ function permitirOperacion(tipo){
     localStorage.removeItem('ag_marco_pendiente');
     var p = JSON.parse(raw);
     if(!p || !p.marco) return;
+    __organismoIdCoreContextos = p.marco.organismo_id || null;
     var texto = JSON.stringify(p.marco, null, 2);
     window.addEventListener('load', function(){
       setTimeout(function(){

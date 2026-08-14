@@ -1921,6 +1921,13 @@ canvas{animation:none !important}
   <div style="padding:.5rem .75rem;border-bottom:1px solid var(--borde)">
     <button class="btn-comp" id="btn-comparar" onclick="abrirComparativa()" style="width:100%;display:none">⚖️ Comparar diagnósticos</button>
   </div>
+  <!-- 14/08: exportarHistorial() ya existía en el código pero no tenía botón real -- quedaba
+       inalcanzable para el usuario. Se suma acá, junto con el mismo handoff automático de un
+       clic que ya tienen Contextos y Negocios Pro. -->
+  <div style="padding:.5rem .75rem;border-bottom:1px solid var(--borde);display:flex;flex-direction:column;gap:6px">
+    <button class="btn-comp" onclick="exportarHistorial()" style="width:100%">⇩ Exportar historial (JSON)</button>
+    <button class="btn-comp" onclick="irAIncorporarEnCore()" style="width:100%">→ Volver a Comprender AI e incorporar</button>
+  </div>
   <div class="hist-list" id="hist-list">
     <div class="hist-empty">Todavía no hay diagnósticos anteriores.<br>Analizá otra ciudad con el botón "+ Nueva ciudad".</div>
   </div>
@@ -5656,6 +5663,11 @@ function exportarHistorial(){
     version: '1.0',
     producto: PRODUCTO_URBANISMO,
     software: PRODUCTO_URBANISMO,   /* alias del campo historico; mismo valor canonico */
+    // 14/08, handoff automático: viaja acá si el marco vino del Core con id (capturado al
+    // arrancar). Si el historial mezcla varias ciudades, igual se manda -- adjuntarDiagnosticoPro()
+    // en el Core ya sabe separar por ciudad cuando no hay un único id claro; acá solo se ofrece
+    // el dato si lo tenemos, nunca se inventa.
+    organismo_id: __organismoIdCoreUrbanismo || null,
     exportado: new Date().toISOString(),
     ciudad_principal: ciudad,
     perfil: perfilTerritorio,
@@ -5687,6 +5699,26 @@ function exportarHistorial(){
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   console.log('Historial exportado: ' + filename);
+  dejarListoParaIncorporarEnCoreUrbanismo(exportData);
+}
+/* Handoff automático Urbanismo -> Core (14/08), mismo mecanismo unificado que ya usan Negocios
+   Pro y Contextos (ag_export_pendiente_incorporar). Antes exportarHistorial() no tenía ningún
+   botón real conectado -- quedaba inalcanzable. Si el marco no vino con organismo_id (pestaña
+   abierta suelta, sin pasar por el Core), no se deja nada pendiente -- la descarga del JSON
+   sigue funcionando igual, solo que sin el atajo de un clic. */
+function dejarListoParaIncorporarEnCoreUrbanismo(payload){
+  if(!__organismoIdCoreUrbanismo) return;
+  try{
+    localStorage.setItem('ag_export_pendiente_incorporar', JSON.stringify({
+      generado: new Date().toISOString(),
+      organismo_id: __organismoIdCoreUrbanismo,
+      organismo_nombre: payload.ciudad_principal || null,
+      payload: payload
+    }));
+  }catch(e){}
+}
+function irAIncorporarEnCore(){
+  try{ window.open('index.html', '_blank'); }catch(e){ location.href = 'index.html'; }
 }
 
 // ══════════════════════════════════════════
@@ -6759,6 +6791,7 @@ function permitirOperacion(tipo){
 /* ---- C-06 · marco pendiente dejado por el Core ----
    El Core guarda el marco del organismo activo al abrir este módulo.
    Se toma una sola vez y se descarta, para no reaplicarlo en cada recarga. */
+var __organismoIdCoreUrbanismo = null;   // 14/08: capturado acá para el handoff automático de vuelta
 (function(){
   try{
     var raw = localStorage.getItem('ag_marco_pendiente');
@@ -6766,6 +6799,7 @@ function permitirOperacion(tipo){
     localStorage.removeItem('ag_marco_pendiente');
     var p = JSON.parse(raw);
     if(!p || !p.marco) return;
+    __organismoIdCoreUrbanismo = p.marco.organismo_id || null;
     var texto = JSON.stringify(p.marco, null, 2);
     window.addEventListener('load', function(){
       setTimeout(function(){

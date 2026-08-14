@@ -6096,28 +6096,45 @@ function moverACarpeta(org, nombre){
   teMenuNuevaCarpeta = false;
   construirTuEspacioOrganismos();
 }
-/* Handoff automático Negocios Pro -> Core (14/08), en espejo de ag_marco_pendiente (que ya hacía
-   lo mismo al revés, escrito por abrirModulo() al abrir un módulo con organismo activo). Antes,
-   incorporar una evaluación cerrada de Negocios Pro era 100% manual: buscar el organismo, abrir
-   el menú "⋯", "Pegar evaluación Pro", copiar y pegar el JSON a mano. negocios.html ahora deja
-   el export ya armado en localStorage al cerrar una evaluación -- acá solo hace falta un clic.
+/* Handoff automático módulo -> Core (14/08, unificado 14/08), en espejo de ag_marco_pendiente
+   (que ya hacía lo mismo al revés, escrito por abrirModulo() al abrir un módulo con organismo
+   activo). Antes, incorporar un export cerrado de cualquiera de los tres módulos era 100%
+   manual: buscar el organismo, abrir el menú "⋯", "Pegar evaluación Pro", copiar y pegar el
+   JSON a mano. Empezó solo para Negocios Pro (clave propia `ag_negocioPro_export_pendiente`) y
+   se unificó a los tres bajo una sola clave (`ag_export_pendiente_incorporar`) y una sola
+   función acá -- Urbanismo y Contextos dejan el export armado del mismo modo al cerrar/exportar.
+   Reutiliza `importarProParaOrganismo()`, el mismo router que ya usaba el camino manual (decide
+   Urbanismo/Contextos/Negocios Pro mirando el propio payload) -- así el camino automático y el
+   manual quedan garantizados a comportarse igual, sin lógica de ruteo duplicada acá.
    Si el organismo de destino ya no existe (se borró, o el export es de otra cuenta), no se
    muestra nada acá -- el camino manual de siempre sigue disponible como respaldo, sin un aviso
-   confuso apuntando a un organismo que no está. */
+   confuso apuntando a un organismo que no está. Se acepta también la clave vieja específica de
+   Negocios Pro por compatibilidad con lo que haya quedado pendiente de antes de unificar. */
+function leerExportPendienteUnificado(){
+  try{
+    var raw = localStorage.getItem('ag_export_pendiente_incorporar');
+    if(raw) return { clave: 'ag_export_pendiente_incorporar', datos: JSON.parse(raw) };
+    var rawViejo = localStorage.getItem('ag_negocioPro_export_pendiente');
+    if(rawViejo) return { clave: 'ag_negocioPro_export_pendiente', datos: JSON.parse(rawViejo) };
+  }catch(e){}
+  return null;
+}
 function renderAvisoImportarNegocioProPendiente(list, cont){
-  var raw;
-  try{ raw = localStorage.getItem('ag_negocioPro_export_pendiente'); }catch(e){ raw = null; }
-  if(!raw) return;
-  var pendiente;
-  try{ pendiente = JSON.parse(raw); }
-  catch(e){ try{ localStorage.removeItem('ag_negocioPro_export_pendiente'); }catch(e2){} return; }
+  var leido = leerExportPendienteUnificado();
+  if(!leido){ return; }
+  var pendiente = leido.datos;
+  if(!pendiente || !pendiente.payload || !pendiente.organismo_id){
+    try{ localStorage.removeItem(leido.clave); }catch(e){}
+    return;
+  }
   var destino = list.find(function(o){ return o.id === pendiente.organismo_id; });
   if(!destino) return;
+  var etiquetaProducto = idProducto(pendiente.payload) || 'Comprender';
   const aviso = document.createElement('div');
   aviso.className = 'aviso';
   aviso.style.cssText = 'margin-bottom:10px;display:flex;flex-direction:column;gap:8px';
   const texto = document.createElement('div');
-  texto.textContent = 'Hay una evaluación de Negocios Pro lista para incorporar a «' + destino.nombre + '».';
+  texto.textContent = 'Hay un export de ' + etiquetaProducto + ' listo para incorporar a «' + destino.nombre + '».';
   const fila = document.createElement('div');
   fila.style.cssText = 'display:flex;gap:8px;align-items:center';
   const btnOk = document.createElement('button');
@@ -6125,8 +6142,8 @@ function renderAvisoImportarNegocioProPendiente(list, cont){
   btnOk.textContent = 'Incorporar';
   btnOk.addEventListener('click', function(e){
     e.stopPropagation();
-    try{ localStorage.removeItem('ag_negocioPro_export_pendiente'); }catch(err){}
-    adjuntarEvaluacionNegocioPro(pendiente.payload, false, destino);
+    try{ localStorage.removeItem(leido.clave); }catch(err){}
+    importarProParaOrganismo(destino, JSON.stringify(pendiente.payload));
     construirTuEspacioOrganismos();
   });
   const btnDescartar = document.createElement('button');
@@ -6134,7 +6151,7 @@ function renderAvisoImportarNegocioProPendiente(list, cont){
   btnDescartar.textContent = 'Descartar';
   btnDescartar.addEventListener('click', function(e){
     e.stopPropagation();
-    try{ localStorage.removeItem('ag_negocioPro_export_pendiente'); }catch(err){}
+    try{ localStorage.removeItem(leido.clave); }catch(err){}
     construirTuEspacioOrganismos();
   });
   fila.appendChild(btnOk); fila.appendChild(btnDescartar);

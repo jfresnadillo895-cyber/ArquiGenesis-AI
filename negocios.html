@@ -6352,16 +6352,18 @@ function cerrarEvaluacion(){
   mostrarExportacion(payload);
 }
 
-/* Handoff automático Negocios Pro -> Core (14/08), en espejo del que ya existía al revés
-   (ag_marco_pendiente, escrito por abrirModulo() en index.html). Mismo origen, misma
+/* Handoff automático Negocios Pro -> Core (14/08, unificado 14/08), en espejo del que ya existía
+   al revés (ag_marco_pendiente, escrito por abrirModulo() en index.html). Mismo origen, misma
    localStorage: negocios.html deja acá el export ya armado con su organismo, y el Core lo
    detecta solo al abrir Tu espacio -- sin que Javier tenga que buscar el organismo, abrir el
    menú "⋯" ni copiar/pegar el JSON. De un solo uso: el Core lo borra apenas se incorpora (o si
    Javier lo descarta a mano). El camino manual (textarea + "Pegar evaluación Pro") queda intacto
-   como respaldo -- esto no lo reemplaza, solo evita tener que usarlo en el caso normal. */
+   como respaldo -- esto no lo reemplaza, solo evita tener que usarlo en el caso normal.
+   Clave unificada con Urbanismo/Contextos (`ag_export_pendiente_incorporar`) -- el Core la lee
+   una sola vez sin necesitar saber de qué módulo vino, mira el propio payload para rutear. */
 function dejarListoParaIncorporarEnCore(payload){
   try{
-    localStorage.setItem('ag_negocioPro_export_pendiente', JSON.stringify({
+    localStorage.setItem('ag_export_pendiente_incorporar', JSON.stringify({
       generado: new Date().toISOString(),
       organismo_id: state.organismoId,
       organismo_nombre: state.organismoNombre,
