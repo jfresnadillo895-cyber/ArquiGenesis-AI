@@ -231,6 +231,8 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
   <div id="cajaSinOrganismo" class="aviso">
     Todavía no recibí un organismo del Core. Abrí este módulo desde el organismo que querés evaluar — ícono de 4 cuadraditos (arriba a la derecha) → <b>Negocios</b> — y volvé a esta pantalla con el marco ya cargado. También podés continuar sin organismo vinculado, a modo de prueba: la evaluación se genera igual, pero sin <code>organismo_id</code> para incorporar del otro lado.
   </div>
+  <!-- N3.0-B: banner de borrador recuperable, construido en JS por renderCajaBorrador() -->
+  <div id="cajaBorrador" class="aviso" style="display:none"></div>
 
   <div class="form-card">
     <h3>Tipo de evaluación</h3>
@@ -2380,7 +2382,293 @@ function leerMarcoPendiente(){
     state.marcoGenerado = p.generado || p.marco.generado || new Date().toISOString();
     state.organismoId = p.marco.organismo_id || null;
     state.organismoNombre = p.organismo || 'Organismo sin nombre';
+    return true;   // N3.0-B: hubo handoff fresco del Core en esta carga
   }catch(e){}
+  return false;
+}
+
+/* ================= N3.0-B · borrador persistente (14/08) =================
+   Hasta acá, `state` vivía solo en memoria: cerrar la pestaña, recargar o un cuelgue del
+   navegador antes de llegar a "Cerrar evaluación" perdía TODA la evaluación en curso, así
+   fueran seis dimensiones ya conversadas. Diseño aprobado por Javier con 4 correcciones sobre
+   la propuesta original (ver PENDIENTES.md, entrada N3.0-B):
+     1. cerrarEvaluacion() NO borra el borrador -- lo marca 'cerrado_pendiente_importacion' y
+        se conserva hasta que adjuntarEvaluacionNegocioPro() en el Core confirme la importación
+        (ver el hook en index.html) o el usuario elija "Empezar de cero" a propósito.
+     2. La hidratación es por whitelist (CAMPOS_BORRADOR_RESTAURABLES), nunca Object.assign
+        crudo -- organismoId/marco/organismoNombre de la apertura actual SIEMPRE prevalecen
+        sobre lo que traiga el borrador.
+     3. guardarBorrador() no depende solo de mostrarPantalla(): también se llama al final de
+        cada mutación estructural que puede pasar sin cambiar de pantalla (confirmar acción,
+        cambiar su estado, registrar evidencia, aceptar una lectura de seguimiento, cerrar una
+        acción o la ejecución).
+     4. guardarBorrador() nunca falla en silencio: si localStorage tira QuotaExceededError u
+        otro error, se avisa una vez (no bloqueante) y la sesión sigue en memoria igual.
+
+   HALLAZGO DE IMPLEMENTACION (no estaba en el diff aprobado, necesario para que esto funcione
+   en el caso que más importa): el handoff del Core (`ag_marco_pendiente`) es de un solo uso --
+   se borra apenas se lee. Un simple F5 en negocios.html NO vuelve a dejar un marco fresco, así
+   que "el marco actual del Core" muchas veces no existe para comparar. Se agrega un puntero
+   aparte, `ag_negocio_borrador_ultimo` (el organismo_id del último borrador guardado), para
+   saber a qué organismo mirar cuando no hay handoff fresco -- en ESE caso puntual, y solo en
+   ese caso, el marco que trae el propio borrador es la única fuente disponible y se usa para
+   poder mostrar algo en la pantalla de inicio. Si más tarde llega un handoff fresco (el usuario
+   volvió a entrar desde el Core), ese sigue ganando siempre, sin excepción. */
+var BORRADOR_VERSION = 1;
+var CLAVE_BORRADOR_ULTIMO = 'ag_negocio_borrador_ultimo';
+function claveBorrador(organismoId){ return 'ag_negocio_borrador_' + organismoId; }
+
+// Candados transitorios y errores de una sesión anterior: nunca tiene sentido persistirlos.
+var CAMPOS_BORRADOR_EXCLUIDOS = ['llamando', 'llamandoIntegral', 'llamandoProyectivo',
+  'llamandoDecisiones', 'llamandoEjecucion', 'llamandoSeguimiento', 'errorSeguimiento'];
+
+// Único punto que decide qué SÍ se restaura de un borrador -- corrección 2 de Javier: nunca un
+// Object.assign crudo. organismoId/marco/organismoNombre quedan afuera a propósito: esos los fija
+// hidratarDesdeBorrador() aparte, siempre con el valor de la apertura actual.
+var CAMPOS_BORRADOR_RESTAURABLES = [
+  'dimensiones', 'dimensionActual', 'historialDim', 'evidenciasDim', 'propuestaActual',
+  'diagnosticosIntegrales', 'propuestaIntegral', 'historialIntegral',
+  'proyectivos', 'propuestaProyectivo', 'historialProyectivo', 'descartesProyectivo',
+  'camposDecisiones', 'propuestaDecisiones', 'historialDecisiones', 'criteriosUsuario',
+  'ejecuciones', 'ejecucionActual', 'propuestaEjecucion', 'historialEjecucion', 'accionActiva',
+  'propuestaSeguimiento', 'historialSeguimiento'
+];
+
+// Los 11 textareas estáticos de conversación -- cubren las seis conversaciones con la IA
+// (dimensión, relaciones, proyectivo, decisiones, ejecución) más la síntesis general. Los
+// formularios de evidencia/seguimiento/cierre de acción dentro de Ejecución usan textareas
+// creados dinámicamente (uno nuevo por formulario) y quedan FUERA de este debounce por ahora --
+// su dato ya quedó guardado por guardarBorrador() en cuanto se envían (ver registrarEvidencia,
+// registrarSeguimiento, confirmarCierreAccion más abajo); lo único que no se recupera es texto
+// tipeado ahí y todavía sin enviar. Señalado en el reporte a Javier, no resuelto en este corte.
+var TEXTAREAS_BORRADOR = ['dimInput', 'dimCorreccionInput', 'intInput', 'intCorreccionInput',
+  'proyInput', 'proyCorreccionInput', 'decInput', 'decCorreccionInput', 'ejecInput',
+  'ejecCorreccionInput', 'inSintesis'];
+
+var _borradorRev = 0;              // último rev que ESTA pestaña escribió -- base para detectar conflicto
+var _borradorTexto = {};           // texto tipeado sin enviar todavía, separado de state
+var _borradorAvisoConflicto = false;  // para no repetir el aviso de "otra pestaña escribió" en cada tecla
+var _debounceTextoBorrador = null;
+var _borradorPendienteOfrecido = null;   // {draft} mientras se muestra el banner de "continuar / empezar de cero"
+
+function _snapshotStateParaBorrador(){
+  var copia = {};
+  for(var k in state){
+    if(!Object.prototype.hasOwnProperty.call(state, k)) continue;
+    if(CAMPOS_BORRADOR_EXCLUIDOS.indexOf(k) > -1) continue;
+    copia[k] = state[k];
+  }
+  return copia;
+}
+
+/* Guardado general. forzarReapertura=true es lo único que le permite a una mutación posterior
+   volver a poner 'abierto' un borrador que ya estaba 'cerrado_pendiente_importacion' -- en la
+   práctica no hay hoy ningún botón que permita seguir editando después de "Cerrar evaluación",
+   pero si en el futuro lo hay, no queda pisado en silencio por el próximo guardado automático. */
+function guardarBorrador(forzarReapertura){
+  try{
+    if(!state.organismoId) return;   // sin organismo no hay a qué atar el borrador
+    var clave = claveBorrador(state.organismoId);
+    var previo = null;
+    try{ previo = JSON.parse(localStorage.getItem(clave) || 'null'); }catch(e){ previo = null; }
+
+    if(previo && typeof previo.rev === 'number' && previo.rev > _borradorRev){
+      avisarConflictoBorrador();
+    }
+    var rev = Math.max((previo && previo.rev) || 0, _borradorRev) + 1;
+    var ahora = new Date().toISOString();
+    var estadoPrevio = previo && previo.estado_borrador;
+    var registro = {
+      version: BORRADOR_VERSION,
+      organismo_id: state.organismoId,
+      organismo_nombre: state.organismoNombre,
+      marco: state.marco,
+      marco_generado: state.marcoGenerado,
+      rev: rev,
+      creado: (previo && previo.creado) || ahora,
+      actualizado: ahora,
+      estado_borrador: (estadoPrevio === 'cerrado_pendiente_importacion' && !forzarReapertura)
+        ? estadoPrevio : 'abierto',
+      payload_cierre: (previo && previo.payload_cierre) || null,   // solo lo llena marcarBorradorCerrado()
+      state: _snapshotStateParaBorrador(),
+      borradorTexto: _borradorTexto
+    };
+    localStorage.setItem(clave, JSON.stringify(registro));
+    localStorage.setItem(CLAVE_BORRADOR_ULTIMO, state.organismoId);
+    _borradorRev = rev;
+  }catch(e){
+    avisarFalloAlmacenamientoBorrador(e);
+  }
+}
+
+// Se llama SOLO desde cerrarEvaluacion() -- corrección 1 de Javier: cerrar no borra, marca.
+function marcarBorradorCerrado(payload){
+  try{
+    if(!state.organismoId) return;
+    guardarBorrador(true);
+    var clave = claveBorrador(state.organismoId);
+    var registro = JSON.parse(localStorage.getItem(clave) || 'null');
+    if(!registro) return;
+    registro.estado_borrador = 'cerrado_pendiente_importacion';
+    registro.payload_cierre = payload;
+    localStorage.setItem(clave, JSON.stringify(registro));
+  }catch(e){ avisarFalloAlmacenamientoBorrador(e); }
+}
+
+function leerBorrador(organismoId){
+  try{
+    if(!organismoId) return null;
+    var raw = localStorage.getItem(claveBorrador(organismoId));
+    if(!raw) return null;
+    var d = JSON.parse(raw);
+    if(!d || d.version !== BORRADOR_VERSION || d.organismo_id !== organismoId) return null;
+    return d;
+  }catch(e){ return null; }
+}
+
+function borrarBorrador(organismoId){
+  try{
+    if(!organismoId) return;
+    localStorage.removeItem(claveBorrador(organismoId));
+    if(localStorage.getItem(CLAVE_BORRADOR_ULTIMO) === organismoId) localStorage.removeItem(CLAVE_BORRADOR_ULTIMO);
+  }catch(e){}
+}
+
+// Corrección 2 de Javier: hidratación por whitelist. organismoId/marco/organismoNombre de la
+// apertura ACTUAL siempre prevalecen -- nunca un borrador viejo pisa el marco recién recibido.
+function hidratarDesdeBorrador(draft){
+  var organismoIdActual = state.organismoId, marcoActual = state.marco,
+      marcoGeneradoActual = state.marcoGenerado, nombreActual = state.organismoNombre;
+  CAMPOS_BORRADOR_RESTAURABLES.forEach(function(campo){
+    if(draft.state && Object.prototype.hasOwnProperty.call(draft.state, campo)) state[campo] = draft.state[campo];
+  });
+  state.organismoId = organismoIdActual;
+  state.marco = marcoActual;
+  state.marcoGenerado = marcoGeneradoActual;
+  state.organismoNombre = nombreActual;
+  state.llamando = false; state.llamandoIntegral = false; state.llamandoProyectivo = false;
+  state.llamandoDecisiones = false; state.llamandoEjecucion = false; state.llamandoSeguimiento = false;
+  state.errorSeguimiento = null;
+  _borradorTexto = draft.borradorTexto || {};
+  _borradorRev = draft.rev || 0;
+  TEXTAREAS_BORRADOR.forEach(function(id){
+    var el = document.getElementById(id);
+    if(el && _borradorTexto[id]) el.value = _borradorTexto[id];
+  });
+}
+
+function avisarConflictoBorrador(){
+  if(_borradorAvisoConflicto) return;
+  _borradorAvisoConflicto = true;
+  var el = document.getElementById('avisoConflictoBorrador');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'avisoConflictoBorrador';
+    el.className = 'aviso';
+    el.style.cssText = 'position:fixed;bottom:16px;right:16px;max-width:320px;z-index:9999;background:#FFF6E5;border:1px solid #E0B84B;color:#7A5B10;font-size:.82rem;padding:10px 12px;border-radius:8px;';
+    el.textContent = 'Este organismo se está editando en otra pestaña -- lo que hagas acá puede pisarse.';
+    document.body.appendChild(el);
+  }
+  setTimeout(function(){ _borradorAvisoConflicto = false; }, 15000);   // vuelve a avisar si sigue pasando
+}
+
+function avisarFalloAlmacenamientoBorrador(e){
+  console.error(JSON.stringify({ evento: 'BORRADOR_NO_GUARDADO', detalle: String((e && e.message) || e) }));
+  var el = document.getElementById('avisoFalloBorrador');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'avisoFalloBorrador';
+    el.className = 'aviso';
+    el.style.cssText = 'position:fixed;bottom:16px;right:16px;max-width:320px;z-index:9999;background:#FBEAEA;border:1px solid #D98080;color:#8A2E2E;font-size:.82rem;padding:10px 12px;border-radius:8px;';
+    el.textContent = 'No se pudo guardar el borrador de esta evaluación en este navegador (¿sin espacio libre?). Tu sesión sigue igual, pero conviene cerrar y exportar pronto para no perder el trabajo.';
+    document.body.appendChild(el);
+  }
+}
+
+// Debounce de 700ms para texto tipeado sin enviar -- corrección 3 de Javier respeta el pedido
+// original: texto NO dispara guardado inmediato, solo lo estructural.
+function _sincronizarTextoBorrador(id){
+  var el = document.getElementById(id);
+  if(!el) return;
+  _borradorTexto[id] = el.value;
+  if(_debounceTextoBorrador) clearTimeout(_debounceTextoBorrador);
+  _debounceTextoBorrador = setTimeout(function(){ guardarBorrador(); }, 700);
+}
+function engancharTextareasBorrador(){
+  TEXTAREAS_BORRADOR.forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.addEventListener('input', function(){ _sincronizarTextoBorrador(id); });
+  });
+}
+
+window.addEventListener('beforeunload', function(){ guardarBorrador(); });
+
+/* Se llama una sola vez, al arrancar. marcoFresco=true si leerMarcoPendiente() encontró y
+   consumió un handoff del Core en ESTA carga. Devuelve true si hay un borrador para ofrecer. */
+function ofrecerBorradorSiExiste(marcoFresco){
+  var organismoId = marcoFresco ? state.organismoId : (function(){
+    try{ return localStorage.getItem(CLAVE_BORRADOR_ULTIMO); }catch(e){ return null; }
+  })();
+  var draft = leerBorrador(organismoId);
+  if(!draft) return false;
+  _borradorPendienteOfrecido = draft;
+  if(!marcoFresco){
+    // No hubo handoff fresco del Core en esta carga (típicamente un F5) -- sin esto no hay
+    // ningún organismo/marco para mostrar en la pantalla de inicio. Si más tarde SÍ llega un
+    // handoff fresco, ese gana siempre (ver hidratarDesdeBorrador).
+    state.organismoId = draft.organismo_id;
+    state.marco = draft.marco;
+    state.marcoGenerado = draft.marco_generado;
+    state.organismoNombre = draft.organismo_nombre;
+  }
+  return true;
+}
+
+function continuarBorrador(){
+  if(!_borradorPendienteOfrecido) return;
+  var draft = _borradorPendienteOfrecido;
+  _borradorPendienteOfrecido = null;
+  if(draft.estado_borrador === 'cerrado_pendiente_importacion' && draft.payload_cierre){
+    hidratarDesdeBorrador(draft);
+    mostrarExportacion(draft.payload_cierre);
+    return;
+  }
+  hidratarDesdeBorrador(draft);
+  var eNP = estadoNegociosPro();
+  var ir = ETAPA_NEGOCIO_IR[eNP.actual];
+  if(ir) ir(); else mostrarPantalla('pantallaDiagnostico');
+}
+
+function empezarDeCeroSobreBorrador(){
+  if(!_borradorPendienteOfrecido) return;
+  borrarBorrador(_borradorPendienteOfrecido.organismo_id);
+  _borradorPendienteOfrecido = null;
+  pintarInicio();
+}
+
+function renderCajaBorrador(){
+  var caja = document.getElementById('cajaBorrador');
+  if(!caja) return;
+  if(!_borradorPendienteOfrecido){ caja.style.display = 'none'; caja.innerHTML = ''; return; }
+  var d = _borradorPendienteOfrecido;
+  var fecha = new Date(d.actualizado).toLocaleString('es-AR');
+  var cerrado = d.estado_borrador === 'cerrado_pendiente_importacion';
+  caja.innerHTML = '';
+  var p = document.createElement('p');
+  p.textContent = cerrado
+    ? 'Encontramos una evaluación cerrada de este organismo del ' + fecha + ' que todavía no se importó al Core, guardada en este navegador.'
+    : 'Encontramos un borrador de esta evaluación del ' + fecha + ', guardado en este navegador.';
+  caja.appendChild(p);
+  var acciones = document.createElement('div'); acciones.className = 'acciones';
+  var bCont = document.createElement('button'); bCont.className = 'btn';
+  bCont.textContent = cerrado ? 'Ver el texto para importar' : 'Continuar donde quedaste';
+  bCont.onclick = continuarBorrador;
+  var bNuevo = document.createElement('button'); bNuevo.className = 'btn secundario';
+  bNuevo.textContent = 'Empezar de cero';
+  bNuevo.onclick = empezarDeCeroSobreBorrador;
+  acciones.appendChild(bCont); acciones.appendChild(bNuevo);
+  caja.appendChild(acciones);
+  caja.style.display = 'block';
 }
 
 function pintarInicio(){
@@ -2396,6 +2684,7 @@ function pintarInicio(){
     cajaOk.style.display = 'none';
     cajaNo.style.display = 'block';
   }
+  renderCajaBorrador();   // N3.0-B: banner de "continuar / empezar de cero" si hay borrador
 }
 function escaparHtml(s){
   var d = document.createElement('div');
@@ -2456,6 +2745,7 @@ function mostrarPantalla(id){
   document.getElementById(id).classList.add('activa');
   renderNavNegocio(id);
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  guardarBorrador();   // N3.0-B: gancho general -- toda transición de pantalla guarda
 }
 function volverAInicio(){ pintarInicio(); mostrarPantalla('pantallaInicio'); }
 
@@ -4245,6 +4535,7 @@ function fijarEstadoDecision(id, estado){
   if(estado !== 'condicionada') d.condicion_detalle = null;
   d._condicionando = false;
   mostrarPropuestaDecisiones(state.propuestaDecisiones);
+  guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
 function adoptarDecision(id){ fijarEstadoDecision(id, 'adoptada'); }
 function descartarDecision(id){ fijarEstadoDecision(id, 'descartada'); }
@@ -4271,6 +4562,7 @@ function confirmarCondicionDecision(id, detalle){
   d.fecha = new Date().toISOString();
   d._condicionando = false;
   mostrarPropuestaDecisiones(state.propuestaDecisiones);
+  guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
 function corregirDecisionPuntual(id){
   var d = encontrarDecision(id);
@@ -4640,6 +4932,7 @@ function confirmarAccion(accionPropuestaId, datos){
 
   state.propuestaEjecucion.acciones = state.propuestaEjecucion.acciones.filter(function(a){ return a.id !== accionPropuestaId; });
   recalcularEstadoGeneralEjecucion(ejec);
+  guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
 function descartarAccionPropuesta(id){
   if(!state.propuestaEjecucion) return;
@@ -4651,6 +4944,7 @@ function descartarAccionPropuesta(id){
       if(idx > -1) otra.dependencias_propuestas.splice(idx, 1);
     });
   }
+  guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
 function cambiarEstadoAccion(accionId, nuevoEstado, motivo){
   var ejec = state.ejecucionActual;
@@ -4660,6 +4954,7 @@ function cambiarEstadoAccion(accionId, nuevoEstado, motivo){
   registrarCambioAccion(accion, 'estado', accion.estado, nuevoEstado, motivo);
   accion.estado = nuevoEstado;
   recalcularEstadoGeneralEjecucion(ejec);
+  guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
 
 /* ---- evidencia: exclusivamente humana -- ni PLAN_EJECUCION ni LECTURA_SEGUIMIENTO pueden
@@ -4679,6 +4974,7 @@ function registrarEvidencia(accionId, datos){
     var ind = ejec.indicadores.find(function(i){ return i.id === evidencia.indicador_id; });
     if(ind){ ind.valor_actual = datos.valor; ind.fecha_ultima_medicion = evidencia.fecha; }
   }
+  guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
   return evidencia.id;
 }
 /* ---- seguimiento: append-only, nunca reemplaza un registro anterior ---- */
@@ -4693,6 +4989,7 @@ function registrarSeguimiento(accionId, datos){
     bloqueos: listaStringsIntegral(datos.bloqueos), cambios_contexto: listaStringsIntegral(datos.cambios_contexto),
     observacion_usuario: datos.observacion_usuario || '', lectura_ia: null
   });
+  guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
 
 /* ---- LECTURA_SEGUIMIENTO: prompt y llamada, siempre sobre UNA acción puntual ---- */
@@ -4797,9 +5094,11 @@ function aceptarLecturaSeguimiento(accionId){
 
   state.propuestaSeguimiento = null;
   recalcularEstadoGeneralEjecucion(ejec);
+  guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
 function descartarLecturaSeguimiento(){
   state.propuestaSeguimiento = null;
+  guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
 
 /* ---- cierre de acción: "completada" nunca implica "la hipótesis se confirmó" -- son dos
@@ -4817,6 +5116,7 @@ function confirmarCierreAccion(accionId, datos){
   accion.resultado_esperado_cumplido = (datos.resultado_esperado_cumplido === true || datos.resultado_esperado_cumplido === false) ? datos.resultado_esperado_cumplido : null;
   if(datos.aprendizajes) accion.notas = accion.notas ? (accion.notas + ' | Aprendizajes: ' + datos.aprendizajes) : ('Aprendizajes: ' + datos.aprendizajes);
   recalcularEstadoGeneralEjecucion(ejec);
+  guardarBorrador();   // N3.0-B: mutación estructural sin cambio de pantalla
 }
 
 /* ================= flujo de pantallas ================= */
@@ -5123,6 +5423,7 @@ function abrirVistaAccion(accionId){
   document.getElementById('ejecVistaCierre').style.display = 'none';
   document.getElementById('ejecVistaAccion').style.display = 'block';
   renderVistaAccion();
+  guardarBorrador();   // N3.0-B: cambia accionActiva sin pasar por mostrarPantalla()
 }
 function accionActivaObj(){
   var ejec = state.ejecucionActual || ejecucionVigente();
@@ -5581,6 +5882,11 @@ function cerrarEvaluacion(){
       ejecucion_actual: state.ejecucionActual   // N2.6: ciclo VIVO si existe, o null -- nunca mezclado con ejecuciones[]
     }
   });
+  // N3.0-B, corrección 1 de Javier: cerrar NO borra el borrador -- lo marca
+  // 'cerrado_pendiente_importacion' y lo conserva hasta que la importación al Core sea
+  // exitosa (ver el hook en index.html, adjuntarEvaluacionNegocioPro()) o el usuario elija
+  // "Empezar de cero" a propósito sobre un borrador ya cerrado.
+  marcarBorradorCerrado(payload);
   mostrarExportacion(payload);
 }
 
@@ -5636,7 +5942,9 @@ function copiarExportacion(){
 
 /* ---- arranque ---- */
 function arrancarNegociosPro(){
-  leerMarcoPendiente();
+  var marcoFresco = leerMarcoPendiente();
+  ofrecerBorradorSiExiste(marcoFresco);
+  engancharTextareasBorrador();
   pintarInicio();
 }
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancarNegociosPro);

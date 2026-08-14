@@ -3813,6 +3813,15 @@ function adjuntarEvaluacionNegocioPro(datos, silencioso, forzarDestino){
   destino.evaluaciones_negocio_pro.push({ version: version, fecha: new Date().toISOString(), resumen: resumen, datos: datos });
   destino.actualizado = new Date().toISOString();
   guardarOrganismo(destino);
+  // N3.0-B, corrección 1 de Javier: recién acá, con la importación YA exitosa, se borra el
+  // borrador persistente de Negocios Pro de este organismo (espejo de borrarBorrador() en
+  // negocios.html -- ese archivo corre en otra página/ventana, así que no puede llamarse
+  // directo desde acá; se repite la misma lógica sobre el mismo localStorage). Si algo de esto
+  // falla, no debe romper la importación: por eso va en su propio try/catch.
+  try{
+    localStorage.removeItem('ag_negocio_borrador_' + destino.id);
+    if(localStorage.getItem('ag_negocio_borrador_ultimo') === destino.id) localStorage.removeItem('ag_negocio_borrador_ultimo');
+  }catch(e){}
   if(state.organismo && state.organismo.id === destino.id) state.organismo = destino;
   if(!silencioso){
     renderOrgList();
