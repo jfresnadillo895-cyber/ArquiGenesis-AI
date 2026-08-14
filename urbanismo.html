@@ -4755,10 +4755,17 @@ function procesarContextoJSON(txt){
       document.getElementById('ctx-quitar').style.display = 'inline-block';
       const ind = document.getElementById('contexto-indicador');
       ind.style.display = 'inline';
-      ind.textContent = '✓ Marco del Core: '+(c.investigacion||'—');
+      // 14/08: frase unificada con Contextos/Negocios Pro -- misma etiqueta en los tres Pro.
+      ind.textContent = '↺ Continuidad del organismo «'+(marcoOrganismoNombre||c.investigacion||'—')+'»';
       return;
     }
-    if(c.producto !== 'Comprender · Contextos') throw new Error('El JSON no proviene de Comprender · Contextos ni del Core (campo "producto"). Si venís de Comprender AI, usá el botón «Marco para Pro» dentro de la Ficha del organismo — no «Exportar respaldo».');
+    // 14/08, hallazgo real (no relacionado con el handoff automático, pero en el mismo camino):
+    // esto comparaba contra el literal 'Comprender · Contextos' (con punto medio), que nunca fue
+    // el valor real -- PRODUCTO_CONTEXTOS (definida más arriba, línea ~2614) es 'Comprender
+    // Contextos', sin punto medio. El pegado manual de una capa de Contextos venía fallando
+    // siempre por esto, no solo la automatización nueva. Se corrige usando esProductoContextos(),
+    // el mismo helper que ya usa el resto del archivo (incluye el alias legacy también).
+    if(!esProductoContextos(c)) throw new Error('El JSON no proviene de Comprender · Contextos ni del Core (campo "producto"). Si venís de Comprender AI, usá el botón «Marco para Pro» dentro de la Ficha del organismo — no «Exportar respaldo».');
     const esV2 = !!c.sistemas;
     if(typeof c.ivc_global !== 'number' || (!c.escalas && !c.sistemas)) throw new Error('Estructura incompleta: faltan ivc_global o escalas/sistemas.');
     contextoCapa = c;
@@ -6792,6 +6799,7 @@ function permitirOperacion(tipo){
    El Core guarda el marco del organismo activo al abrir este módulo.
    Se toma una sola vez y se descarta, para no reaplicarlo en cada recarga. */
 var __organismoIdCoreUrbanismo = null;   // 14/08: capturado acá para el handoff automático de vuelta
+var marcoOrganismoNombre = null;   // 14/08: capturado para la etiqueta "Continuidad del organismo «X»"
 (function(){
   try{
     var raw = localStorage.getItem('ag_marco_pendiente');
@@ -6800,6 +6808,7 @@ var __organismoIdCoreUrbanismo = null;   // 14/08: capturado acá para el handof
     var p = JSON.parse(raw);
     if(!p || !p.marco) return;
     __organismoIdCoreUrbanismo = p.marco.organismo_id || null;
+    marcoOrganismoNombre = p.organismo || null;
     var texto = JSON.stringify(p.marco, null, 2);
     window.addEventListener('load', function(){
       setTimeout(function(){
@@ -6812,6 +6821,33 @@ var __organismoIdCoreUrbanismo = null;   // 14/08: capturado acá para el handof
           if(typeof procesarContextoJSON==='function') procesarContextoJSON(texto);
         }catch(e){}
       }, 400);
+    });
+  }catch(e){}
+})();
+
+/* Handoff automático directo Contextos -> Urbanismo (14/08), sin pasar por el Core -- espejo del
+   de arriba, pero para la clave propia que deja contextos.html (`dejarListaCapaParaUrbanismo()`).
+   Mismo criterio: se toma una sola vez, se descarta, y no pisa nada si el usuario ya venía
+   escribiendo algo en el cuadro. */
+(function(){
+  try{
+    var raw = localStorage.getItem('ag_capa_contexto_pendiente_urbanismo');
+    if(!raw) return;
+    localStorage.removeItem('ag_capa_contexto_pendiente_urbanismo');
+    var p = JSON.parse(raw);
+    if(!p || !p.payload) return;
+    var texto = JSON.stringify(p.payload, null, 2);
+    window.addEventListener('load', function(){
+      setTimeout(function(){
+        try{
+          var ta = document.getElementById('ctx-json');
+          if(!ta) return;
+          if(ta.value && ta.value.trim()) return;   // no pisar lo que el usuario ya cargó (ni el marco del Core, si llegó junto)
+          ta.value = texto;
+          ta.dispatchEvent(new Event('input', { bubbles:true }));
+          if(typeof procesarContextoJSON==='function') procesarContextoJSON(texto);
+        }catch(e){}
+      }, 450);   // un poco después del handoff del Core, por si ambos llegaran juntos -- no debería pasar en uso normal, pero así el del Core gana el cuadro
     });
   }catch(e){}
 })();

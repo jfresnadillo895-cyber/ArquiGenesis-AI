@@ -3709,6 +3709,7 @@ function adjuntarDiagnosticoPro(datos, ciudad, origen, silencioso, forzarDestino
   }
   destino.diagnosticos_pro.push({ origen: origen, version: version, fecha: new Date().toISOString(), resumen: resumen, datos: datos });
   destino.actualizado = new Date().toISOString();
+  destino.avisoImportacionPro = true;   // 14/08: punto rojo en Tu espacio -- se limpia al abrir el organismo
   guardarOrganismo(destino);
   if(state.organismo && state.organismo.id === destino.id) state.organismo = destino;
   if(!silencioso){
@@ -3812,6 +3813,7 @@ function adjuntarEvaluacionNegocioPro(datos, silencioso, forzarDestino){
     (resumenDecisiones ? '. Campo de decisiones (v' + ultimoCD.version + '): ' + resumenDecisiones : '');
   destino.evaluaciones_negocio_pro.push({ version: version, fecha: new Date().toISOString(), resumen: resumen, datos: datos });
   destino.actualizado = new Date().toISOString();
+  destino.avisoImportacionPro = true;   // 14/08: punto rojo en Tu espacio -- se limpia al abrir el organismo
   guardarOrganismo(destino);
   // N3.0-B, corrección 1 de Javier: recién acá, con la importación YA exitosa, se borra el
   // borrador persistente de Negocios Pro de este organismo (espejo de borrarBorrador() en
@@ -5777,6 +5779,9 @@ function intentarAbrirOrganismoDesdeURL(){
 }
 
 function abrirOrganismo(org){
+  // 14/08: apaga el punto rojo de "se incorporó algo nuevo" apenas el usuario entra a verlo --
+  // no hace falta un botón de "marcar como visto" aparte.
+  if(org.avisoImportacionPro){ org.avisoImportacionPro = false; guardarOrganismo(org); }
   // invalidar cualquier respuesta en vuelo de la sesión anterior
   state.epoch++;
   state.busy = false;
@@ -6190,7 +6195,18 @@ function construirTuEspacioOrganismos(){
     const left = document.createElement('span');
     const nm = document.createElement('span'); nm.className='oname'; nm.textContent = org.nombre;
     const tp = document.createElement('span'); tp.className='otipo'; tp.textContent = org.tipo;
-    left.appendChild(nm); left.appendChild(tp);
+    left.appendChild(nm);
+    // 14/08: punto rojo -- se marcó con avisoImportacionPro al incorporar algo desde un Pro
+    // (automático o pegado a mano), para encontrarlo rápido en la lista. Se apaga solo al abrir
+    // el organismo (ver abrirOrganismo()), no hace falta que el usuario lo cierre a mano.
+    if(org.avisoImportacionPro){
+      const punto = document.createElement('span');
+      punto.className = 'oaviso-punto';
+      punto.title = 'Se incorporó información nueva desde un Pro';
+      punto.style.cssText = 'display:inline-block;width:7px;height:7px;border-radius:50%;background:#C4453A;margin-left:6px;vertical-align:middle';
+      nm.appendChild(punto);
+    }
+    left.appendChild(tp);
     const st = document.createElement('span'); st.className='ostado';
     st.textContent = (org.ficha && org.ficha.proximo) ? org.ficha.proximo : 'Listo para comenzar';
     const menuBtn = document.createElement('span');

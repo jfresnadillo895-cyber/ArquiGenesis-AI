@@ -2891,7 +2891,10 @@ function pintarInicio(){
   if(state.marco){
     cajaNo.style.display = 'none';
     cajaOk.style.display = 'block';
-    cajaOk.innerHTML = 'Organismo recibido del Core: <b>' + escaparHtml(state.organismoNombre) + '</b>.'
+    // 14/08: frase unificada con Urbanismo/Contextos -- "Continuidad del organismo «X»" es la
+    // misma etiqueta en los tres Pro, para que se reconozca de un vistazo que esta sesión sigue
+    // a un organismo puntual del Core, no importa desde cuál de los tres Pro se esté mirando.
+    cajaOk.innerHTML = '↺ Continuidad del organismo «' + escaparHtml(state.organismoNombre) + '».'
       + (state.marcoGenerado ? ' Marco generado el ' + new Date(state.marcoGenerado).toLocaleString('es-AR') + '.' : '')
       + ' La evaluación que generes acá se va a poder importar directamente sobre este organismo, aparte de su ficha confirmada.';
   } else {

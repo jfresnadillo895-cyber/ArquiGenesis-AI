@@ -366,11 +366,12 @@ header header .cai-ham{flex-shrink:0}
 <div class="modal-fondo" id="modalExport">
   <div class="modal-caja" role="dialog" aria-label="Exportar capa de contexto">
     <h3>Capa de contexto para Urbanismo — contrato v2.1</h3>
-    <p class="modal-ayuda">Copiá el JSON y guardalo, o descargalo si tu navegador lo permite. Este archivo se importa en Comprender · Urbanismo como capa de contexto, o en Comprender AI para la ficha del organismo. Si esta pestaña vino de Comprender AI, ya quedó lista para incorporar apenas volvés a abrir Tu espacio ahí -- no hace falta copiar nada.</p>
+    <p class="modal-ayuda">Copiá el JSON y guardalo, o descargalo si tu navegador lo permite. Este archivo se importa en Comprender · Urbanismo como capa de contexto, o en Comprender AI para la ficha del organismo. Si esta pestaña vino de Comprender AI, ya quedó lista para incorporar apenas volvés a abrir Tu espacio ahí -- no hace falta copiar nada. Lo mismo si vas directo a Urbanismo: queda lista, sin pegar nada tampoco.</p>
     <textarea id="exportTexto" readonly spellcheck="false"></textarea>
     <div class="modal-estado" id="exportEstado"></div>
     <div class="acciones">
       <button class="btn" onclick="irAIncorporarEnCore()">Volver a Comprender AI e incorporar</button>
+      <button class="btn" onclick="irAIncorporarEnUrbanismo()">Ir a Urbanismo e incorporar</button>
       <button class="btn secundario" onclick="copiarExport()">Copiar</button>
       <button class="btn secundario" onclick="descargarExport()">Descargar .json</button>
       <button class="btn secundario" onclick="cerrarExport()">Cerrar</button>
@@ -2445,8 +2446,8 @@ function revisarMarcoPegado(){
     av.style.background='var(--soporte-c,#E6F2EF)';
     av.style.border='1px solid rgba(62,140,122,.35)';
     av.style.color='#2C6B5C';
-    av.innerHTML = '<strong>✓ Marco de comprensión de Comprender AI reconocido</strong>'
-      + '<br>Investigación: “' + escaparHTML(marco.investigacion || '—') + '”'
+    // 14/08: frase unificada con Urbanismo/Negocios Pro -- misma etiqueta en los tres Pro.
+    av.innerHTML = '<strong>↺ Continuidad del organismo «' + escaparHTML(marco.investigacion || '—') + '»</strong>'
       + '<br>' + ((m.correspondencias||[]).length) + ' correspondencia(s) · '
       + ((m.ideas||[]).length) + ' principio(s) · '
       + ((m.abierto||[]).length) + ' tensión(es) abierta(s)'
@@ -2641,6 +2642,7 @@ function exportarJSON(){
   document.getElementById('exportEstado').textContent='';
   document.getElementById('modalExport').classList.add('visible');
   dejarListoParaIncorporarEnCoreContextos(salida);
+  dejarListaCapaParaUrbanismo(salida);
 }
 /* Handoff automático Contextos -> Core (14/08), mismo mecanismo unificado que ya usan Negocios
    Pro y Urbanismo (ag_export_pendiente_incorporar). Si el marco no vino con organismo_id (por
@@ -2659,6 +2661,21 @@ function dejarListoParaIncorporarEnCoreContextos(payload){
 }
 function irAIncorporarEnCore(){
   try{ window.open('index.html', '_blank'); }catch(e){ location.href = 'index.html'; }
+}
+/* Handoff automático directo Contextos -> Urbanismo (14/08), sin pasar por el Core -- Javier
+   confirmó que ese camino ya existía manual (la capa de contexto que Urbanismo reconoce sola
+   via procesarContextoJSON()) y pidió unificarlo con el mismo criterio de un clic. Clave propia
+   (no la compartida con el Core, que espera {organismo_id, payload} para "Tu espacio") -- acá
+   no hace falta organismo_id, Urbanismo aplica la capa directo, igual que si se pegara a mano. */
+function dejarListaCapaParaUrbanismo(payload){
+  try{
+    localStorage.setItem('ag_capa_contexto_pendiente_urbanismo', JSON.stringify({
+      generado: new Date().toISOString(), payload: payload
+    }));
+  }catch(e){}
+}
+function irAIncorporarEnUrbanismo(){
+  try{ window.open('urbanismo.html', '_blank'); }catch(e){ location.href = 'urbanismo.html'; }
 }
 function cerrarExport(){ document.getElementById('modalExport').classList.remove('visible'); }
 async function copiarExport(){
