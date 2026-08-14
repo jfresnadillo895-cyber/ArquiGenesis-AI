@@ -6096,12 +6096,58 @@ function moverACarpeta(org, nombre){
   teMenuNuevaCarpeta = false;
   construirTuEspacioOrganismos();
 }
+/* Handoff automático Negocios Pro -> Core (14/08), en espejo de ag_marco_pendiente (que ya hacía
+   lo mismo al revés, escrito por abrirModulo() al abrir un módulo con organismo activo). Antes,
+   incorporar una evaluación cerrada de Negocios Pro era 100% manual: buscar el organismo, abrir
+   el menú "⋯", "Pegar evaluación Pro", copiar y pegar el JSON a mano. negocios.html ahora deja
+   el export ya armado en localStorage al cerrar una evaluación -- acá solo hace falta un clic.
+   Si el organismo de destino ya no existe (se borró, o el export es de otra cuenta), no se
+   muestra nada acá -- el camino manual de siempre sigue disponible como respaldo, sin un aviso
+   confuso apuntando a un organismo que no está. */
+function renderAvisoImportarNegocioProPendiente(list, cont){
+  var raw;
+  try{ raw = localStorage.getItem('ag_negocioPro_export_pendiente'); }catch(e){ raw = null; }
+  if(!raw) return;
+  var pendiente;
+  try{ pendiente = JSON.parse(raw); }
+  catch(e){ try{ localStorage.removeItem('ag_negocioPro_export_pendiente'); }catch(e2){} return; }
+  var destino = list.find(function(o){ return o.id === pendiente.organismo_id; });
+  if(!destino) return;
+  const aviso = document.createElement('div');
+  aviso.className = 'aviso';
+  aviso.style.cssText = 'margin-bottom:10px;display:flex;flex-direction:column;gap:8px';
+  const texto = document.createElement('div');
+  texto.textContent = 'Hay una evaluación de Negocios Pro lista para incorporar a «' + destino.nombre + '».';
+  const fila = document.createElement('div');
+  fila.style.cssText = 'display:flex;gap:8px;align-items:center';
+  const btnOk = document.createElement('button');
+  btnOk.className = 'btn primary';
+  btnOk.textContent = 'Incorporar';
+  btnOk.addEventListener('click', function(e){
+    e.stopPropagation();
+    try{ localStorage.removeItem('ag_negocioPro_export_pendiente'); }catch(err){}
+    adjuntarEvaluacionNegocioPro(pendiente.payload, false, destino);
+    construirTuEspacioOrganismos();
+  });
+  const btnDescartar = document.createElement('button');
+  btnDescartar.className = 'orgMenuItem';
+  btnDescartar.textContent = 'Descartar';
+  btnDescartar.addEventListener('click', function(e){
+    e.stopPropagation();
+    try{ localStorage.removeItem('ag_negocioPro_export_pendiente'); }catch(err){}
+    construirTuEspacioOrganismos();
+  });
+  fila.appendChild(btnOk); fila.appendChild(btnDescartar);
+  aviso.appendChild(texto); aviso.appendChild(fila);
+  cont.appendChild(aviso);
+}
 function construirTuEspacioOrganismos(){
   const cont = document.getElementById('teOrgList');
   const vacio = document.getElementById('teOrgVacio');
   const buscador = document.getElementById('teOrgSearch');
   cont.innerHTML = '';
   const list = cargarOrganismos();
+  renderAvisoImportarNegocioProPendiente(list, cont);
   if(!list.length){
     vacio.style.display = '';
     buscador.style.display = 'none';
