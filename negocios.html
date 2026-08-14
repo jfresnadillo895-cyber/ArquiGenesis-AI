@@ -3101,18 +3101,29 @@ function resumenConfirmadasTexto(codActual){
    Ejecución/Seguimiento. Objetivo explícito: que PROMPT_DIMENSION() siga siendo liviano incluso
    con las cinco dimensiones restantes ya confirmadas (medir después del cambio, punto 4). */
 var TOPE_EVIDENCIA_CRUZADA_ENTRADAS = 6, TOPE_EVIDENCIA_CRUZADA_CHARS = 140;
+// N3.3 -- ajuste post-verificación en vivo: la lectura y tensión/oportunidad de cada dimensión
+// confirmada NO tenían tope (a diferencia de evidencias, que sí). Medido en vivo sobre B6 con
+// las otras 5 dimensiones confirmadas: el bloque de contexto cruzado pesaba ~1357 tokens, de
+// los cuales ~625 eran solo lectura sin recortar -- más que tensión+oportunidad+evidencias
+// juntas. Se aplica el mismo criterio de recorte que ya usa evidencias, para no violar la
+// condición de Javier ("no multiplicar fuertemente tokens por llamada").
+var TOPE_LECTURA_CRUZADA_CHARS = 160, TOPE_FRASE_CRUZADA_CHARS = 100;
 function resumenEvidenciaCruzadaParaDimension(codActual){
   var claves = Object.keys(state.dimensiones).filter(function(c){ return c !== codActual && state.dimensiones[c].confirmada; });
   if(!claves.length) return 'Ninguna otra dimensión confirmada todavía -- no hay contexto cruzado disponible.';
 
   var partes = [];
   var evidenciasIncluidas = 0, evidenciasOmitidas = 0;
+  function recortar(txt, tope){
+    if(!txt) return txt;
+    return txt.length > tope ? txt.slice(0, tope) + '...' : txt;
+  }
   claves.forEach(function(c){
     var d = state.dimensiones[c];
     var linea = c + ' · ' + d.nombre + ' (' + (ESTADO_LABEL[d.estado] || d.estado) + ')';
-    if(d.tension_principal) linea += ' -- tensión: ' + d.tension_principal;
-    if(d.oportunidad) linea += ' -- oportunidad: ' + d.oportunidad;
-    if(d.lectura) linea += '\n    lectura: ' + d.lectura;
+    if(d.tension_principal) linea += ' -- tensión: ' + recortar(d.tension_principal, TOPE_FRASE_CRUZADA_CHARS);
+    if(d.oportunidad) linea += ' -- oportunidad: ' + recortar(d.oportunidad, TOPE_FRASE_CRUZADA_CHARS);
+    if(d.lectura) linea += '\n    lectura (resumida): ' + recortar(d.lectura, TOPE_LECTURA_CRUZADA_CHARS);
     partes.push(linea);
     (d.evidencias || []).forEach(function(ev){
       if(evidenciasIncluidas >= TOPE_EVIDENCIA_CRUZADA_ENTRADAS){ evidenciasOmitidas++; return; }
