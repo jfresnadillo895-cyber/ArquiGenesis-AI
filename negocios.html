@@ -1626,11 +1626,11 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
       excluye:[],
       boton:'Elegir Profesional',
       destacado:false },
-    { id:'estudio', nombre:'Comprender · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
+    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
       lema:'Para estudios y prácticas profesionales con mayor escala',
       incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
       excluye:[],
-      boton:'Elegir Comprender · Estudio',
+      boton:'Elegir Pro · Estudio',
       destacado:true }
   ];
 
@@ -1646,7 +1646,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 
     var aviso = '';
     if(motivo === 'sin_saldo')     aviso = 'Se te terminaron los créditos.';
-    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Comprender · Estudio.';
+    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Pro · Estudio.';
 
     var tarjetas = PLANES.map(function(p){
       var creditosItem = '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
@@ -1776,7 +1776,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
     Array.prototype.forEach.call(capa.querySelectorAll('button[data-plan]'), function(b){
       b.addEventListener('click', function(){
         var plan = b.getAttribute('data-plan');
-        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Comprender · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
+        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Pro · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
         if(perfilSuscripcionActiva){ llamarCambiarPlan(plan, b, textoOriginal); return; }
         b.disabled = true; b.textContent = 'Preparando…'; estado.textContent = '';
         tokenVigente().then(function(t){
@@ -2000,7 +2000,7 @@ var ORDEN_PLANES = ['gratis', 'profesional', 'estudio'];
 var CRED_PLANES = {
   gratis:      { nombre:'Gratis' },
   profesional: { nombre:'Profesional' },
-  estudio:     { nombre:'Comprender · Estudio' },
+  estudio:     { nombre:'Pro · Estudio' },
   magister:    { nombre:'Magister' }
 };
 function credPlan(){ try{ return localStorage.getItem('ag_core_plan') || 'gratis'; }catch(e){ return 'gratis'; } }
@@ -2024,6 +2024,15 @@ function moduloBloqueado(id){
   row.appendChild(b);
   card.appendChild(h); card.appendChild(p1); card.appendChild(row);
   caiAbrir();
+}
+/* 17/08: portero de plan -- mismo patrón que ya tienen Urbanismo/Contextos (permitirOperacion()),
+   antes Negocios no lo tenía y dejaba completar todo el formulario para recién chocar con el
+   403 del servidor al enviar. Solo cubre el plan (moduloHabilitado/moduloBloqueado) -- Negocios
+   ya tiene su propio sistema real de créditos vía registrarUsoNegocio()/x-comprender-saldo, así
+   que no se duplica acá una segunda estimación local de créditos como en Urbanismo/Contextos. */
+function permitirOperacion(){
+  if(!moduloHabilitado()){ moduloBloqueado(); return false; }
+  return true;
 }
 var NAV_CORE = { nombre: 'Comprender AI', archivo: 'index.html' };
 function caiIrA(archivo){ try{ window.open(archivo, '_blank'); }catch(e){ location.href = archivo; } }
@@ -3352,6 +3361,7 @@ function abrirDimension(cod){
 
 function enviarTurnoDimension(textoUsuario){
   if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca llama a la IA
+  if(!permitirOperacion()) return;   // 17/08: portero de plan, antes de gastar una llamada
   if(state.llamando) return;
   var esInicio = (textoUsuario === null);
   if(!esInicio){
@@ -3644,6 +3654,7 @@ function abrirDiagnosticoIntegral(){
 
 function enviarTurnoIntegral(textoUsuario){
   if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca llama a la IA
+  if(!permitirOperacion()) return;   // 17/08: portero de plan, antes de gastar una llamada
   if(state.llamandoIntegral) return;
   var esInicio = (textoUsuario === null);
   if(!esInicio){
@@ -4078,6 +4089,7 @@ function explorarTransformaciones(){
 
 function enviarTurnoProyectivo(textoUsuario){
   if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca llama a la IA
+  if(!permitirOperacion()) return;   // 17/08: portero de plan, antes de gastar una llamada
   if(state.llamandoProyectivo) return;
   var esInicio = (textoUsuario === null);
   if(!esInicio){
@@ -4691,6 +4703,7 @@ function iniciarComparacionYDecision(){
 }
 function enviarTurnoDecisiones(textoUsuario){
   if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca llama a la IA
+  if(!permitirOperacion()) return;   // 17/08: portero de plan, antes de gastar una llamada
   if(state.llamandoDecisiones) return;
   var esInicio = (textoUsuario === null);
   if(!esInicio){
@@ -5670,6 +5683,7 @@ function prepararEjecucionParaDecision(decisionId){
 }
 function enviarTurnoEjecucion(textoUsuario){
   if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca llama a la IA
+  if(!permitirOperacion()) return;   // 17/08: portero de plan, antes de gastar una llamada
   if(state.llamandoEjecucion) return;
   var esInicio = (textoUsuario === null);
   if(!esInicio){
@@ -5919,6 +5933,7 @@ function renderFormularioCierreAccion(a){
 }
 function pedirLecturaSeguimiento(accionId){
   if(!puedeMutarNegocio()) return;   // N3.2: Modo Ver nunca llama a la IA
+  if(!permitirOperacion()) return;   // 17/08: portero de plan, antes de gastar una llamada
   if(state.llamandoSeguimiento) return;
   var a = accionActivaObj();
   if(!a) return;

@@ -59,6 +59,12 @@ header{
 .logo{display:inline-flex;align-items:center;gap:9px;flex-shrink:0}
 .lg-txt{font-family:'DM Sans',sans-serif;font-weight:400;font-size:16px;letter-spacing:.005em;color:var(--text)}
 .lg-txt b{font-weight:700;color:var(--accent)}
+/* 17/08: identidad de Compy -- reusa la marca "toro" ya existente (mismo glifo del ecosistema,
+   sin mascota nueva) y suma solo el nombre como caption chico, mismo criterio visual que
+   .cai-baja en negocios/urbanismo/contextos.html. */
+.lg-textos{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.lg-compy{font-family:'DM Sans',sans-serif;font-size:10px;color:var(--faint);letter-spacing:.06em;margin-top:1px}
+@media (max-width:560px){.lg-compy{display:none}}
 .toro{
   /* Marca unificada del ecosistema: mismo tamaño y misma velocidad de reposo que
      Urbanismo y Contextos (kit: .cai-toro). En reposo los tres se ven idénticos.
@@ -162,6 +168,12 @@ header .spacer{flex:1}
 .toro-hero{
   width:62px;height:62px;color:var(--accent);opacity:.9;margin-bottom:22px;
   animation:girar 40s linear infinite;transform-origin:center;
+}
+/* 17/08: presentación breve de Compy en la pantalla vacía -- una línea, sin
+   reemplazar el h1/lema existentes, mismo criterio de "no infantilizar". */
+.compy-intro{
+  font-family:'DM Sans',sans-serif;font-size:12px;color:var(--faint);
+  letter-spacing:.03em;margin-bottom:8px;
 }
 #welcome h1{
   font-family:'DM Sans',sans-serif;font-weight:500;font-size:clamp(24px,4.6vw,33px);
@@ -564,7 +576,10 @@ header .spacer{flex:1}
             <circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/>
           </g>
         </svg>
-        <span class="lg-txt">Comprender <b>AI</b></span>
+        <span class="lg-textos">
+          <span class="lg-txt">Comprender <b>AI</b></span>
+          <span class="lg-compy">Compy</span>
+        </span>
       </span>
       <span id="orgchip"><b id="orgname"></b></span>
       <span class="spacer"></span>
@@ -598,6 +613,7 @@ header .spacer{flex:1}
           <circle cx="20" cy="20" r="3" fill="currentColor" stroke="none" opacity=".9"/>
         </g>
       </svg>
+      <p class="compy-intro">Soy Compy, la presencia conversacional de Comprender AI</p>
       <h1>¿Qué querés comprender hoy?</h1>
       <p class="lema">Contanos una situación, problema, proyecto o decisión.</p>
       <p class="ejemplos-titulo">O probá con un ejemplo</p>
@@ -1716,11 +1732,11 @@ header .spacer{flex:1}
       excluye:[],
       boton:'Elegir Profesional',
       destacado:false },
-    { id:'estudio', nombre:'Comprender · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
+    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
       lema:'Para estudios y prácticas profesionales con mayor escala',
       incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
       excluye:[],
-      boton:'Elegir Comprender · Estudio',
+      boton:'Elegir Pro · Estudio',
       destacado:true }
   ];
 
@@ -1736,7 +1752,7 @@ header .spacer{flex:1}
 
     var aviso = '';
     if(motivo === 'sin_saldo')     aviso = 'Se te terminaron los créditos.';
-    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Comprender · Estudio.';
+    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Pro · Estudio.';
 
     var tarjetas = PLANES.map(function(p){
       var creditosItem = '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
@@ -1821,7 +1837,7 @@ header .spacer{flex:1}
     Array.prototype.forEach.call(capa.querySelectorAll('button[data-plan]'), function(b){
       b.addEventListener('click', function(){
         var plan = b.getAttribute('data-plan');
-        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Comprender · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
+        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Pro · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
         b.disabled = true; b.textContent = 'Preparando…'; estado.textContent = '';
         tokenVigente().then(function(t){
           if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
@@ -3879,8 +3895,10 @@ function ejecutarImportForzado(org, nombreOrigen, aplicar){
 }
 
 /* ================= CRÉDITOS — presupuesto de comprensión =================
-   El límite es de USO, no de tema. Todas las especialidades están disponibles
-   para todos: lo que se paga es cuánta comprensión, no cuál.
+   17/08: el criterio cambió con el brief Compy/Planes. El tipo de cuenta (plan)
+   determina qué capacidades y aplicaciones están habilitadas -- ver ACCESO_MODULOS
+   más abajo. Los créditos son un mecanismo aparte: regulan cuánto se puede usar
+   DENTRO de lo que el plan ya habilita, nunca amplían lo que el plan no incluye.
    Costo por operación proporcional al costo real de tokens.
 ========================================================================= */
 
@@ -3890,16 +3908,19 @@ const PLANES = {
   profesional: { nombre:'Profesional',   creditos: 1800, ventana:'mes',  precio:'USD 19/mes',
                  anual:'USD 190/año (2 meses sin cargo)',
                  desc:'Comprender AI completo, sin tope diario: bolsa mensual de créditos para conversar, construir organismos y generar informes. No incluye los módulos especializados.' },
-  estudio:     { nombre:'Comprender · Estudio', creditos: 4500, ventana:'mes',  precio:'USD 49/mes',
+  estudio:     { nombre:'Pro · Estudio', creditos: 4500, ventana:'mes',  precio:'USD 49/mes',
                  anual:'USD 490/año (2 meses sin cargo)',
-                 desc:'Todo lo de Profesional y además habilita los módulos especializados — Comprender Urbanismo y Comprender Contextos — con lectura territorial completa, campo de fuerzas y PDF de presentación.' },
+                 desc:'Todo lo de Profesional y además habilita las Aplicaciones Estudio — Comprender Urbanismo, Comprender Contextos y Comprender Negocios — con lectura territorial completa, campo de fuerzas, diagnósticos estructurados y PDF de presentación.' },
   /* 03/08: faltaba por completo -- un suscriptor Magister caia en PLANES.gratis (50 creditos,
      ventana 'unica') aca, aunque el saldo real del servidor ya fuera el correcto (9000/mes).
-     precio/anual/desc no se leen en ningun lado del archivo (confirmado por busqueda) -- se
-     completan solo para no dejar esta entrada con menos campos que sus hermanas. */
-  magister:    { nombre:'Magister',      creditos: 9000, ventana:'mes',  precio:'USD 79/mes',
-                 anual:'USD 790/año (2 meses sin cargo)',
-                 desc:'Todo lo de Comprender · Estudio, con el doble de créditos para investigaciones sostenidas sobre un organismo.' }
+     17/08: Magister queda en pausa y fuera de comercialización (brief Compy/Planes) -- no debe
+     tener precio público ni descripción promocional. precio/anual/desc no se leen en ningun
+     lado del archivo (confirmado por busqueda), así que se dejan vacíos a propósito en vez de
+     con una cifra o promesa que no corresponde publicar; creditos/nombre se conservan porque
+     sí los usa credEstado() para no romper a un eventual suscriptor legado. */
+  magister:    { nombre:'Magister',      creditos: 9000, ventana:'mes',  precio:'',
+                 anual:'',
+                 desc:'' }
 };
 
 // Paquete de recarga: salvavidas puntual, sin compromiso. Deliberadamente algo más caro
@@ -4336,7 +4357,7 @@ function cardCreditos(){
   const p1 = document.createElement('p');
   p1.textContent = 'Plan ' + c.plan.nombre + ' · ' + c.resta + ' de ' + c.total + ' créditos' +
     (c.extra ? ' (incluye ' + c.extra + ' de recarga)' : '') +
-    ', se renuevan cada ' + c.renueva + '. Todas las lecturas están disponibles en cualquier plan: lo que varía es cuánta comprensión podés desplegar, no cuál.';
+    ', se renuevan cada ' + c.renueva + '. Tu plan determina qué capacidades y aplicaciones tenés habilitadas; los créditos regulan cuánto podés usarlas.';
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
   const filas = [
     ['Consulta de comprensión', COSTO.chat],
@@ -7292,7 +7313,8 @@ function correrPruebasAuto(){
       }finally{ state.organismo = _org; }
       chk('C13 · nomenclatura unificada en las descripciones de plan',
           PLANES.estudio.desc.indexOf('Urban Pro') === -1 && PLANES.estudio.desc.indexOf('Context Pro') === -1 &&
-          PLANES.estudio.desc.indexOf('Comprender Urbanismo') > -1 && PLANES.estudio.desc.indexOf('Comprender Contextos') > -1);
+          PLANES.estudio.desc.indexOf('Comprender Urbanismo') > -1 && PLANES.estudio.desc.indexOf('Comprender Contextos') > -1 &&
+          PLANES.estudio.desc.indexOf('Comprender Negocios') > -1);
       chk('C14 · Profesional aclara que no incluye los módulos',
           /No incluye los módulos/.test(PLANES.profesional.desc));
       chk('C08 · con Estudio los módulos están habilitados',
