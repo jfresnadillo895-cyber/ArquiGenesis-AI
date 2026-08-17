@@ -3867,6 +3867,320 @@ window.debugOrganismSnapshot = function(organismoId){
   return snap;
 };
 
+/* ============ CONTEXTOS UNIVERSAL · CORTE C1-A2 -- reconstructOrigin() (17/08) ============
+   Segundo corte de Contextos Universal, sobre C1-A1 ya cerrado (176/176 en vivo). Construye
+   SOLO el segundo escalón: OrganismSnapshot + ContextOpening -> reconstructOrigin() ->
+   OriginAssessment. Su trabajo NO es comprender el Campo -- solo responde si el Origen está
+   suficientemente delimitado para empezar sin preguntarle innecesariamente al usuario.
+   Primera llamada IA de Contextos Universal: contrato propio, no reutiliza CONTEXT_PROMPT ni
+   ninguna categoría del Contextos Legacy (natural/territorial/social/económico/político/
+   tecnológico). Como máximo 1 llamada IA por ejecución, como máximo 1 pregunta al usuario, cero
+   escritura (nunca llama guardarOrganismo/persistirOrganismos), cero descubrimiento de Campo
+   (no arma relaciones, no fabrica tensión/función/diagnóstico, no produce Foco ni Retorno).
+   No avanza a C1-B/OPEN -- se detiene acá, tal como pide el encargo. */
+
+var C1A2_ENGINE_VERSION = 'context-c1-a';
+var C1A2_MODEL = 'claude-sonnet-4-6';
+var C1A2_MAX_TOKENS = 700;
+var C1A2_LIMITE_RECUERDOS = 3;
+
+function nuevoIdOpening(){
+  return 'ctxop_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,6);
+}
+
+/* ContextOpening: representa una Apertura concreta, read-only respecto del Organismo (nunca lo
+   modifica). No se persiste en este corte -- vive en memoria mientras dura la evaluación (y el
+   eventual ciclo need_user -> respuesta -> segunda reconstrucción), regla 12 del encargo, no
+   regla de persistencia durable: eso no fue pedido acá. */
+function crearContextOpening(organismId, opts){
+  var op = opts || {};
+  return {
+    openingId: nuevoIdOpening(),
+    organismId: organismId,
+    basedOnVersion: (typeof op.basedOnVersion === 'number') ? op.basedOnVersion : null,
+    question: (typeof op.question === 'string' && op.question.trim()) ? op.question.trim() : null,
+    intention: (typeof op.intention === 'string' && op.intention.trim()) ? op.intention.trim() : null,
+    boundaryOverride: op.boundaryOverride || null,
+    engineVersion: C1A2_ENGINE_VERSION,
+    status: 'reconstructing_origin',
+    createdAt: new Date().toISOString(),
+    closedAt: null,
+    userAnswer: null   // extensión mínima sobre el contrato del encargo: necesaria para la regla
+                        // 12 (incorporar la respuesta a LA APERTURA, nunca a la Memoria vigente)
+  };
+}
+
+/* Incorpora la respuesta del usuario a una pregunta de delimitación (need_user) SIN crear
+   Recuerdo ni tocar la Memoria vigente (regla 12) -- devuelve una Apertura nueva, lista para una
+   segunda llamada a reconstructOrigin(). Nunca salta directo a OPEN. */
+function responderContextOpening(opening, respuesta){
+  if(!opening) return null;
+  var actualizado = {
+    openingId: opening.openingId, organismId: opening.organismId, basedOnVersion: opening.basedOnVersion,
+    question: opening.question, intention: opening.intention, boundaryOverride: opening.boundaryOverride,
+    engineVersion: opening.engineVersion,
+    status: 'reconstructing_origin',
+    createdAt: opening.createdAt, closedAt: null,
+    userAnswer: (typeof respuesta === 'string' && respuesta.trim()) ? respuesta.trim() : opening.userAnswer
+  };
+  return JSON.parse(JSON.stringify(actualizado));
+}
+
+function C1A2_situacionDeOpening(opening){
+  if(!opening) return null;
+  if(opening.question) return opening.question;
+  if(opening.intention) return opening.intention;
+  return null;
+}
+
+/* Prompt propio y mínimo de C1-A2 (regla 14/15): nada de CONTEXT_PROMPT ni de las categorías del
+   Contextos Legacy. Se arma de cero en cada llamada, a partir SOLO del Snapshot (read-only) y la
+   Apertura -- nunca de state.history ni de ningún otro estado de chat. */
+function C1A2_PROMPT_RECONSTRUCT_ORIGIN(snapshot, opening, bloqueRecuerdos){
+  var snapTxt = JSON.stringify({
+    identity: snapshot.identity,
+    boundary: snapshot.boundary,
+    currentMemory: snapshot.currentMemory,
+    memories: { available: snapshot.memories.available, count: snapshot.memories.count },
+    knownRelations: snapshot.knownRelations,
+    openQuestions: snapshot.openQuestions,
+    inheritedInterpretations: snapshot.inheritedInterpretations,
+    missingCapabilities: snapshot.missingCapabilities
+  }, null, 2);
+  var aperturaTxt = 'Pregunta declarada: ' + (opening.question || '(ninguna)') +
+    '\nIntención declarada: ' + (opening.intention || '(ninguna)') +
+    (opening.boundaryOverride ? ('\nDelimitación propuesta por el usuario: ' + JSON.stringify(opening.boundaryOverride)) : '') +
+    (opening.userAnswer ? ('\nRespuesta del usuario a la pregunta de delimitación anterior: ' + opening.userAnswer) : '');
+  return 'Sos el motor de reconstrucción de Origen de Contextos Universal -- un motor NUEVO y ' +
+    'propio, distinto de cualquier Contextos anterior (no uses categorías como natural/' +
+    'territorial/social/económico/político/tecnológico, ni ninguna otra lista fija: eso no existe ' +
+    'todavía en este paso). Tenés una representación read-only (un Snapshot) de un Organismo real ' +
+    'y una Apertura Contextual en curso. Tu única tarea es determinar si existe suficiente ' +
+    'delimitación y comprensión previa para EMPEZAR a situar este Organismo en su Campo. No ' +
+    'comprendas el Campo todavía: eso es un paso posterior que no te corresponde acá.\n\n' +
+    'SNAPSHOT DEL ORGANISMO (read-only):\n' + snapTxt + '\n\n' +
+    'APERTURA CONTEXTUAL:\n' + aperturaTxt + '\n' +
+    bloqueRecuerdos + '\n\n' +
+    'REGLAS:\n' +
+    '1. La tarea no es obtener más información: es decidir si la que ya existe alcanza. ' +
+    'Reutilizá lo que ya está en el Snapshot (Memoria vigente, preguntas abiertas, ' +
+    'interpretaciones heredadas, recuerdos si los hay) antes de pensar en preguntar.\n' +
+    '2. Información incompleta NO equivale a información bloqueante: preguntas abiertas, pocas ' +
+    'relaciones conocidas o campos faltantes no bloquean por sí solos -- regístralos como ' +
+    'incertidumbre con "blocksOpening": false cuando corresponda.\n' +
+    '3. Preguntá (status "need_user") solo si una incertidumbre impide realmente saber qué unidad ' +
+    'estamos situando, o si dos interpretaciones razonables de esa unidad producirían Aperturas ' +
+    'significativamente distintas. Como máximo UNA pregunta, nunca una batería.\n' +
+    '4. "insufficient" es excepcional: solo si prácticamente no hay una unidad reconocible desde ' +
+    'la cual empezar. Nunca lo uses solo porque falten detalles.\n' +
+    '5. No descubras relaciones nuevas del Campo, no fabriques tensión/función/diagnóstico nuevos, ' +
+    'no produzcas Foco ni Retorno -- ninguno de esos pasos te corresponde en este paso.\n' +
+    '6. Los recuerdos y las interpretaciones heredadas que veas (si los hay) son antecedentes de ' +
+    'comprensiones pasadas, nunca evidencia de que algo sigue siendo así hoy -- si el Snapshot los ' +
+    'contradice o los matiza, priorizá la Memoria vigente del Snapshot.\n' +
+    '7. No expliques tu razonamiento paso a paso: "justificationSummary" es solo una síntesis ' +
+    'breve y auditable del resultado final.\n\n' +
+    'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador (sin texto antes ni ' +
+    'después -- esta llamada no tiene texto visible para ningún usuario). Cerrá con el marcador ' +
+    'exacto (JSON válido, sin comentarios ni texto extra adentro):\n' +
+    '[[ORIGIN_ASSESSMENT:{\n' +
+    '  "boundarySufficient": true|false,\n' +
+    '  "relevantMemoryRefs": ["function"|"tensions"|"diagnosis"|"next"|"nextPending"|"principles", ...],\n' +
+    '  "relevantMemoryEventRefs": ["<id de un recuerdo ofrecido arriba, si lo hay>"],\n' +
+    '  "existingExternalRelationRefs": [],\n' +
+    '  "relevantTensionRefs": ["currentMemory.tensions"],\n' +
+    '  "relevantOpenQuestionRefs": [0],\n' +
+    '  "criticalUnknowns": [ { "description": "...", "blocksOpening": true|false } ],\n' +
+    '  "openingFocus": "una frase corta nombrando la unidad/delimitación confirmada (opcional)",\n' +
+    '  "status": "continue"|"need_user"|"insufficient",\n' +
+    '  "userQuestion": { "text": "...", "resolves": "...", "whyNeeded": "..." },\n' +
+    '  "justificationSummary": "..."\n' +
+    '}]]\n' +
+    '"userQuestion" va como null salvo que "status" sea exactamente "need_user".';
+}
+
+/* Núcleo puro de C1-A2: arma systemPrompt + mensajes, decidiendo si corresponde recall selectivo
+   (regla 7) -- SIN llamar a la IA. Reutiliza M2.2 (seleccionarRecuerdosCandidatos) y M2.3
+   (bloqueRecuerdosParaContexto, con su marco epistemológico ya probado) tal cual existen, no los
+   duplica. Solo entra recall si hay question o intention -- sin eso no hay situación con la que
+   M2.2 pueda puntuar nada, así que 0 candidatos por diseño (no se carga recuerdos[] completo). */
+function C1A2_prepararLlamada(snapshot, opening){
+  if(!snapshot || !opening) return null;
+  var situacion = C1A2_situacionDeOpening(opening);
+  var o = cargarOrganismos().find(function(x){ return x.id === snapshot.organismId; });   // solo lectura
+  var candidatosRecuerdos = [];
+  var bloqueRecuerdos = '';
+  if(o && situacion){
+    var sel = seleccionarRecuerdosCandidatos({
+      organismo:o, situacionActual:situacion, ventanaReciente:[],
+      recuerdos: obtenerRecuerdos(o), limite: C1A2_LIMITE_RECUERDOS
+    });
+    candidatosRecuerdos = sel.candidates.map(function(c){ return c.id; });
+    bloqueRecuerdos = bloqueRecuerdosParaContexto(o, situacion, []);
+  }
+  return {
+    systemPrompt: C1A2_PROMPT_RECONSTRUCT_ORIGIN(snapshot, opening, bloqueRecuerdos),
+    mensajes: [{ role:'user', content:'(evaluá si el Origen puede reconstruirse con la información disponible)' }],
+    candidatosRecuerdos: candidatosRecuerdos
+  };
+}
+
+/* Única función de C1-A2 que hace red -- el único fetch de todo el corte (A2-17: 1 llamada IA
+   por ejecución). Mismo patrón que llamarIAProyectivo() de Negocios Pro: system = prompt
+   completo armado de cero, messages = un turno mínimo de arranque. */
+function C1A2_llamarIA(systemPrompt, mensajes){
+  var t0 = Date.now();
+  return fetch(apiEndpoint(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ model: C1A2_MODEL, max_tokens: C1A2_MAX_TOKENS, system: systemPrompt, messages: mensajes })
+  }).then(function(res){
+    return res.json().then(function(data){
+      if(!res.ok || (data && data.error)){
+        throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+      }
+      var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
+    });
+  });
+}
+
+/* Parser defensivo, mismo criterio que parseProyectivoNegocio()/validarTransformacion(): nunca
+   confía a ciegas en el JSON del modelo. Rechaza (devuelve null) si falta justificationSummary o
+   si status no es uno de los tres válidos -- eso son campos sin los que no hay OriginAssessment
+   auditable. Todo lo demás se filtra contra lo que realmente se le ofreció al modelo (ids de
+   recuerdos reales, índices de openQuestions reales) para que nunca aparezca una referencia
+   inventada en la salida. */
+function C1A2_parseOriginAssessment(texto, snapshot, candidatosRecuerdos){
+  var re = /\[\[ORIGIN_ASSESSMENT:([\s\S]*?)\]\]/;
+  var m = String(texto || '').match(re);
+  if(!m) return null;
+  var raw;
+  try{ raw = JSON.parse(m[1]); }catch(e){ return null; }
+  if(!raw || typeof raw !== 'object') return null;
+
+  var ESTADOS = ['continue','need_user','insufficient'];
+  if(ESTADOS.indexOf(raw.status) === -1) return null;
+
+  var justificationSummary = (typeof raw.justificationSummary === 'string' && raw.justificationSummary.trim())
+    ? raw.justificationSummary.trim() : null;
+  if(!justificationSummary) return null;   // obligatorio, sin excepción
+
+  var CAMPOS_MEMORIA_VALIDOS = ['function','tensions','diagnosis','next','nextPending','principles'];
+  var relevantMemoryRefs = Array.isArray(raw.relevantMemoryRefs)
+    ? raw.relevantMemoryRefs.filter(function(x){ return CAMPOS_MEMORIA_VALIDOS.indexOf(x) > -1; }) : [];
+
+  var idsOfrecidos = candidatosRecuerdos || [];
+  var relevantMemoryEventRefs = Array.isArray(raw.relevantMemoryEventRefs)
+    ? raw.relevantMemoryEventRefs.filter(function(x){ return idsOfrecidos.indexOf(x) > -1; }) : [];   // nunca un id inventado
+
+  var existingExternalRelationRefs = Array.isArray(raw.existingExternalRelationRefs)
+    ? raw.existingExternalRelationRefs.filter(function(x){ return typeof x === 'string'; }) : [];
+
+  var relevantTensionRefs = Array.isArray(raw.relevantTensionRefs)
+    ? raw.relevantTensionRefs.filter(function(x){ return typeof x === 'string'; }) : [];
+
+  var nOpenQ = (snapshot && Array.isArray(snapshot.openQuestions)) ? snapshot.openQuestions.length : 0;
+  var relevantOpenQuestionRefs = Array.isArray(raw.relevantOpenQuestionRefs)
+    ? raw.relevantOpenQuestionRefs.filter(function(x){ return Number.isInteger(x) && x >= 0 && x < nOpenQ; }) : [];
+
+  var criticalUnknowns = Array.isArray(raw.criticalUnknowns)
+    ? raw.criticalUnknowns.filter(function(u){
+        return u && typeof u.description === 'string' && u.description.trim() && typeof u.blocksOpening === 'boolean';
+      }).map(function(u){ return { description: u.description.trim(), blocksOpening: u.blocksOpening }; })
+    : [];
+
+  var openingFocus = (typeof raw.openingFocus === 'string' && raw.openingFocus.trim())
+    ? raw.openingFocus.trim().slice(0, 200) : null;
+
+  var boundarySufficient = (typeof raw.boundarySufficient === 'boolean') ? raw.boundarySufficient : null;
+
+  var userQuestion = null;
+  if(raw.status === 'need_user'){
+    var uq = raw.userQuestion;
+    if(!uq || typeof uq !== 'object' || Array.isArray(uq) ||
+       typeof uq.text !== 'string' || !uq.text.trim() ||
+       typeof uq.resolves !== 'string' || !uq.resolves.trim() ||
+       typeof uq.whyNeeded !== 'string' || !uq.whyNeeded.trim()) return null;   // need_user sin pregunta bien formada: inválido
+    userQuestion = { text: uq.text.trim(), resolves: uq.resolves.trim(), whyNeeded: uq.whyNeeded.trim() };
+  }
+  // continue/insufficient NUNCA preguntan (reglas 9/11), sin importar lo que haya devuelto el
+  // modelo en userQuestion -- se descarta a propósito, no se refleja arriba.
+
+  return {
+    boundarySufficient: boundarySufficient,
+    relevantMemoryRefs: relevantMemoryRefs,
+    relevantMemoryEventRefs: relevantMemoryEventRefs,
+    existingExternalRelationRefs: existingExternalRelationRefs,
+    relevantTensionRefs: relevantTensionRefs,
+    relevantOpenQuestionRefs: relevantOpenQuestionRefs,
+    criticalUnknowns: criticalUnknowns,
+    openingFocus: openingFocus,
+    status: raw.status,
+    userQuestion: userQuestion,
+    justificationSummary: justificationSummary
+  };
+}
+
+/* ---- reconstructOrigin: punto de entrada único de C1-A2 ---- */
+async function reconstructOrigin(snapshot, opening){
+  var prep = C1A2_prepararLlamada(snapshot, opening);
+  if(!prep) return { ok:false, motivo:'snapshot u opening ausente' };
+  var res;
+  try{
+    res = await C1A2_llamarIA(prep.systemPrompt, prep.mensajes);
+  }catch(e){
+    return { ok:false, motivo:'error de red/API: ' + (e && e.message), candidatosRecuerdos: prep.candidatosRecuerdos.length };
+  }
+  var parsed = C1A2_parseOriginAssessment(res.texto, snapshot, prep.candidatosRecuerdos);
+  if(!parsed){
+    return { ok:false, motivo:'no se pudo interpretar la respuesta del modelo', usage: res.usage,
+             duracionMs: res.duracionMs, candidatosRecuerdos: prep.candidatosRecuerdos.length, textoCrudo: res.texto };
+  }
+  var nuevoOpening = {
+    openingId: opening.openingId, organismId: opening.organismId, basedOnVersion: opening.basedOnVersion,
+    question: opening.question, intention: opening.intention, boundaryOverride: opening.boundaryOverride,
+    engineVersion: opening.engineVersion, status: parsed.status, createdAt: opening.createdAt,
+    closedAt: (parsed.status !== 'need_user') ? new Date().toISOString() : null,
+    userAnswer: opening.userAnswer || null
+  };
+  nuevoOpening = JSON.parse(JSON.stringify(nuevoOpening));
+  return {
+    ok: true, assessment: parsed, opening: nuevoOpening,
+    telemetry: {
+      llamadasIA: 1,
+      tokensInput: (res.usage && res.usage.input_tokens) || null,
+      tokensOutput: (res.usage && res.usage.output_tokens) || null,
+      duracionMs: res.duracionMs,
+      recuerdosCandidatos: prep.candidatosRecuerdos.length,
+      generoPregunta: parsed.status === 'need_user',
+      resultado: parsed.status
+    }
+  };
+}
+
+/* Laboratorio interno C1-A2 (regla 17): solo consola. Para el ciclo need_user -> respuesta ->
+   segunda reconstrucción, usar directamente crearContextOpening()/responderContextOpening()/
+   reconstructOrigin() desde la consola -- ya son funciones globales, no hace falta duplicar el
+   flujo acá; esta es solo la forma corta para la primera evaluación de un organismo real. */
+window.debugReconstructOrigin = function(organismoId, question, intention){
+  var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
+  if(!o){ console.warn('[C1-A2] organismo no encontrado:', organismoId); return null; }
+  var snap = OrganismSnapshotAdapter(o);
+  var opening = crearContextOpening(o.id, { basedOnVersion: snap.organismVersion, question: question, intention: intention });
+  console.log('[C1-A2] Snapshot:', snap);
+  console.log('[C1-A2] ContextOpening inicial:', opening);
+  return reconstructOrigin(snap, opening).then(function(res){
+    console.log('[C1-A2] resultado:', res);
+    if(res.ok){
+      console.log('[C1-A2] status:', res.assessment.status);
+      console.log('[C1-A2] telemetry:', res.telemetry);
+      if(res.assessment.userQuestion) console.log('[C1-A2] pregunta:', res.assessment.userQuestion);
+    }
+    return res;
+  });
+};
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
@@ -8411,6 +8725,220 @@ function correrPruebasAuto(){
         OrganismSnapshotAdapter(o);
         return sinEscritura && fichaVersion(o) === versionAntes;
       })());
+    })();
+
+    /* ---- Contextos Universal · Corte C1-A2 (17/08) -- reconstructOrigin() ----
+       Estos 17 tests verifican la capa DETERMINISTA de C1-A2: el parser defensivo (con
+       marcadores sintéticos que simulan posibles respuestas del modelo, sin gastar ninguna
+       llamada real), el wiring de M2 (cuándo entra recall y cuándo no), la ausencia del prompt
+       Legacy, el costo estructural (1 solo fetch en todo el código) y la inmutabilidad/
+       aislamiento -- igual que M2.3-01..15 no podían probar si el modelo REALMENTE rememora
+       bien, estos no prueban si el modelo REALMENTE decide bien continue/need_user/insufficient
+       -- eso requiere llamadas reales, ver PENDIENTES.md para esa verificación en vivo (A2-18
+       tampoco es un chk(): es la regresión general en producción). */
+    (function(){
+      function snapMinimo(openQ){
+        return { organismId:'o_c1a2', organismVersion:1, capturedAt:'x',
+                 identity:{name:'X',type:'empresa',campoDe:null}, boundary:null,
+                 currentMemory:{function:'integrar',tensions:'demanda dispersa',diagnosis:null,next:null,nextPending:null,principles:[],other:null},
+                 memories:{available:false,count:0,refs:[]},
+                 knownRelations:[], knownTensions:[], knownFunctions:[],
+                 openQuestions: openQ || [],
+                 evidenceRefs:[], inheritedInterpretations:[],
+                 availableCapabilities:{memoryRecall:true},
+                 provenance:{}, missingCapabilities:[] };
+      }
+      function organismoConRecuerdoPertinente(){
+        return {
+          id:'o_c1a2_rec', nombre:'Con Recuerdo', tipo:'empresa', ficha:{ funcion:'integrar', tensiones:'demanda dispersa' },
+          principios:[],
+          recuerdos:[
+            { id:'rp1', title:'Cambio de proveedor de telas', createdAt:'2025-02-01T00:00:00.000Z', source:'core',
+              field:['tensiones'], before:{tensiones:'dependencia de proveedor único de telas técnicas'},
+              after:{tensiones:'segundo proveedor activo, producción estabilizada'},
+              summary:'Tensiones activas: segundo proveedor activo, producción estabilizada', organismVersion:1,
+              originRef:{propuestaId:'p1',turno:2,resuelto_como:'confirmada'} }
+          ]
+        };
+      }
+      function organismoConRecuerdoIrrelevante(){
+        return {
+          id:'o_c1a2_irr', nombre:'Con Recuerdo Irrelevante', tipo:'empresa', ficha:{ funcion:'integrar', tensiones:'demanda dispersa' },
+          principios:[],
+          recuerdos:[
+            { id:'ri1', title:'Vacaciones del equipo', createdAt:'2025-02-01T00:00:00.000Z', source:'core',
+              field:['proximo'], before:{proximo:''}, after:{proximo:'coordinar cobertura de vacaciones de enero'},
+              summary:'Próximo paso: coordinar cobertura de vacaciones de enero', organismVersion:1,
+              originRef:{propuestaId:'p9',turno:9,resuelto_como:'confirmada'} }
+          ]
+        };
+      }
+
+      chk('A2-01 · Organismo rico, Memoria suficiente -> continue, cero preguntas (capa determinista: parser)', (function(){
+        var texto = '[[ORIGIN_ASSESSMENT:{"boundarySufficient":true,"relevantMemoryRefs":["function","tensions"],' +
+          '"relevantMemoryEventRefs":[],"existingExternalRelationRefs":[],"relevantTensionRefs":["currentMemory.tensions"],' +
+          '"relevantOpenQuestionRefs":[],"criticalUnknowns":[],"openingFocus":"el estudio completo","status":"continue",' +
+          '"userQuestion":null,"justificationSummary":"Memoria vigente completa y consistente, alcanza para empezar."}]]';
+        var parsed = C1A2_parseOriginAssessment(texto, snapMinimo(), []);
+        return !!parsed && parsed.status === 'continue' && parsed.userQuestion === null && parsed.relevantMemoryRefs.length === 2;
+      })());
+
+      chk('A2-02 · Incompleto pero usable: faltan datos secundarios -> continue', (function(){
+        var texto = '[[ORIGIN_ASSESSMENT:{"boundarySufficient":true,"relevantMemoryRefs":["function"],' +
+          '"relevantMemoryEventRefs":[],"existingExternalRelationRefs":[],"relevantTensionRefs":[],' +
+          '"relevantOpenQuestionRefs":[],"criticalUnknowns":[{"description":"falta el historial completo de ventas","blocksOpening":false}],' +
+          '"status":"continue","userQuestion":null,"justificationSummary":"Falta un dato secundario, no impide empezar."}]]';
+        var parsed = C1A2_parseOriginAssessment(texto, snapMinimo(), []);
+        return !!parsed && parsed.status === 'continue' && parsed.criticalUnknowns.length === 1 &&
+               parsed.criticalUnknowns[0].blocksOpening === false;
+      })());
+
+      chk('A2-03 · Delimitación ambigua: dos unidades razonables -> need_user + una pregunta discriminante', (function(){
+        var texto = '[[ORIGIN_ASSESSMENT:{"boundarySufficient":false,"relevantMemoryRefs":[],' +
+          '"relevantMemoryEventRefs":[],"existingExternalRelationRefs":[],"relevantTensionRefs":[],' +
+          '"relevantOpenQuestionRefs":[],"criticalUnknowns":[{"description":"no está claro si la unidad es el estudio o solo la nueva línea","blocksOpening":true}],' +
+          '"status":"need_user","userQuestion":{"text":"¿Querés situar al estudio completo o solamente esta nueva unidad de negocio?",' +
+          '"resolves":"qué unidad delimita la Apertura","whyNeeded":"las dos interpretaciones producirían Aperturas distintas"},' +
+          '"justificationSummary":"Ambigüedad estructural sobre la unidad."}]]';
+        var parsed = C1A2_parseOriginAssessment(texto, snapMinimo(), []);
+        return !!parsed && parsed.status === 'need_user' && !!parsed.userQuestion &&
+               !!parsed.userQuestion.text && !!parsed.userQuestion.resolves && !!parsed.userQuestion.whyNeeded;
+      })());
+
+      chk('A2-04 · Dato irrelevante faltante: se registra como no bloqueante y continúa', (function(){
+        var texto = '[[ORIGIN_ASSESSMENT:{"boundarySufficient":true,"relevantMemoryRefs":[],' +
+          '"relevantMemoryEventRefs":[],"existingExternalRelationRefs":[],"relevantTensionRefs":[],' +
+          '"relevantOpenQuestionRefs":[],"criticalUnknowns":[{"description":"falta el color corporativo","blocksOpening":false},' +
+          '{"description":"no está claro qué unidad situar","blocksOpening":true}],"status":"continue","userQuestion":null,' +
+          '"justificationSummary":"El dato faltante es irrelevante para delimitar."}]]';
+        var parsed = C1A2_parseOriginAssessment(texto, snapMinimo(), []);
+        return !!parsed && parsed.criticalUnknowns.length === 2 &&
+               parsed.criticalUnknowns[0].blocksOpening === false && parsed.criticalUnknowns[1].blocksOpening === true;
+      })());
+
+      chk('A2-05 · Respuesta ya en Memoria: la Memoria vigente viaja en el prompt para que se reutilice, no se pregunta', (function(){
+        var snap = snapMinimo();
+        var opening = crearContextOpening(snap.organismId, { question:'¿cuál es la función vigente del organismo?' });
+        var prep = C1A2_prepararLlamada(snap, opening);
+        return !!prep && prep.systemPrompt.indexOf('demanda dispersa') > -1 && prep.systemPrompt.indexOf('integrar') > -1;
+      })());
+
+      chk('A2-06 · Recuerdo pertinente: entra como candidato y viaja con el marco recuerdo!=evidencia de M2.3, sin duplicarlo', (function(){
+        var o = organismoConRecuerdoPertinente();
+        guardarOrganismo(o);   // C1A2_prepararLlamada busca el organismo real vía cargarOrganismos()
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿seguimos dependiendo de un solo proveedor de telas técnicas?' });
+        var prep = C1A2_prepararLlamada(snap, opening);
+        return !!prep && prep.candidatosRecuerdos.length >= 1 && prep.candidatosRecuerdos.length <= 3 &&
+               prep.systemPrompt.indexOf('antecedente, no evidencia actual') > -1;
+      })());
+
+      chk('A2-07 · Recuerdo irrelevante: no influye, cero candidatos, sin bloque de recuerdos', (function(){
+        var o = organismoConRecuerdoIrrelevante();
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿la propuesta de valor llega a los clientes correctos?' });
+        var prep = C1A2_prepararLlamada(snap, opening);
+        return !!prep && prep.candidatosRecuerdos.length === 0 && prep.systemPrompt.indexOf('RECUERDOS PREVIOS') === -1;
+      })());
+
+      chk('A2-08 · Interpretación Legacy heredada: viaja como antecedente, nunca como verdad demostrada', (function(){
+        var snap = snapMinimo();
+        snap.inheritedInterpretations = [{ sourceModule:'urbanismo_legacy', kind:'lectura_territorial', version:1,
+          fecha:'2025-01-01', origin:null, summary:null, nature:'interpretacion_heredada' }];
+        var opening = crearContextOpening(snap.organismId, { intention:'situar el estudio en su campo' });
+        var prep = C1A2_prepararLlamada(snap, opening);
+        return !!prep && prep.systemPrompt.indexOf('interpretacion_heredada') > -1 &&
+               prep.systemPrompt.indexOf('interpretaciones heredadas') > -1 &&
+               prep.systemPrompt.indexOf('nunca evidencia de que algo sigue siendo así hoy') > -1;
+      })());
+
+      chk('A2-09 · Pregunta abierta existente (horizonte): puede reutilizarse, su sola existencia no bloquea', (function(){
+        var snap = snapMinimo([{ text:'¿el canal actual alcanza para escalar?', source:'horizonte', fecha:'2025-05-01' }]);
+        var opening = crearContextOpening(snap.organismId, { intention:'situar el estudio en su campo' });
+        var prep = C1A2_prepararLlamada(snap, opening);
+        return !!prep && prep.systemPrompt.indexOf('el canal actual alcanza para escalar') > -1 &&
+               prep.systemPrompt.indexOf('no bloquean por sí solos') > -1;
+      })());
+
+      chk('A2-10 · Sin recuerdos: funciona normalmente, cero candidatos, sin romper', (function(){
+        var o = { id:'o_c1a2_sinrec', nombre:'Sin Recuerdos', tipo:'empresa', ficha:{funcion:'integrar'}, principios:[] };
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿cuál es la función vigente?' });
+        var prep = C1A2_prepararLlamada(snap, opening);
+        return !!prep && prep.candidatosRecuerdos.length === 0 && typeof prep.systemPrompt === 'string' && prep.systemPrompt.length > 0;
+      })());
+
+      chk('A2-11 · insufficient legítimo: nunca fabrica una pregunta aunque el modelo la haya incluido por error', (function(){
+        var texto = '[[ORIGIN_ASSESSMENT:{"boundarySufficient":false,"relevantMemoryRefs":[],' +
+          '"relevantMemoryEventRefs":[],"existingExternalRelationRefs":[],"relevantTensionRefs":[],' +
+          '"relevantOpenQuestionRefs":[],"criticalUnknowns":[{"description":"no hay ninguna unidad reconocible","blocksOpening":true}],' +
+          '"status":"insufficient","userQuestion":{"text":"¿algo?","resolves":"x","whyNeeded":"y"},' +
+          '"justificationSummary":"No existe una unidad reconocible desde la cual empezar."}]]';
+        var parsed = C1A2_parseOriginAssessment(texto, snapMinimo(), []);
+        return !!parsed && parsed.status === 'insufficient' && parsed.userQuestion === null;
+      })());
+
+      chk('A2-12 · Respuesta a need_user se incorpora a la MISMA Apertura, no a la Memoria, y queda lista para reconstruir de nuevo', (function(){
+        var snap = snapMinimo();
+        var opening = crearContextOpening(snap.organismId, { question:'¿estudio completo o solo la nueva unidad?' });
+        var opening2 = responderContextOpening(opening, 'la unidad A únicamente');
+        var mismaApertura = opening2.openingId === opening.openingId && opening2.question === opening.question;
+        var estadoListo = opening2.status === 'reconstructing_origin' && opening2.userAnswer === 'la unidad A únicamente';
+        var prep2 = C1A2_prepararLlamada(snap, opening2);
+        var respuestaViaja = prep2.systemPrompt.indexOf('la unidad A únicamente') > -1;
+        return mismaApertura && estadoListo && respuestaViaja;
+      })());
+
+      chk('A2-13 · Una sola pregunta: el contrato nunca permite una batería (un array de preguntas se rechaza)', (function(){
+        var textoArray = '[[ORIGIN_ASSESSMENT:{"status":"need_user","userQuestion":[{"text":"a","resolves":"a","whyNeeded":"a"},' +
+          '{"text":"b","resolves":"b","whyNeeded":"b"}],"justificationSummary":"x"}]]';
+        var parsedArray = C1A2_parseOriginAssessment(textoArray, snapMinimo(), []);
+        var textoOk = '[[ORIGIN_ASSESSMENT:{"status":"need_user","userQuestion":{"text":"a","resolves":"a","whyNeeded":"a"},' +
+          '"justificationSummary":"x"}]]';
+        var parsedOk = C1A2_parseOriginAssessment(textoOk, snapMinimo(), []);
+        return parsedArray === null && !!parsedOk && typeof parsedOk.userQuestion === 'object' && !Array.isArray(parsedOk.userQuestion);
+      })());
+
+      chk('A2-14 · No abre Campo: sin prompt Legacy y sin descubrir relaciones por cuenta propia', (function(){
+        var srcSinLegacy = (C1A2_PROMPT_RECONSTRUCT_ORIGIN.toString() + C1A2_prepararLlamada.toString() +
+          C1A2_parseOriginAssessment.toString() + reconstructOrigin.toString()).indexOf('CONTEXT_PROMPT') === -1;
+        var texto = '[[ORIGIN_ASSESSMENT:{"status":"continue","existingExternalRelationRefs":["relación X","relación Y"],' +
+          '"userQuestion":null,"justificationSummary":"x"}]]';
+        var parsed = C1A2_parseOriginAssessment(texto, snapMinimo(), []);
+        // el código nunca agrega ni descubre relaciones por su cuenta: solo relee lo que el
+        // modelo devolvió, tal cual (hoy siempre partiendo de knownRelations:[] del Snapshot).
+        return srcSinLegacy && !!parsed && parsed.existingExternalRelationRefs.length === 2;
+      })());
+
+      chk('A2-15 · Sin escritura: preparar la llamada no modifica el Organismo ni usa funciones de guardado', (function(){
+        var o = organismoConRecuerdoPertinente();
+        guardarOrganismo(o);   // registrado a propósito, para ejercitar también el camino de recall de M2
+        var antes = JSON.stringify(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿seguimos dependiendo de un proveedor único?' });
+        C1A2_prepararLlamada(snap, opening);
+        var src = C1A2_prepararLlamada.toString() + C1A2_llamarIA.toString() + C1A2_parseOriginAssessment.toString() +
+          reconstructOrigin.toString() + crearContextOpening.toString() + responderContextOpening.toString();
+        var sinEscritura = src.indexOf('guardarOrganismo') === -1 && src.indexOf('persistirOrganismos') === -1;
+        return JSON.stringify(o) === antes && sinEscritura;
+      })());
+
+      chk('A2-16 · Aislamiento: buildSystem() no menciona reconstructOrigin ni ContextOpening', (function(){
+        return typeof buildSystem === 'function' &&
+               buildSystem.toString().indexOf('reconstructOrigin') === -1 &&
+               buildSystem.toString().indexOf('ContextOpening') === -1;
+      })());
+
+      chk('A2-17 · Costo: como máximo una llamada IA por ejecución (un único fetch en todo el código de C1-A2)', (function(){
+        var src = C1A2_llamarIA.toString() + C1A2_prepararLlamada.toString() + reconstructOrigin.toString() +
+          C1A2_parseOriginAssessment.toString() + C1A2_PROMPT_RECONSTRUCT_ORIGIN.toString();
+        var matches = src.match(/fetch\s*\(/g) || [];
+        return matches.length === 1;
+      })());
+      // A2-18 · Compatibilidad completa: no es un chk() individual -- ES correr correrPruebasAuto()
+      // completo en vivo, ver PENDIENTES.md para el resultado real de esa corrida.
     })();
 
     /* ---- N2.2 · compatibilidad del resumen con evaluaciones N2.1 sin tension_principal ---- */
