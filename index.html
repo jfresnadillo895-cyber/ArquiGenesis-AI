@@ -4921,6 +4921,293 @@ window.debugPropagateField = function(organismoId, question, intention){
   });
 };
 
+/* ============================================================================
+   Contextos Universal · C1-C1 — selectContextFronts() (Frentes Contextuales y prioridad)
+   Entrada: GraphState (de C1-B2) + ContextOpening. Transforma regiones/incertidumbres del
+   grafo en pocos ContextFront candidatos y selecciona cuál merece atención primero. NO resuelve
+   el Frente, no pregunta, no investiga, no interpreta Función -- ver PENDIENTES.md.
+   ============================================================================ */
+
+var C1C1_MODEL = 'claude-sonnet-4-6';
+var C1C1_MAX_TOKENS = 2200;
+var C1C1_MAX_LATENTES = 2;   // política Profesional: 1 activo + 0-2 latentes, nunca más
+var C1C1_NIVELES = ['high','medium','low'];   // mismo enum de 3 valores para las 4 dimensiones cualitativas
+
+function C1C1_normalizar(s){
+  return String(s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+/* Ventana cognitiva compacta (regla 12: una sola llamada, no una por ruta): todas las relaciones y
+   rutas del grafo -- son pocas por diseño de C1-B2 (máx. 12 relaciones, 2-4 rutas) -- más lo que
+   B2 ya descartó, para que el modelo no lo reproponga sin una razón nueva. */
+function C1C1_ventanaFrentes(graphState, opening){
+  var porId = {};
+  graphState.nodes.forEach(function(n){ porId[n.id] = n; });
+  var relaciones = graphState.relations.map(function(r){
+    return { id: r.id, from: porId[r.sourceNodeId] ? porId[r.sourceNodeId].label : null,
+      to: porId[r.targetNodeId] ? porId[r.targetNodeId].label : null,
+      manifestation: r.manifestation, possibleIncidence: r.possibleIncidence,
+      epistemicState: r.epistemicState, uncertainty: r.uncertainty, evidenceNeed: r.evidenceNeed,
+      returnRationale: r.returnRationale, status: r.status };
+  });
+  var rutas = graphState.routes.map(function(rt){
+    return { id: rt.id, status: rt.status, closureReason: rt.closureReason,
+      path: rt.nodeIds.map(function(id){ return porId[id] ? porId[id].label : id; }) };
+  });
+  return {
+    originAnchor: graphState.originAnchor,
+    aperturaTexto: 'Pregunta declarada: ' + (opening.question || '(ninguna)') +
+      '\nIntención declarada: ' + (opening.intention || '(ninguna)'),
+    relaciones: relaciones, rutas: rutas,
+    yaDescartadoEnB2: graphState.discardedExpansions || []
+  };
+}
+
+/* Prompt propio de C1-C1 (continuación de OPEN/B2, motor propio). Universal entre dominios: no
+   hay ninguna rama por tipo de Organismo en esta función. */
+function C1C1_PROMPT_SELECT_FRONTS(ventana){
+  var ventanaTxt = JSON.stringify({
+    originAnchor: ventana.originAnchor, relaciones: ventana.relaciones, rutas: ventana.rutas,
+    yaDescartadoEnB2: ventana.yaDescartadoEnB2
+  }, null, 2);
+  return 'Sos el motor de selección de Frentes Contextuales (C1-C1) de Contextos Universal -- ' +
+    'continuación de OPEN/B2, motor propio, sin dimensiones ni sistemas de Contextos Legacy.\n\n' +
+    'QUÉ ES UN FRENTE: nunca un tema ("Frente económico", "Frente tecnológico" -- eso está ' +
+    'prohibido). Un Frente es una configuración todavía insuficientemente comprendida cuya ' +
+    'resolución podría modificar significativamente cómo entendemos al Organismo -- una pregunta ' +
+    'concreta y proporcional a lo que el grafo realmente sostiene, nunca grandilocuente.\n\n' +
+    ventana.aperturaTexto + '\n\nGRAFO DISPONIBLE (ventana ya seleccionada, no es el Organismo ' +
+    'completo):\n' + ventanaTxt + '\n\n' +
+    'REGLAS:\n' +
+    '1. Cada candidato necesita, para existir, las cuatro cosas siguientes: un trigger concreto ' +
+    '(al menos una relación o ruta real del grafo -- nunca inventada), una incidencia potencial ' +
+    'clara (qué podría cambiar en la comprensión del Organismo), una incertidumbre real (qué ' +
+    'todavía no sabemos), y una vía razonable de avance (alguna forma plausible de reducirla). Si ' +
+    'no podés justificar las cuatro, no lo propongas.\n' +
+    '2. Si dos o más rutas/relaciones distintas apuntan, en el fondo, a la misma incertidumbre ' +
+    'funcional, fusionalas en un solo Frente y sumá todas sus referencias en triggerRefs -- no ' +
+    'investigues dos veces lo mismo. Si un candidato parece amplio pero todavía no sabés si ' +
+    'contiene dos problemas distintos, mantenelo unido -- la división puede pasar después, no ' +
+    'generes complejidad preventiva.\n' +
+    '3. La distancia no determina prioridad: una ruta de segundo o tercer salto puede merecer más ' +
+    'atención que una relación inmediata si tiene más incidencia. La antigüedad de un antecedente/' +
+    'recuerdo tampoco decide -- solo importan pertinencia e incidencia.\n' +
+    '4. Antes de activar un Frente, tiene que poder responder: "si resolvemos esta incertidumbre, ' +
+    'qué parte de nuestra representación del Organismo podría cambiar?" Si no hay respuesta ' +
+    'plausible, dejalo "latent" o "discarded", nunca "active".\n' +
+    '5. Evaluá cada candidato en cuatro ejes cualitativos (nunca un puntaje decimal): ' +
+    'expectedUnderstandingGain, resolvability, estimatedCognitiveCost (cada uno "high"|"medium"|' +
+    '"low"), y con eso una priority también "high"|"medium"|"low" -- regla conceptual, no ' +
+    'fórmula: mayor incidencia + mayor ganancia explicativa + mayor resolubilidad + menor costo = ' +
+    'mayor prioridad.\n' +
+    '6. De todos los candidatos, elegí como máximo UNO con status "active" -- el que realmente ' +
+    'merece atención cognitiva primero. El resto puede quedar "latent" (candidato secundario real, ' +
+    'máximo 2) o "discarded" (no alcanza las cuatro condiciones de la regla 1, o es curiosidad sin ' +
+    'retorno). No actives automáticamente todo lo que el grafo trajo -- si varias candidatas ' +
+    'propagaron mucho pero en el fondo sostienen la misma pregunta o ninguna es claramente mejor ' +
+    'que las demás, elegí la de mayor ganancia real, no todas.\n' +
+    '7. Es legítimo que ningún candidato alcance las cuatro condiciones -- en ese caso, devolvé ' +
+    '"fronts" vacío o todos "discarded", y "activeFrontId": null. No fabriques un Frente para ' +
+    'justificar que Contextos "encontró algo".\n' +
+    '8. No selecciones todavía qué hacer con el Frente (nada de ASK, RESEARCH, DEEPEN, EXPAND, ' +
+    'TRACE, CONTRAST, INTERPRET) -- eso es un paso futuro, no tuyo. No crees Tensión, no ' +
+    'interpretes Dinámica/Operador/Función, no produzcas Foco ni Retorno, no busques evidencia ' +
+    'externa, no le preguntes nada al usuario.\n\n' +
+    'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
+    'después. Sé breve en cada campo. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
+    '[[CONTEXT_FRONTS:{\n' +
+    '  "fronts": [ { "id": "f1", "formulation": "...", "triggerRefs": ["route1","rel1"], ' +
+    '"relationRefs": ["rel1"], "routeRefs": ["route1"], "uncertainty": "...", ' +
+    '"possibleIncidence": "...", "expectedUnderstandingGain": "high"|"medium"|"low", ' +
+    '"resolvability": "high"|"medium"|"low", "estimatedCognitiveCost": "low"|"medium"|"high", ' +
+    '"priority": "high"|"medium"|"low", "status": "active"|"latent"|"discarded", ' +
+    '"justificationSummary": "..." } ],\n' +
+    '  "activeFrontId": "f1"|null,\n' +
+    '  "overallJustification": "..."\n' +
+    '}]]';
+}
+
+function C1C1_llamarIA(systemPrompt, mensajes){
+  var t0 = Date.now();
+  return fetch(apiEndpoint(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ model: C1C1_MODEL, max_tokens: C1C1_MAX_TOKENS, system: systemPrompt, messages: mensajes })
+  }).then(function(res){
+    return res.json().then(function(data){
+      if(!res.ok || (data && data.error)){
+        throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+      }
+      var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
+    });
+  });
+}
+
+/* Parser defensivo: rechaza toda la respuesta si falta overallJustification o "fronts" no es
+   lista. Cada Frente se valida individualmente -- sin las cuatro condiciones de la regla 1
+   (trigger real, incidencia, incertidumbre, vía de avance) se descarta. Las refs se filtran contra
+   lo realmente ofrecido (nunca se confía en un id inventado por el modelo). */
+function C1C1_parseContextFronts(texto, refsOfrecidas){
+  var re = /\[\[CONTEXT_FRONTS:([\s\S]*?)\]\]/;
+  var m = String(texto || '').match(re);
+  if(!m) return null;
+  var raw;
+  try{ raw = JSON.parse(m[1]); }catch(e){ return null; }
+  if(!raw || typeof raw !== 'object') return null;
+  var overallJustification = (typeof raw.overallJustification === 'string' && raw.overallJustification.trim())
+    ? raw.overallJustification.trim() : null;
+  if(!overallJustification) return null;
+  if(!Array.isArray(raw.fronts)) return null;
+
+  var idsRuta = (refsOfrecidas && refsOfrecidas.routeIds) || [];
+  var idsRelacion = (refsOfrecidas && refsOfrecidas.relationIds) || [];
+  function refValida(x){ return idsRuta.indexOf(x) > -1 || idsRelacion.indexOf(x) > -1; }
+  function limpiarRefs(arr){
+    return Array.isArray(arr) ? arr.filter(function(x){ return typeof x === 'string' && refValida(x); }) : [];
+  }
+
+  var fronts = raw.fronts.map(function(f, i){
+    if(!f || typeof f !== 'object') return null;
+    if(typeof f.formulation !== 'string' || !f.formulation.trim()) return null;
+    if(typeof f.uncertainty !== 'string' || !f.uncertainty.trim()) return null;
+    if(typeof f.possibleIncidence !== 'string' || !f.possibleIncidence.trim()) return null;
+    if(C1C1_NIVELES.indexOf(f.expectedUnderstandingGain) === -1) return null;
+    if(C1C1_NIVELES.indexOf(f.resolvability) === -1) return null;
+    if(C1C1_NIVELES.indexOf(f.estimatedCognitiveCost) === -1) return null;
+    if(C1C1_NIVELES.indexOf(f.priority) === -1) return null;
+    if(['active','latent','discarded'].indexOf(f.status) === -1) return null;
+    var triggerRefs = limpiarRefs(f.triggerRefs);
+    if(!triggerRefs.length) return null;   // regla 1: sin trigger concreto real, no hay Frente
+    var justificationSummary = (typeof f.justificationSummary === 'string' && f.justificationSummary.trim())
+      ? f.justificationSummary.trim() : null;
+    if(!justificationSummary) return null;
+    return {
+      id: (typeof f.id === 'string' && f.id.trim()) ? f.id.trim() : ('f' + (i + 1)),
+      formulation: f.formulation.trim(), triggerRefs: triggerRefs,
+      relationRefs: limpiarRefs(f.relationRefs), routeRefs: limpiarRefs(f.routeRefs),
+      uncertainty: f.uncertainty.trim(), possibleIncidence: f.possibleIncidence.trim(),
+      expectedUnderstandingGain: f.expectedUnderstandingGain, resolvability: f.resolvability,
+      estimatedCognitiveCost: f.estimatedCognitiveCost, priority: f.priority,
+      status: f.status, justificationSummary: justificationSummary
+    };
+  }).filter(Boolean);
+
+  var activeFrontId = (typeof raw.activeFrontId === 'string' && raw.activeFrontId.trim()) ? raw.activeFrontId.trim() : null;
+  return { fronts: fronts, activeFrontId: activeFrontId, overallJustification: overallJustification };
+}
+
+/* Aplica la política de "pocos" de forma determinista (regla 5), sin confiar en la autocontención
+   del modelo: como máximo UN Frente "active" (si el modelo marcó más de uno, se queda solo con el
+   que coincide con activeFrontId, o si no es válido, con el primero -- el resto baja a "latent");
+   como máximo C1C1_MAX_LATENTES "latent" (el resto, en el mismo orden del modelo, pasa a
+   "discarded" -- nunca se elimina silenciosamente, queda trazado con status final). */
+function C1C1_aplicarPoliticaFrentes(fronts, activeFrontIdModelo){
+  var activos = fronts.filter(function(f){ return f.status === 'active'; });
+  if(activos.length > 1){
+    var elegido = activos.filter(function(f){ return f.id === activeFrontIdModelo; })[0] || activos[0];
+    fronts.forEach(function(f){
+      if(f.status === 'active' && f.id !== elegido.id) f.status = 'latent';
+    });
+  }
+  var activosFinal = fronts.filter(function(f){ return f.status === 'active'; });
+  var latentes = fronts.filter(function(f){ return f.status === 'latent'; });
+  if(latentes.length > C1C1_MAX_LATENTES){
+    latentes.slice(C1C1_MAX_LATENTES).forEach(function(f){ f.status = 'discarded'; });
+  }
+  var activeFrontId = activosFinal.length ? activosFinal[0].id : null;
+  return { fronts: fronts, activeFrontId: activeFrontId };
+}
+
+/* ---- selectContextFronts: punto de entrada único de C1-C1 ---- */
+async function selectContextFronts(graphState, opening){
+  if(!graphState || !opening){
+    return { ok:false, motivo:'graphState u opening ausente' };
+  }
+  if(!Array.isArray(graphState.relations) || !graphState.relations.length){
+    var vacio = {
+      openingId: opening.openingId, originAnchor: graphState.originAnchor || null,
+      fronts: [], activeFrontId: null, status: 'no_active_front',
+      justificationSummary: 'El grafo de C1-B2 no trajo relaciones -- no hay incertidumbre real de la que partir.'
+    };
+    return { ok: true, result: JSON.parse(JSON.stringify(vacio)),
+      telemetry: { llamadasIA: 0, tokensInput: 0, tokensOutput: 0, relacionesRecibidas: 0, rutasRecibidas: 0,
+        candidatosPropuestos: 0, candidatosFusionados: 0, candidatosDescartados: 0, duracionMs: 0 } };
+  }
+
+  var ventana = C1C1_ventanaFrentes(graphState, opening);
+  var prompt = C1C1_PROMPT_SELECT_FRONTS(ventana);
+  var res;
+  try{
+    res = await C1C1_llamarIA(prompt, [{ role:'user', content:'(proponé Frentes candidatos y elegí cuál merece atención primero, si alguno)' }]);
+  }catch(e){
+    return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
+  }
+
+  var routeIds = graphState.routes.map(function(r){ return r.id; });
+  var relationIds = graphState.relations.map(function(r){ return r.id; });
+  var parsed = C1C1_parseContextFronts(res.texto, { routeIds: routeIds, relationIds: relationIds });
+  if(!parsed){
+    return { ok:false, motivo:'no se pudo interpretar la respuesta del modelo', usage: res.usage,
+             duracionMs: res.duracionMs, textoCrudo: res.texto };
+  }
+
+  var candidatosPropuestos = parsed.fronts.length;
+  var candidatosFusionados = parsed.fronts.filter(function(f){ return f.triggerRefs.length > 1; }).length;
+  var aplicado = C1C1_aplicarPoliticaFrentes(parsed.fronts, parsed.activeFrontId);
+  var candidatosDescartados = aplicado.fronts.filter(function(f){ return f.status === 'discarded'; }).length;
+
+  var result = {
+    openingId: opening.openingId, originAnchor: graphState.originAnchor || null,
+    fronts: aplicado.fronts, activeFrontId: aplicado.activeFrontId,
+    status: aplicado.activeFrontId ? 'front_selected' : 'no_active_front',
+    justificationSummary: parsed.overallJustification
+  };
+  result = JSON.parse(JSON.stringify(result));
+  return {
+    ok: true, result: result,
+    telemetry: {
+      llamadasIA: 1, tokensInput: (res.usage && res.usage.input_tokens) || null,
+      tokensOutput: (res.usage && res.usage.output_tokens) || null, duracionMs: res.duracionMs,
+      relacionesRecibidas: graphState.relations.length, rutasRecibidas: graphState.routes.length,
+      candidatosPropuestos: candidatosPropuestos, candidatosFusionados: candidatosFusionados,
+      candidatosDescartados: candidatosDescartados
+    }
+  };
+}
+
+/* Laboratorio interno C1-C1 (extiende el de C1-B2): encadena reconstructOrigin() -> openField() ->
+   propagateField() -> selectContextFronts() y muestra qué quedó activo/latente/descartado y por
+   qué. Solo consola, sin UI nueva. */
+window.debugSelectContextFronts = function(organismoId, question, intention){
+  var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
+  if(!o){ console.warn('[C1-C1] organismo no encontrado:', organismoId); return null; }
+  var snap = OrganismSnapshotAdapter(o);
+  var opening = crearContextOpening(o.id, { basedOnVersion: snap.organismVersion, question: question, intention: intention });
+  return reconstructOrigin(snap, opening).then(function(r1){
+    if(!r1.ok || r1.assessment.status !== 'continue'){
+      console.warn('[C1-C1] no se llega a openField(): status =', r1.ok ? r1.assessment.status : r1.motivo);
+      return { origin: r1 };
+    }
+    return openField(snap, r1.opening, r1.assessment).then(function(r2){
+      if(!r2.ok){ console.warn('[C1-C1] no se llega a propagateField(): motivo =', r2.motivo); return { origin: r1, field: r2 }; }
+      return propagateField(snap, r1.opening, r1.assessment, r2.result).then(function(r3){
+        if(!r3.ok){ console.warn('[C1-C1] no se llega a selectContextFronts(): motivo =', r3.motivo); return { origin: r1, field: r2, graph: r3 }; }
+        return selectContextFronts(r3.result, r1.opening).then(function(r4){
+          console.log('[C1-C1] resultado:', r4.ok ? r4.result : r4.motivo);
+          if(r4.ok){
+            r4.result.fronts.forEach(function(f){
+              console.log('[C1-C1] Frente ' + f.id + ' (' + f.status + ', prioridad ' + f.priority + '):', f.formulation);
+            });
+            console.log('[C1-C1] telemetry:', r4.telemetry);
+          }
+          return { origin: r1, field: r2, graph: r3, fronts: r4 };
+        });
+      });
+    });
+  });
+};
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
@@ -10041,6 +10328,151 @@ function correrPruebasAuto(){
       })());
 
       // B2-18 · Compatibilidad general: no es un chk() individual -- ES correr correrPruebasAuto()
+      // completo en vivo, ver PENDIENTES.md para el resultado real de esa corrida.
+    })();
+
+    /* ---- Contextos Universal · Corte C1-C1 -- selectContextFronts() (C1-01..17, C1-18 en vivo) ----
+       Mismo límite que B1-15/B2-05: selectContextFronts() es async, así que lo que depende de la
+       orquestación completa se prueba por prueba estructural (texto/orden del código fuente). Todo
+       lo demás (parser, política de "pocos", ventana, prompt) es determinista y síncrono. */
+    (function(){
+      function relacion(id, from, to, opts){
+        opts = opts || {};
+        return { id: id, sourceNodeId: from, targetNodeId: to,
+          manifestation: opts.manifestation || 'manifiesta algo', possibleIncidence: opts.possibleIncidence || 'incide en el organismo',
+          epistemicState: opts.epistemicState || 'hipotesis', uncertainty: opts.uncertainty || ['no se sabe X'],
+          evidenceNeed: opts.evidenceNeed || null, returnRationale: opts.returnRationale || 'cambiaría la comprensión', status: 'candidate' };
+      }
+      function ruta(id, nodeIds, opts){
+        opts = opts || {};
+        return { id: id, nodeIds: nodeIds, depth: nodeIds.length - 1, status: opts.status || 'open_limit_reached', closureReason: opts.closureReason || null };
+      }
+      function graphFake(nombre, relaciones, rutas){
+        return { openingId: 'op_test', originAnchor: nombre, nodes: [
+            { id:'n0', label: nombre, depth:0, kind:'organismo' }, { id:'n1', label:'A', depth:1, kind:'campo' },
+            { id:'n2', label:'B', depth:2, kind:'campo' }, { id:'n3', label:'C', depth:1, kind:'campo' }
+          ], relations: relaciones, routes: rutas, discardedExpansions: [], status: 'expanded', justificationSummary: 'x' };
+      }
+      function openingFake(){ return { openingId: 'op_test', question: null, intention: null }; }
+      function marker(fronts, activeFrontId, overallJustification){
+        return '[[CONTEXT_FRONTS:' + JSON.stringify({ fronts: fronts, activeFrontId: activeFrontId, overallJustification: overallJustification || 'ok' }) + ']]';
+      }
+      function frenteRaw(id, status, triggerRefs, opts){
+        opts = opts || {};
+        return { id: id, formulation: opts.formulation || ('¿pregunta ' + id + '?'), triggerRefs: triggerRefs,
+          relationRefs: opts.relationRefs || triggerRefs, routeRefs: opts.routeRefs || [],
+          uncertainty: opts.uncertainty || 'no se sabe algo', possibleIncidence: opts.possibleIncidence || 'podría cambiar algo',
+          expectedUnderstandingGain: opts.expectedUnderstandingGain || 'medium', resolvability: opts.resolvability || 'medium',
+          estimatedCognitiveCost: opts.estimatedCognitiveCost || 'medium', priority: opts.priority || 'medium',
+          status: status, justificationSummary: opts.justificationSummary || 'justificación' };
+      }
+
+      chk('C1-01 · Un candidato claramente dominante: la política deja exactamente uno activo', (function(){
+        var fronts = [frenteRaw('f1','active',['route1']), frenteRaw('f2','discarded',['route2'])];
+        var r = C1C1_aplicarPoliticaFrentes(fronts, 'f1');
+        return r.activeFrontId === 'f1' && fronts[1].status === 'discarded';
+      })());
+
+      chk('C1-02 · Varias relaciones, una sola incertidumbre: el parser preserva múltiples triggerRefs en un mismo Frente', (function(){
+        var texto = marker([frenteRaw('f1','active',['route1','route2'])], 'f1');
+        var parsed = C1C1_parseContextFronts(texto, { routeIds: ['route1','route2'], relationIds: [] });
+        return parsed && parsed.fronts.length === 1 && parsed.fronts[0].triggerRefs.length === 2;
+      })());
+
+      chk('C1-03 · Dos Frentes independientes: activa uno y deja el otro latente (no lo descarta)', (function(){
+        var fronts = [frenteRaw('f1','active',['route1']), frenteRaw('f2','latent',['route2'])];
+        var r = C1C1_aplicarPoliticaFrentes(fronts, 'f1');
+        return r.activeFrontId === 'f1' && fronts[1].status === 'latent';
+      })());
+
+      chk('C1-04 · Frente cercano trivial vs remoto crítico: el prompt indica explícitamente que la distancia no determina prioridad', (function(){
+        var ventana = C1C1_ventanaFrentes(graphFake('Organismo', [relacion('rel1','n0','n1')], [ruta('route1',['n0','n1'])]), openingFake());
+        return C1C1_PROMPT_SELECT_FRONTS(ventana).indexOf('La distancia no determina prioridad') > -1;
+      })());
+
+      chk('C1-05/06 · El prompt exige considerar resolubilidad y costo cognitivo, no solo incidencia, en la prioridad', (function(){
+        var ventana = C1C1_ventanaFrentes(graphFake('Organismo', [relacion('rel1','n0','n1')], [ruta('route1',['n0','n1'])]), openingFake());
+        var p = C1C1_PROMPT_SELECT_FRONTS(ventana);
+        return p.indexOf('mayor resolubilidad') > -1 && p.indexOf('menor costo') > -1 && p.indexOf('resolvability') > -1;
+      })());
+
+      chk('C1-07 · Curiosidad sin retorno: el prompt exige una respuesta plausible de retorno antes de marcar "active"', (function(){
+        var ventana = C1C1_ventanaFrentes(graphFake('Organismo', [relacion('rel1','n0','n1')], [ruta('route1',['n0','n1'])]), openingFake());
+        var p = C1C1_PROMPT_SELECT_FRONTS(ventana);
+        return p.indexOf('qué parte de nuestra representación del Organismo podría cambiar') > -1 && p.indexOf('nunca "active"') > -1;
+      })());
+
+      chk('C1-08 · Sin Frente suficiente: selectContextFronts() corta antes de llamar a la IA si el grafo no trae relaciones', (function(){
+        var src = selectContextFronts.toString();
+        var idxGuard = src.indexOf('!Array.isArray(graphState.relations)');
+        var idxLlamada = src.indexOf('C1C1_llamarIA(');
+        return idxGuard > -1 && idxLlamada > -1 && idxGuard < idxLlamada &&
+          src.indexOf("status: 'no_active_front'") > -1;
+      })());
+
+      chk('C1-09 · No patologizar: el trigger de un Frente puede ser cualquier relación real, sin exigir una Tensión previa', (function(){
+        var ventana = C1C1_ventanaFrentes(graphFake('Organismo', [relacion('rel1','n0','n1')], [ruta('route1',['n0','n1'])]), openingFake());
+        var p = C1C1_PROMPT_SELECT_FRONTS(ventana);
+        return p.indexOf('trigger concreto') > -1 && p.indexOf('requiere una Tensión') === -1 && p.indexOf('No crees Tensión') > -1;
+      })());
+
+      chk('C1-10/11/12 · Misma lógica en los tres dominios: el bloque de REGLAS del prompt es idéntico sin importar el contenido de la ventana', (function(){
+        function ventanaDe(nombre, relLabel){
+          return C1C1_ventanaFrentes(graphFake(nombre, [relacion('rel1','n0','n1')], [ruta('route1',['n0','n1'])]), openingFake());
+        }
+        var pHumano = C1C1_PROMPT_SELECT_FRONTS(ventanaDe('Estudio de diseño'));
+        var pBio = C1C1_PROMPT_SELECT_FRONTS(ventanaDe('Colonia de hongos'));
+        var pAbstracto = C1C1_PROMPT_SELECT_FRONTS(ventanaDe('Metodología de consultoría'));
+        function reglas(p){ return p.substring(p.indexOf('REGLAS:')); }
+        var sinRamaPorTipo = C1C1_PROMPT_SELECT_FRONTS.toString().indexOf('.tipo') === -1 &&
+          C1C1_ventanaFrentes.toString().indexOf('.tipo') === -1;
+        return reglas(pHumano) === reglas(pBio) && reglas(pBio) === reglas(pAbstracto) && sinRamaPorTipo;
+      })());
+
+      chk('C1-13 · Caso biológico B2 denso: si el modelo marca 3 Frentes activos, la política deja solo 1 activo y hasta 2 latentes', (function(){
+        var fronts = [frenteRaw('f1','active',['route1']), frenteRaw('f2','active',['route2']), frenteRaw('f3','active',['route3'])];
+        var r = C1C1_aplicarPoliticaFrentes(fronts, 'f2');
+        var activos = fronts.filter(function(f){ return f.status === 'active'; });
+        var latentes = fronts.filter(function(f){ return f.status === 'latent'; });
+        return r.activeFrontId === 'f2' && activos.length === 1 && latentes.length === 2;
+      })());
+
+      chk('C1-14 · Fusión: routeRefs/relationRefs de un Frente fusionado preservan ambas rutas de origen', (function(){
+        var texto = marker([frenteRaw('f1','active',['route1','route2'], { routeRefs:['route1','route2'], relationRefs:['rel1','rel2'] })], 'f1');
+        var parsed = C1C1_parseContextFronts(texto, { routeIds: ['route1','route2'], relationIds: ['rel1','rel2'] });
+        return parsed && parsed.fronts[0].routeRefs.length === 2 && parsed.fronts[0].relationRefs.length === 2;
+      })());
+
+      chk('C1-15 · Prioridad recalculable: cambiar priority no requiere tocar id/formulation/triggerRefs', (function(){
+        var texto = marker([frenteRaw('f1','active',['route1'], { priority:'medium' })], 'f1');
+        var parsed = C1C1_parseContextFronts(texto, { routeIds: ['route1'], relationIds: [] });
+        var f = parsed.fronts[0];
+        var idAntes = f.id, formAntes = f.formulation, refsAntes = f.triggerRefs.slice();
+        f.priority = 'high';
+        return f.priority === 'high' && f.id === idAntes && f.formulation === formAntes && JSON.stringify(f.triggerRefs) === JSON.stringify(refsAntes);
+      })());
+
+      chk('C1-16 · Inmutabilidad: todo el proceso permanece read-only respecto del Organismo real', (function(){
+        var o = { id:'o_c1c1_inm', nombre:'Inmutable', tipo:'empresa', ficha:{funcion:'integrar'}, principios:[] };
+        guardarOrganismo(o);
+        var antes = JSON.stringify(o);
+        var g = graphFake('Inmutable', [relacion('rel1','n0','n1')], [ruta('route1',['n0','n1'])]);
+        C1C1_ventanaFrentes(g, openingFake());
+        var texto = marker([frenteRaw('f1','active',['route1'])], 'f1');
+        C1C1_parseContextFronts(texto, { routeIds:['route1'], relationIds:['rel1'] });
+        var src = C1C1_ventanaFrentes.toString() + C1C1_parseContextFronts.toString() + C1C1_aplicarPoliticaFrentes.toString() + selectContextFronts.toString();
+        var sinEscritura = src.indexOf('guardarOrganismo') === -1 && src.indexOf('persistirOrganismos') === -1;
+        return JSON.stringify(o) === antes && sinEscritura;
+      })());
+
+      chk('C1-17 · Una llamada máxima normal: como mucho un fetch por ejecución, nunca una llamada por ruta', (function(){
+        var src = C1C1_llamarIA.toString() + selectContextFronts.toString() + C1C1_parseContextFronts.toString() + C1C1_PROMPT_SELECT_FRONTS.toString();
+        var unSoloFetch = (src.match(/fetch\s*\(/g) || []).length === 1;
+        var unSoloLlamarIA = (selectContextFronts.toString().match(/C1C1_llamarIA\s*\(/g) || []).length === 1;
+        return unSoloFetch && unSoloLlamarIA;
+      })());
+
+      // C1-18 · Compatibilidad general: no es un chk() individual -- ES correr correrPruebasAuto()
       // completo en vivo, ver PENDIENTES.md para el resultado real de esa corrida.
     })();
 
