@@ -965,6 +965,7 @@ header .spacer{flex:1}
         localStorage.setItem('ag_core_saldo', JSON.stringify({ saldo: Number(saldo), momento: Date.now() }));
       }
       if(typeof renderCred === 'function') renderCred();
+      if(typeof avisoUmbralCreditos === 'function') avisoUmbralCreditos();
     }catch(e){}
   }
 
@@ -3740,7 +3741,7 @@ function adjuntarDiagnosticoPro(datos, ciudad, origen, silencioso, forzarDestino
    esto NO es un diagnóstico Pro de Urbanismo/Contextos (o.diagnosticos_pro) ni una
    lectura conversacional (o.lecturas_negocio) — es una evaluación estructurada aparte,
    en o.evaluaciones_negocio_pro[]. La ficha confirmada (o.ficha) no se toca acá. */
-function adjuntarEvaluacionNegocioPro(datos, silencioso, forzarDestino){
+function adjuntarEvaluacionNegocioPro(datos, silencioso, forzarDestino, forzadoDesde){
   let destino = forzarDestino || null;
   if(!destino){
     const idm = datos.organismo_id || null;
@@ -3827,7 +3828,9 @@ function adjuntarEvaluacionNegocioPro(datos, silencioso, forzarDestino){
     (sintesisProyectiva ? '. Proyectivo (v' + ultimoProy.version + '): ' + sintesisProyectiva : '') +
     (resumenEjecucion ? '. ' + resumenEjecucion : '') +
     (resumenDecisiones ? '. Campo de decisiones (v' + ultimoCD.version + '): ' + resumenDecisiones : '');
-  destino.evaluaciones_negocio_pro.push({ version: version, fecha: new Date().toISOString(), resumen: resumen, datos: datos });
+  // 17/08: "forzado" deja rastro cuando Javier eligió importar igual pese a un organismo de
+  // origen que no coincidía (ver ejecutarImportForzado) -- null en el camino normal.
+  destino.evaluaciones_negocio_pro.push({ version: version, fecha: new Date().toISOString(), resumen: resumen, datos: datos, forzado: forzadoDesde || null });
   destino.actualizado = new Date().toISOString();
   destino.avisoImportacionPro = true;   // 14/08: punto rojo en Tu espacio -- se limpia al abrir el organismo
   guardarOrganismo(destino);
@@ -3870,7 +3873,9 @@ function importarProParaOrganismo(org, textoJSON){
   }
   if(esProductoNegociosPro(datos)){
     const nombreOrigen = datos.marco_origen && datos.marco_origen.organismo;
-    ejecutarImportForzado(org, nombreOrigen, function(){ adjuntarEvaluacionNegocioPro(datos, false, org); });
+    ejecutarImportForzado(org, nombreOrigen, function(forzado, nombreReal){
+      adjuntarEvaluacionNegocioPro(datos, false, org, forzado ? nombreReal : null);
+    });
     return;
   }
   cerrarTuEspacio();
@@ -3879,7 +3884,11 @@ function importarProParaOrganismo(org, textoJSON){
 function ejecutarImportForzado(org, nombreOrigen, aplicar){
   const coincide = !nombreOrigen || normalizarNombre(nombreOrigen) === normalizarNombre(org.nombre);
   cerrarTuEspacio();
-  if(coincide){ aplicar(); return; }
+  // 17/08: aplicar() ahora recibe (forzado, nombreOrigen) -- antes no dejaba rastro de que el
+  // organismo de origen no coincidía. false/undefined en el camino directo (coincide o sin
+  // nombreOrigen), true + el nombre real cuando Javier eligió "importar igual" a propósito.
+  // Los demás callers de aplicar() no leen argumentos, así que esto no rompe nada existente.
+  if(coincide){ aplicar(false); return; }
   el.cardContent.innerHTML = '';
   const h = document.createElement('h3'); h.textContent = '¿Importar en «' + org.nombre + '» de todos modos?';
   const p1 = document.createElement('p');
@@ -3888,7 +3897,7 @@ function ejecutarImportForzado(org, nombreOrigen, aplicar){
   const b1 = document.createElement('button'); b1.className = 'btn'; b1.textContent = 'Cancelar';
   b1.onclick = cerrarOverlay;
   const b2 = document.createElement('button'); b2.className = 'btn primary'; b2.textContent = 'Importar en «' + org.nombre + '»';
-  b2.onclick = function(){ cerrarOverlay(); aplicar(); };
+  b2.onclick = function(){ cerrarOverlay(); aplicar(true, nombreOrigen); };
   row.appendChild(b1); row.appendChild(b2);
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
@@ -3965,6 +3974,49 @@ function credEstado(){
   }catch(e){}
   return { plan: plan, clave: clave, usado: usado, extra: extra, total: total, resta: resta,
            renueva: etiquetaVentana(plan) };
+}
+
+/* 17/08: aviso de créditos al 75%/90% del límite -- PENDIENTES.md punto 5 del panel lateral.
+   No existía en ningún lado: cardCreditos() es pasiva (solo se ve si el usuario la abre) y
+   cardSinCreditos() recién salta en 0. Se dispara desde anotarSaldo(), el único punto por el
+   que pasa el saldo REAL del servidor (llega en cada respuesta autenticada, vía el wrapper de
+   fetch de más arriba) -- no hace falta un chequeo aparte en cada llamada a la IA.
+   Dedup por ventana de facturación (credEstado().clave): una vez avisado un umbral dentro de la
+   misma clave, no se repite -- se guarda en ag_core_aviso_credito, aparte de ag_core_cred (que
+   es el conteo, no el aviso). Si sube el umbral (de 75 a 90) dentro de la misma clave, sí avisa
+   de nuevo, una vez. */
+function avisoUmbralCreditos(){
+  try{
+    const c = credEstado();
+    if(!c.total) return;
+    const pctUsado = (c.total - c.resta) / c.total;
+    const umbral = pctUsado >= 0.9 ? 90 : (pctUsado >= 0.75 ? 75 : null);
+    if(!umbral) return;
+    let marca = null;
+    try{ marca = JSON.parse(localStorage.getItem('ag_core_aviso_credito') || 'null'); }catch(e){}
+    if(marca && marca.clave === c.clave && marca.umbral >= umbral) return;   // ya avisado este umbral (o uno mayor) en esta ventana
+    localStorage.setItem('ag_core_aviso_credito', JSON.stringify({ clave: c.clave, umbral: umbral }));
+    if(el.overlay.classList.contains('open')) return;   // no interrumpir algo que ya está en pantalla
+    cardAvisoCreditos(umbral, c);
+  }catch(e){}
+}
+function cardAvisoCreditos(umbral, c){
+  el.cardContent.innerHTML = '';
+  const h = document.createElement('h3');
+  h.textContent = umbral >= 90 ? 'Te estás por quedar sin créditos' : 'Vas por el 75% de tus créditos';
+  const p1 = document.createElement('p');
+  p1.textContent = 'Te quedan ' + c.resta + ' de ' + c.total + ' créditos de tu plan ' + c.plan.nombre +
+    ', se renuevan cada ' + c.renueva + '.';
+  const p2 = document.createElement('p');
+  p2.textContent = 'Tus organismos y fichas están intactos -- nada se pierde si se agotan, solo esperás a que se renueven o pasás a un plan mayor.';
+  el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(p2);
+  const row = document.createElement('div'); row.className='cardrow';
+  const b1 = document.createElement('button'); b1.className='btn'; b1.textContent='Entendido'; b1.onclick = cerrarOverlay;
+  const b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Ver planes';
+  b2.onclick = function(){ cerrarOverlay(); window.mostrarPlanes('ampliar'); };
+  row.appendChild(b1); row.appendChild(b2);
+  el.cardContent.appendChild(row);
+  el.overlay.classList.add('open');
 }
 
 /* ============ N2 · RECORRIDO DE LA COMPRENSIÓN ============
@@ -7504,6 +7556,14 @@ function cardBancoPruebas(){
 window.correrPruebas = function(){ return correrPruebasAuto(); };
 document.addEventListener('keydown', function(e){ if(e.ctrlKey && e.altKey && (e.key === 'p' || e.key === 'P')){ e.preventDefault(); cardBancoPruebas(); } });
 window.addEventListener('hashchange', function(){ if(location.hash === '#pruebas') cardBancoPruebas(); });
+// 17/08: deep-link para los botones "El ciclo de comprensión"/"Ayuda" del panel lateral de
+// Negocios Pro (y, más adelante, Urbanismo/Contextos) -- abren index.html#ciclo / #ayuda en
+// pestaña nueva en vez de duplicar el contenido de estos paneles en cada Pro (ver comentario
+// en construirTuEspacioConfig() de negocios.html). Mismo criterio que #pruebas, arriba.
+window.addEventListener('hashchange', function(){
+  if(location.hash === '#ciclo') mostrarCiclo();
+  if(location.hash === '#ayuda') mostrarAyuda();
+});
 
 /* ================= PWA · instalar la app (10/08) =================
    Registra el service worker mínimo (sw.js, sin caché -- ver su propio comentario) y
@@ -7530,6 +7590,8 @@ mostrarOnboarding(false);
 sincronizarOrganismosConServidor();   // Corte 0.5
 intentarAbrirOrganismoDesdeURL();     // Corte I: caso comun, ya esta en localStorage
 if(location.hash === '#pruebas') cardBancoPruebas();
+if(location.hash === '#ciclo') mostrarCiclo();
+if(location.hash === '#ayuda') mostrarAyuda();
 </script>
 </body>
 </html>

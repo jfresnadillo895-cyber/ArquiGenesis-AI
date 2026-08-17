@@ -693,6 +693,7 @@ header header .cai-ham{flex-shrink:0}
         localStorage.setItem('ag_core_saldo', JSON.stringify({ saldo: Number(saldo), momento: Date.now() }));
       }
       if(typeof renderCred === 'function') renderCred();
+      if(typeof avisoUmbralCreditos === 'function') avisoUmbralCreditos();
     }catch(e){}
   }
 
@@ -1456,11 +1457,11 @@ header header .cai-ham{flex-shrink:0}
       excluye:[],
       boton:'Elegir Profesional',
       destacado:false },
-    { id:'estudio', nombre:'Comprender · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
+    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
       lema:'Para estudios y prácticas profesionales con mayor escala',
       incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
       excluye:[],
-      boton:'Elegir Comprender · Estudio',
+      boton:'Elegir Pro · Estudio',
       destacado:true }
   ];
 
@@ -1476,7 +1477,7 @@ header header .cai-ham{flex-shrink:0}
 
     var aviso = '';
     if(motivo === 'sin_saldo')     aviso = 'Se te terminaron los créditos.';
-    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Comprender · Estudio.';
+    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Pro · Estudio.';
 
     var tarjetas = PLANES.map(function(p){
       var creditosItem = '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
@@ -1561,7 +1562,7 @@ header header .cai-ham{flex-shrink:0}
     Array.prototype.forEach.call(capa.querySelectorAll('button[data-plan]'), function(b){
       b.addEventListener('click', function(){
         var plan = b.getAttribute('data-plan');
-        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Comprender · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
+        var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Pro · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
         b.disabled = true; b.textContent = 'Preparando…'; estado.textContent = '';
         tokenVigente().then(function(t){
           if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
@@ -3386,7 +3387,7 @@ document.addEventListener('click', function(e){
 const CRED_PLANES = {
   gratis:      { nombre:'Gratis',        creditos: 50,   ventana:'unica' },
   profesional: { nombre:'Profesional',   creditos: 1800, ventana:'mes' },
-  estudio:     { nombre:'Comprender · Estudio', creditos: 4500, ventana:'mes' },
+  estudio:     { nombre:'Pro · Estudio', creditos: 4500, ventana:'mes' },
   magister:    { nombre:'Magister',      creditos: 9000, ventana:'mes' }   /* 03/08: faltaba -- un suscriptor Magister caia en 'gratis' aca */
 };
 const CRED_COSTO = { diagnostico: 12, proyectivo: 8, refinamiento: 3, campo: 12 };
@@ -3560,6 +3561,43 @@ function credSinCreditos(tipo){
   card.appendChild(h); card.appendChild(p1); card.appendChild(p2); card.appendChild(row);
   caiAbrir();
 }
+/* 17/08: aviso de créditos al 75%/90% -- mismo criterio que index.html/urbanismo.html
+   (PENDIENTES.md punto 5), adaptado al kit cai- de este archivo. Se dispara desde
+   anotarSaldo(). Dedup por credEstado().clave en ag_core_aviso_credito. */
+function avisoUmbralCreditos(){
+  try{
+    const c = credEstado();
+    if(!c.total) return;
+    const pctUsado = (c.total - c.resta) / c.total;
+    const umbral = pctUsado >= 0.9 ? 90 : (pctUsado >= 0.75 ? 75 : null);
+    if(!umbral) return;
+    let marca = null;
+    try{ marca = JSON.parse(localStorage.getItem('ag_core_aviso_credito') || 'null'); }catch(e){}
+    if(marca && marca.clave === c.clave && marca.umbral >= umbral) return;
+    localStorage.setItem('ag_core_aviso_credito', JSON.stringify({ clave: c.clave, umbral: umbral }));
+    const ov = document.getElementById('cai-ov');
+    if(ov && ov.classList.contains('open')) return;
+    cardAvisoCreditos(umbral, c);
+  }catch(e){}
+}
+function cardAvisoCreditos(umbral, c){
+  const card = caiOverlay(); card.innerHTML = '';
+  const h = document.createElement('h3');
+  h.textContent = umbral >= 90 ? 'Te estás por quedar sin créditos' : 'Vas por el 75% de tus créditos';
+  const p1 = document.createElement('p');
+  p1.textContent = 'Te quedan ' + c.resta + ' de ' + c.total + ' créditos de tu plan ' + c.plan.nombre +
+    ', se renuevan cada ' + c.renueva + '.';
+  const p2 = document.createElement('p');
+  p2.textContent = 'Tus diagnósticos están intactos -- nada se pierde si se agotan, solo esperás a que se renueven o pasás a un plan mayor.';
+  const row = document.createElement('div'); row.className = 'cai-row';
+  const b1 = document.createElement('button'); b1.className = 'cai-btn'; b1.textContent = 'Entendido'; b1.onclick = caiCerrar;
+  const b2 = document.createElement('button'); b2.className = 'cai-btn pri'; b2.textContent = 'Ver planes';
+  b2.onclick = function(){ caiCerrar(); window.mostrarPlanes('ampliar'); };
+  row.appendChild(b1); row.appendChild(b2);
+  card.appendChild(h); card.appendChild(p1); card.appendChild(p2); card.appendChild(row);
+  caiAbrir();
+}
+
 function caiMensaje(titulo, texto){
   const card = caiOverlay(); card.innerHTML='';
   const h=document.createElement('h3'); h.textContent=titulo;

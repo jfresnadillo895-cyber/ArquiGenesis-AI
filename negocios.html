@@ -170,6 +170,22 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 #teConfig{padding:6px;flex:1;overflow-y:auto;display:flex;flex-direction:column}
 @media (prefers-reduced-motion:reduce){ #tuEspacio{transition:none} }
 
+/* 17/08: "Evaluaciones anteriores", movida de pantallaInicio al panel lateral, scoped al
+   organismo actual -- ver PENDIENTES.md, diseño cerrado 14/08. */
+#teContinuidad{padding:14px 16px 6px;border-bottom:1px solid #E2DFD8;max-height:46vh;overflow-y:auto}
+.te-cont-organismo{font-size:13.5px;font-weight:600;color:#1C2A3A;margin-bottom:2px}
+.te-cont-titulo{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;
+  color:#94A0AD;text-transform:uppercase;margin-bottom:8px}
+.te-cont-fila{padding:9px 0;border-top:1px solid #EEEBE4}
+.te-cont-fila:first-of-type{border-top:none}
+.te-cont-meta{font-size:11.5px;color:#5C6B7D;margin-bottom:3px}
+.te-cont-resumen{font-size:12px;color:#1C2A3A;line-height:1.4;margin-bottom:6px}
+.te-cont-aviso{font-size:11px;color:#C1553F;margin-bottom:6px;line-height:1.4}
+.te-cont-acciones{display:flex;gap:6px}
+.te-cont-btn{font-size:11.5px;padding:5px 10px;border-radius:6px;border:1px solid #E2DFD8;
+  background:#FFF;color:#1C2A3A;cursor:pointer;font-family:'IBM Plex Sans',sans-serif}
+.te-cont-btn.pri{background:var(--acento);color:#FFF;border-color:var(--acento)}
+
 /* ---------- menú de módulos -- mismo botón de 4 cuadraditos que index.html. */
 #modulosMenu{position:fixed;z-index:9050;background:#FFF;border:1px solid #E2DFD8;border-radius:14px;
   padding:6px;min-width:200px;box-shadow:0 12px 34px rgba(28,42,58,.16);display:none;flex-direction:column}
@@ -204,6 +220,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
 <div id="teFondo"></div>
 <div id="tuEspacio">
   <div id="teTop">Comprender AI</div>
+  <div id="teContinuidad" style="display:none"></div>
   <div id="teConfig"></div>
 </div>
 <div id="modulosMenu"></div>
@@ -228,13 +245,21 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
   </div>
 
   <div id="cajaOrganismo" class="aviso" style="display:none"></div>
+  <!-- 17/08: reescrito -- diseño cerrado con Javier (PENDIENTES.md): los organismos se crean
+       SOLO en el Core, nunca acá. Antes este texto ofrecía "continuar sin organismo" como
+       camino igual de válido; ahora el Core es la acción principal (con botón propio) y la
+       opción sin organismo queda como nota secundaria, con su consecuencia real explícita. -->
   <div id="cajaSinOrganismo" class="aviso">
-    Todavía no recibí un organismo del Core. Abrí este módulo desde el organismo que querés evaluar — ícono de 4 cuadraditos (arriba a la derecha) → <b>Negocios</b> — y volvé a esta pantalla con el marco ya cargado. También podés continuar sin organismo vinculado, a modo de prueba: la evaluación se genera igual, pero sin <code>organismo_id</code> para incorporar del otro lado.
+    <p>Todavía no recibí un organismo del Core. Los organismos se crean ahí — abrí el que querés evaluar (o creá uno nuevo) y, desde el ícono de 4 cuadraditos (arriba a la derecha), elegí <b>Negocios</b> para volver a esta pantalla con el marco ya cargado.</p>
+    <div class="acciones" style="margin-top:14px">
+      <button type="button" class="btn" onclick="caiIrA('index.html')">Ir al Core</button>
+    </div>
+    <p class="hint" style="margin-top:14px">¿Solo querés probar cómo funciona? Podés continuar sin organismo vinculado más abajo, pero la evaluación queda suelta: no vas a poder incorporarla a ningún organismo después.</p>
   </div>
   <!-- N3.0-B: banner de borrador recuperable, construido en JS por renderCajaBorrador() -->
   <div id="cajaBorrador" class="aviso" style="display:none"></div>
-  <!-- N3.2: lista de evaluaciones cerradas continuables/visibles, construida en JS por renderListaContinuidad() -->
-  <div id="cajaContinuidad" style="display:none"></div>
+  <!-- 17/08: "Evaluaciones anteriores" se movió al panel lateral (#teContinuidad), scoped al
+       organismo actual -- ver construirTeContinuidad(). Ya no vive acá. -->
 
   <div class="form-card">
     <h3>Tipo de evaluación</h3>
@@ -851,6 +876,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
         localStorage.setItem('ag_core_saldo', JSON.stringify({ saldo: Number(saldo), momento: Date.now() }));
       }
       if(typeof renderCred === 'function') renderCred();
+      if(typeof avisoUmbralCreditos === 'function') avisoUmbralCreditos();
     }catch(e){}
   }
 
@@ -2034,6 +2060,66 @@ function permitirOperacion(){
   if(!moduloHabilitado()){ moduloBloqueado(); return false; }
   return true;
 }
+
+/* 17/08: aviso de créditos al 75%/90% -- PENDIENTES.md punto 5. Negocios no tiene credEstado()
+   (no duplica la estimación local de Urbanismo/Contextos, ver comentario de permitirOperacion()
+   arriba), así que este chequeo arma su propio total por plan -- mismos números que
+   PLANES en index.html y creditos_de() en la base (gratis 50, profesional 1800, estudio 4500,
+   magister 9000), es la misma duplicación ya reconocida en ANEXO_ESQUEMA_SQL.md, no una nueva.
+   Se dispara desde anotarSaldo(). Dedup por ventana de facturación en ag_core_aviso_credito. */
+var CRED_TOTALES_NEG = {
+  gratis:      { creditos: 50,   ventana: 'unica' },
+  profesional: { creditos: 1800, ventana: 'mes' },
+  estudio:     { creditos: 4500, ventana: 'mes' },
+  magister:    { creditos: 9000, ventana: 'mes' }
+};
+function credEstadoNeg(){
+  var id = credPlan();
+  var p = CRED_TOTALES_NEG[id] || CRED_TOTALES_NEG.gratis;
+  var nombre = (CRED_PLANES[id] && CRED_PLANES[id].nombre) || id;
+  var clave = p.ventana === 'unica' ? 'bienvenida' : new Date().toISOString().slice(0, 7);
+  var resta = p.creditos;
+  try{
+    var s = JSON.parse(localStorage.getItem('ag_core_saldo') || 'null');
+    if(s && typeof s.saldo === 'number') resta = s.saldo;
+  }catch(e){}
+  return { total: p.creditos, resta: Math.max(0, resta), clave: clave,
+           renueva: p.ventana === 'mes' ? 'mes' : 'única vez', nombre: nombre };
+}
+function avisoUmbralCreditos(){
+  try{
+    var c = credEstadoNeg();
+    if(!c.total) return;
+    var pctUsado = (c.total - c.resta) / c.total;
+    var umbral = pctUsado >= 0.9 ? 90 : (pctUsado >= 0.75 ? 75 : null);
+    if(!umbral) return;
+    var marca = null;
+    try{ marca = JSON.parse(localStorage.getItem('ag_core_aviso_credito') || 'null'); }catch(e){}
+    if(marca && marca.clave === c.clave && marca.umbral >= umbral) return;
+    localStorage.setItem('ag_core_aviso_credito', JSON.stringify({ clave: c.clave, umbral: umbral }));
+    var ov = document.getElementById('cai-ov');
+    if(ov && ov.classList.contains('open')) return;
+    cardAvisoCreditos(umbral, c);
+  }catch(e){}
+}
+function cardAvisoCreditos(umbral, c){
+  var card = caiOverlay(); card.innerHTML = '';
+  var h = document.createElement('h3');
+  h.textContent = umbral >= 90 ? 'Te estás por quedar sin créditos' : 'Vas por el 75% de tus créditos';
+  var p1 = document.createElement('p');
+  p1.textContent = 'Te quedan ' + c.resta + ' de ' + c.total + ' créditos de tu plan ' + c.nombre +
+    ', se renuevan cada ' + c.renueva + '.';
+  var p2 = document.createElement('p');
+  p2.textContent = 'Tus evaluaciones están intactas -- nada se pierde si se agotan, solo esperás a que se renueven o pasás a un plan mayor.';
+  var row = document.createElement('div'); row.className = 'cai-row';
+  var b1 = document.createElement('button'); b1.className = 'cai-btn'; b1.textContent = 'Entendido'; b1.onclick = caiCerrar;
+  var b2 = document.createElement('button'); b2.className = 'cai-btn pri'; b2.textContent = 'Ver planes';
+  b2.onclick = function(){ caiCerrar(); window.mostrarPlanes('ampliar'); };
+  row.appendChild(b1); row.appendChild(b2);
+  card.appendChild(h); card.appendChild(p1); card.appendChild(p2); card.appendChild(row);
+  caiAbrir();
+}
+
 var NAV_CORE = { nombre: 'Comprender AI', archivo: 'index.html' };
 function caiIrA(archivo){ try{ window.open(archivo, '_blank'); }catch(e){ location.href = archivo; } }
 function caiNavItems(){
@@ -2066,11 +2152,18 @@ function caiAbrir(){ document.getElementById('cai-ov').classList.add('open'); }
 function caiCerrar(){ var o = document.getElementById('cai-ov'); if(o) o.classList.remove('open'); }
 
 /* ---- Tu espacio (panel lateral) -- mismo formato que index.html/urbanismo.html/
-   contextos.html. Negocios Pro N2.1 mantiene esta sección deliberadamente mínima:
-   solo Avisos y Cuenta -- no incluye todavía Ciclo/Ayuda/Tu opinión/Acerca de,
-   porque ese contenido no forma parte del recorrido aprobado para este incremento. */
+   contextos.html. Negocios Pro N2.1 mantenía esta sección deliberadamente mínima (solo
+   Avisos y Cuenta). 17/08, diseño cerrado con Javier (PENDIENTES.md punto 6): se suman
+   "El ciclo de comprensión" y "Ayuda" para tener siempre presente la posición dentro del
+   ciclo mientras se está adentro de un Pro -- PERO sin duplicar el contenido: Ayuda tiene 6
+   pestañas (Uso/Tus datos/Ciclo/Referencia/Tu opinión/Acerca de) construidas contra el
+   overlay propio de index.html, reconstruirlas acá hubiera sido mucho código con riesgo de
+   desincronizarse con el tiempo (mismo patrón de bug que Corte M). Javier eligió la opción
+   liviana: los dos botones abren index.html en pestaña nueva (mismo patrón que caiIrA(), no
+   se pierde la sesión de Negocios Pro), el contenido real sigue viviendo en un solo lugar. */
 function abrirTuEspacio(){
   construirTuEspacioConfig();
+  construirTeContinuidad();
   document.getElementById('teFondo').classList.add('open');
   document.getElementById('tuEspacio').classList.add('open');
 }
@@ -2096,9 +2189,29 @@ function construirTuEspacioConfig(){
   cfg.appendChild(bAvisos);
   var bCuenta = document.createElement('button');
   bCuenta.className = 'cai-item';
-  bCuenta.textContent = 'Cuenta';
+  var bCuentaTitulo = document.createElement('div');
+  bCuentaTitulo.textContent = 'Cuenta';
+  var bCuentaCorreo = document.createElement('div');
+  bCuentaCorreo.style.cssText = 'font-size:11px;color:var(--tenue);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+  bCuenta.appendChild(bCuentaTitulo);
+  bCuenta.appendChild(bCuentaCorreo);
   bCuenta.addEventListener('click', function(){ cerrarTuEspacio(); if(window.mostrarCuentaComprender) window.mostrarCuentaComprender(); });
   cfg.appendChild(bCuenta);
+  var bCiclo = document.createElement('button');
+  bCiclo.className = 'cai-item';
+  bCiclo.textContent = 'El ciclo de comprensión';
+  bCiclo.addEventListener('click', function(){ cerrarTuEspacio(); caiIrA('index.html#ciclo'); });
+  cfg.appendChild(bCiclo);
+  var bAyuda = document.createElement('button');
+  bAyuda.className = 'cai-item';
+  bAyuda.textContent = 'Ayuda';
+  bAyuda.addEventListener('click', function(){ cerrarTuEspacio(); caiIrA('index.html#ayuda'); });
+  cfg.appendChild(bAyuda);
+  if(window.obtenerCorreoActivoComprender){
+    window.obtenerCorreoActivoComprender().then(function(correo){
+      bCuentaCorreo.textContent = correo || '';
+    });
+  }
   if(window.actualizarContadorBandejaComprender) window.actualizarContadorBandejaComprender();
 }
 
@@ -2838,58 +2951,80 @@ function renderCajaBorrador(){
   caja.style.display = 'block';
 }
 
-/* N3.2, punto 5 del diff aprobado: sección de "Continuar / Ver" en la pantalla de Inicio, debajo
-   del banner de borrador de N3.0-B (que sigue intacto). No es una pantalla nueva -- una sección
-   más de pantallaInicio, mismo criterio que renderCajaBorrador(). Por organismo se muestra
-   siempre la última entrada (recomendada) y, además, cualquier entrada anterior que siga
-   "continuable" sin estar superada (corrección de Javier sobre elegibilidad, punto 2) -- nunca se
-   oculta un ciclo vivo que nadie retomó todavía. */
-function renderListaContinuidad(){
-  var caja = document.getElementById('cajaContinuidad');
+/* 17/08: "Evaluaciones anteriores" movida del centro (pantallaInicio) al panel lateral --
+   diseño cerrado con Javier el 14/08, PENDIENTES.md puntos 1-3. Tres cambios respecto de la
+   renderListaContinuidad() original (conservada en el historial de versiones si hace falta
+   volver atrás): (1) vive en el panel lateral, no en pantallaInicio; (2) scoped SOLO al
+   organismo actual (state.organismoId) -- ya no itera todos los organismos de la cuenta, así
+   que el nombre del organismo pasa a ser el título de la sección en vez de repetirse por fila;
+   (3) cada fila muestra fecha de CIERRE real (entrada.datos.generado, sin hora -- la versión ya
+   alcanza para distinguir varios análisis del mismo día), estado del ciclo explícito
+   (Abierto/Cerrado en vez de solo mencionar el caso "sin cerrar"), y un aviso si esa entrada se
+   importó con "forzado" (ver ejecutarImportForzado()/adjuntarEvaluacionNegocioPro() en
+   index.html, 17/08) -- antes esa discrepancia no dejaba ningún rastro visible. */
+function construirTeContinuidad(){
+  var caja = document.getElementById('teContinuidad');
   if(!caja) return;
-  var organismos = cargarOrganismosNegocio().filter(function(o){
-    return Array.isArray(o.evaluaciones_negocio_pro) && o.evaluaciones_negocio_pro.length;
-  });
-  if(!organismos.length){ caja.style.display = 'none'; caja.innerHTML = ''; return; }
-
   caja.innerHTML = '';
-  var titulo = document.createElement('h3');
-  titulo.textContent = 'Evaluaciones anteriores';
-  caja.appendChild(titulo);
+  if(!state.organismoId){ caja.style.display = 'none'; return; }
+  var org = cargarOrganismosNegocio().find(function(o){ return o.id === state.organismoId; });
+  var todas = (org && Array.isArray(org.evaluaciones_negocio_pro)) ? org.evaluaciones_negocio_pro : [];
+  if(!todas.length){ caja.style.display = 'none'; return; }
 
-  organismos.forEach(function(org){
-    var todas = org.evaluaciones_negocio_pro;
-    var ultima = todas[todas.length - 1];
-    var filas = [];
-    todas.forEach(function(entrada, i){
-      var esUltima = (i === todas.length - 1);
-      var st = estadoLongitudinalEvaluacion(entrada, todas);
-      if(esUltima || (st.continuar && entrada.version !== ultima.version)) filas.push({ entrada: entrada, st: st, recomendada: esUltima });
-    });
-    filas.forEach(function(f){
-      var fila = document.createElement('div');
-      fila.className = 'fila-continuidad';
-      fila.style.cssText = 'border-top:1px solid #eee;padding:10px 0;';
-      var p = document.createElement('p');
-      p.className = 'hint';
-      var fecha = new Date(f.entrada.fecha).toLocaleString('es-AR');
-      p.innerHTML = '<b>' + escaparHtml(org.nombre) + '</b> · v' + f.entrada.version + (f.recomendada ? ' (última)' : '')
-        + ' · ' + fecha + (f.st.continuar ? ' · ciclo de ejecución sin cerrar' : '') + '<br>' + escaparHtml(f.entrada.resumen || '');
-      fila.appendChild(p);
-      var acciones = document.createElement('div'); acciones.className = 'acciones';
-      var bVer = document.createElement('button'); bVer.className = 'btn secundario';
-      bVer.textContent = 'Ver';
-      bVer.onclick = (function(orgId, v){ return function(){ verEvaluacionHistorica(orgId, v); }; })(org.id, f.entrada.version);
-      acciones.appendChild(bVer);
-      if(f.st.continuar){
-        var bCont = document.createElement('button'); bCont.className = 'btn';
-        bCont.textContent = 'Continuar';
-        bCont.onclick = (function(orgId, v){ return function(){ continuarEvaluacionHistorica(orgId, v); }; })(org.id, f.entrada.version);
-        acciones.appendChild(bCont);
-      }
-      fila.appendChild(acciones);
-      caja.appendChild(fila);
-    });
+  var tOrg = document.createElement('div');
+  tOrg.className = 'te-cont-organismo';
+  tOrg.textContent = state.organismoNombre || org.nombre || 'Este organismo';
+  caja.appendChild(tOrg);
+  var tLabel = document.createElement('div');
+  tLabel.className = 'te-cont-titulo';
+  tLabel.textContent = 'Evaluaciones anteriores';
+  caja.appendChild(tLabel);
+
+  var ultima = todas[todas.length - 1];
+  todas.forEach(function(entrada, i){
+    var esUltima = (i === todas.length - 1);
+    var st = estadoLongitudinalEvaluacion(entrada, todas);
+    // Misma elegibilidad que antes: siempre la última, más cualquier ciclo vivo sin retomar.
+    if(!esUltima && !(st.continuar && entrada.version !== ultima.version)) return;
+
+    var fila = document.createElement('div');
+    fila.className = 'te-cont-fila';
+
+    var fechaCierre = (entrada.datos && entrada.datos.generado) ? new Date(entrada.datos.generado) : new Date(entrada.fecha);
+    var fechaTxt = fechaCierre.toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' });
+    var meta = document.createElement('div');
+    meta.className = 'te-cont-meta';
+    meta.textContent = 'v' + entrada.version + (esUltima ? ' (última)' : '') + ' · ' + fechaTxt
+      + ' · ' + (st.continuar ? 'Abierto' : 'Cerrado');
+    fila.appendChild(meta);
+
+    if(entrada.resumen){
+      var resumen = document.createElement('div');
+      resumen.className = 'te-cont-resumen';
+      resumen.textContent = entrada.resumen;
+      fila.appendChild(resumen);
+    }
+
+    if(entrada.forzado){
+      var aviso = document.createElement('div');
+      aviso.className = 'te-cont-aviso';
+      aviso.textContent = 'Importada acá aunque el origen registrado era «' + entrada.forzado + '».';
+      fila.appendChild(aviso);
+    }
+
+    var acciones = document.createElement('div'); acciones.className = 'te-cont-acciones';
+    var bVer = document.createElement('button'); bVer.className = 'te-cont-btn';
+    bVer.textContent = 'Ver';
+    bVer.onclick = (function(orgId, v){ return function(){ cerrarTuEspacio(); verEvaluacionHistorica(orgId, v); }; })(org.id, entrada.version);
+    acciones.appendChild(bVer);
+    if(st.continuar){
+      var bCont = document.createElement('button'); bCont.className = 'te-cont-btn pri';
+      bCont.textContent = 'Continuar';
+      bCont.onclick = (function(orgId, v){ return function(){ cerrarTuEspacio(); continuarEvaluacionHistorica(orgId, v); }; })(org.id, entrada.version);
+      acciones.appendChild(bCont);
+    }
+    fila.appendChild(acciones);
+    caja.appendChild(fila);
   });
   caja.style.display = 'block';
 }
@@ -2911,7 +3046,8 @@ function pintarInicio(){
     cajaNo.style.display = 'block';
   }
   renderCajaBorrador();   // N3.0-B: banner de "continuar / empezar de cero" si hay borrador
-  renderListaContinuidad();   // N3.2: evaluaciones cerradas continuables/visibles
+  // 17/08: "Evaluaciones anteriores" ya no se pinta acá -- ver construirTeContinuidad(), en el
+  // panel lateral, llamada desde abrirTuEspacio().
 }
 function escaparHtml(s){
   var d = document.createElement('div');
