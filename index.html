@@ -4506,7 +4506,9 @@ window.debugOpenField = function(organismoId, question, intention){
    ============================================================================ */
 
 var C1B2_MODEL = 'claude-sonnet-4-6';
-var C1B2_MAX_TOKENS = 1700;
+var C1B2_MAX_TOKENS = 2600;   // ajustado 17/08 tras verificación en vivo: 1700 cortaba el marcador
+                               // a mitad de camino cuando el modelo decide propagar varias rutas
+                               // (hasta 4) a la vez con justificación rica -- ver PENDIENTES.md
 var C1B2_MAX_DEPTH = 3;              // saltos desde el Organismo (n0 = 0, hasta profundidad 3)
 var C1B2_MAX_RELATIONS_TOTAL = 12;   // presupuesto del grafo de trabajo -- política, no ontológico
 /* Mismos 6 valores que C1B1_EPISTEMIC_STATES -- copia propia intencional, mismo criterio que
