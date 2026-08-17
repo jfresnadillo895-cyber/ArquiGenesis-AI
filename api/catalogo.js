@@ -34,19 +34,19 @@ export const PLANES = {
     monto: 30000,      // ARS, lo que se cobra
     umbral: 20000,     // ARS, minimo para reconocer este plan en un webhook
     creditos: 1800,    // informativo -- la fuente real es creditos_de() en Postgres
-    ls_variant_id: 1977811,   // Lemon Squeezy, cargado 03/08 -- para RECONOCER el plan en el webhook
-    ls_checkout_uuid: '533faf86-65c8-46d5-ad7f-bd1b16287e93',   // para ARMAR el link de checkout (distinto del variant_id)
+    ls_variant_id: 2018880,   // Lemon Squeezy, LIVE MODE (cargado 14/08, reemplaza el de test) -- para RECONOCER el plan en el webhook
+    ls_checkout_uuid: '6ad9844e-ca2b-4b50-bac8-310d516c1abd',   // LIVE MODE -- para ARMAR el link de checkout (distinto del variant_id)
     ls_precio_usd: 19,        // USD/mes, mercado internacional (Corte B.6)
   },
   estudio: {
     id: 'estudio',
-    nombre: 'Comprender · Estudio',
-    titulo: 'Comprender · Estudio',
+    nombre: 'Pro · Estudio',
+    titulo: 'Pro · Estudio',
     monto: 80000,
     umbral: 60000,
     creditos: 4500,
-    ls_variant_id: 1977954,
-    ls_checkout_uuid: '69919784-a22e-40d4-81ff-55c5e661885b',
+    ls_variant_id: 2018881,   // LIVE MODE (cargado 14/08, reemplaza el de test)
+    ls_checkout_uuid: '5c6710b6-12ae-4997-8d51-f0736b316bb1',   // LIVE MODE
     ls_precio_usd: 49,
   },
   magister: {
