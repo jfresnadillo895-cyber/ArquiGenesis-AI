@@ -3698,6 +3698,175 @@ window.debugBloqueRecuerdos = function(organismoId, situacionActual, ventanaReci
   return { candidates: sel.candidates, bloque: bloque };
 };
 
+/* ============ CONTEXTOS UNIVERSAL · CORTE C1-A1 -- OrganismSnapshotAdapter (17/08) ============
+   Primer corte técnico de Contextos Universal (distinto del Contextos Legacy ligado a
+   Urbanismo -- ver deslinde en PENDIENTES.md). Capa nueva, aislada y READ-ONLY: convierte el
+   Organismo real, tal cual quedó después de Memoria Viva M1-M2, en un OrganismSnapshot
+   inmutable. Cero IA, cero rememoración activa (no llama seleccionarRecuerdosCandidatos ni
+   bloqueRecuerdosParaContexto -- M2.2/M2.3 existen pero este corte no las ejecuta, ver regla 6
+   del encargo), cero escritura (nunca llama guardarOrganismo/persistirOrganismos), cero
+   interpretación nueva (no arma relaciones, no detecta tensiones nuevas, no produce Foco/Retorno).
+   No se engancha a buildSystem() ni a ningún flujo real todavía -- Core/Urbanismo/Negocios/
+   Contextos Legacy quedan sin ningún cambio observable.
+   Adaptado a lo que el Organismo real tiene HOY (auditoría 17/08), no al contrato conceptual
+   completo del encargo -- ver 'missingCapabilities' más abajo para lo que no se pudo reconstruir
+   con fiabilidad, y PENDIENTES.md para el detalle campo por campo. */
+
+/* Fuentes reales de "interpretación heredada" (regla 8): lecturas/evaluaciones producidas por
+   Core o las especialidades ANTES de este Snapshot. Cada una entra marcada como interpretación,
+   nunca como evidencia -- el Snapshot no decide si siguen siendo válidas hoy. */
+var C1A1_FUENTES_HEREDADAS = [
+  { campo:'lecturas_urban',           modulo:'urbanismo_legacy', tipo:'lectura_territorial' },
+  { campo:'lecturas_negocio',         modulo:'negocios_legacy',  tipo:'lectura_negocio' },
+  { campo:'evaluaciones_context',     modulo:'contextos_legacy', tipo:'evaluacion_de_campo' },
+  { campo:'evaluaciones_negocio_pro', modulo:'negocios_pro',     tipo:'evaluacion_estructurada' },
+  { campo:'diagnosticos_pro',         modulo:'importado_pegado', tipo:'diagnostico_pro_importado' },
+  { campo:'proyectivos',              modulo:'core',             tipo:'lectura_proyectiva' }
+];
+
+function C1A1_identity(o){
+  return { name: o.nombre || null, type: o.tipo || null, campoDe: o.campo_de || null };
+}
+
+/* boundary: el Organismo real no tiene HOY ningún campo de borde/delimitación (auditado --
+   no existe 'borde'/'limite'/'delimitacion' en ninguna parte del modelo). No se infiere (regla
+   9): siempre null en este corte, sea cual sea el organismo. Punto de extensión futuro, no de
+   este corte. */
+function C1A1_boundary(o){ return null; }
+
+/* currentMemory = Memoria vigente = o.ficha. Mismo criterio de campos visibles que ya usa el
+   resto del Core (CAMPOS_OCULTOS/camposVisibles): 'modo' es código de contrato M01-M09, nunca
+   texto visible (D-01 · H02, arquitectura protegida) -- Contextos Universal es un consumidor
+   nuevo, no una excepción a esa regla. */
+function C1A1_currentMemory(o){
+  var f = (o && o.ficha) || {};
+  return {
+    function:     (typeof f.funcion === 'string' && f.funcion)     ? f.funcion     : null,
+    tensions:     (typeof f.tensiones === 'string' && f.tensiones) ? f.tensiones   : null,
+    diagnosis:    (typeof f.diagnostico === 'string' && f.diagnostico) ? f.diagnostico : null,
+    next:         (typeof f.proximo === 'string' && f.proximo)     ? f.proximo     : null,
+    nextPending:  (typeof f.proximos === 'string' && f.proximos)   ? f.proximos    : null,
+    principles: (Array.isArray(o.principios) ? o.principios : []).map(function(p){
+      return { text: (p && p.texto) || null, family: (p && p.fam) || null };
+    }),
+    other: null   // el Organismo real no tiene un campo "misceláneo" -- no se inventa uno
+  };
+}
+
+/* memories: se apoya en M2.1 (obtenerRecuerdos), no reimplementa nada. refs = vista compacta
+   (recuerdoCompacto) que M2.1 ya expone -- id/title/createdAt/source/field/organismVersion, sin
+   before/after/summary. El contenido completo sigue disponible vía obtenerRecuerdoPorId(), como
+   siempre (regla 5: por referencia, sin copiar todo el historial a cada Snapshot). */
+function C1A1_memories(o){
+  var refs = obtenerRecuerdos(o, { compacto:true });
+  return { available: refs.length > 0, count: refs.length, refs: refs };
+}
+
+/* openQuestions: única fuente real y explícita de "pregunta abierta" en el Organismo hoy es
+   o.horizonte.pregunta (Corte J) -- horizonte es singular (el más reciente reemplaza al
+   anterior), así que como máximo hay una. No se inventa una lista a partir de o.ficha.proximo
+   (eso ya vive en currentMemory.next, no se duplica acá). */
+function C1A1_openQuestions(o){
+  var h = o && o.horizonte;
+  if(!h || typeof h.pregunta !== 'string' || !h.pregunta.trim()) return [];
+  return [{ text: h.pregunta, source: 'horizonte', fecha: h.fecha || null }];
+}
+
+function C1A1_resumenDe(entrada){
+  if(entrada && typeof entrada.resumen === 'string' && entrada.resumen) return entrada.resumen;
+  if(entrada && typeof entrada.texto === 'string' && entrada.texto) return entrada.texto;
+  return null;   // lecturas_urban/lecturas_negocio guardan 'dimensiones' estructuradas, no un
+                 // resumen de una línea -- no se aplana acá, ver missingCapabilities
+}
+
+function C1A1_inheritedInterpretations(o){
+  var out = [];
+  C1A1_FUENTES_HEREDADAS.forEach(function(f){
+    var lista = (o && Array.isArray(o[f.campo])) ? o[f.campo] : [];
+    lista.forEach(function(entrada){
+      out.push({
+        sourceModule: f.modulo,
+        kind: f.tipo,
+        version: (typeof entrada.version === 'number') ? entrada.version : null,
+        fecha: entrada.fecha || null,
+        origin: entrada.origen || null,   // hoy solo diagnosticos_pro lo trae ('urbanismo'/'contextos')
+        summary: C1A1_resumenDe(entrada),
+        nature: 'interpretacion_heredada'   // nunca 'evidencia' -- regla 8, sin excepción
+      });
+    });
+  });
+  return out;
+}
+
+/* provenance: mapa chico por COLECCIÓN, no taxonomía fina por dato individual (regla 7: "no
+   crear una taxonomía enorme si el Core actual no la tiene"). */
+function C1A1_provenance(o){
+  return {
+    currentMemory: 'memoria_vigente_gobernada_por_lazo_propuesta_confirmacion',
+    memories: 'recuerdo_creado_solo_al_confirmar_una_propuesta',
+    inheritedInterpretations: 'interpretacion_de_especialidad_legacy_pro_o_importada_pegada',
+    openQuestions: 'horizonte_propuesto_y_confirmado_por_el_lazo_de_hitos',
+    principles: 'append_only_sin_lazo_de_confirmacion_propio'   // deuda de gobernanza N1.0 ya documentada
+  };
+}
+
+/* missingCapabilities: lo que este corte NO puede reconstruir con fiabilidad a partir del
+   Organismo real -- documentado en vez de inventado (regla 7). */
+function C1A1_missingCapabilities(o){
+  return [
+    'boundary_explicito',
+    'evidencias_planas',
+    'relaciones_estructuradas',
+    'taxonomia_provenencia_por_dato',
+    'resumen_plano_de_lecturas_urban_y_negocio'
+  ];
+}
+
+/* ---- OrganismSnapshotAdapter: punto de entrada único de C1-A1 ---- */
+function OrganismSnapshotAdapter(o){
+  if(!o || typeof o !== 'object') return null;
+  var snap = {
+    organismId: o.id || null,
+    organismVersion: fichaVersion(o),
+    capturedAt: new Date().toISOString(),
+    identity: C1A1_identity(o),
+    boundary: C1A1_boundary(o),
+    currentMemory: C1A1_currentMemory(o),
+    memories: C1A1_memories(o),
+    knownRelations: [],   // no existe hoy una colección de relaciones estructuradas (solo texto
+                           // libre en hito.relaciones) -- no se inventa, ver missingCapabilities
+    knownTensions: [],    // ya cubierto por currentMemory.tensions -- no se duplica (regla 4)
+    knownFunctions: [],   // ídem, ya cubierto por currentMemory.function -- no se duplica
+    openQuestions: C1A1_openQuestions(o),
+    evidenceRefs: [],     // las evidencias existen solo anidadas por dimensión dentro de
+                           // evaluaciones_negocio_pro.datos -- no se aplanan en este corte
+    inheritedInterpretations: C1A1_inheritedInterpretations(o),
+    availableCapabilities: { memoryRecall: true },   // capacidad del SISTEMA (M2.1-M2.3 existen);
+                           // distinto de memories.available, que es si ESTE organismo ya tiene
+                           // recuerdos
+    provenance: C1A1_provenance(o),
+    missingCapabilities: C1A1_missingCapabilities(o)
+  };
+  // Inmutabilidad dura (regla 10): clon profundo final vía JSON -- ninguna referencia al
+  // Organismo real sobrevive, sin importar cómo se haya construido cada pieza arriba. Mismo
+  // patrón ya usado en el archivo (JSON.parse(JSON.stringify(...)) en aplicarPropuesta()).
+  return JSON.parse(JSON.stringify(snap));
+}
+
+/* Laboratorio interno C1 (regla 12): solo consola, sin UI nueva -- mismo criterio que
+   window.debugBloqueRecuerdos de M2.3. Elige un organismo real por id, arma el Snapshot, lo
+   muestra, y de paso confirma que no mutó nada (regla 10). */
+window.debugOrganismSnapshot = function(organismoId){
+  var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
+  if(!o){ console.warn('[C1-A1] organismo no encontrado:', organismoId); return null; }
+  var antes = JSON.stringify(o);
+  var snap = OrganismSnapshotAdapter(o);
+  var despues = JSON.stringify(cargarOrganismos().find(function(x){ return x.id === organismoId; }));
+  console.log('[C1-A1] OrganismSnapshot:', snap);
+  console.log('[C1-A1] Organismo sin mutar (antes === después):', antes === despues);
+  return snap;
+};
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
@@ -8088,6 +8257,160 @@ function correrPruebasAuto(){
       // M2.4-16 · Regresión general: no es un chk() individual -- ES correr correrPruebasAuto()
       // completo (Core + isolation de Urbanismo/Negocios/Contextos vía Grep) en vivo, ver
       // PENDIENTES.md para el resultado real de esa corrida.
+    })();
+
+    /* ---- Contextos Universal · Corte C1-A1 (17/08) -- OrganismSnapshotAdapter ---- */
+    (function(){
+      function organismoRico(){
+        return {
+          id:'o_c1a1_rico', nombre:'Estudio Rico', tipo:'empresa', campo_de:null,
+          creado:'2025-01-01T00:00:00.000Z', actualizado:'2025-06-01T00:00:00.000Z',
+          ficha:{ funcion:'integrar', modo:'M03', tensiones:'demanda desconectada de la propuesta',
+                  diagnostico:'la propuesta no llega a quien la necesita', proximo:'mapear canales reales',
+                  proximos:'validar con 3 clientes', version:4 },
+          principios:[ { texto:'no vender lo que no se puede sostener', fam:'espacio' } ],
+          recuerdos:[
+            { id:'r1', title:'Cambio de función', createdAt:'2025-02-01T00:00:00.000Z', source:'core',
+              field:['funcion'], before:{funcion:'diferenciar'}, after:{funcion:'integrar'},
+              summary:'Función vigente: integrar', organismVersion:1, originRef:{propuestaId:'p1',turno:2,resuelto_como:'confirmada'} },
+            { id:'r2', title:'Diagnóstico actualizado', createdAt:'2025-03-01T00:00:00.000Z', source:'core',
+              field:['diagnostico'], before:{diagnostico:''}, after:{diagnostico:'primer diagnóstico'},
+              summary:'Diagnóstico vigente: primer diagnóstico', organismVersion:2, originRef:{propuestaId:'p2',turno:5,resuelto_como:'confirmada'} }
+          ],
+          horizonte:{ fecha:'2025-05-01T00:00:00.000Z', observar:'canales de venta', pregunta:'¿el canal actual alcanza para escalar?',
+                      relacion:null, consecuencias:null, escala:null, accion:null, cuando:null },
+          hitos:[ { fecha:'2025-04-01T00:00:00.000Z', etapa:'diagnóstico cerrado', comprendimos:'x', tension_principal:'y', relaciones:null, que_cambio:'z' } ],
+          lecturas_urban:[ { version:1, fecha:'2025-02-15T00:00:00.000Z', dimensiones:[{cod:'D1',estado:'tensionada'}] } ],
+          lecturas_negocio:[ { version:1, fecha:'2025-02-20T00:00:00.000Z', dimensiones:[{cod:'B1',estado:'estable'}] } ],
+          evaluaciones_context:[ { version:1, fecha:'2025-02-25T00:00:00.000Z', fuerzas:['x'], campo:'y' } ],
+          evaluaciones_negocio_pro:[ { version:1, fecha:'2025-03-10T00:00:00.000Z', resumen:'B1 estable, B3 tensionada', datos:{dimensiones:[]} } ],
+          diagnosticos_pro:[ { origen:'urbanismo', version:1, fecha:'2025-03-15T00:00:00.000Z', resumen:'lectura territorial pegada', datos:{} } ],
+          proyectivos:[ { version:1, alcance:'integrado', texto:'si el canal no escala, revisar el modelo', fecha:'2025-04-10T00:00:00.000Z' } ]
+        };
+      }
+      function organismoMinimo(){
+        return { id:'o_c1a1_min', nombre:'Mínimo', tipo:'empresa', ficha:{}, principios:[] };
+      }
+
+      chk('A1-01 · Organismo rico: Snapshot conserva correctamente la Memoria y estructuras realmente disponibles', (function(){
+        var o = organismoRico(); var s = OrganismSnapshotAdapter(o);
+        return s.identity.name === 'Estudio Rico' &&
+               s.currentMemory.function === 'integrar' &&
+               s.currentMemory.tensions === 'demanda desconectada de la propuesta' &&
+               s.currentMemory.principles.length === 1 && s.currentMemory.principles[0].family === 'espacio' &&
+               s.memories.count === 2 &&
+               s.openQuestions.length === 1 && s.openQuestions[0].text === o.horizonte.pregunta &&
+               s.inheritedInterpretations.length === 6 &&
+               s.availableCapabilities.memoryRecall === true;
+      })());
+
+      chk('A1-02 · Organismo mínimo: información ausente queda ausente, sin invenciones', (function(){
+        var o = organismoMinimo(); var s = OrganismSnapshotAdapter(o);
+        return s.currentMemory.function === null && s.currentMemory.tensions === null &&
+               s.currentMemory.diagnosis === null && s.currentMemory.next === null &&
+               s.currentMemory.nextPending === null && s.currentMemory.principles.length === 0 &&
+               s.memories.available === false && s.memories.count === 0 && s.memories.refs.length === 0 &&
+               s.openQuestions.length === 0 && s.inheritedInterpretations.length === 0 &&
+               s.boundary === null && s.knownRelations.length === 0 && s.knownTensions.length === 0 &&
+               s.knownFunctions.length === 0 && s.evidenceRefs.length === 0;
+      })());
+
+      chk('A1-03 · Memoria Viva: reconoce Memoria vigente y disponibilidad de recuerdos', (function(){
+        var o = organismoRico(); var s = OrganismSnapshotAdapter(o);
+        return s.currentMemory.diagnosis === o.ficha.diagnostico &&
+               s.currentMemory.next === o.ficha.proximo &&
+               s.memories.available === true && s.memories.count === 2 &&
+               s.availableCapabilities.memoryRecall === true;
+      })());
+
+      chk('A1-04 · Recuerdos por referencia: sin cargar indiscriminadamente toda su profundidad', (function(){
+        var o = organismoRico(); var s = OrganismSnapshotAdapter(o);
+        var ref = s.memories.refs[0];
+        var claves = Object.keys(ref).sort().join(',');
+        var sinProfundidad = claves.indexOf('before') === -1 && claves.indexOf('after') === -1 && claves.indexOf('summary') === -1;
+        var completoSigueDisponible = !!obtenerRecuerdoPorId(o, ref.id).before;
+        return sinProfundidad && completoSigueDisponible;
+      })());
+
+      chk('A1-05 · Recuerdo ≠ evidencia: ningún recuerdo se transforma en prueba factual independiente', (function(){
+        var o = organismoRico(); var s = OrganismSnapshotAdapter(o);
+        var refsTxt = JSON.stringify(s.memories.refs);
+        var sinFlagDeVerdad = refsTxt.indexOf('vigente') === -1 && refsTxt.indexOf('evidencia') === -1;
+        // la memoria vigente sale SOLO de o.ficha, nunca se mezcla con el contenido de recuerdos
+        var memoriaSoloDeFicha = s.currentMemory.function === o.ficha.funcion;
+        return sinFlagDeVerdad && memoriaSoloDeFicha;
+      })());
+
+      chk('A1-06 · Interpretación heredada: lecturas Core/Urbanismo/Negocios/Contextos Legacy conservan su naturaleza de interpretación heredada', (function(){
+        var o = organismoRico(); var s = OrganismSnapshotAdapter(o);
+        var todasMarcadas = s.inheritedInterpretations.every(function(x){ return x.nature === 'interpretacion_heredada'; });
+        var modulos = {}; s.inheritedInterpretations.forEach(function(x){ modulos[x.sourceModule] = true; });
+        var seisDistintos = Object.keys(modulos).length === 6;
+        return todasMarcadas && seisDistintos;
+      })());
+
+      chk('A1-07 · Proveniencia: se conserva cuando realmente está disponible', (function(){
+        var o = organismoRico(); var s = OrganismSnapshotAdapter(o);
+        var diag = s.inheritedInterpretations.filter(function(x){ return x.kind === 'diagnostico_pro_importado'; })[0];
+        var provenanceCompleto = s.provenance.currentMemory && s.provenance.memories &&
+                                  s.provenance.inheritedInterpretations && s.provenance.openQuestions;
+        return diag && diag.origin === 'urbanismo' && !!provenanceCompleto;
+      })());
+
+      chk('A1-08 · Boundary ausente: no se inventa una delimitación', (function(){
+        var o1 = organismoMinimo(); var o2 = organismoRico();
+        o2.limite = 'campo que no es parte del contrato';   // no debe confundirse con boundary real
+        var s1 = OrganismSnapshotAdapter(o1), s2 = OrganismSnapshotAdapter(o2);
+        return s1.boundary === null && s2.boundary === null;
+      })());
+
+      chk('A1-09 · Inmutabilidad fuente: generar Snapshot no modifica el Organismo', (function(){
+        var o = organismoRico(); var antes = JSON.stringify(o);
+        OrganismSnapshotAdapter(o);
+        return JSON.stringify(o) === antes;
+      })());
+
+      chk('A1-10 · Desacople de referencias: modificar el Snapshot no modifica el Organismo', (function(){
+        var o = organismoRico(); var s = OrganismSnapshotAdapter(o);
+        s.identity.name = 'HACKEADO';
+        s.memories.refs.push({id:'fantasma'});
+        if(s.currentMemory.principles.length) s.currentMemory.principles[0].text = 'HACKEADO';
+        return o.nombre === 'Estudio Rico' && o.recuerdos.length === 2 &&
+               o.principios[0].texto === 'no vender lo que no se puede sostener';
+      })());
+
+      chk('A1-11 · Compatibilidad M1-M2: no altera Recordar, recuperar, seleccionar ni rememorar', (function(){
+        var src = OrganismSnapshotAdapter.toString() + C1A1_identity.toString() + C1A1_boundary.toString() +
+                  C1A1_currentMemory.toString() + C1A1_memories.toString() + C1A1_openQuestions.toString() +
+                  C1A1_inheritedInterpretations.toString() + C1A1_provenance.toString() + C1A1_missingCapabilities.toString();
+        var noEjecutaRememoracion = src.indexOf('seleccionarRecuerdosCandidatos') === -1 &&
+                                     src.indexOf('bloqueRecuerdosParaContexto') === -1 &&
+                                     src.indexOf('bloqueRecuerdosDeSesion') === -1;
+        var m1m2Intactas = typeof crearRecuerdo === 'function' && typeof obtenerRecuerdos === 'function' &&
+                            typeof seleccionarRecuerdosCandidatos === 'function' && typeof bloqueRecuerdosDeSesion === 'function';
+        return noEjecutaRememoracion && m1m2Intactas;
+      })());
+
+      chk('A1-12 · Aislamiento: ningún cambio observable en Core, Urbanismo, Negocios ni Contextos Legacy', (function(){
+        // buildSystem() -- el único punto real de integración de M2.3 -- no menciona C1-A1: el
+        // Snapshot no está enganchado a ningún flujo real todavía, tal como pide el encargo.
+        return typeof buildSystem === 'function' && buildSystem.toString().indexOf('OrganismSnapshotAdapter') === -1;
+      })());
+
+      chk('A1-13 · Sin IA: cero llamadas nuevas al modelo', (function(){
+        var src = OrganismSnapshotAdapter.toString() + C1A1_identity.toString() + C1A1_boundary.toString() +
+                  C1A1_currentMemory.toString() + C1A1_memories.toString() + C1A1_openQuestions.toString() +
+                  C1A1_inheritedInterpretations.toString() + C1A1_provenance.toString() + C1A1_missingCapabilities.toString();
+        return !/fetch\s*\(/.test(src) && !/anthropic/i.test(src) && !/api\//i.test(src);
+      })());
+
+      chk('A1-14 · Persistencia: crear un Snapshot no produce ninguna escritura ni cambio de versión', (function(){
+        var o = organismoRico(); var versionAntes = fichaVersion(o);
+        var src = OrganismSnapshotAdapter.toString();
+        var sinEscritura = src.indexOf('guardarOrganismo') === -1 && src.indexOf('persistirOrganismos') === -1;
+        OrganismSnapshotAdapter(o);
+        return sinEscritura && fichaVersion(o) === versionAntes;
+      })());
     })();
 
     /* ---- N2.2 · compatibilidad del resumen con evaluaciones N2.1 sin tension_principal ---- */
