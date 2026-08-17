@@ -8352,8 +8352,12 @@ function correrPruebasAuto(){
       }finally{
         if(_pl === null) localStorage.removeItem('ag_core_plan'); else localStorage.setItem('ag_core_plan', _pl);
       }
+      // Fix 17/08: quedó desactualizado desde que Negocios Pro salió con archivo propio
+      // (negocios.html) -- ACCESO_MODULOS.negocios tiene archivo hace tiempo, así que
+      // modulosDisponibles() correctamente devuelve también 'negocios'. La expectativa
+      // vieja ('urbanismo,contextos') era la lista de antes de ese lanzamiento.
       chk('C11 · sólo se ofrecen los módulos que tienen archivo',
-          modulosDisponibles().join(',') === 'urbanismo,contextos');
+          modulosDisponibles().join(',') === 'urbanismo,contextos,negocios');
       chk('C12 · la tabla declara las siete especialidades',
           Object.keys(ACCESO_MODULOS).length === 7 && !!ACCESO_MODULOS.negocios &&
           ACCESO_MODULOS.trayectoria.prueba_en_gratis === false);
