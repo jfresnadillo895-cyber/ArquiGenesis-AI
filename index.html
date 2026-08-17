@@ -5208,6 +5208,293 @@ window.debugSelectContextFronts = function(organismoId, question, intention){
   });
 };
 
+/* ============================================================================
+   Contextos Universal · C1-C2 — selectNextCognitiveAction() (selector de próxima acción cognitiva)
+   Entrada: Frente activo (de C1-C1) + GraphState (de C1-B2) + Memoria/Recuerdos disponibles.
+   Decide la PRÓXIMA acción cognitiva -- NO la ejecuta. No pregunta, no investiga, no expande el
+   grafo, no crea Tensión/Función/Foco, no escribe Memoria -- ver PENDIENTES.md.
+   ============================================================================ */
+
+var C1C2_MODEL = 'claude-sonnet-4-6';
+var C1C2_MAX_TOKENS = 1600;
+var C1C2_LIMITE_RECUERDOS = 3;   // mismo techo que M2.2/C1-A2/C1-B1, no reinventado
+var C1C2_NIVELES = ['high','medium','low'];
+var C1C2_ACCIONES = ['READ','ASK','RESEARCH','DEEPEN','EXPAND','TRACE','CONTRAST','INTERPRET','CLOSE_FRONT'];
+
+/* Ventana cognitiva compacta (regla 14: una sola llamada, no todo el Campo): el Frente activo con
+   sus relaciones/rutas pertinentes (filtradas por sus propias refs, no el grafo entero), Memoria
+   vigente, y Recuerdos pertinentes -- reutilizando M2.2 (seleccionarRecuerdosCandidatos) y M2.1
+   (obtenerRecuerdoPorId/textoCompactoRecuerdo) tal cual, sin reimplementar recall (regla 7/8). */
+function C1C2_ventanaAccion(snapshot, opening, graphState, front, o){
+  var porId = {};
+  (graphState.nodes || []).forEach(function(n){ porId[n.id] = n; });
+  var relPorId = {};
+  (graphState.relations || []).forEach(function(r){ relPorId[r.id] = r; });
+  var relacionesPertinentes = (front.relationRefs || []).map(function(id){
+    var r = relPorId[id];
+    if(!r) return null;
+    return { id: r.id, from: porId[r.sourceNodeId] ? porId[r.sourceNodeId].label : null,
+      to: porId[r.targetNodeId] ? porId[r.targetNodeId].label : null,
+      manifestation: r.manifestation, possibleIncidence: r.possibleIncidence,
+      epistemicState: r.epistemicState, uncertainty: r.uncertainty, evidenceNeed: r.evidenceNeed,
+      returnRationale: r.returnRationale };
+  }).filter(Boolean);
+  var rutasPertinentes = (front.routeRefs || []).map(function(id){
+    var rt = (graphState.routes || []).filter(function(x){ return x.id === id; })[0];
+    if(!rt) return null;
+    return { id: rt.id, status: rt.status, closureReason: rt.closureReason,
+      path: rt.nodeIds.map(function(nid){ return porId[nid] ? porId[nid].label : nid; }) };
+  }).filter(Boolean);
+
+  var memoriaVigente = snapshot.currentMemory ? {
+    function: snapshot.currentMemory.function, tensions: snapshot.currentMemory.tensions,
+    diagnosis: snapshot.currentMemory.diagnosis
+  } : null;
+
+  var situacion = front.formulation + ' ' + front.uncertainty;
+  var recuerdosTexto = [];
+  var candIds = [];
+  if(o){
+    var recs = obtenerRecuerdos(o);
+    var sel = seleccionarRecuerdosCandidatos({ organismo:o, situacionActual:situacion, recuerdos:recs, limite:C1C2_LIMITE_RECUERDOS });
+    (sel.candidates || []).forEach(function(c){
+      var r = obtenerRecuerdoPorId(o, c.id);
+      if(r){ recuerdosTexto.push(textoCompactoRecuerdo(r)); candIds.push(c.id); }
+    });
+  }
+
+  return {
+    frontId: front.id, formulation: front.formulation, uncertainty: front.uncertainty,
+    possibleIncidence: front.possibleIncidence, priority: front.priority,
+    relacionesPertinentes: relacionesPertinentes, rutasPertinentes: rutasPertinentes,
+    memoriaVigente: memoriaVigente, recuerdosPertinentes: recuerdosTexto,
+    aperturaTexto: 'Pregunta declarada: ' + (opening.question || '(ninguna)') +
+      '\nIntención declarada: ' + (opening.intention || '(ninguna)'),
+    recuerdoIdsOfrecidos: candIds
+  };
+}
+
+/* Prompt propio de C1-C2 (continuación de OPEN/B2/C1, motor propio). Universal entre dominios: no
+   hay ninguna rama por tipo de Organismo en esta función. */
+function C1C2_PROMPT_SELECT_ACTION(ventana){
+  var ventanaTxt = JSON.stringify({
+    frontId: ventana.frontId, formulation: ventana.formulation, uncertainty: ventana.uncertainty,
+    possibleIncidence: ventana.possibleIncidence, priority: ventana.priority,
+    relacionesPertinentes: ventana.relacionesPertinentes, rutasPertinentes: ventana.rutasPertinentes,
+    memoriaVigente: ventana.memoriaVigente,
+    recuerdosPertinentes: ventana.recuerdosPertinentes.length ? ventana.recuerdosPertinentes : '(ninguno pertinente)'
+  }, null, 2);
+  return 'Sos el motor de selección de próxima acción cognitiva (C1-C2) de Contextos Universal -- ' +
+    'continuación de C1-C1, motor propio, sin dimensiones ni sistemas de Contextos Legacy.\n\n' +
+    'PRINCIPIO RECTOR: Contextos no pregunta, investiga ni profundiza por defecto. Elegí la ' +
+    'operación de MENOR costo que pueda reducir de forma significativa la incertidumbre del ' +
+    'Frente activo. Primero reutilizar lo que ya existe (Memoria vigente, evidencia ya disponible, ' +
+    'Recuerdos pertinentes, relaciones/rutas del grafo); recién después considerar una acción que ' +
+    'requiera algo nuevo.\n\n' +
+    ventana.aperturaTexto + '\n\nFRENTE ACTIVO Y SU VENTANA (ya seleccionada, no es todo el ' +
+    'Campo):\n' + ventanaTxt + '\n\n' +
+    'ALFABETO DE ACCIONES (elegí exactamente UNA):\n' +
+    '- READ: la información pertinente YA EXISTE (Memoria vigente, Recuerdo pertinente, grafo, ' +
+    'evidencia ya registrada) pero todavía no fue incorporada a la comprensión del Frente.\n' +
+    '- ASK: el usuario probablemente tiene una información discriminante que NO está disponible ' +
+    'de ninguna otra forma, y que cambiaría significativamente la interpretación.\n' +
+    '- RESEARCH: hace falta comprobar un hecho externo específico y temporal/documental -- tiene ' +
+    'que poder expresarse como un "targetClaim" concreto (ej.: "comprobar si X sigue vigente"), ' +
+    'nunca algo genérico como "conocer mejor el sector" o "investigar tecnología".\n' +
+    '- DEEPEN: la relación ya está identificada pero es demasiado superficial -- necesitamos más ' +
+    'resolución sobre ELLA específicamente (sabemos qué mirar).\n' +
+    '- EXPAND: hace falta descubrir qué existe más allá del nodo/relación actual -- todavía no ' +
+    'sabemos qué hay ahí.\n' +
+    '- TRACE: la cadena ya está sugerida (una ruta con varios saltos) pero el mecanismo de cómo se ' +
+    'conectan sus partes todavía no está reconstruido.\n' +
+    '- CONTRAST: existe una explicación o relación plausible que necesita ponerse a prueba frente ' +
+    'a una alternativa o evidencia contraria.\n' +
+    '- INTERPRET: la información YA es suficiente -- el problema no es falta de datos, es falta de ' +
+    'comprensión de la configuración que esos datos forman.\n' +
+    '- CLOSE_FRONT: seguir probablemente no produciría ganancia suficiente, o el Frente no resulta ' +
+    'resoluble en esta Apertura. Cerrar no es resolver ni declarar falso -- es que no merece más ' +
+    'gasto cognitivo ahora.\n\n' +
+    'REGLAS:\n' +
+    '1. READ != INTERPRET: READ es cuando falta incorporar información que ya existe; INTERPRET es ' +
+    'cuando la información ya está incorporada y lo que falta es comprenderla. No uses READ como ' +
+    'una forma genérica de "seguir pensando".\n' +
+    '2. DEEPEN / EXPAND / TRACE son distintas: DEEPEN mira más de cerca algo que ya identificamos; ' +
+    'EXPAND busca algo que todavía no sabemos que existe; TRACE reconstruye cómo se conecta una ' +
+    'cadena que ya está sugerida. Si en este caso concreto dos te resultan genuinamente ' +
+    'indistinguibles, elegí la más específica igual y decilo en justificationSummary -- no las ' +
+    'fusiones.\n' +
+    '3. ASK tiene que ser costoso aunque sea técnicamente barato: solo elegilo si (a) existe una ' +
+    'incertidumbre concreta, (b) el usuario es una fuente apropiada para resolverla, (c) la ' +
+    'respuesta discriminaría entre interpretaciones o rutas reales, (d) esa información NO está ya ' +
+    'en Memoria/Recuerdos/evidencia, y (e) no hay una acción más económica o fiable. Si elegís ASK, ' +
+    '"requirement.description" tiene que formular la necesidad de la pregunta -- NUNCA generes ni ' +
+    'muestres la pregunta en sí, eso no te corresponde en este paso.\n' +
+    '4. RESEARCH solo si podés expresar "requirement.targetClaim": qué afirmación externa concreta ' +
+    'hay que comprobar y de qué relación depende. Sin eso, no elijas RESEARCH.\n' +
+    '5. Un Recuerdo pertinente puede convertir un ASK en READ si recupera un antecedente ' +
+    'suficiente -- pero ese antecedente sigue siendo histórico, no evidencia de vigencia actual; si ' +
+    'la vigencia importa, correspondería CONTRAST o RESEARCH, no asumir que sigue igual.\n' +
+    '6. Elegí UNA sola acción -- nunca combines ASK+RESEARCH+DEEPEN ni ninguna otra combinación. ' +
+    'No planifiques varios pasos por adelantado.\n' +
+    '7. No ejecutes nada: no preguntes, no investigues, no expandas el grafo, no agregues evidencia, ' +
+    'no reinterpretes, no crees Tensión/Función/Foco, no escribas Memoria. Solo decidís cuál acción ' +
+    'sigue.\n\n' +
+    'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
+    'después. Sé breve. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
+    '[[NEXT_ACTION:{\n' +
+    '  "action": "READ"|"ASK"|"RESEARCH"|"DEEPEN"|"EXPAND"|"TRACE"|"CONTRAST"|"INTERPRET"|"CLOSE_FRONT",\n' +
+    '  "targetRefs": ["rel1","route1","recuerdo:abc"],\n' +
+    '  "uncertaintyAddressed": "...",\n' +
+    '  "expectedGain": "high"|"medium"|"low",\n' +
+    '  "estimatedCost": "low"|"medium"|"high",\n' +
+    '  "requirement": { "type": "...", "description": "...", "targetClaim": "..." } | null,\n' +
+    '  "justificationSummary": "..."\n' +
+    '}]]';
+}
+
+function C1C2_llamarIA(systemPrompt, mensajes){
+  var t0 = Date.now();
+  return fetch(apiEndpoint(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ model: C1C2_MODEL, max_tokens: C1C2_MAX_TOKENS, system: systemPrompt, messages: mensajes })
+  }).then(function(res){
+    return res.json().then(function(data){
+      if(!res.ok || (data && data.error)){
+        throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+      }
+      var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
+    });
+  });
+}
+
+/* Parser defensivo: rechaza toda la respuesta si falta un campo obligatorio, si "action" no es una
+   de las 9 válidas, o si es RESEARCH sin requirement.targetClaim (regla 6, dura -- sin eso no hay
+   RESEARCH válido). ASK sin requirement.description también se rechaza (regla 3: tiene que
+   formular la necesidad). Las refs se filtran contra lo realmente ofrecido (relaciones/rutas del
+   Frente + recuerdos realmente recuperados), nunca se confía en un id inventado. */
+function C1C2_parseNextAction(texto, refsOfrecidas){
+  var re = /\[\[NEXT_ACTION:([\s\S]*?)\]\]/;
+  var m = String(texto || '').match(re);
+  if(!m) return null;
+  var raw;
+  try{ raw = JSON.parse(m[1]); }catch(e){ return null; }
+  if(!raw || typeof raw !== 'object') return null;
+
+  if(C1C2_ACCIONES.indexOf(raw.action) === -1) return null;
+  if(typeof raw.uncertaintyAddressed !== 'string' || !raw.uncertaintyAddressed.trim()) return null;
+  if(C1C2_NIVELES.indexOf(raw.expectedGain) === -1) return null;
+  if(C1C2_NIVELES.indexOf(raw.estimatedCost) === -1) return null;
+  var justificationSummary = (typeof raw.justificationSummary === 'string' && raw.justificationSummary.trim())
+    ? raw.justificationSummary.trim() : null;
+  if(!justificationSummary) return null;
+
+  var idsRuta = (refsOfrecidas && refsOfrecidas.routeIds) || [];
+  var idsRelacion = (refsOfrecidas && refsOfrecidas.relationIds) || [];
+  var idsRecuerdo = (refsOfrecidas && refsOfrecidas.recuerdoIds) || [];
+  function refValida(x){
+    if(typeof x !== 'string') return false;
+    var m2 = /^recuerdo:(.+)$/.exec(x);
+    if(m2) return idsRecuerdo.indexOf(m2[1]) > -1;
+    return idsRuta.indexOf(x) > -1 || idsRelacion.indexOf(x) > -1;
+  }
+  var targetRefs = Array.isArray(raw.targetRefs) ? raw.targetRefs.filter(refValida) : [];
+
+  var requirement = null;
+  if(raw.requirement && typeof raw.requirement === 'object' && !Array.isArray(raw.requirement)){
+    var desc = (typeof raw.requirement.description === 'string' && raw.requirement.description.trim())
+      ? raw.requirement.description.trim() : null;
+    var claim = (typeof raw.requirement.targetClaim === 'string' && raw.requirement.targetClaim.trim())
+      ? raw.requirement.targetClaim.trim() : null;
+    requirement = {
+      type: (typeof raw.requirement.type === 'string' && raw.requirement.type.trim()) ? raw.requirement.type.trim() : null,
+      description: desc, targetClaim: claim
+    };
+  }
+  if(raw.action === 'RESEARCH' && (!requirement || !requirement.targetClaim)) return null;   // regla 6, dura
+  if(raw.action === 'ASK' && (!requirement || !requirement.description)) return null;        // regla 3
+
+  return {
+    action: raw.action, targetRefs: targetRefs, uncertaintyAddressed: raw.uncertaintyAddressed.trim(),
+    expectedGain: raw.expectedGain, estimatedCost: raw.estimatedCost,
+    requirement: requirement, justificationSummary: justificationSummary
+  };
+}
+
+/* ---- selectNextCognitiveAction: punto de entrada único de C1-C2 ---- */
+async function selectNextCognitiveAction(snapshot, opening, graphState, front){
+  if(!snapshot || !opening || !graphState || !front){
+    return { ok:false, motivo:'snapshot, opening, graphState o front ausente' };
+  }
+  if(front.status !== 'active'){
+    return { ok:false, motivo:'selectNextCognitiveAction() requiere un ContextFront con status "active"' };
+  }
+  var o = cargarOrganismos().find(function(x){ return x.id === snapshot.organismId; });   // solo lectura
+  var ventana = C1C2_ventanaAccion(snapshot, opening, graphState, front, o);
+  var prompt = C1C2_PROMPT_SELECT_ACTION(ventana);
+  var res;
+  try{
+    res = await C1C2_llamarIA(prompt, [{ role:'user', content:'(elegí la próxima acción cognitiva para este Frente, si alguna)' }]);
+  }catch(e){
+    return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
+  }
+
+  var refsOfrecidas = {
+    routeIds: (front.routeRefs || []).slice(), relationIds: (front.relationRefs || []).slice(),
+    recuerdoIds: ventana.recuerdoIdsOfrecidos
+  };
+  var parsed = C1C2_parseNextAction(res.texto, refsOfrecidas);
+  if(!parsed){
+    return { ok:false, motivo:'no se pudo interpretar la respuesta del modelo', usage: res.usage,
+             duracionMs: res.duracionMs, textoCrudo: res.texto };
+  }
+
+  var result = {
+    frontId: front.id, action: parsed.action, targetRefs: parsed.targetRefs,
+    uncertaintyAddressed: parsed.uncertaintyAddressed, expectedGain: parsed.expectedGain,
+    estimatedCost: parsed.estimatedCost, requirement: parsed.requirement,
+    justificationSummary: parsed.justificationSummary
+  };
+  result = JSON.parse(JSON.stringify(result));
+  return {
+    ok: true, result: result,
+    telemetry: {
+      llamadasIA: 1, tokensInput: (res.usage && res.usage.input_tokens) || null,
+      tokensOutput: (res.usage && res.usage.output_tokens) || null, duracionMs: res.duracionMs,
+      recuerdosOfrecidos: ventana.recuerdoIdsOfrecidos.length, accionElegida: parsed.action
+    }
+  };
+}
+
+/* Laboratorio interno C1-C2 (extiende el de C1-C1): encadena reconstructOrigin() -> openField() ->
+   propagateField() -> selectContextFronts() -> selectNextCognitiveAction() sobre el Frente activo,
+   si existe. Solo consola, sin UI nueva. */
+window.debugSelectNextCognitiveAction = function(organismoId, question, intention){
+  var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
+  if(!o){ console.warn('[C1-C2] organismo no encontrado:', organismoId); return null; }
+  var snap = OrganismSnapshotAdapter(o);
+  var opening = crearContextOpening(o.id, { basedOnVersion: snap.organismVersion, question: question, intention: intention });
+  return reconstructOrigin(snap, opening).then(function(r1){
+    if(!r1.ok || r1.assessment.status !== 'continue'){ console.warn('[C1-C2] no se llega a openField():', r1.ok?r1.assessment.status:r1.motivo); return { origin:r1 }; }
+    return openField(snap, r1.opening, r1.assessment).then(function(r2){
+      if(!r2.ok){ console.warn('[C1-C2] no se llega a propagateField():', r2.motivo); return { origin:r1, field:r2 }; }
+      return propagateField(snap, r1.opening, r1.assessment, r2.result).then(function(r3){
+        if(!r3.ok){ console.warn('[C1-C2] no se llega a selectContextFronts():', r3.motivo); return { origin:r1, field:r2, graph:r3 }; }
+        return selectContextFronts(r3.result, r1.opening).then(function(r4){
+          if(!r4.ok || !r4.result.activeFrontId){ console.warn('[C1-C2] no hay Frente activo:', r4.ok?r4.result.status:r4.motivo); return { origin:r1, field:r2, graph:r3, fronts:r4 }; }
+          var activo = r4.result.fronts.filter(function(f){ return f.id === r4.result.activeFrontId; })[0];
+          return selectNextCognitiveAction(snap, r1.opening, r3.result, activo).then(function(r5){
+            console.log('[C1-C2] próxima acción:', r5.ok ? r5.result : r5.motivo);
+            if(r5.ok) console.log('[C1-C2] telemetry:', r5.telemetry);
+            return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5 };
+          });
+        });
+      });
+    });
+  });
+};
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
@@ -10473,6 +10760,141 @@ function correrPruebasAuto(){
       })());
 
       // C1-18 · Compatibilidad general: no es un chk() individual -- ES correr correrPruebasAuto()
+      // completo en vivo, ver PENDIENTES.md para el resultado real de esa corrida.
+    })();
+
+    /* ---- Contextos Universal · Corte C1-C2 -- selectNextCognitiveAction() (C2-01..20, C2-21 en vivo) ----
+       Mismo límite que B1-15/B2-05/C1-08: selectNextCognitiveAction() es async, así que lo que
+       depende de la orquestación completa se prueba por análisis estructural del código fuente.
+       El parser (C1C2_parseNextAction) es determinista y síncrono -- se prueba con marcadores
+       sintéticos, sin gastar ninguna llamada real. */
+    (function(){
+      function marker(obj){ return '[[NEXT_ACTION:' + JSON.stringify(obj) + ']]'; }
+      function base(action, extra){
+        var o = { action: action, targetRefs: ['rel1'], uncertaintyAddressed: 'no se sabe algo',
+          expectedGain: 'medium', estimatedCost: 'medium', requirement: null, justificationSummary: 'justificación' };
+        return Object.assign ? Object.assign(o, extra || {}) : (function(){ for(var k in (extra||{})) o[k]=extra[k]; return o; })();
+      }
+      var refs = { routeIds:['route1'], relationIds:['rel1'], recuerdoIds:['rec1'] };
+
+      chk('C2-01 · Información ya disponible: el parser acepta READ sin requirement', (function(){
+        var parsed = C1C2_parseNextAction(marker(base('READ')), refs);
+        return parsed && parsed.action === 'READ';
+      })());
+
+      chk('C2-02 · Recuerdo pertinente: la ventana lo incluye vía M2.2 (reutilizado, no reimplementado)', (function(){
+        var o = { id:'o_c1c2_rec', nombre:'Con Recuerdo', tipo:'empresa', ficha:{funcion:'integrar'}, principios:[],
+          recuerdos: [{ id:'r1', title:'Renegoció condiciones con proveedor secundario', field:['tensiones'],
+            before:{}, after:{}, source:'core', createdAt: new Date().toISOString() }] };
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var front = { id:'f1', formulation:'¿el proveedor secundario tiene incentivos para renegociar condiciones?',
+          uncertainty:'no se sabe si renegoció antes', relationRefs:[], routeRefs:[] };
+        var ventana = C1C2_ventanaAccion(snap, { question:null, intention:null }, { nodes:[], relations:[], routes:[] }, front, o);
+        return ventana.recuerdosPertinentes.length > 0;
+      })());
+
+      chk('C2-03 · ASK discriminante: se acepta con requirement.description; se rechaza sin él (regla 3, dura)', (function(){
+        var conDesc = C1C2_parseNextAction(marker(base('ASK', { requirement:{ type:'ask_need', description:'formula la necesidad', targetClaim:null } })), refs);
+        var sinDesc = C1C2_parseNextAction(marker(base('ASK', { requirement:null })), refs);
+        return conDesc && conDesc.action === 'ASK' && sinDesc === null;
+      })());
+
+      chk('C2-04 · RESEARCH específico: se acepta con requirement.targetClaim; se rechaza sin él (regla 6, dura)', (function(){
+        var conClaim = C1C2_parseNextAction(marker(base('RESEARCH', { requirement:{ type:'research_claim', description:'d', targetClaim:'comprobar si X sigue vigente' } })), refs);
+        var sinClaim = C1C2_parseNextAction(marker(base('RESEARCH', { requirement:{ type:'x', description:'d', targetClaim:null } })), refs);
+        return conClaim && conClaim.action === 'RESEARCH' && conClaim.requirement.targetClaim.indexOf('vigente') > -1 && sinClaim === null;
+      })());
+
+      chk('C2-05/06/07 · DEEPEN/EXPAND/TRACE quedan distinguibles, no se fusionan en el parser', (function(){
+        var d = C1C2_parseNextAction(marker(base('DEEPEN')), refs);
+        var e = C1C2_parseNextAction(marker(base('EXPAND')), refs);
+        var t = C1C2_parseNextAction(marker(base('TRACE')), refs);
+        return d.action === 'DEEPEN' && e.action === 'EXPAND' && t.action === 'TRACE';
+      })());
+
+      chk('C2-08 · CONTRAST: hipótesis plausible que necesita refutación', (function(){
+        var parsed = C1C2_parseNextAction(marker(base('CONTRAST')), refs);
+        return parsed && parsed.action === 'CONTRAST';
+      })());
+
+      chk('C2-09 · INTERPRET: información suficiente, falta comprensión', (function(){
+        var parsed = C1C2_parseNextAction(marker(base('INTERPRET')), refs);
+        return parsed && parsed.action === 'INTERPRET';
+      })());
+
+      chk('C2-10 · CLOSE_FRONT: baja ganancia esperada + costo alto preservados tal cual', (function(){
+        var parsed = C1C2_parseNextAction(marker(base('CLOSE_FRONT', { expectedGain:'low', estimatedCost:'high' })), refs);
+        return parsed && parsed.action === 'CLOSE_FRONT' && parsed.expectedGain === 'low' && parsed.estimatedCost === 'high';
+      })());
+
+      chk('C2-11 · ASK innecesario prohibido: sin requirement.description válido, la respuesta se rechaza entera', (function(){
+        var sinReq = C1C2_parseNextAction(marker(base('ASK', { requirement:null })), refs);
+        var reqVacio = C1C2_parseNextAction(marker(base('ASK', { requirement:{ type:'x', description:'', targetClaim:null } })), refs);
+        return sinReq === null && reqVacio === null;
+      })());
+
+      chk('C2-12 · RESEARCH genérico prohibido: sin targetClaim la respuesta se rechaza entera', (function(){
+        var sinClaim = C1C2_parseNextAction(marker(base('RESEARCH', { requirement:{ type:'x', description:'conocer mejor el sector', targetClaim:null } })), refs);
+        return sinClaim === null;
+      })());
+
+      chk('C2-13 · Una sola acción: el contrato tiene un único campo "action" (string, nunca lista)', (function(){
+        var parsed = C1C2_parseNextAction(marker(base('READ')), refs);
+        var prompt = C1C2_PROMPT_SELECT_ACTION(C1C2_ventanaAccion(
+          { currentMemory:null }, { question:null, intention:null }, { nodes:[], relations:[], routes:[] },
+          { id:'f1', formulation:'x', uncertainty:'y', relationRefs:[], routeRefs:[] }, null));
+        return typeof parsed.action === 'string' && !Array.isArray(parsed.action) &&
+          prompt.indexOf('Elegí UNA sola acción') > -1;
+      })());
+
+      chk('C2-14/15/16 · Misma lógica en los tres dominios: el bloque de REGLAS del prompt es idéntico sin importar el contenido de la ventana', (function(){
+        function ventanaDe(nombre){
+          var front = { id:'f1', formulation:'¿pregunta sobre ' + nombre + '?', uncertainty:'no se sabe X', relationRefs:[], routeRefs:[] };
+          return C1C2_ventanaAccion({ currentMemory:null }, { question:null, intention:null }, { nodes:[], relations:[], routes:[] }, front, null);
+        }
+        var pHumano = C1C2_PROMPT_SELECT_ACTION(ventanaDe('un estudio de diseño'));
+        var pBio = C1C2_PROMPT_SELECT_ACTION(ventanaDe('una colonia de hongos'));
+        var pAbstracto = C1C2_PROMPT_SELECT_ACTION(ventanaDe('una metodología de consultoría'));
+        function reglas(p){ return p.substring(p.indexOf('REGLAS:')); }
+        var sinRamaPorTipo = C1C2_PROMPT_SELECT_ACTION.toString().indexOf('.tipo') === -1 &&
+          C1C2_ventanaAccion.toString().indexOf('.tipo') === -1;
+        return reglas(pHumano) === reglas(pBio) && reglas(pBio) === reglas(pAbstracto) && sinRamaPorTipo;
+      })());
+
+      chk('C2-17 · Recuerdo obsoleto: el prompt exige CONTRAST/RESEARCH en vez de asumir vigencia', (function(){
+        var prompt = C1C2_PROMPT_SELECT_ACTION(C1C2_ventanaAccion(
+          { currentMemory:null }, { question:null, intention:null }, { nodes:[], relations:[], routes:[] },
+          { id:'f1', formulation:'x', uncertainty:'y', relationRefs:[], routeRefs:[] }, null));
+        return prompt.indexOf('no evidencia de vigencia actual') > -1 && prompt.indexOf('CONTRAST o RESEARCH') > -1;
+      })());
+
+      chk('C2-18 · Distancia no determina acción: la ventana/parser no usan profundidad de nodo/ruta como criterio', (function(){
+        var src = C1C2_ventanaAccion.toString() + C1C2_parseNextAction.toString();
+        return src.indexOf('.depth') === -1;
+      })());
+
+      chk('C2-19 · Inmutabilidad: todo el proceso permanece read-only respecto del Organismo real', (function(){
+        var o = { id:'o_c1c2_inm', nombre:'Inmutable', tipo:'empresa', ficha:{funcion:'integrar'}, principios:[] };
+        guardarOrganismo(o);
+        var antes = JSON.stringify(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var front = { id:'f1', formulation:'x', uncertainty:'y', relationRefs:[], routeRefs:[] };
+        C1C2_ventanaAccion(snap, { question:null, intention:null }, { nodes:[], relations:[], routes:[] }, front, o);
+        C1C2_parseNextAction(marker(base('READ')), refs);
+        var src = C1C2_ventanaAccion.toString() + C1C2_parseNextAction.toString() + selectNextCognitiveAction.toString();
+        var sinEscritura = src.indexOf('guardarOrganismo(') === -1 && src.indexOf('persistirOrganismos') === -1;
+        return JSON.stringify(o) === antes && sinEscritura;
+      })());
+
+      chk('C2-20 · Una llamada normal: como mucho un fetch por ejecución', (function(){
+        var src = C1C2_llamarIA.toString() + selectNextCognitiveAction.toString() + C1C2_parseNextAction.toString() + C1C2_PROMPT_SELECT_ACTION.toString();
+        var unSoloFetch = (src.match(/fetch\s*\(/g) || []).length === 1;
+        var unaSolaLlamarIA = (selectNextCognitiveAction.toString().match(/C1C2_llamarIA\s*\(/g) || []).length === 1;
+        return unSoloFetch && unaSolaLlamarIA;
+      })());
+
+      // C2-21 · Compatibilidad general: no es un chk() individual -- ES correr correrPruebasAuto()
       // completo en vivo, ver PENDIENTES.md para el resultado real de esa corrida.
     })();
 
