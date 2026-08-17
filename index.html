@@ -3430,6 +3430,139 @@ function obtenerRecuerdoPorId(o, id){
   return null;
 }
 
+/* ============ MEMORIA VIVA · CORTE M2.2 -- PRESELECCIÓN DE CANDIDATOS (17/08) ============
+   Determinista, sin IA, sin embeddings. NO decide "este recuerdo es relevante" (eso es M2.3):
+   solo reduce el universo de o.recuerdos[] a 0-3 candidatos por coincidencia de términos con la
+   situación presente, para que M2.3 (cuando exista) le dé la llamada IA que el Core ya hace de
+   todas formas, en vez de tener que revisar todo el historial. Read-only total -- no toca
+   o.recuerdos, o.ficha ni llama a guardarOrganismo. NO se engancha a buildSystem() ni al
+   SYSTEM_PROMPT en este corte -- los candidatos quedan disponibles solo para pruebas/consola,
+   el Core sigue respondiendo exactamente igual que antes de M2.2.
+   Principio: pertinencia ≠ recencia. El puntaje sale ÚNICAMENTE de coincidencia de términos; la
+   fecha solo desempata cuando dos recuerdos quedan con el mismo puntaje. */
+
+/* Palabras que NUNCA aportan puntaje: artículos/preposiciones/conectores del español, más los
+   términos genéricos que Javier pidió explícitamente neutralizar (aparecen en casi cualquier
+   conversación y no dicen nada sobre EN QUÉ se parece la situación presente a un recuerdo). */
+var STOPWORDS_ES = ['el','la','los','las','un','una','unos','unas','de','del','al','a','ante','bajo',
+  'cabe','con','contra','desde','en','entre','hacia','hasta','para','por','segun','sin','so','sobre',
+  'tras','y','o','u','ni','que','como','mas','pero','porque','cuando','donde','quien','cual','cuyo',
+  'se','su','sus','lo','le','les','me','te','nos','os','mi','tu','este','esta','estos','estas','ese',
+  'esa','esos','esas','aquel','aquella','aquellos','aquellas','es','son','fue','ser','estar','esta',
+  'estan','hay','ha','han','muy','ya','solo','tambien','tan','no','si','asi','eso','esto','todo',
+  'toda','todos','todas','nos','sobre','entre',
+  'problema','situacion','proyecto','cambio'];   // genéricos pedidos explícitamente por Javier
+var STOPWORDS_ES_SET = (function(){
+  var s = {}; STOPWORDS_ES.forEach(function(w){ s[w] = true; }); return s;
+})();
+/* minúsculas + sin acentos + solo letras/números como separadores -- normalización sencilla,
+   nada de NLP: alcanza para comparar español informal sin falsos negativos por tildes/mayúsculas. */
+function normalizarTexto(s){
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+/* términos "significativos": largo >= 3 y fuera de la lista de stopwords/genéricos. */
+function terminosSignificativos(s){
+  return normalizarTexto(s).filter(function(t){ return t.length >= 3 && !STOPWORDS_ES_SET[t]; });
+}
+/* Texto comparable de un recuerdo, separado por origen (para poder atribuir la señal a de dónde
+   salió). `after` solo entra si el total es corto -- si es muy largo se descarta, a propósito,
+   para no convertir esto en una comparación de documentos completos (regla 4: "si su extensión
+   permite hacerlo razonablemente"). */
+var M22_AFTER_MAX_CHARS = 400;
+function textoComparableDeRecuerdo(r){
+  var partes = {};
+  partes.title = r.title || '';
+  partes.field = (r.field || []).map(function(k){ return CAMPO_LABEL[k] || k; }).join(' ');
+  partes.summary = r.summary || '';
+  partes.source = r.source || '';
+  var afterTxt = '';
+  if(r.after && typeof r.after === 'object'){
+    var vals = Object.keys(r.after).map(function(k){ return r.after[k]; }).filter(function(v){ return typeof v === 'string'; });
+    var total = vals.join(' ');
+    if(total.length && total.length <= M22_AFTER_MAX_CHARS) afterTxt = total;
+  }
+  partes.after = afterTxt;
+  return partes;
+}
+/* Pesos por origen de la coincidencia -- el título pesa más que una mención suelta en `after`,
+   pero ninguno alcanza para decidir nada por sí solo, son solo señales para ORDENAR candidatos. */
+var M22_PESOS = { title:3, field:2, summary:1.5, after:1, source:0.5 };
+function calcularSenalesRecuerdo(terminosQuery, r){
+  var partes = textoComparableDeRecuerdo(r);
+  var senales = [], score = 0;
+  Object.keys(partes).forEach(function(origen){
+    var terminosParte = {};
+    terminosSignificativos(partes[origen]).forEach(function(t){ terminosParte[t] = true; });
+    terminosQuery.forEach(function(t){
+      if(terminosParte[t]){
+        var peso = M22_PESOS[origen] || 1;
+        score += peso;
+        senales.push({ campo: origen, termino: t, peso: peso });
+      }
+    });
+  });
+  return { score: score, senales: senales };
+}
+/* seleccionarRecuerdosCandidatos({ organismo, situacionActual, ventanaReciente, recuerdos, limite })
+   -- organismo: solo se usa para trazabilidad de debug, NO se recorre acá (los recuerdos ya
+      vienen scopeados al organismo correcto vía M2.1, este corte nunca llama a
+      cargarOrganismos()/recuerdosDe() por su cuenta -- opera solo sobre lo que se le pasa).
+   -- situacionActual: string, el turno/situación presente.
+   -- ventanaReciente: opcional, string o array de strings con algo de conversación reciente.
+   -- recuerdos: el arreglo YA recuperado con obtenerRecuerdos() (M2.1) -- este selector no
+      vuelve a leer o.recuerdos.
+   -- limite: default 3 (0-3 pedido por el encargo), configurable, 0 es válido (= sin candidatos).
+   Devuelve { candidates: [...] } -- nunca { relevantMemory:true } ni ninguna afirmación: son
+   CANDIDATOS, la preselección puede equivocarse, M2.3 (cuando exista) decide de verdad. */
+function seleccionarRecuerdosCandidatos(args){
+  var a = args || {};
+  var recuerdos = Array.isArray(a.recuerdos) ? a.recuerdos : [];
+  var limite = (typeof a.limite === 'number' && a.limite >= 0) ? a.limite : 3;
+  if(!recuerdos.length || limite === 0) return { candidates: [] };
+  var textoQuery = a.situacionActual || '';
+  if(a.ventanaReciente){
+    textoQuery += ' ' + (Array.isArray(a.ventanaReciente) ? a.ventanaReciente.join(' ') : a.ventanaReciente);
+  }
+  var terminosQuery = terminosSignificativos(textoQuery);
+  if(!terminosQuery.length) return { candidates: [] };   // nada significativo para comparar -- sin candidatos, no es un error
+  var puntuados = recuerdos.map(function(r){
+    var c = calcularSenalesRecuerdo(terminosQuery, r);
+    return { r: r, score: c.score, senales: c.senales };
+  }).filter(function(x){ return x.score > 0; });          // cero coincidencia real = no candidato
+  puntuados.sort(function(x, y){
+    if(y.score !== x.score) return y.score - x.score;       // 1° criterio: pertinencia (puntaje)
+    return new Date(y.r.createdAt).getTime() - new Date(x.r.createdAt).getTime();   // 2° criterio, SOLO desempate: recencia
+  });
+  return {
+    candidates: puntuados.slice(0, limite).map(function(x){
+      return {
+        id: x.r.id, title: x.r.title, createdAt: x.r.createdAt, source: x.r.source,
+        field: (x.r.field || []).slice(),
+        relevanceSignals: x.senales,   // trazabilidad/debug, no se muestra al usuario
+        score: x.score                // idem -- ayuda a depurar el orden, no es una conclusión
+      };
+    })
+  };
+}
+/* Utilidad de consola SOLO para desarrollo (regla 13: nada de UI nueva para el usuario). Uso
+   manual desde devtools: debugRecuerdosCandidatos('org_xxx', 'texto de la situación presente').
+   Imprime situación, recuerdos disponibles del organismo y candidatos con sus señales. */
+window.debugRecuerdosCandidatos = function(organismoId, situacionActual, limite){
+  var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
+  if(!o){ console.warn('[M2.2] organismo no encontrado:', organismoId); return null; }
+  var recs = obtenerRecuerdos(o);
+  var res = seleccionarRecuerdosCandidatos({ organismo:o, situacionActual:situacionActual, recuerdos:recs, limite:limite });
+  console.log('[M2.2] situación:', situacionActual);
+  console.log('[M2.2] recuerdos disponibles:', recs.length);
+  console.log('[M2.2] candidatos:', res.candidates);
+  return res;
+};
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
@@ -7358,6 +7491,118 @@ function correrPruebasAuto(){
                obtenerRecuerdoPorId(recargado, recs[0].id) !== null;
       } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
+
+    /* ---- Memoria Viva · Corte M2.2 (17/08) -- preselección determinista de candidatos ---- */
+    (function(){
+      // Escenario compartido por varios chk() de M2.2: un estudio con 3 recuerdos --
+      // uno viejo pero pertinente, uno reciente pero irrelevante, y uno "trampa" cargado de
+      // palabras genéricas que NO deberían aportar puntaje.
+      function m22RecuerdosEjemplo(){
+        return [
+          { id:'r_viejo_proveedor', title:'Dependencia crítica del proveedor de maderas',
+            createdAt:'2025-03-10T09:00:00.000Z', source:'core', field:['tensiones'],
+            after:{ tensiones:'dependencia critica de un unico proveedor de maderas certificadas' },
+            summary:'Tensiones activas: dependencia critica de un unico proveedor de maderas certificadas' },
+          { id:'r_reciente_irrelevante', title:'Se actualiza el horario de atención al público',
+            createdAt:'2026-08-16T09:00:00.000Z', source:'core', field:['proximo'],
+            after:{ proximo:'publicar el nuevo horario de atencion en la web' },
+            summary:'Próximo paso: publicar el nuevo horario de atencion en la web' },
+          { id:'r_generico', title:'Cambio en el problema del proyecto',
+            createdAt:'2026-08-15T09:00:00.000Z', source:'core', field:['diagnostico'],
+            after:{ diagnostico:'el problema y la situacion del proyecto siguen sin resolverse' } }
+        ];
+      }
+      chk('M2.2-01 · recuerdo claramente relacionado aparece como candidato', (function(){
+        var res = seleccionarRecuerdosCandidatos({ organismo:{id:'o1'},
+          situacionActual:'Estamos de nuevo complicados con el proveedor de maderas, no llega el pedido',
+          recuerdos: m22RecuerdosEjemplo(), limite:3 });
+        return res.candidates.length >= 1 && res.candidates[0].id === 'r_viejo_proveedor';
+      })());
+      chk('M2.2-02 · recuerdo reciente irrelevante no desplaza al realmente pertinente', (function(){
+        var res = seleccionarRecuerdosCandidatos({ organismo:{id:'o1'},
+          situacionActual:'volvió el tema del proveedor de maderas certificadas',
+          recuerdos: m22RecuerdosEjemplo(), limite:3 });
+        var ids = res.candidates.map(function(c){ return c.id; });
+        var posViejo = ids.indexOf('r_viejo_proveedor'), posReciente = ids.indexOf('r_reciente_irrelevante');
+        return posViejo !== -1 && (posReciente === -1 || posViejo < posReciente);
+      })());
+      chk('M2.2-03 · recuerdo antiguo con relación fuerte queda primero pese a ser el más viejo', (function(){
+        var res = seleccionarRecuerdosCandidatos({ organismo:{id:'o1'},
+          situacionActual:'maderas proveedor certificadas dependencia',
+          recuerdos: m22RecuerdosEjemplo(), limite:3 });
+        return res.candidates.length > 0 && res.candidates[0].id === 'r_viejo_proveedor';
+      })());
+      chk('M2.2-04 · ningún recuerdo pertinente devuelve cero candidatos', (function(){
+        var res = seleccionarRecuerdosCandidatos({ organismo:{id:'o1'},
+          situacionActual:'quiero hablar de algo completamente distinto: logistica de exportacion maritima internacional',
+          recuerdos: m22RecuerdosEjemplo(), limite:3 });
+        return Array.isArray(res.candidates) && res.candidates.length === 0;
+      })());
+      chk('M2.2-05 · respeta el límite configurado sin modificar la colección original', (function(){
+        var muchos = [];
+        for(var i=0;i<10;i++){
+          muchos.push({ id:'m'+i, title:'reunion de equipo numero '+i,
+            createdAt:'2026-08-0'+((i%9)+1)+'T00:00:00.000Z', source:'core', field:['diagnostico'],
+            after:{ diagnostico:'reunion de equipo sobre coordinacion interna numero '+i } });
+        }
+        var snap = JSON.stringify(muchos);
+        var res = seleccionarRecuerdosCandidatos({ organismo:{id:'o1'},
+          situacionActual:'otra vez la reunion de equipo y la coordinacion interna', recuerdos:muchos, limite:2 });
+        return res.candidates.length === 2 && JSON.stringify(muchos) === snap;
+      })());
+      chk('M2.2-06 · aislamiento: el selector nunca ve recuerdos que no se le pasaron', (function(){
+        var recsA = [{ id:'a1', title:'maderas proveedor critico', createdAt:'2025-01-01T00:00:00.000Z', source:'core', field:[], after:{ diagnostico:'dependencia critica de maderas' } }];
+        var res = seleccionarRecuerdosCandidatos({ organismo:{id:'oA'}, situacionActual:'maderas proveedor critico dependencia', recuerdos:recsA, limite:3 });
+        return res.candidates.every(function(c){ return c.id !== 'b1'; });   // b1 nunca existió en el input de este organismo
+      })());
+      chk('M2.2-07 · relevancia por contenido (after/summary), no solo por título', (function(){
+        var recs = [{ id:'contenido1', title:'Se cierra la etapa de diagnóstico', createdAt:'2026-01-01T00:00:00.000Z', source:'core', field:['diagnostico'],
+          after:{ diagnostico:'la fuga de talento senior explica la caida de calidad en los proyectos grandes' } }];
+        var res = seleccionarRecuerdosCandidatos({ organismo:{id:'o1'}, situacionActual:'siento que estamos perdiendo talento senior otra vez', recuerdos:recs, limite:3 });
+        return res.candidates.length === 1 && res.candidates[0].id === 'contenido1' &&
+               res.candidates[0].relevanceSignals.some(function(s){ return s.campo === 'after'; });
+      })());
+      chk('M2.2-08 · palabras genéricas (problema/situación/proyecto/cambio) no producen pertinencia', (function(){
+        var res = seleccionarRecuerdosCandidatos({ organismo:{id:'o1'},
+          situacionActual:'tenemos un problema con la situación del proyecto, hubo un cambio',
+          recuerdos: m22RecuerdosEjemplo(), limite:3 });
+        return res.candidates.every(function(c){ return c.id !== 'r_generico'; });
+      })());
+      chk('M2.2-09 · recuerdo ≠ evidencia: la forma de salida nunca afirma nada, solo trae candidatos', (function(){
+        var recs = [{ id:'r_x', title:'Dependencia crítica del proveedor X', createdAt:'2025-01-01T00:00:00.000Z', source:'core', field:['tensiones'], after:{ tensiones:'dependencia critica del proveedor equis' } }];
+        var res = seleccionarRecuerdosCandidatos({ organismo:{id:'o1'}, situacionActual:'volvimos a hablar del proveedor equis', recuerdos:recs, limite:3 });
+        var c = res.candidates[0];
+        return !!c && c.hasOwnProperty('relevanceSignals') && !c.hasOwnProperty('relevantMemory') &&
+               !c.hasOwnProperty('esVerdadero') && !res.hasOwnProperty('relevantMemory');
+      })());
+      chk('M2.2-10 · inmutabilidad: seleccionar candidatos no modifica organismo ni recuerdos', (function(){
+        var o = { id:'o1', ficha:{ diagnostico:'d' }, recuerdos: m22RecuerdosEjemplo() };
+        var snap = JSON.stringify(o);
+        seleccionarRecuerdosCandidatos({ organismo:o, situacionActual:'proveedor de maderas', recuerdos:o.recuerdos, limite:3 });
+        return JSON.stringify(o) === snap;
+      })());
+      chk('M2.2-11 · cero costo IA: sin fetch ni referencias a Anthropic en el código de selección', (function(){
+        var src = seleccionarRecuerdosCandidatos.toString() + calcularSenalesRecuerdo.toString() +
+                   textoComparableDeRecuerdo.toString() + terminosSignificativos.toString() + normalizarTexto.toString();
+        return !/fetch\s*\(/.test(src) && !/anthropic/i.test(src) && !/api\//i.test(src);
+      })());
+      chk('M2.2-12 · compatibilidad: M1 + M2.1 siguen funcionando sin regresión', (function(){
+        var o = { id:'o_compat_m22', nombre:'Compat', tipo:'empresa', ficha:{ diagnostico:'viejo' }, principios:[] };
+        var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+        var cola = { version_cola: COLA_VERSION, propuestas: [] };
+        try{
+          cargarPropuestas = function(){ return cola; };
+          persistirPropuestas = function(c){ cola = c; return true; };
+          guardarOrganismo = function(org){ o = org; };
+          state.organismo = o;
+          var prop = proponerFicha({ diagnostico:'nuevo' }, null, null, null);
+          var r = resolverPropuesta(prop.id, 'confirmar');
+          var recs = obtenerRecuerdos(o);
+          var porId = obtenerRecuerdoPorId(o, recs[0] ? recs[0].id : null);
+          return r.ok === true && recs.length === 1 && porId !== null && porId.after.diagnostico === 'nuevo';
+        } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+      })());
+    })();
 
     /* ---- N2.2 · compatibilidad del resumen con evaluaciones N2.1 sin tension_principal ---- */
     chk('IMP·3 · adjuntarEvaluacionNegocioPro arma el resumen igual con dims viejas (N2.1) y nuevas (N2.2) mezcladas', (function(){
