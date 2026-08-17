@@ -3391,6 +3391,45 @@ function recuerdosDe(o){
   return (o && Array.isArray(o.recuerdos)) ? o.recuerdos : [];
 }
 
+/* ============ MEMORIA VIVA · CORTE M2.1 -- RECUPERACIÓN DE RECUERDOS (17/08) ============
+   Capa de LECTURA read-only sobre o.recuerdos[] (que M1 ya escribe). No crea recuerdos, no
+   decide relevancia, no toca el prompt -- solo da una forma estable y segura de consultar lo
+   que ya existe. `recuerdosDe(o)` (M1) sigue siendo el acceso crudo al array real; este corte
+   agrega `obtenerRecuerdos()`/`obtenerRecuerdoPorId()` como la interfaz recomendada por encima,
+   sin reemplazar ni tocar `crearRecuerdo()`/`aplicarPropuesta()` (el lazo de escritura de M1
+   queda intacto, tal como pedía el encargo).
+   Inmutabilidad: SIEMPRE se copia el arreglo (`.slice()`) antes de ordenar/recortar -- nunca se
+   llama .sort()/.reverse() sobre recuerdosDe(o) directamente, porque esos métodos mutan en el
+   lugar. Los objetos recuerdo individuales se devuelven por referencia (no se clonan en
+   profundidad) cuando no se pide vista compacta -- mismo criterio que ya usa el resto del
+   archivo (mostrarFicha() lee o.ficha por referencia, momentosDe() devuelve o.momentos tal
+   cual) -- no es una laxitud nueva de este corte. */
+function recuerdoCompacto(r){
+  return { id:r.id, title:r.title, createdAt:r.createdAt, source:r.source,
+           field:(r.field||[]).slice(), organismVersion:r.organismVersion };
+}
+/* obtenerRecuerdos(o, opciones): lee, nunca escribe.
+   opciones.orden: 'asc' (default, más viejo primero -- orden cronológico literal) | 'desc'
+   opciones.limite: recorta el resultado, NO borra nada del organismo
+   opciones.compacto: true → devuelve la vista liviana (recuerdoCompacto), sin before/after/summary */
+function obtenerRecuerdos(o, opciones){
+  var op = opciones || {};
+  var lista = recuerdosDe(o).slice();   // copia -- nunca se toca el arreglo real
+  lista.sort(function(a,b){ return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(); });
+  if(op.orden === 'desc') lista.reverse();
+  if(typeof op.limite === 'number' && op.limite >= 0) lista = lista.slice(0, op.limite);
+  if(op.compacto) lista = lista.map(recuerdoCompacto);
+  return lista;
+}
+/* Búsqueda puntual por id -- recorre sin ordenar ni copiar el arreglo (no hace falta: no se
+   muta nada, solo se lee hasta encontrar). Devuelve el recuerdo completo, o null si no existe
+   o si el organismo no tiene recuerdos -- nunca inventa un resultado. */
+function obtenerRecuerdoPorId(o, id){
+  var lista = recuerdosDe(o);
+  for(var i=0;i<lista.length;i++){ if(lista[i].id === id) return lista[i]; }
+  return null;
+}
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
@@ -6029,7 +6068,7 @@ function mostrarFicha(){
     ['Proyectivo vigente', (o.proyectivos && o.proyectivos.length) ? ('v' + o.proyectivos[o.proyectivos.length-1].version + ' · alcance ' + o.proyectivos[o.proyectivos.length-1].alcance) : 'aún no generado'],
     ['Paradigma vigente', (o.paradigmas && o.paradigmas.length) ? o.paradigmas[o.paradigmas.length-1].texto : 'aún no construido'],
     ['Historial de memoria', textoHistorialFicha(o)],
-    ['Recuerdos', recuerdosDe(o).length ? (recuerdosDe(o).length + (recuerdosDe(o).length === 1 ? ' recuerdo guardado' : ' recuerdos guardados')) : 'ninguno todavía'],
+    ['Recuerdos', obtenerRecuerdos(o).length ? (obtenerRecuerdos(o).length + (obtenerRecuerdos(o).length === 1 ? ' recuerdo guardado' : ' recuerdos guardados')) : 'ninguno todavía'],
     ['Proyectivo vigente', (o.proyectivos && o.proyectivos.length) ? '(v' + o.proyectivos[o.proyectivos.length-1].version + ' · ' + o.proyectivos[o.proyectivos.length-1].alcance + ') ' + o.proyectivos[o.proyectivos.length-1].texto : 'ninguno todavía']
   ];
   for(const c of campos){
@@ -6087,7 +6126,7 @@ function mostrarFicha(){
    con su antes/después (reusa las mismas clases .propcmp/.pc-ant/.pc-new que ya
    usa la tarjeta de revisión de propuestas). */
 function cardRecuerdos(o){
-  var recs = recuerdosDe(o).slice().reverse();   // más reciente primero
+  var recs = obtenerRecuerdos(o, { orden:'desc' });   // M2.1: vía la interfaz de lectura, más reciente primero
   el.cardContent.innerHTML = '';
   var h = document.createElement('h3'); h.textContent = 'Recuerdos · ' + o.nombre;
   el.cardContent.appendChild(h);
@@ -7203,6 +7242,123 @@ function correrPruebasAuto(){
       return typeof crearRecuerdo === 'function' && typeof recuerdosDe === 'function';
     })());
 
+    /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
+    chk('M2.1-01 · organismo sin recuerdos devuelve colección vacía válida', (function(){
+      var o1 = { id:'org_m21_sin1', nombre:'Sin Recuerdos', tipo:'empresa', ficha:{} };            // sin o.recuerdos
+      var o2 = { id:'org_m21_sin2', nombre:'Vacío Explícito', tipo:'empresa', ficha:{}, recuerdos:[] };
+      var r1 = obtenerRecuerdos(o1), r2 = obtenerRecuerdos(o2), r3 = obtenerRecuerdos(null);
+      return Array.isArray(r1) && r1.length === 0 && Array.isArray(r2) && r2.length === 0 &&
+             Array.isArray(r3) && r3.length === 0;
+    })());
+    chk('M2.1-02 · recuperación múltiple trae todos los recuerdos del organismo', (function(){
+      var o = { id:'org_m21_multi', nombre:'Multi', tipo:'empresa', ficha:{}, recuerdos:[
+        { id:'r1', title:'uno', createdAt:'2026-08-01T10:00:00.000Z', source:'core', field:['diagnostico'] },
+        { id:'r2', title:'dos', createdAt:'2026-08-02T10:00:00.000Z', source:'core', field:['tensiones'] },
+        { id:'r3', title:'tres', createdAt:'2026-08-03T10:00:00.000Z', source:'core', field:['proximo'] }
+      ]};
+      var r = obtenerRecuerdos(o);
+      return r.length === 3 && r.map(function(x){return x.id;}).sort().join(',') === 'r1,r2,r3';
+    })());
+    chk('M2.1-03 · aislamiento: nunca mezcla recuerdos de organismos distintos', (function(){
+      var oA = { id:'org_m21_a', nombre:'A', tipo:'empresa', ficha:{}, recuerdos:[{ id:'ra1', title:'a', createdAt:'2026-08-01T00:00:00.000Z', source:'core', field:[] }] };
+      var oB = { id:'org_m21_b', nombre:'B', tipo:'empresa', ficha:{}, recuerdos:[{ id:'rb1', title:'b', createdAt:'2026-08-01T00:00:00.000Z', source:'core', field:[] }, { id:'rb2', title:'b2', createdAt:'2026-08-02T00:00:00.000Z', source:'core', field:[] }] };
+      var ra = obtenerRecuerdos(oA), rb = obtenerRecuerdos(oB);
+      return ra.length === 1 && ra[0].id === 'ra1' && rb.length === 2 &&
+             rb.every(function(x){ return x.id !== 'ra1'; });
+    })());
+    chk('M2.1-04 · recuperación por id localiza el recuerdo correcto (o null si no existe)', (function(){
+      var o = { id:'org_m21_id', nombre:'ID', tipo:'empresa', ficha:{}, recuerdos:[
+        { id:'rx1', title:'primero', createdAt:'2026-08-01T00:00:00.000Z', source:'core', field:[] },
+        { id:'rx2', title:'segundo', createdAt:'2026-08-02T00:00:00.000Z', source:'core', field:[] }
+      ]};
+      var hallado = obtenerRecuerdoPorId(o, 'rx2');
+      var noExiste = obtenerRecuerdoPorId(o, 'no_existe');
+      var sinRecuerdos = obtenerRecuerdoPorId({ id:'x', recuerdos:[] }, 'rx2');
+      return hallado && hallado.title === 'segundo' && noExiste === null && sinRecuerdos === null;
+    })());
+    chk('M2.1-05 · orden cronológico correcto (asc por defecto, desc opcional)', (function(){
+      var o = { id:'org_m21_orden', nombre:'Orden', tipo:'empresa', ficha:{}, recuerdos:[
+        { id:'rc', title:'c', createdAt:'2026-08-03T00:00:00.000Z', source:'core', field:[] },
+        { id:'ra', title:'a', createdAt:'2026-08-01T00:00:00.000Z', source:'core', field:[] },
+        { id:'rb', title:'b', createdAt:'2026-08-02T00:00:00.000Z', source:'core', field:[] }
+      ]};   // deliberadamente fuera de orden en el arreglo real
+      var asc = obtenerRecuerdos(o).map(function(x){return x.id;}).join(',');
+      var desc = obtenerRecuerdos(o, { orden:'desc' }).map(function(x){return x.id;}).join(',');
+      return asc === 'ra,rb,rc' && desc === 'rc,rb,ra';
+    })());
+    chk('M2.1-06 · límite recorta el resultado sin eliminar nada del organismo', (function(){
+      var o = { id:'org_m21_limite', nombre:'Límite', tipo:'empresa', ficha:{}, recuerdos:[
+        { id:'l1', title:'1', createdAt:'2026-08-01T00:00:00.000Z', source:'core', field:[] },
+        { id:'l2', title:'2', createdAt:'2026-08-02T00:00:00.000Z', source:'core', field:[] },
+        { id:'l3', title:'3', createdAt:'2026-08-03T00:00:00.000Z', source:'core', field:[] },
+        { id:'l4', title:'4', createdAt:'2026-08-04T00:00:00.000Z', source:'core', field:[] },
+        { id:'l5', title:'5', createdAt:'2026-08-05T00:00:00.000Z', source:'core', field:[] }
+      ]};
+      var r = obtenerRecuerdos(o, { limite:2 });
+      return r.length === 2 && r[0].id === 'l1' && r[1].id === 'l2' && o.recuerdos.length === 5;
+    })());
+    chk('M2.1-07 · inmutabilidad: leer recuerdos deja el organismo byte a byte idéntico', (function(){
+      var o = { id:'org_m21_inmut', nombre:'Inmutable', tipo:'empresa', ficha:{ diagnostico:'d1' }, ficha_historial:[{ version:0 }], recuerdos:[
+        { id:'ri1', title:'x', createdAt:'2026-08-01T00:00:00.000Z', source:'core', field:['diagnostico'], before:{diagnostico:'d0'}, after:{diagnostico:'d1'} },
+        { id:'ri2', title:'y', createdAt:'2026-08-02T00:00:00.000Z', source:'core', field:['tensiones'], before:{}, after:{} }
+      ]};
+      var snapshot = JSON.stringify(o);
+      obtenerRecuerdos(o);
+      obtenerRecuerdos(o, { orden:'desc' });
+      obtenerRecuerdos(o, { limite:1 });
+      obtenerRecuerdos(o, { compacto:true });
+      obtenerRecuerdoPorId(o, 'ri1');
+      obtenerRecuerdoPorId(o, 'no_existe');
+      return JSON.stringify(o) === snapshot;
+    })());
+    chk('M2.1 · vista compacta trae solo id/title/createdAt/source/field/organismVersion', (function(){
+      var o = { id:'org_m21_compacto', nombre:'Compacto', tipo:'empresa', ficha:{}, recuerdos:[
+        { id:'rk1', title:'t', createdAt:'2026-08-01T00:00:00.000Z', source:'core', field:['diagnostico'],
+          before:{diagnostico:'antes'}, after:{diagnostico:'despues'}, summary:'resumen largo', organismVersion:1,
+          originRef:{ propuestaId:'p1', turno:2, resuelto_como:'confirmada' } }
+      ]};
+      var compacto = obtenerRecuerdos(o, { compacto:true })[0];
+      var claves = Object.keys(compacto).sort().join(',');
+      return claves === 'createdAt,field,id,organismVersion,source,title' &&
+             compacto.before === undefined && compacto.after === undefined && compacto.summary === undefined;
+    })());
+    chk('M2.1-08 · compatibilidad M1: crear recuerdos vía aplicarPropuesta() sigue igual', (function(){
+      var o = { id:'org_m21_compat', nombre:'Compat M1', tipo:'empresa', ficha:{ diagnostico:'viejo' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({ diagnostico:'nuevo' }, null, null, null);
+        var r = resolverPropuesta(prop.id, 'confirmar');
+        var viaHelperNueva = obtenerRecuerdos(o);
+        var viaAccesoM1 = recuerdosDe(o);
+        return r.ok === true && viaHelperNueva.length === 1 && viaAccesoM1.length === 1 &&
+               viaHelperNueva[0].id === viaAccesoM1[0].id && viaHelperNueva[0].after.diagnostico === 'nuevo';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M2.1-09 · un recuerdo creado, guardado y "recargado" se recupera vía la interfaz de lectura', (function(){
+      var almacen = {};   // simula localStorage: solo el objeto persistido, sin referencia en memoria
+      var o = { id:'org_m21_persist_real', nombre:'Persistencia Real', tipo:'empresa', ficha:{ diagnostico:'inicial' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ almacen[org.id] = JSON.parse(JSON.stringify(org)); };   // persistencia real, sin alias
+        state.organismo = o;
+        var prop = proponerFicha({ diagnostico:'final' }, null, null, null);
+        resolverPropuesta(prop.id, 'confirmar');
+        // "recarga": se descarta la referencia original, se lee de nuevo desde el almacén
+        var recargado = almacen['org_m21_persist_real'];
+        var recs = obtenerRecuerdos(recargado);
+        return recs.length === 1 && recs[0].after.diagnostico === 'final' &&
+               obtenerRecuerdoPorId(recargado, recs[0].id) !== null;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+
     /* ---- N2.2 · compatibilidad del resumen con evaluaciones N2.1 sin tension_principal ---- */
     chk('IMP·3 · adjuntarEvaluacionNegocioPro arma el resumen igual con dims viejas (N2.1) y nuevas (N2.2) mezcladas', (function(){
       var o = { id:'org_imp3_test', nombre:'Compat Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
@@ -7755,7 +7911,19 @@ var CASOS_COGNITIVOS = [
     espera:'El recuerdo sigue en Memoria → Recuerdos, con el mismo título, fecha y antes/después.' },
   { id:'M1-07', titulo:'Memoria Viva · aislamiento',
     entrada:'(Corte M1) Abrí Urbanismo, Contextos y Negocios Pro después de crear recuerdos en el Core.',
-    espera:'Los tres funcionan exactamente igual que antes -- ninguno muestra ni depende de "Recuerdos" (alcance de M1 es solo Core).' }
+    espera:'Los tres funcionan exactamente igual que antes -- ninguno muestra ni depende de "Recuerdos" (alcance de M1 es solo Core).' },
+  { id:'M2.1-01', titulo:'Memoria Viva · recuperación sin recuerdos',
+    entrada:'(Corte M2.1) Abrí Memoria → Recuerdos de un organismo que nunca confirmó un cambio de memoria.',
+    espera:'Se ve "Todavía no hay recuerdos guardados..." -- sin error, sin recuerdo inventado.' },
+  { id:'M2.1-02', titulo:'Memoria Viva · recuperación múltiple',
+    entrada:'(Corte M2.1) Abrí Memoria → Recuerdos de un organismo con varios recuerdos guardados.',
+    espera:'Aparecen todos, no solo el último.' },
+  { id:'M2.1-05', titulo:'Memoria Viva · orden cronológico en pantalla',
+    entrada:'(Corte M2.1) Con varios recuerdos, mirá el orden en Recuerdos.',
+    espera:'El más reciente aparece arriba de todo (la vista usa orden:desc sobre la nueva interfaz).' },
+  { id:'M2.1-08', titulo:'Memoria Viva · confirmar una propuesta sigue creando recuerdos igual',
+    entrada:'(Corte M2.1) Confirmá una propuesta real de cambio de memoria, como en P02.',
+    espera:'Se comporta exactamente igual que antes de M2.1 -- el recuerdo nuevo aparece en Recuerdos.' }
 ];
 function cargarResultadosManual(){ try{ return JSON.parse(localStorage.getItem('ag_core_banco') || '{}'); }catch(e){ return {}; } }
 function guardarResultadoManual(id, estado){
