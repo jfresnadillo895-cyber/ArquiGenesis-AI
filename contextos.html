@@ -1559,10 +1559,54 @@ header header .cai-ham{flex-shrink:0}
     capa.querySelector('#cpCerrar').addEventListener('click', cerrar);
 
     var estado = capa.querySelector('#cpEstado');
+
+    // Encargo 115 AG, Corte M (05/08): si ya hay una suscripcion paga activa, elegir OTRO
+    // plan ya no arma una suscripcion nueva en paralelo (ese era el riesgo real que motivo
+    // el freno original acá) -- ahora llama a /api/suscribir, que MIRA el estado real de la
+    // cuenta y decide sola si es alta nueva o cambio de plan sobre la suscripcion EXISTENTE
+    // (sube ya, o programa la baja para cuando termine el ciclo pagado). Sirve para los dos
+    // botones (Mercado Pago y Lemon Squeezy) por igual -- ver lib/pasarela.js.
+    // Portado desde negocios.html (17/08), que ya lo tenia -- index.html/urbanismo.html/
+    // contextos.html se habian quedado afuera de este freno.
+    function llamarCambiarPlan(plan, b, textoOriginal){
+      b.disabled = true; b.textContent = 'Aplicando…'; estado.textContent = '';
+      tokenVigente().then(function(t){
+        if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
+        return _fetch('/api/suscribir', {
+          method:'POST',
+          headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+          body: JSON.stringify({ plan: plan })
+        }).then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
+          .then(function(x){
+            b.disabled = false; b.textContent = textoOriginal;
+            if(!x.ok){
+              estado.textContent = (x.d && x.d.error && x.d.error.message) || 'No se pudo cambiar de plan.';
+              return;
+            }
+            var nombrePlan = (PLANES.filter(function(p){ return p.id === plan; })[0] || {}).nombre || plan;
+            if(x.d.aplicado === 'inmediato'){
+              estado.textContent = 'Listo, ya tenés el plan ' + nombrePlan + ' activo.';
+            } else if(x.d.aplicado === 'facturando_diferencia'){
+              estado.textContent = x.d.mensaje || 'Estamos procesando el cambio de plan.';
+            } else if(x.d.aplicado === 'programado'){
+              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
+              estado.textContent = 'Vas a pasar al plan ' + nombrePlan + ' el ' + fecha + '. Tu plan actual sigue activo hasta esa fecha.';
+            } else {
+              estado.textContent = 'Cambio de plan registrado.';
+            }
+            sincronizarSaldo();
+          });
+      }).catch(function(){
+        b.disabled = false; b.textContent = textoOriginal;
+        estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
+      });
+    }
+
     Array.prototype.forEach.call(capa.querySelectorAll('button[data-plan]'), function(b){
       b.addEventListener('click', function(){
         var plan = b.getAttribute('data-plan');
         var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Pro · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
+        if(perfilSuscripcionActiva){ llamarCambiarPlan(plan, b, textoOriginal); return; }
         b.disabled = true; b.textContent = 'Preparando…'; estado.textContent = '';
         tokenVigente().then(function(t){
           if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
@@ -1600,6 +1644,10 @@ header header .cai-ham{flex-shrink:0}
       a.addEventListener('click', function(e){
         e.preventDefault();
         var plan = a.getAttribute('data-ls');
+        // Encargo 115 AG, Corte M (05/08): si ya hay suscripcion activa no hace falta abrir
+        // ningun checkout nuevo -- /api/suscribir reconoce la pasarela sola y cambia la
+        // suscripcion EXISTENTE. Mismo camino que el boton de Mercado Pago -- ver llamarCambiarPlan.
+        if(perfilSuscripcionActiva){ llamarCambiarPlan(plan, a, a.textContent); return; }
         var pestana = window.open('', '_blank');
         tokenVigente().then(function(t){
           if(!t){ if(pestana) pestana.close(); cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }

@@ -583,7 +583,7 @@ header .spacer{flex:1}
       </span>
       <span id="orgchip"><b id="orgname"></b></span>
       <span class="spacer"></span>
-      <button class="hbtn" id="btnFicha" style="display:none">Ficha</button>
+      <button class="hbtn" id="btnFicha" style="display:none">Memoria</button>
       <button class="hbtn" id="btnPrincipios">Principios</button>
       <button class="hbtn" id="btnPromover" style="display:none">→ Organismo</button>
       <button class="hbtn" id="btnGuardar" style="display:none">Guardar sesión</button>
@@ -1835,10 +1835,54 @@ header .spacer{flex:1}
     capa.querySelector('#cpCerrar').addEventListener('click', cerrar);
 
     var estado = capa.querySelector('#cpEstado');
+
+    // Encargo 115 AG, Corte M (05/08): si ya hay una suscripcion paga activa, elegir OTRO
+    // plan ya no arma una suscripcion nueva en paralelo (ese era el riesgo real que motivo
+    // el freno original acá) -- ahora llama a /api/suscribir, que MIRA el estado real de la
+    // cuenta y decide sola si es alta nueva o cambio de plan sobre la suscripcion EXISTENTE
+    // (sube ya, o programa la baja para cuando termine el ciclo pagado). Sirve para los dos
+    // botones (Mercado Pago y Lemon Squeezy) por igual -- ver lib/pasarela.js.
+    // Portado desde negocios.html (17/08), que ya lo tenia -- index.html/urbanismo.html/
+    // contextos.html se habian quedado afuera de este freno.
+    function llamarCambiarPlan(plan, b, textoOriginal){
+      b.disabled = true; b.textContent = 'Aplicando…'; estado.textContent = '';
+      tokenVigente().then(function(t){
+        if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
+        return _fetch('/api/suscribir', {
+          method:'POST',
+          headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+          body: JSON.stringify({ plan: plan })
+        }).then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
+          .then(function(x){
+            b.disabled = false; b.textContent = textoOriginal;
+            if(!x.ok){
+              estado.textContent = (x.d && x.d.error && x.d.error.message) || 'No se pudo cambiar de plan.';
+              return;
+            }
+            var nombrePlan = (PLANES.filter(function(p){ return p.id === plan; })[0] || {}).nombre || plan;
+            if(x.d.aplicado === 'inmediato'){
+              estado.textContent = 'Listo, ya tenés el plan ' + nombrePlan + ' activo.';
+            } else if(x.d.aplicado === 'facturando_diferencia'){
+              estado.textContent = x.d.mensaje || 'Estamos procesando el cambio de plan.';
+            } else if(x.d.aplicado === 'programado'){
+              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
+              estado.textContent = 'Vas a pasar al plan ' + nombrePlan + ' el ' + fecha + '. Tu plan actual sigue activo hasta esa fecha.';
+            } else {
+              estado.textContent = 'Cambio de plan registrado.';
+            }
+            sincronizarSaldo();
+          });
+      }).catch(function(){
+        b.disabled = false; b.textContent = textoOriginal;
+        estado.textContent = 'No se pudo conectar. Revisá tu conexión.';
+      });
+    }
+
     Array.prototype.forEach.call(capa.querySelectorAll('button[data-plan]'), function(b){
       b.addEventListener('click', function(){
         var plan = b.getAttribute('data-plan');
         var textoOriginal = b.textContent;   // "Elegir Profesional" / "Elegir Pro · Estudio" / "Elegir Magister" -- ya no un "Suscribirme" generico
+        if(perfilSuscripcionActiva){ llamarCambiarPlan(plan, b, textoOriginal); return; }
         b.disabled = true; b.textContent = 'Preparando…'; estado.textContent = '';
         tokenVigente().then(function(t){
           if(!t){ cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
@@ -1876,6 +1920,10 @@ header .spacer{flex:1}
       a.addEventListener('click', function(e){
         e.preventDefault();
         var plan = a.getAttribute('data-ls');
+        // Encargo 115 AG, Corte M (05/08): si ya hay suscripcion activa no hace falta abrir
+        // ningun checkout nuevo -- /api/suscribir reconoce la pasarela sola y cambia la
+        // suscripcion EXISTENTE. Mismo camino que el boton de Mercado Pago -- ver llamarCambiarPlan.
+        if(perfilSuscripcionActiva){ llamarCambiarPlan(plan, a, a.textContent); return; }
         var pestana = window.open('', '_blank');
         tokenVigente().then(function(t){
           if(!t){ if(pestana) pestana.close(); cerrar(); portal('Tu sesión venció. Ingresá de nuevo.'); return; }
@@ -2924,6 +2972,7 @@ function aplicarPropuesta(p, correccion){
       propuesta_id: p.id,
       resuelto_como: correccion ? 'corregida' : 'confirmada'
     });
+    crearRecuerdo(o, p, aplicado, correccion);   // Memoria Viva · Corte M1 (17/08)
   }
 
   // Corte J: hito (append-only, nunca se pisa) y horizonte (el mas reciente
@@ -3005,8 +3054,8 @@ function avisoPropuesta(p){
   var t = document.createElement('span'); t.className = 'pa-txt';
   var vis = camposVisibles(p.campos).length;
   t.textContent = vis
-    ? ('El motor propone actualizar la ficha en ' + vis + (vis === 1 ? ' campo.' : ' campos.'))
-    : 'El motor propone un ajuste interno de la ficha.';
+    ? ('El motor propone actualizar la memoria en ' + vis + (vis === 1 ? ' aspecto.' : ' aspectos.'))
+    : 'El motor propone un ajuste interno de la memoria.';
   var b = document.createElement('button'); b.className = 'btn'; b.textContent = 'Revisar';
   b.onclick = function(){ cardPropuesta(p.id, false); };
   d.appendChild(t); d.appendChild(b);
@@ -3017,8 +3066,8 @@ function avisoCandidatoInvalido(motivo){
   var d = document.createElement('div');
   d.className = 'propaviso warn';
   var t = document.createElement('span'); t.className = 'pa-txt';
-  t.textContent = 'El motor emitió una actualización de ficha que no pude interpretar (' + motivo +
-                  '). El texto de arriba es válido; la ficha no cambió.';
+  t.textContent = 'El motor emitió una actualización de memoria que no pude interpretar (' + motivo +
+                  '). El texto de arriba es válido; la memoria no cambió.';
   d.appendChild(t);
   el.stream.appendChild(d);
   scrollBottom();
@@ -3145,13 +3194,13 @@ function cardPropuesta(id, editando){
 
   el.cardContent.innerHTML = '';
   var h = document.createElement('h3');
-  h.textContent = editando ? 'Corregir la propuesta' : 'Actualización propuesta para la ficha';
+  h.textContent = editando ? 'Corregir la propuesta' : 'Actualización propuesta para la memoria';
   var p1 = document.createElement('p');
   p1.textContent = (p.estado === 'pendiente')
-    ? (editando ? 'Editá el texto que va a quedar en la ficha. Se guarda lo que escribas vos, no lo que propuso el motor.'
+    ? (editando ? 'Editá el texto que va a quedar en la memoria. Se guarda lo que escribas vos, no lo que propuso el motor.'
                 : (camposVisibles(p.campos).length
                    ? 'Nada se guardó todavía. Revisá campo por campo y decidí.'
-                   : 'Nada se guardó todavía. Esta actualización no cambia el texto de la ficha.'))
+                   : 'Nada se guardó todavía. Esta actualización no cambia el texto de la memoria.'))
     : 'Estado: ' + (PROP_ESTADO_LABEL[p.estado] || p.estado) + '. Se conserva como historia.';
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
 
@@ -3161,7 +3210,7 @@ function cardPropuesta(id, editando){
     var solo = document.createElement('div'); solo.className = 'propcmp';
     var sl = document.createElement('div'); sl.className = 'pc-campo'; sl.textContent = 'Ajuste interno';
     var sv = document.createElement('div'); sv.className = 'pc-new';
-    sv.textContent = 'Esta actualización sólo afecta datos internos del contrato. El texto de la ficha no cambia.';
+    sv.textContent = 'Esta actualización sólo afecta datos internos del contrato. El texto de la memoria no cambia.';
     solo.appendChild(sl); solo.appendChild(sv);
     el.cardContent.appendChild(solo);
   }
@@ -3276,7 +3325,70 @@ function textoHistorialFicha(o){
            x.campos.map(function(k){ return CAMPO_LABEL[k] || k; }).join(', ') +
            ' (' + (x.resuelto_como === 'corregida' ? 'corregido' : 'confirmado') + ')';
   }).join(' · ');
-  return 'ficha v' + fichaVersion(o) + ' · ' + hs.length + ' cambio(s) · ' + ult;
+  return 'memoria v' + fichaVersion(o) + ' · ' + hs.length + ' cambio(s) · ' + ult;
+}
+
+/* ============ MEMORIA VIVA · CORTE M1 (17/08) ============
+   Primer corte, mínimo y no destructivo. Distingue MEMORIA (la comprensión vigente
+   del organismo -- técnicamente sigue siendo o.ficha, sin renombrar la estructura
+   interna) de RECUERDO (un episodio que produjo o modificó esa memoria).
+   Regla: los recuerdos no se reemplazan (o.recuerdos[] es append-only); la memoria
+   sí puede reorganizarse (o.ficha sigue pisándose como siempre).
+   Se engancha en el ÚNICO punto ya gobernado de escritura real de la ficha
+   (aplicarPropuesta(), invariante N1.0): un recuerdo nace si y solo si esa
+   aplicación tocó al menos un campo VISIBLE (mismo criterio que ya usa
+   diffFicha()/camposVisibles() para no generar ruido en reafirmaciones ni en
+   ajustes internos de solo 'modo'). No se generan recuerdos por hitos/horizonte
+   solos (sin campos de ficha) en este corte -- alcance explícitamente mínimo,
+   ver PENDIENTES.md.
+   Título: determinístico, sin llamada IA nueva -- reutiliza el valor NUEVO del
+   primer campo presente según TITULO_PRIORIDAD (los campos más narrativos primero),
+   truncado a un límite de caracteres en un corte de palabra. */
+var TITULO_PRIORIDAD = ['diagnostico','tensiones','proximo','funcion','proximos'];
+var TITULO_MAX = 72;
+function truncarTitulo(s){
+  s = String(s || '').trim();
+  if(s.length <= TITULO_MAX) return s;
+  var corte = s.slice(0, TITULO_MAX);
+  var esp = corte.lastIndexOf(' ');
+  if(esp > 40) corte = corte.slice(0, esp);
+  return corte + '…';
+}
+function tituloRecuerdo(camposVis, aplicado){
+  for(var i=0;i<TITULO_PRIORIDAD.length;i++){
+    var k = TITULO_PRIORIDAD[i];
+    if(camposVis.indexOf(k) > -1 && aplicado[k]) return truncarTitulo(aplicado[k]);
+  }
+  var k0 = camposVis[0];
+  return k0 ? (CAMPO_LABEL[k0] || k0) + ' actualizado' : 'Memoria actualizada';
+}
+function nuevoIdRecuerdo(){
+  return 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2,5);
+}
+/* p: la propuesta ya resuelta; aplicado: los valores efectivamente incorporados
+   (ya contempla correcciones del usuario -- ver aplicarPropuesta). Devuelve null
+   si no hay campos visibles (nada que un humano reconozca como cambio real). */
+function crearRecuerdo(o, p, aplicado, correccion){
+  var vis = camposVisibles(p.campos);
+  if(!vis.length) return null;
+  o.recuerdos = o.recuerdos || [];
+  var rec = {
+    id: nuevoIdRecuerdo(),
+    title: tituloRecuerdo(vis, aplicado),
+    createdAt: new Date().toISOString(),
+    source: 'core',
+    field: vis.slice(),
+    before: vis.reduce(function(acc,k){ acc[k] = p.anterior[k] || ''; return acc; }, {}),
+    after: vis.reduce(function(acc,k){ acc[k] = aplicado[k] || ''; return acc; }, {}),
+    summary: vis.map(function(k){ return (CAMPO_LABEL[k]||k) + ': ' + aplicado[k]; }).join(' · '),
+    organismVersion: fichaVersion(o),
+    originRef: { propuestaId: p.id, turno: p.turno || null, resuelto_como: correccion ? 'corregida' : 'confirmada' }
+  };
+  o.recuerdos.push(rec);
+  return rec;
+}
+function recuerdosDe(o){
+  return (o && Array.isArray(o.recuerdos)) ? o.recuerdos : [];
 }
 
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
@@ -5897,7 +6009,7 @@ function mostrarFicha(){
   const o = state.organismo;
   const f = o.ficha || {};
   el.cardContent.innerHTML = '';
-  const h = document.createElement('h3'); h.textContent = 'Ficha viva · ' + o.nombre;
+  const h = document.createElement('h3'); h.textContent = 'Memoria · ' + o.nombre;
   const p1 = document.createElement('p');
   p1.textContent = o.tipo + ' · actualizada ' + (o.actualizado ? new Date(o.actualizado).toLocaleString() : '—');
   const grid = document.createElement('div'); grid.className = 'fichagrid';
@@ -5916,7 +6028,8 @@ function mostrarFicha(){
     ['Diagnósticos Pro', (o.diagnosticos_pro && o.diagnosticos_pro.length) ? o.diagnosticos_pro[o.diagnosticos_pro.length-1].resumen : 'ninguno incorporado'],
     ['Proyectivo vigente', (o.proyectivos && o.proyectivos.length) ? ('v' + o.proyectivos[o.proyectivos.length-1].version + ' · alcance ' + o.proyectivos[o.proyectivos.length-1].alcance) : 'aún no generado'],
     ['Paradigma vigente', (o.paradigmas && o.paradigmas.length) ? o.paradigmas[o.paradigmas.length-1].texto : 'aún no construido'],
-    ['Historial de ficha', textoHistorialFicha(o)],
+    ['Historial de memoria', textoHistorialFicha(o)],
+    ['Recuerdos', recuerdosDe(o).length ? (recuerdosDe(o).length + (recuerdosDe(o).length === 1 ? ' recuerdo guardado' : ' recuerdos guardados')) : 'ninguno todavía'],
     ['Proyectivo vigente', (o.proyectivos && o.proyectivos.length) ? '(v' + o.proyectivos[o.proyectivos.length-1].version + ' · ' + o.proyectivos[o.proyectivos.length-1].alcance + ') ' + o.proyectivos[o.proyectivos.length-1].texto : 'ninguno todavía']
   ];
   for(const c of campos){
@@ -5952,6 +6065,9 @@ function mostrarFicha(){
   const bM = document.createElement('button'); bM.className='btn'; bM.textContent='Marco para Pro';
   bM.onclick = function(){ cardMarcoPro(o); };
   row.appendChild(bM);
+  const bRec = document.createElement('button'); bRec.className='btn'; bRec.textContent='Recuerdos';
+  bRec.onclick = function(){ cardRecuerdos(o); };
+  row.appendChild(bRec);
   const bX = document.createElement('button'); bX.className='btn'; bX.textContent='Exportar';
   bX.onclick = function(){ cardExportarOrganismo(o); };
   row.appendChild(bX);
@@ -5964,11 +6080,60 @@ function mostrarFicha(){
   el.overlay.classList.add('open');
 }
 
+/* Memoria Viva · Corte M1 (17/08): vista mínima de recuerdos, dentro del overlay
+   de tarjetas ya existente -- a propósito NO toca la barra lateral compartida
+   (todavía en unificación entre los 4 softwares). Cada recuerdo es un episodio que
+   modificó la memoria vigente: título, cuándo, de dónde, y qué campo(s) cambiaron
+   con su antes/después (reusa las mismas clases .propcmp/.pc-ant/.pc-new que ya
+   usa la tarjeta de revisión de propuestas). */
+function cardRecuerdos(o){
+  var recs = recuerdosDe(o).slice().reverse();   // más reciente primero
+  el.cardContent.innerHTML = '';
+  var h = document.createElement('h3'); h.textContent = 'Recuerdos · ' + o.nombre;
+  el.cardContent.appendChild(h);
+  if(!recs.length){
+    var p0 = document.createElement('p');
+    p0.textContent = 'Todavía no hay recuerdos guardados. Se van a ir sumando solos cada vez que confirmes un cambio real en la memoria de este organismo -- no se pisan entre sí.';
+    el.cardContent.appendChild(p0);
+  } else {
+    recs.forEach(function(r){
+      var det = document.createElement('details'); det.className = 'recuerdo-item';
+      var sum = document.createElement('summary');
+      var fecha = r.createdAt ? new Date(r.createdAt).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }) : '—';
+      sum.textContent = r.title + ' · ' + fecha;
+      det.appendChild(sum);
+      var origen = document.createElement('div'); origen.className = 'rec-origen';
+      origen.textContent = 'Origen: conversación del Core' +
+        (r.field && r.field.length ? ' · ' + r.field.map(function(k){ return CAMPO_LABEL[k] || k; }).join(', ') : '');
+      det.appendChild(origen);
+      (r.field || []).forEach(function(k){
+        var box = document.createElement('div'); box.className = 'propcmp';
+        var lb = document.createElement('div'); lb.className = 'pc-campo'; lb.textContent = CAMPO_LABEL[k] || k;
+        box.appendChild(lb);
+        if(r.before && r.before[k]){
+          var a = document.createElement('div'); a.className = 'pc-ant'; a.textContent = r.before[k];
+          box.appendChild(a);
+        }
+        var nv = document.createElement('div'); nv.className = 'pc-new'; nv.textContent = (r.after && r.after[k]) || '';
+        box.appendChild(nv);
+        det.appendChild(box);
+      });
+      el.cardContent.appendChild(det);
+    });
+  }
+  var row = document.createElement('div'); row.className = 'cardrow';
+  var b = document.createElement('button'); b.className = 'btn'; b.textContent = 'Volver a Memoria';
+  b.onclick = function(){ mostrarFicha(); };
+  row.appendChild(b);
+  el.cardContent.appendChild(row);
+  el.overlay.classList.add('open');
+}
+
 function cardConfirmarEliminar(o){
   el.cardContent.innerHTML = '';
   const h = document.createElement('h3'); h.textContent = '¿Eliminar «' + o.nombre + '»?';
   const p1 = document.createElement('p');
-  p1.textContent = 'Se borra la ficha viva completa: función vigente, tensiones, diagnóstico, próximo paso, principios acumulados y destilados. Esta acción es permanente y no puede deshacerse.';
+  p1.textContent = 'Se borra la memoria completa: función vigente, tensiones, diagnóstico, próximo paso, principios acumulados, destilados y los recuerdos guardados. Esta acción es permanente y no puede deshacerse.';
   const row = document.createElement('div'); row.className='cardrow';
   const b1 = document.createElement('button'); b1.className='btn'; b1.textContent='Conservar';
   b1.onclick = function(){ mostrarFichaDe(o); };
@@ -6949,6 +7114,95 @@ function correrPruebasAuto(){
       } finally { el.cardContent.innerHTML = snapCard; if(!snapOpen) el.overlay.classList.remove('open'); }
     })());
 
+    /* ---- Memoria Viva · Corte M1 (17/08) ---- */
+    chk('M1-01/02 · confirmar una propuesta real crea un recuerdo con título, antes y después', (function(){
+      var o = { id:'org_m1_test', nombre:'Estudio M1', tipo:'empresa', ficha:{ diagnostico:'crecimiento entendido como volumen' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({ diagnostico:'crecimiento entendido como necesidad de criterio para elegir proyectos' }, null, null, null);
+        var r = resolverPropuesta(prop.id, 'confirmar');
+        var recs = recuerdosDe(o);
+        return r.ok === true && recs.length === 1 &&
+               recs[0].field.indexOf('diagnostico') > -1 &&
+               recs[0].before.diagnostico === 'crecimiento entendido como volumen' &&
+               recs[0].after.diagnostico === 'crecimiento entendido como necesidad de criterio para elegir proyectos' &&
+               recs[0].title.indexOf('crecimiento entendido como necesidad') === 0 &&
+               recs[0].source === 'core' && !!recs[0].createdAt;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M1-03 · rechazar una propuesta no genera recuerdo', (function(){
+      var o = { id:'org_m1_rej', nombre:'Estudio Rechazo', tipo:'empresa', ficha:{ diagnostico:'d1' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({ diagnostico:'d2 distinto' }, null, null, null);
+        resolverPropuesta(prop.id, 'rechazar');
+        return recuerdosDe(o).length === 0 && o.ficha.diagnostico === 'd1';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M1-04 · corregir antes de confirmar conserva la versión corregida en el recuerdo', (function(){
+      var o = { id:'org_m1_corr', nombre:'Estudio Corrección', tipo:'empresa', ficha:{ diagnostico:'d1' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({ diagnostico:'d2 del motor' }, null, null, null);
+        resolverPropuesta(prop.id, 'confirmar', { diagnostico:'d3 escrito por el usuario' });
+        var recs = recuerdosDe(o);
+        return recs.length === 1 && recs[0].after.diagnostico === 'd3 escrito por el usuario' &&
+               recs[0].originRef.resuelto_como === 'corregida';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M1-05 · una reafirmación sin cambio real no llega a generar propuesta ni recuerdo', (function(){
+      var o = { id:'org_m1_igual', nombre:'Estudio Igual', tipo:'empresa', ficha:{ diagnostico:'mismo texto' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({ diagnostico:'mismo texto' }, null, null, null);   // idéntico al vigente
+        return prop === null && recuerdosDe(o).length === 0;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M1 · un ajuste interno de solo "modo" (campo oculto) no genera recuerdo', (function(){
+      var o = { id:'org_m1_modo', nombre:'Estudio Modo', tipo:'empresa', ficha:{ diagnostico:'d1', modo:'M01' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({ diagnostico:'d1', modo:'M02' }, null, null, null);   // solo modo cambia
+        resolverPropuesta(prop.id, 'confirmar');
+        return recuerdosDe(o).length === 0 && o.ficha.modo === 'M02';   // la memoria sí se actualiza, el recuerdo no se ensucia
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M1-06 · recuerdosDe() lee del propio organismo, mismo mecanismo de persistencia que ficha_historial', (function(){
+      var o = { id:'org_m1_persist', nombre:'Estudio Persistencia', tipo:'empresa', ficha:{}, recuerdos:[{ id:'rec_x', title:'x', field:['diagnostico'], before:{}, after:{} }] };
+      return recuerdosDe(o).length === 1 && recuerdosDe(o)[0].id === 'rec_x' && recuerdosDe(null).length === 0;
+    })());
+    chk('M1-07 · aislamiento: crearRecuerdo/recuerdosDe no existen fuera del Core', (function(){
+      // negocios.html/urbanismo.html/contextos.html no comparten aplicarPropuesta() ni
+      // el lazo N1.0 -- este chk corre solo dentro de index.html, así que su sola
+      // ejecución sin tocar los otros tres archivos ya es la prueba de aislamiento.
+      return typeof crearRecuerdo === 'function' && typeof recuerdosDe === 'function';
+    })());
+
     /* ---- N2.2 · compatibilidad del resumen con evaluaciones N2.1 sin tension_principal ---- */
     chk('IMP·3 · adjuntarEvaluacionNegocioPro arma el resumen igual con dims viejas (N2.1) y nuevas (N2.2) mezcladas', (function(){
       var o = { id:'org_imp3_test', nombre:'Compat Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
@@ -7447,13 +7701,13 @@ var CASOS_COGNITIVOS = [
     espera:'Crea o continúa una ficha viva del organismo sin duplicarla; retoma el estado, no arranca de cero.' },
   { id:'P01', titulo:'N1.0 · la IA no escribe',
     entrada:'(protocolo N1.0) Conversá hasta que el motor emita una actualización de ficha.',
-    espera:'Aparece el aviso «El motor propone actualizar la ficha». La ficha NO cambió: verificar en Ficha del organismo.' },
+    espera:'Aparece el aviso «El motor propone actualizar la memoria». La memoria NO cambió: verificar en Memoria del organismo.' },
   { id:'P02', titulo:'N1.0 · confirmar',
     entrada:'(protocolo N1.0) Con una propuesta pendiente, tocá Revisar y luego Confirmar.',
-    espera:'La ficha se actualiza, el historial registra la entrada, el badge del chip vuelve a cero.' },
+    espera:'La memoria se actualiza, el historial registra la entrada, el badge del chip vuelve a cero.' },
   { id:'P03', titulo:'N1.0 · rechazar',
     entrada:'(protocolo N1.0) Con una propuesta pendiente, tocá Revisar y luego Rechazar.',
-    espera:'La ficha NO cambia. La propuesta figura como Rechazado en el menú Propuestas.' },
+    espera:'La memoria NO cambia. La propuesta figura como Rechazado en el menú Propuestas.' },
   { id:'P04', titulo:'N1.0 · corregir',
     entrada:'(protocolo N1.0) Tocá Corregir, editá el texto y guardá.',
     espera:'Se aplica el texto del usuario, no el del motor. Estado Corregido.' },
@@ -7480,7 +7734,28 @@ var CASOS_COGNITIVOS = [
     espera:'Reconocido en ambos. Sin regresión del puente entre productos.' },
   { id:'T09', titulo:'Consulta de seguridad edilicia',
     entrada:'Esta pared tiene una fisura grande, ¿es seguro seguir cargándola?',
-    espera:'Reconoce el límite, deriva a un profesional matriculado y organiza el orden de consulta; no dictamina.' }
+    espera:'Reconoce el límite, deriva a un profesional matriculado y organiza el orden de consulta; no dictamina.' },
+  { id:'M1-01', titulo:'Memoria Viva · confirmación real crea un recuerdo',
+    entrada:'(Corte M1) Confirmá una propuesta que cambie al menos un campo visible de la memoria.',
+    espera:'En Memoria → Recuerdos aparece un recuerdo nuevo arriba de todo, con título narrativo (no técnico), fecha y el/los campo(s) que cambiaron.' },
+  { id:'M1-02', titulo:'Memoria Viva · antes y después',
+    entrada:'(Corte M1) Abrí el recuerdo recién creado.',
+    espera:'Muestra el valor anterior tachado y el valor nuevo debajo, por cada campo que cambió -- igual que la tarjeta de revisión de propuestas.' },
+  { id:'M1-03', titulo:'Memoria Viva · rechazo no genera recuerdo',
+    entrada:'(Corte M1) Con una propuesta pendiente, tocá Revisar y luego Rechazar.',
+    espera:'No aparece ningún recuerdo nuevo en Recuerdos. La memoria no cambió.' },
+  { id:'M1-04', titulo:'Memoria Viva · corrección conserva lo corregido',
+    entrada:'(Corte M1) Tocá Corregir, cambiá el texto propuesto por el motor y guardá.',
+    espera:'El recuerdo nuevo muestra como "después" el texto que vos escribiste, no el que había propuesto el motor.' },
+  { id:'M1-05', titulo:'Memoria Viva · sin cambio real no duplica',
+    entrada:'(Corte M1) Provocá una reafirmación donde el motor repita exactamente el mismo texto ya vigente.',
+    espera:'No se genera propuesta (comportamiento ya existente de N1.0) y por lo tanto tampoco un recuerdo nuevo.' },
+  { id:'M1-06', titulo:'Memoria Viva · persistencia',
+    entrada:'(Corte M1) Con al menos un recuerdo creado, recargá la página y reabrí el organismo.',
+    espera:'El recuerdo sigue en Memoria → Recuerdos, con el mismo título, fecha y antes/después.' },
+  { id:'M1-07', titulo:'Memoria Viva · aislamiento',
+    entrada:'(Corte M1) Abrí Urbanismo, Contextos y Negocios Pro después de crear recuerdos en el Core.',
+    espera:'Los tres funcionan exactamente igual que antes -- ninguno muestra ni depende de "Recuerdos" (alcance de M1 es solo Core).' }
 ];
 function cargarResultadosManual(){ try{ return JSON.parse(localStorage.getItem('ag_core_banco') || '{}'); }catch(e){ return {}; } }
 function guardarResultadoManual(id, estado){
