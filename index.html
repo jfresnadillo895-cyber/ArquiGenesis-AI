@@ -4498,6 +4498,427 @@ window.debugOpenField = function(organismoId, question, intention){
   });
 };
 
+/* ============================================================================
+   Contextos Universal · C1-B2 — propagateField() (propagación selectiva del Campo)
+   Entrada: OrganismSnapshot + ContextOpening + OriginAssessment + BoundaryOpeningResult (de
+   C1-A1/C1-A2/C1-B1). No reconstruye Origen ni repite OPEN. No modifica el Organismo, no crea
+   Tensiones/Recuerdos, no selecciona Frentes -- ver PENDIENTES.md.
+   ============================================================================ */
+
+var C1B2_MODEL = 'claude-sonnet-4-6';
+var C1B2_MAX_TOKENS = 1700;
+var C1B2_MAX_DEPTH = 3;              // saltos desde el Organismo (n0 = 0, hasta profundidad 3)
+var C1B2_MAX_RELATIONS_TOTAL = 12;   // presupuesto del grafo de trabajo -- política, no ontológico
+/* Mismos 6 valores que C1B1_EPISTEMIC_STATES -- copia propia intencional, mismo criterio que
+   MODEL/MAX_TOKENS por corte (no generalizar constantes entre cortes). */
+var C1B2_EPISTEMIC_STATES = ['relacion_declarada','memoria_gobernada','recuerdo_historico',
+  'inferencia_contextos','evidencia_existente','hipotesis'];
+/* Razones de cierre que puede elegir el modelo (juicio cognitivo) */
+var C1B2_RAZONES_IA = ['baja_incidencia','solo_detalle','sin_retorno_comprensible',
+  'demasiado_especulativa','requiere_evidencia_inexistente'];
+
+function C1B2_normalizar(s){
+  return String(s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+function C1B2_nuevoId(prefijo, grafo){
+  grafo.__contador = grafo.__contador || {};
+  grafo.__contador[prefijo] = (grafo.__contador[prefijo] || 0) + 1;
+  return prefijo + grafo.__contador[prefijo];
+}
+
+/* Paso determinista (sin IA): arma el grafo inicial a partir de lo que C1-B1 YA descubrió -- nodo
+   Organismo (n0, depth 0) + un nodo Campo por cada candidata de B1 (depth 1) + una relación
+   Organismo<->Campo por cada una, copiando la epistemología tal cual la dejó B1 (nunca la
+   recalcula). Una route por candidata. */
+function C1B2_construirGrafoInicial(snapshot, opening, boundaryOpeningResult){
+  var grafo = {
+    openingId: opening.openingId,
+    originAnchor: boundaryOpeningResult.originAnchor || null,
+    nodes: [], relations: [], routes: [],
+    budget: { maxDepth: C1B2_MAX_DEPTH, maxRelationsTotal: C1B2_MAX_RELATIONS_TOTAL,
+              relationsUsed: 0, budgetReached: false },
+    discardedExpansions: [],
+    status: 'no_candidates',
+    justificationSummary: null,
+    __contador: {}
+  };
+  var n0 = C1B2_nuevoId('n', grafo);
+  grafo.nodes.push({ id: n0, label: (snapshot.identity && snapshot.identity.name) ? snapshot.identity.name : 'Organismo',
+    description: null, kind: 'organismo', depth: 0 });
+
+  var candidatas = boundaryOpeningResult.candidateRelations || [];
+  candidatas.forEach(function(c){
+    var nId = C1B2_nuevoId('n', grafo);
+    grafo.nodes.push({ id: nId, label: c.target.label, description: c.target.description || null,
+      kind: 'campo', depth: 1 });
+    var relId = C1B2_nuevoId('rel', grafo);
+    grafo.relations.push({
+      id: relId, sourceNodeId: n0, targetNodeId: nId,
+      manifestation: c.manifestation, possibleIncidence: c.possibleIncidence,
+      epistemicState: c.epistemicState, supportRefs: c.supportRefs || [],
+      provenanceRefs: c.provenanceRefs || [], uncertainty: c.uncertainty || [],
+      evidenceNeed: null, suggestedBy: 'B1:' + c.id,
+      status: 'candidate', closureReason: null, returnRationale: null
+    });
+    grafo.budget.relationsUsed++;
+    var routeId = C1B2_nuevoId('route', grafo);
+    grafo.routes.push({ id: routeId, nodeIds: [n0, nId], depth: 1, status: 'active', closureReason: null });
+  });
+  return grafo;
+}
+
+/* Ventana cognitiva compacta para evaluar UNA capa de rutas activas a la vez -- una llamada por
+   profundidad (acotada por C1B2_MAX_DEPTH), nunca una llamada por nodo. */
+function C1B2_ventanaPropagacion(grafo, frontier, opening){
+  var porId = {};
+  grafo.nodes.forEach(function(n){ porId[n.id] = n; });
+  var relPorTarget = {};
+  grafo.relations.forEach(function(r){ relPorTarget[r.targetNodeId] = r; });
+
+  var rutas = frontier.map(function(route){
+    var actualId = route.nodeIds[route.nodeIds.length - 1];
+    var actual = porId[actualId];
+    var relLlegada = relPorTarget[actualId];
+    return {
+      routeId: route.id,
+      path: route.nodeIds.map(function(id){ return porId[id].label; }),
+      nodoActual: { label: actual.label, description: actual.description },
+      comoLlegamos: relLlegada ? { manifestation: relLlegada.manifestation,
+        possibleIncidence: relLlegada.possibleIncidence, epistemicState: relLlegada.epistemicState } : null,
+      profundidadActual: route.depth
+    };
+  });
+
+  return {
+    originAnchor: grafo.originAnchor,
+    aperturaTexto: 'Pregunta declarada: ' + (opening.question || '(ninguna)') +
+      '\nIntención declarada: ' + (opening.intention || '(ninguna)'),
+    rutas: rutas,
+    presupuesto: { profundidadMaxima: grafo.budget.maxDepth,
+      relacionesRestantes: grafo.budget.maxRelationsTotal - grafo.budget.relationsUsed }
+  };
+}
+
+/* Prompt propio de C1-B2 (continuación de OPEN, mismo motor conceptual, sin dimensiones ni
+   sistemas de Contextos Legacy). Universal entre dominios: no hay ninguna rama por tipo de
+   Organismo en esta función. */
+function C1B2_PROMPT_PROPAGATE(ventana){
+  var ventanaTxt = JSON.stringify({
+    originAnchor: ventana.originAnchor,
+    rutas: ventana.rutas,
+    presupuesto: ventana.presupuesto
+  }, null, 2);
+  return 'Sos el motor de propagación selectiva del Campo (C1-B2) de Contextos Universal -- ' +
+    'continuación de OPEN (C1-B1), motor propio, sin dimensiones ni sistemas de Contextos Legacy.\n\n' +
+    'PARA CADA RUTA de la lista, respondé una única pregunta: ¿necesitamos seguir esta relación un ' +
+    'paso más para comprender por qué o cómo podría incidir sobre el Organismo? No expandas por ' +
+    'curiosidad ni exhaustividad -- expandí solo si el salto siguiente aumenta significativamente ' +
+    'la capacidad de explicar una incidencia real sobre el Organismo (funcionamiento, capacidad, ' +
+    'dependencia, continuidad, transformación, tensión existente). La distancia no determina ' +
+    'importancia: una relación de segundo o tercer grado puede ser más importante que una directa; ' +
+    'no prioricés por cercanía.\n\n' +
+    ventana.aperturaTexto + '\n\nRUTAS A EVALUAR (ventana ya seleccionada, no es todo el grafo):\n' +
+    ventanaTxt + '\n\n' +
+    'REGLAS:\n' +
+    '1. Si decidís "close": la ruta no continúa ahora. No es afirmar que es falsa -- es que seguirla ' +
+    'no merece más costo en este momento. Elegí closureReason de esta lista exacta: ' +
+    '"baja_incidencia" (el siguiente salto tiene poca incidencia), "solo_detalle" (solo agrega ' +
+    'detalle periférico), "sin_retorno_comprensible" (no se ve cómo volvería a cambiar la ' +
+    'comprensión del Organismo), "demasiado_especulativa" (necesitaría suponer demasiado), o ' +
+    '"requiere_evidencia_inexistente" (necesitaría evidencia externa que no tenemos). Si te sirve ' +
+    'para que quede registrado, podés describir brevemente en "consideredTarget" qué habría sido el ' +
+    'siguiente salto -- sin que eso cree una relación real.\n' +
+    '2. Si decidís "propagate": proponé un "newTarget" (label + description, puede quedar ' +
+    'provisional) y una "newRelation" con manifestation, possibleIncidence, epistemicState (mismo ' +
+    'enum de siempre: relacion_declarada, memoria_gobernada, recuerdo_historico, ' +
+    'inferencia_contextos, evidencia_existente, hipotesis -- honestidad epistémica estricta, una ' +
+    'inferencia tuya queda como inferencia, nunca como demostrada), uncertainty (lista), y ' +
+    'evidenceNeed si hace falta evidencia externa para confirmar que existe o sigue vigente (si no ' +
+    'hace falta, null). No investigues nada externo -- solo registrá la necesidad.\n' +
+    '3. Si decidís "propagate", "returnRationale" es obligatorio: una frase breve sobre qué aspecto ' +
+    'de la comprensión del Organismo podría cambiar si entendemos esta secuencia completa. No hace ' +
+    'falta formular la nueva interpretación, solo mostrar que existe una ruta plausible de vuelta. ' +
+    'Si no hay ruta de retorno comprensible, no propagues -- cerrá con "sin_retorno_comprensible".\n' +
+    '4. Nunca afirmes causalidad ("A causa B") solo porque exista una cadena relacional -- una ruta ' +
+    'plausible no es una explicación causal demostrada.\n' +
+    '5. No le preguntes nada al usuario, no busques evidencia externa, no crees Tensión/Función/ ' +
+    'Configuración/Foco/Retorno, no modifiques Memoria ni Recuerdos. Ninguno de esos pasos te ' +
+    'corresponde acá.\n\n' +
+    'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
+    'después. Sé breve en cada campo. Una decisión por cada routeId de la lista, ni más ni menos. ' +
+    'Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
+    '[[FIELD_PROPAGATION:{\n' +
+    '  "decisions": [ { "routeId": "...", "decision": "close"|"propagate", ' +
+    '"closureReason": "..."|null, "consideredTarget": "..."|null, ' +
+    '"newTarget": { "label": "...", "description": "..." }|null, ' +
+    '"newRelation": { "manifestation": "...", "possibleIncidence": "...", "epistemicState": "...", ' +
+    '"uncertainty": ["..."], "evidenceNeed": "..."|null }|null, ' +
+    '"returnRationale": "..."|null } ],\n' +
+    '  "justificationSummary": "..."\n' +
+    '}]]';
+}
+
+/* Único fetch de todo C1-B2 -- mismo patrón que C1A2_llamarIA/C1B1_llamarIA (system armado de
+   cero, constantes propias, sin generalizar entre cortes). */
+function C1B2_llamarIA(systemPrompt, mensajes){
+  var t0 = Date.now();
+  return fetch(apiEndpoint(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ model: C1B2_MODEL, max_tokens: C1B2_MAX_TOKENS, system: systemPrompt, messages: mensajes })
+  }).then(function(res){
+    return res.json().then(function(data){
+      if(!res.ok || (data && data.error)){
+        throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+      }
+      var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
+    });
+  });
+}
+
+/* Parser defensivo: rechaza toda la respuesta si falta justificationSummary o "decisions" no es
+   lista. Cada decisión se valida individualmente -- si una decisión es inválida o su routeId no
+   está entre los ofrecidos, se descarta. Una decisión descartada NUNCA se traduce en propagación:
+   en C1B2_aplicarDecisiones, la ausencia de una decisión válida siempre resuelve como cierre
+   seguro, nunca como expansión fabricada. */
+function C1B2_parseFieldPropagation(texto, routeIdsOfrecidos){
+  var re = /\[\[FIELD_PROPAGATION:([\s\S]*?)\]\]/;
+  var m = String(texto || '').match(re);
+  if(!m) return null;
+  var raw;
+  try{ raw = JSON.parse(m[1]); }catch(e){ return null; }
+  if(!raw || typeof raw !== 'object') return null;
+  var justificationSummary = (typeof raw.justificationSummary === 'string' && raw.justificationSummary.trim())
+    ? raw.justificationSummary.trim() : null;
+  if(!justificationSummary) return null;
+  if(!Array.isArray(raw.decisions)) return null;
+
+  var ofrecidos = routeIdsOfrecidos || [];
+  var decisions = raw.decisions.map(function(d){
+    if(!d || typeof d !== 'object') return null;
+    if(typeof d.routeId !== 'string' || ofrecidos.indexOf(d.routeId) === -1) return null;
+    if(d.decision !== 'close' && d.decision !== 'propagate') return null;
+
+    if(d.decision === 'close'){
+      if(C1B2_RAZONES_IA.indexOf(d.closureReason) === -1) return null;
+      return { routeId: d.routeId, decision: 'close', closureReason: d.closureReason,
+        consideredTarget: (typeof d.consideredTarget === 'string' && d.consideredTarget.trim()) ? d.consideredTarget.trim() : null };
+    }
+    if(!d.newTarget || typeof d.newTarget !== 'object' || Array.isArray(d.newTarget) ||
+       typeof d.newTarget.label !== 'string' || !d.newTarget.label.trim()) return null;
+    if(!d.newRelation || typeof d.newRelation !== 'object' || Array.isArray(d.newRelation)) return null;
+    var nr = d.newRelation;
+    if(typeof nr.manifestation !== 'string' || !nr.manifestation.trim()) return null;
+    if(typeof nr.possibleIncidence !== 'string' || !nr.possibleIncidence.trim()) return null;
+    if(C1B2_EPISTEMIC_STATES.indexOf(nr.epistemicState) === -1) return null;
+    if(typeof d.returnRationale !== 'string' || !d.returnRationale.trim()) return null;
+    return {
+      routeId: d.routeId, decision: 'propagate',
+      newTarget: { label: d.newTarget.label.trim(),
+        description: (typeof d.newTarget.description === 'string' && d.newTarget.description.trim()) ? d.newTarget.description.trim() : null },
+      newRelation: {
+        manifestation: nr.manifestation.trim(), possibleIncidence: nr.possibleIncidence.trim(),
+        epistemicState: nr.epistemicState,
+        uncertainty: Array.isArray(nr.uncertainty) ? nr.uncertainty.filter(function(x){ return typeof x === 'string' && x.trim(); }) : [],
+        evidenceNeed: (typeof nr.evidenceNeed === 'string' && nr.evidenceNeed.trim()) ? nr.evidenceNeed.trim() : null
+      },
+      returnRationale: d.returnRationale.trim()
+    };
+  }).filter(Boolean);
+
+  return { decisions: decisions, justificationSummary: justificationSummary };
+}
+
+/* Aplica las decisiones de UNA capa al grafo, en el orden de la frontier (determinista, sin IA):
+   detecta convergencia (mismo label normalizado ya existente en el grafo -- Campo<->Campo sin
+   duplicar nodo) y ciclo (mismo label ya presente en el propio path de la ruta) antes de crear
+   nada nuevo; respeta el presupuesto total de relaciones; una ruta sin decisión válida cierra con
+   razón de sistema, nunca se expande. */
+function C1B2_aplicarDecisiones(grafo, frontier, parsed){
+  var porDecisionRouteId = {};
+  parsed.decisions.forEach(function(d){ porDecisionRouteId[d.routeId] = d; });
+  var porId = {};
+  grafo.nodes.forEach(function(n){ porId[n.id] = n; });
+  var rutasPorId = {};
+  grafo.routes.forEach(function(r){ rutasPorId[r.id] = r; });
+
+  frontier.forEach(function(routeFrontier){
+    var route = rutasPorId[routeFrontier.id];
+    var d = porDecisionRouteId[route.id];
+
+    if(!d){
+      route.status = 'closed';
+      route.closureReason = 'respuesta_invalida_del_modelo';
+      return;
+    }
+    if(d.decision === 'close'){
+      route.status = 'closed';
+      route.closureReason = d.closureReason;
+      if(d.consideredTarget){
+        grafo.discardedExpansions.push({
+          fromNodeLabel: porId[route.nodeIds[route.nodeIds.length - 1]].label,
+          consideredTarget: d.consideredTarget, reason: d.closureReason
+        });
+      }
+      return;
+    }
+
+    // propagate
+    if(grafo.budget.relationsUsed >= grafo.budget.maxRelationsTotal){
+      route.status = 'open_limit_reached';
+      route.closureReason = null;
+      return;
+    }
+    var labelNuevo = C1B2_normalizar(d.newTarget.label);
+    var pathLabels = route.nodeIds.map(function(id){ return C1B2_normalizar(porId[id].label); });
+    if(pathLabels.indexOf(labelNuevo) > -1){
+      route.status = 'closed';
+      route.closureReason = 'ciclo_detectado';
+      return;
+    }
+    var nodoExistente = grafo.nodes.filter(function(n){ return C1B2_normalizar(n.label) === labelNuevo; })[0];
+    var targetId, convergio = false;
+    if(nodoExistente){
+      targetId = nodoExistente.id;
+      convergio = true;
+    } else {
+      targetId = C1B2_nuevoId('n', grafo);
+      grafo.nodes.push({ id: targetId, label: d.newTarget.label, description: d.newTarget.description,
+        kind: 'campo', depth: route.depth + 1 });
+    }
+    var relId = C1B2_nuevoId('rel', grafo);
+    grafo.relations.push({
+      id: relId, sourceNodeId: route.nodeIds[route.nodeIds.length - 1], targetNodeId: targetId,
+      manifestation: d.newRelation.manifestation, possibleIncidence: d.newRelation.possibleIncidence,
+      epistemicState: d.newRelation.epistemicState, supportRefs: [], provenanceRefs: [],
+      uncertainty: d.newRelation.uncertainty, evidenceNeed: d.newRelation.evidenceNeed,
+      suggestedBy: 'propagacion:' + route.id,
+      status: convergio ? 'converged' : 'candidate', closureReason: null,
+      returnRationale: d.returnRationale
+    });
+    grafo.budget.relationsUsed++;
+    if(grafo.budget.relationsUsed >= grafo.budget.maxRelationsTotal) grafo.budget.budgetReached = true;
+
+    if(convergio){
+      route.status = 'converged';
+      route.closureReason = null;
+    } else {
+      route.nodeIds = route.nodeIds.concat([targetId]);
+      route.depth = route.depth + 1;
+      route.status = 'active';
+    }
+  });
+}
+
+/* ---- propagateField: punto de entrada único de C1-B2 ---- */
+async function propagateField(snapshot, opening, assessment, boundaryOpeningResult){
+  if(!snapshot || !opening || !boundaryOpeningResult){
+    return { ok:false, motivo:'snapshot, opening o boundaryOpeningResult ausente' };
+  }
+  if(boundaryOpeningResult.status !== 'candidates_found' ||
+     !Array.isArray(boundaryOpeningResult.candidateRelations) || !boundaryOpeningResult.candidateRelations.length){
+    var vacio = {
+      openingId: opening.openingId, originAnchor: boundaryOpeningResult.originAnchor || null,
+      nodes: [], relations: [], routes: [],
+      budget: { maxDepth: C1B2_MAX_DEPTH, maxRelationsTotal: C1B2_MAX_RELATIONS_TOTAL, relationsUsed: 0, budgetReached: false },
+      discardedExpansions: [], status: 'no_candidates',
+      justificationSummary: 'C1-B1 no encontró candidatas de borde -- no hay nada que propagar.'
+    };
+    return { ok: true, result: JSON.parse(JSON.stringify(vacio)),
+      telemetry: { llamadasIA: 0, tokensInput: 0, tokensOutput: 0, rutasPropuestas: 0, rutasDescartadas: 0, profundidadMaxima: 0 } };
+  }
+
+  var grafo = C1B2_construirGrafoInicial(snapshot, opening, boundaryOpeningResult);
+  var telemetry = { llamadasIA: 0, tokensInput: 0, tokensOutput: 0, rutasPropuestas: 0, rutasDescartadas: 0, profundidadMaxima: 1 };
+  var justificaciones = [];
+  var depthActual = 1;
+
+  while(depthActual < grafo.budget.maxDepth && grafo.budget.relationsUsed < grafo.budget.maxRelationsTotal){
+    var frontier = grafo.routes.filter(function(r){ return r.status === 'active' && r.depth === depthActual; });
+    if(!frontier.length) break;
+
+    var ventana = C1B2_ventanaPropagacion(grafo, frontier, opening);
+    var prompt = C1B2_PROMPT_PROPAGATE(ventana);
+    var res;
+    try{
+      res = await C1B2_llamarIA(prompt, [{ role:'user', content:'(evaluá estas rutas y decidí cuáles continúan)' }]);
+    }catch(e){
+      frontier.forEach(function(r){ r.status = 'closed'; r.closureReason = 'respuesta_invalida_del_modelo'; });
+      break;
+    }
+    telemetry.llamadasIA++;
+    telemetry.tokensInput += (res.usage && res.usage.input_tokens) || 0;
+    telemetry.tokensOutput += (res.usage && res.usage.output_tokens) || 0;
+
+    var routeIds = frontier.map(function(r){ return r.id; });
+    var parsed = C1B2_parseFieldPropagation(res.texto, routeIds);
+    if(!parsed){
+      frontier.forEach(function(r){ r.status = 'closed'; r.closureReason = 'respuesta_invalida_del_modelo'; });
+      break;
+    }
+    justificaciones.push(parsed.justificationSummary);
+    C1B2_aplicarDecisiones(grafo, frontier, parsed);
+
+    depthActual++;
+  }
+
+  // cualquier ruta que siga "active" al salir del loop (profundidad o presupuesto de política
+  // agotados) queda abierta -- nunca se fabrica un cierre.
+  grafo.routes.forEach(function(r){
+    if(r.status === 'active'){ r.status = 'open_limit_reached'; r.closureReason = null; }
+  });
+
+  telemetry.rutasPropuestas = grafo.relations.filter(function(r){ return r.suggestedBy && r.suggestedBy.indexOf('propagacion:') === 0; }).length;
+  telemetry.rutasDescartadas = grafo.discardedExpansions.length;
+  telemetry.profundidadMaxima = grafo.routes.reduce(function(m, r){ return Math.max(m, r.depth); }, 1);
+
+  grafo.status = telemetry.rutasPropuestas > 0 ? 'expanded' : 'first_border_sufficient';
+  grafo.justificationSummary = justificaciones.length ? justificaciones.join(' | ') : 'Ninguna candidata de B1 requirió propagación más allá del primer borde.';
+  grafo.budget.budgetReached = grafo.budget.relationsUsed >= grafo.budget.maxRelationsTotal;
+
+  var resultado = JSON.parse(JSON.stringify(grafo));
+  delete resultado.__contador;
+  return { ok: true, result: resultado, telemetry: telemetry };
+}
+
+/* Laboratorio interno C1-B2 (extiende el de C1-B1): encadena reconstructOrigin() -> openField() ->
+   propagateField() y muestra, por ruta, el camino completo Organismo -> ... -> nodo alcanzado, por
+   qué siguió cada salto y por qué se detuvo. Solo consola, sin UI nueva. */
+window.debugPropagateField = function(organismoId, question, intention){
+  var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
+  if(!o){ console.warn('[C1-B2] organismo no encontrado:', organismoId); return null; }
+  var snap = OrganismSnapshotAdapter(o);
+  var opening = crearContextOpening(o.id, { basedOnVersion: snap.organismVersion, question: question, intention: intention });
+  return reconstructOrigin(snap, opening).then(function(r1){
+    if(!r1.ok || r1.assessment.status !== 'continue'){
+      console.warn('[C1-B2] no se llega a openField(): status =', r1.ok ? r1.assessment.status : r1.motivo);
+      return { origin: r1 };
+    }
+    return openField(snap, r1.opening, r1.assessment).then(function(r2){
+      if(!r2.ok){
+        console.warn('[C1-B2] no se llega a propagateField(): motivo =', r2.motivo);
+        return { origin: r1, field: r2 };
+      }
+      return propagateField(snap, r1.opening, r1.assessment, r2.result).then(function(r3){
+        console.log('[C1-B2] GraphState:', r3.ok ? r3.result : r3.motivo);
+        if(r3.ok){
+          var porId = {};
+          r3.result.nodes.forEach(function(n){ porId[n.id] = n; });
+          r3.result.routes.forEach(function(rt){
+            console.log('[C1-B2] ruta ' + rt.id + ' (' + rt.status + (rt.closureReason ? ', ' + rt.closureReason : '') + '):',
+              rt.nodeIds.map(function(id){ return porId[id].label; }).join(' -> '));
+          });
+          console.log('[C1-B2] descartadas:', r3.result.discardedExpansions);
+          console.log('[C1-B2] telemetry:', r3.telemetry);
+        }
+        return { origin: r1, field: r2, graph: r3 };
+      });
+    });
+  });
+};
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
@@ -9432,6 +9853,192 @@ function correrPruebasAuto(){
         return unSoloFetch && guardAntes;
       })());
       // B1-16 · Compatibilidad general: no es un chk() individual -- ES correr correrPruebasAuto()
+      // completo en vivo, ver PENDIENTES.md para el resultado real de esa corrida.
+    })();
+
+    /* ---- Contextos Universal · Corte C1-B2 -- propagateField() (B2-01..17, B2-18 en vivo) ----
+       Mismo límite que B1-15: propagateField() es async (llama a fetch), así que los pasos que
+       dependen de eso se prueban por prueba estructural (texto/orden del código fuente), nunca
+       por inspección síncrona de una Promise. Todo lo demás (construcción del grafo, aplicación
+       de decisiones, convergencia, ciclos, presupuesto) es determinista y síncrono -- se prueba
+       llamando directamente a C1B2_construirGrafoInicial()/C1B2_aplicarDecisiones() con
+       decisiones ya parseadas, sin gastar ninguna llamada real. */
+    (function(){
+      function candidata(id, label){
+        return { id: id, sourceRef: 'organismo', target: { label: label, description: 'desc ' + label },
+          manifestation: 'manifiesta algo', possibleIncidence: 'incide en el organismo', supportRefs: [],
+          provenanceRefs: [], uncertainty: [], epistemicState: 'hipotesis', status: 'candidate' };
+      }
+      function boundaryResult(nombreOrganismo, candidatas){
+        return { openingId: 'op_test', originAnchor: nombreOrganismo, candidateRelations: candidatas,
+          unresolvedBoundaryQuestions: [], status: 'candidates_found', justificationSummary: 'test' };
+      }
+      function snapshotFake(nombre){ return { organismId: 'org_c1b2_test', identity: { name: nombre } }; }
+      function openingFake(){ return { openingId: 'op_test', question: null, intention: null }; }
+      function closeDec(routeId, reason, consideredTarget){
+        return { routeId: routeId, decision: 'close', closureReason: reason, consideredTarget: consideredTarget || null };
+      }
+      function propDec(routeId, label, opts){
+        opts = opts || {};
+        return { routeId: routeId, decision: 'propagate',
+          newTarget: { label: label, description: opts.description || null },
+          newRelation: { manifestation: opts.manifestation || 'manifiesta algo',
+            possibleIncidence: opts.possibleIncidence || 'incide en el organismo',
+            epistemicState: opts.epistemicState || 'hipotesis', uncertainty: opts.uncertainty || [],
+            evidenceNeed: (opts.evidenceNeed !== undefined) ? opts.evidenceNeed : null },
+          returnRationale: opts.returnRationale || 'cambiaría la comprensión de una parte del Organismo' };
+      }
+
+      chk('B2-01 · Primer borde suficiente: una candidata que ya explica su incidencia no propaga innecesariamente', (function(){
+        var g = C1B2_construirGrafoInicial(snapshotFake('Organismo'), openingFake(), boundaryResult('Organismo', [candidata('r1','A')]));
+        var frontier = g.routes.slice();
+        C1B2_aplicarDecisiones(g, frontier, { decisions: [closeDec(frontier[0].id, 'baja_incidencia', null)], justificationSummary: 'x' });
+        return g.routes[0].status === 'closed' && g.routes[0].closureReason === 'baja_incidencia' &&
+          g.relations.length === 1 && g.nodes.length === 2;
+      })());
+
+      chk('B2-02 · Segundo salto necesario: Organismo<->A no alcanza, se propaga a A<->B', (function(){
+        var g = C1B2_construirGrafoInicial(snapshotFake('Organismo'), openingFake(), boundaryResult('Organismo', [candidata('r1','A')]));
+        var frontier = g.routes.slice();
+        C1B2_aplicarDecisiones(g, frontier, { decisions: [propDec(frontier[0].id, 'B', { epistemicState:'inferencia_contextos' })], justificationSummary: 'x' });
+        var r = g.routes[0];
+        return r.status === 'active' && r.depth === 2 && r.nodeIds.length === 3 && g.nodes.length === 3 &&
+          g.relations.length === 2 && g.relations[1].epistemicState === 'inferencia_contextos';
+      })());
+
+      chk('B2-03 · Campo<->Campo: la segunda relación conecta el nodo A con B, no el Organismo con B', (function(){
+        var g = C1B2_construirGrafoInicial(snapshotFake('Organismo'), openingFake(), boundaryResult('Organismo', [candidata('r1','A')]));
+        var frontier = g.routes.slice();
+        C1B2_aplicarDecisiones(g, frontier, { decisions: [propDec(frontier[0].id, 'B')], justificationSummary: 'x' });
+        var nodoA = g.nodes[1], organismo = g.nodes[0], relSegunda = g.relations[1];
+        return relSegunda.sourceNodeId === nodoA.id && relSegunda.sourceNodeId !== organismo.id;
+      })());
+
+      chk('B2-04 · Tercer salto justificado: permite profundidad 3 cuando la propagación lo indica', (function(){
+        var g = C1B2_construirGrafoInicial(snapshotFake('Organismo'), openingFake(), boundaryResult('Organismo', [candidata('r1','A')]));
+        var f1 = g.routes.slice();
+        C1B2_aplicarDecisiones(g, f1, { decisions: [propDec(f1[0].id, 'B')], justificationSummary: 'x' });
+        var f2 = g.routes.filter(function(r){ return r.status === 'active'; });
+        C1B2_aplicarDecisiones(g, f2, { decisions: [propDec(f2[0].id, 'C')], justificationSummary: 'x' });
+        var r = g.routes[0];
+        return r.depth === 3 && g.nodes.length === 4 && g.relations.length === 3;
+      })());
+
+      chk('B2-05 · Expansión infinita: el loop de propagateField() está acotado por C1B2_MAX_DEPTH, no por la voluntad del modelo', (function(){
+        var src = propagateField.toString();
+        var condicionAcotada = src.indexOf('depthActual < grafo.budget.maxDepth') > -1;
+        var profundidadFinita = typeof C1B2_MAX_DEPTH === 'number' && isFinite(C1B2_MAX_DEPTH) && C1B2_MAX_DEPTH <= 4;
+        // ninguna ruta que siga "active" al salir del loop se cierra fabricando un motivo -- queda abierta
+        var sinCierreFabricado = src.indexOf("r.status = 'open_limit_reached'; r.closureReason = null;") > -1;
+        return condicionAcotada && profundidadFinita && sinCierreFabricado;
+      })());
+
+      chk('B2-06 · Rama trivial: detecta una rama externa real pero secundaria y la cierra, registrándola como descartada', (function(){
+        var g = C1B2_construirGrafoInicial(snapshotFake('Organismo'), openingFake(), boundaryResult('Organismo', [candidata('r1','A')]));
+        var frontier = g.routes.slice();
+        C1B2_aplicarDecisiones(g, frontier, { decisions: [closeDec(frontier[0].id, 'solo_detalle', 'un detalle periférico sin incidencia real')], justificationSummary: 'x' });
+        return g.discardedExpansions.length === 1 && g.discardedExpansions[0].reason === 'solo_detalle' &&
+          g.discardedExpansions[0].consideredTarget === 'un detalle periférico sin incidencia real';
+      })());
+
+      chk('B2-07 · Relación remota crítica: el prompt indica explícitamente que la distancia no determina importancia', (function(){
+        var ventana = C1B2_ventanaPropagacion(C1B2_construirGrafoInicial(snapshotFake('Organismo'), openingFake(), boundaryResult('Organismo', [candidata('r1','A')])),
+          [], openingFake());
+        var prompt = C1B2_PROMPT_PROPAGATE(ventana);
+        return prompt.indexOf('La distancia no determina importancia') > -1 && prompt.indexOf('no prioricés por cercanía') > -1;
+      })());
+
+      chk('B2-08 · Convergencia: dos rutas que proponen el mismo nodo (case/espacios distintos) no duplican el grafo', (function(){
+        var g = C1B2_construirGrafoInicial(snapshotFake('Organismo'), openingFake(), boundaryResult('Organismo', [candidata('r1','A'), candidata('r2','B')]));
+        var frontier = g.routes.slice();
+        var nodosAntes = g.nodes.length;
+        C1B2_aplicarDecisiones(g, frontier, { decisions: [
+          propDec(frontier[0].id, 'Mercado Externo'),
+          propDec(frontier[1].id, '  mercado   externo ')
+        ], justificationSummary: 'x' });
+        var route1 = g.routes[0], route2 = g.routes[1];
+        var relTarget1 = g.relations[g.relations.length - 2].targetNodeId;
+        var relTarget2 = g.relations[g.relations.length - 1].targetNodeId;
+        return g.nodes.length === nodosAntes + 1 && relTarget1 === relTarget2 &&
+          route2.status === 'converged' && route1.status === 'active';
+      })());
+
+      chk('B2-09 · Ciclo: una relación que propone volver a un nodo ya presente en la propia ruta no produce loop', (function(){
+        var g = C1B2_construirGrafoInicial(snapshotFake('Organismo Base'), openingFake(), boundaryResult('Organismo Base', [candidata('r1','A')]));
+        var frontier = g.routes.slice();
+        var nodosAntes = g.nodes.length, relAntes = g.relations.length;
+        C1B2_aplicarDecisiones(g, frontier, { decisions: [propDec(frontier[0].id, '  Organismo base  ')], justificationSummary: 'x' });
+        var r = g.routes[0];
+        return r.status === 'closed' && r.closureReason === 'ciclo_detectado' && g.nodes.length === nodosAntes && g.relations.length === relAntes;
+      })());
+
+      chk('B2-10 · Falta de evidencia: registra evidenceNeed en vez de fabricar continuidad, y acepta el cierre por evidencia inexistente', (function(){
+        var g = C1B2_construirGrafoInicial(snapshotFake('Organismo'), openingFake(), boundaryResult('Organismo', [candidata('r1','A'), candidata('r2','B')]));
+        var frontier = g.routes.slice();
+        C1B2_aplicarDecisiones(g, frontier, { decisions: [
+          propDec(frontier[0].id, 'C', { evidenceNeed: 'confirmar si la relación sigue vigente hoy' }),
+          closeDec(frontier[1].id, 'requiere_evidencia_inexistente', null)
+        ], justificationSummary: 'x' });
+        var relNueva = g.relations[g.relations.length - 1];
+        return relNueva.evidenceNeed === 'confirmar si la relación sigue vigente hoy' &&
+          g.routes[1].status === 'closed' && g.routes[1].closureReason === 'requiere_evidencia_inexistente';
+      })());
+
+      chk('B2-11 · Sin causalidad falsa: el prompt prohíbe explícitamente afirmar causalidad por una cadena relacional', (function(){
+        var ventana = C1B2_ventanaPropagacion(C1B2_construirGrafoInicial(snapshotFake('Organismo'), openingFake(), boundaryResult('Organismo', [candidata('r1','A')])),
+          [], openingFake());
+        return C1B2_PROMPT_PROPAGATE(ventana).indexOf('Nunca afirmes causalidad') > -1;
+      })());
+
+      chk('B2-12/13/14 · Misma lógica en los tres dominios: el bloque de REGLAS del prompt es idéntico sin importar el contenido de la ventana', (function(){
+        function ventanaDe(nombre, rutas){
+          return C1B2_ventanaPropagacion(C1B2_construirGrafoInicial(snapshotFake(nombre), openingFake(), boundaryResult(nombre, [candidata('r1', rutas)])), [], openingFake());
+        }
+        var pHumano = C1B2_PROMPT_PROPAGATE(ventanaDe('Estudio de diseño', 'red de ejecutores'));
+        var pBio = C1B2_PROMPT_PROPAGATE(ventanaDe('Colonia de hongos', 'humedad del sustrato'));
+        var pAbstracto = C1B2_PROMPT_PROPAGATE(ventanaDe('Metodología de consultoría', 'otros consultores'));
+        function reglas(p){ return p.substring(p.indexOf('REGLAS:')); }
+        var sinRamaPorTipo = C1B2_PROMPT_PROPAGATE.toString().indexOf('.tipo') === -1 &&
+          C1B2_ventanaPropagacion.toString().indexOf('.tipo') === -1;
+        return reglas(pHumano) === reglas(pBio) && reglas(pBio) === reglas(pAbstracto) && sinRamaPorTipo;
+      })());
+
+      chk('B2-15 · Sin categorías Legacy: la propagación no depende de CONTEXT_PROMPT ni de ninguna función de Contextos Legacy', (function(){
+        var src = C1B2_construirGrafoInicial.toString() + C1B2_ventanaPropagacion.toString() + C1B2_PROMPT_PROPAGATE.toString() +
+          C1B2_parseFieldPropagation.toString() + C1B2_aplicarDecisiones.toString() + propagateField.toString();
+        return src.indexOf('CONTEXT_PROMPT(') === -1;
+      })());
+
+      chk('B2-16 · Inmutabilidad: todo el proceso permanece read-only respecto del Organismo real', (function(){
+        var o = { id:'o_c1b2_inm', nombre:'Inmutable', tipo:'empresa', ficha:{funcion:'integrar'}, principios:[] };
+        guardarOrganismo(o);
+        var antes = JSON.stringify(o);
+        var g = C1B2_construirGrafoInicial(snapshotFake('Inmutable'), openingFake(), boundaryResult('Inmutable', [candidata('r1','A')]));
+        C1B2_aplicarDecisiones(g, g.routes.slice(), { decisions: [propDec(g.routes[0].id, 'B')], justificationSummary: 'x' });
+        var src = C1B2_construirGrafoInicial.toString() + C1B2_aplicarDecisiones.toString() + C1B2_parseFieldPropagation.toString() + propagateField.toString();
+        var sinEscritura = src.indexOf('guardarOrganismo') === -1 && src.indexOf('persistirOrganismos') === -1;
+        return JSON.stringify(o) === antes && sinEscritura;
+      })());
+
+      chk('B2-17 · Presupuesto: se agota en 3 saltos/N relaciones sin exceder el máximo, y una ruta sin cupo queda abierta (no cerrada por fabricación)', (function(){
+        var candidatas = [candidata('r1','A'), candidata('r2','B'), candidata('r3','C'), candidata('r4','D')];
+        var g = C1B2_construirGrafoInicial(snapshotFake('Organismo'), openingFake(), boundaryResult('Organismo', candidatas));
+        g.budget.maxRelationsTotal = 9;   // acotado para este test, sin tocar la constante real
+        var f1 = g.routes.slice();
+        C1B2_aplicarDecisiones(g, f1, { decisions: [
+          propDec(f1[0].id,'A2'), propDec(f1[1].id,'B2'), propDec(f1[2].id,'C2'), propDec(f1[3].id,'D2')
+        ], justificationSummary: 'x' });   // 4 + 4 = 8 relaciones
+        var f2 = g.routes.filter(function(r){ return r.status === 'active'; });
+        C1B2_aplicarDecisiones(g, f2, { decisions: [
+          propDec(f2[0].id,'A3'), propDec(f2[1].id,'B3'), propDec(f2[2].id,'C3'), propDec(f2[3].id,'D3')
+        ], justificationSummary: 'x' });
+        var abiertas = g.routes.filter(function(r){ return r.status === 'open_limit_reached'; });
+        var activas = g.routes.filter(function(r){ return r.status === 'active'; });
+        return g.relations.length === 9 && g.budget.relationsUsed === 9 && g.budget.budgetReached === true &&
+          activas.length === 1 && abiertas.length === 3 && abiertas.every(function(r){ return r.closureReason === null; });
+      })());
+
+      // B2-18 · Compatibilidad general: no es un chk() individual -- ES correr correrPruebasAuto()
       // completo en vivo, ver PENDIENTES.md para el resultado real de esa corrida.
     })();
 
