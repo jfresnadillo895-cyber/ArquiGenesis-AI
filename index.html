@@ -7927,10 +7927,16 @@ function correrPruebasAuto(){
 
     /* ---- N2.3 · el resumen suma el último diagnóstico integral confirmado, y sigue
        comportándose como N2.2 cuando no hay ninguno ---- */
+    // Fix 17/08: IMP·4 a IMP·11 tenían el MISMO bug de stubbing que IMP·3 (faltaba
+    // cargarOrganismos()), recién visible ahora que IMP·3 dejó de tirar la excepción que
+    // abortaba correrPruebasAuto() entero antes de llegar acá -- toda esta sección corría
+    // "en la práctica" desde que se escribió (era N2.x-N2.6 era) pero nunca se había
+    // ejecutado en vivo contra una cuenta con datos reales hasta hoy.
     chk('IMP·4 · resumen incluye el último diagnosticos_integrales[] confirmado (N2.3)', (function(){
       var o = { id:'org_imp4_test', nombre:'Integral Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
-      var origGuardar = guardarOrganismo, origState = state.organismo;
+      var origCargar = cargarOrganismos, origGuardar = guardarOrganismo, origState = state.organismo;
       try{
+        cargarOrganismos = function(){ return [o]; };
         guardarOrganismo = function(org){ o = org; };
         state.organismo = null;
         var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp4_test',
@@ -7945,12 +7951,13 @@ function correrPruebasAuto(){
         // tiene que usar la ÚLTIMA versión (v2), no la primera
         return r.indexOf('Relaciones (v2): la presión de margen se transfiere desde mercado a economía') > -1
           && r.indexOf('primera lectura') === -1;
-      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+      } finally { cargarOrganismos = origCargar; guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
     chk('IMP·5 · resumen se comporta igual que N2.2 cuando no hay diagnóstico integral confirmado', (function(){
       var o = { id:'org_imp5_test', nombre:'Sin Integral Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
-      var origGuardar = guardarOrganismo, origState = state.organismo;
+      var origCargar = cargarOrganismos, origGuardar = guardarOrganismo, origState = state.organismo;
       try{
+        cargarOrganismos = function(){ return [o]; };
         guardarOrganismo = function(org){ o = org; };
         state.organismo = null;
         var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp5_test',
@@ -7960,12 +7967,13 @@ function correrPruebasAuto(){
         adjuntarEvaluacionNegocioPro(payload, true);
         var r = o.evaluaciones_negocio_pro[0].resumen;
         return r.indexOf('Relaciones (v') === -1 && r.indexOf('B1 estable') > -1;
-      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+      } finally { cargarOrganismos = origCargar; guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
     chk('IMP·6 · resumen incluye el último proyectivos[] confirmado (N2.4)', (function(){
       var o = { id:'org_imp6_test', nombre:'Proyectivo Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
-      var origGuardar = guardarOrganismo, origState = state.organismo;
+      var origCargar = cargarOrganismos, origGuardar = guardarOrganismo, origState = state.organismo;
       try{
+        cargarOrganismos = function(){ return [o]; };
         guardarOrganismo = function(org){ o = org; };
         state.organismo = null;
         var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp6_test',
@@ -7983,12 +7991,13 @@ function correrPruebasAuto(){
         return r.indexOf('Proyectivo (v2): reorganizar la relación comercial reduciría la dependencia de pocos clientes') > -1
           && r.indexOf('primera exploración') === -1
           && r.indexOf('Relaciones (v1)') > -1;
-      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+      } finally { cargarOrganismos = origCargar; guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
     chk('IMP·7 · resumen se comporta igual que N2.3 cuando no hay proyectivo confirmado', (function(){
       var o = { id:'org_imp7_test', nombre:'Sin Proyectivo Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
-      var origGuardar = guardarOrganismo, origState = state.organismo;
+      var origCargar = cargarOrganismos, origGuardar = guardarOrganismo, origState = state.organismo;
       try{
+        cargarOrganismos = function(){ return [o]; };
         guardarOrganismo = function(org){ o = org; };
         state.organismo = null;
         var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp7_test',
@@ -7998,12 +8007,13 @@ function correrPruebasAuto(){
         adjuntarEvaluacionNegocioPro(payload, true);
         var r = o.evaluaciones_negocio_pro[0].resumen;
         return r.indexOf('Proyectivo') === -1 && r.indexOf('B1 estable') > -1;
-      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+      } finally { cargarOrganismos = origCargar; guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
     chk('IMP·8 · resumen cuenta los estados del último campos_decisiones[] confirmado (N2.5)', (function(){
       var o = { id:'org_imp8_test', nombre:'Decisiones Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
-      var origGuardar = guardarOrganismo, origState = state.organismo;
+      var origCargar = cargarOrganismos, origGuardar = guardarOrganismo, origState = state.organismo;
       try{
+        cargarOrganismos = function(){ return [o]; };
         guardarOrganismo = function(org){ o = org; };
         state.organismo = null;
         var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp8_test',
@@ -8024,12 +8034,13 @@ function correrPruebasAuto(){
         // tiene que usar la ÚLTIMA versión (v2), no la primera, y no perder proyectivo/diagnóstico integral
         return r.indexOf('Campo de decisiones (v2): 1 adoptada, 1 condicionada, 1 sin resolver') > -1
           && r.indexOf('Proyectivo (v1)') > -1 && r.indexOf('Relaciones (v1)') > -1;
-      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+      } finally { cargarOrganismos = origCargar; guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
     chk('IMP·9 · resumen se comporta igual que N2.4 cuando no hay campo de decisiones confirmado', (function(){
       var o = { id:'org_imp9_test', nombre:'Sin Decisiones Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
-      var origGuardar = guardarOrganismo, origState = state.organismo;
+      var origCargar = cargarOrganismos, origGuardar = guardarOrganismo, origState = state.organismo;
       try{
+        cargarOrganismos = function(){ return [o]; };
         guardarOrganismo = function(org){ o = org; };
         state.organismo = null;
         var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp9_test',
@@ -8039,12 +8050,13 @@ function correrPruebasAuto(){
         adjuntarEvaluacionNegocioPro(payload, true);
         var r = o.evaluaciones_negocio_pro[0].resumen;
         return r.indexOf('Campo de decisiones') === -1 && r.indexOf('B1 estable') > -1;
-      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+      } finally { cargarOrganismos = origCargar; guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
     chk('IMP·10 · resumen refleja una ejecución en curso (ejecucion_actual, no ejecuciones[]) con desvío y señal de recomprensión (N2.6)', (function(){
       var o = { id:'org_imp10_test', nombre:'Ejecución Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
-      var origGuardar = guardarOrganismo, origState = state.organismo;
+      var origCargar = cargarOrganismos, origGuardar = guardarOrganismo, origState = state.organismo;
       try{
+        cargarOrganismos = function(){ return [o]; };
         guardarOrganismo = function(org){ o = org; };
         state.organismo = null;
         var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp10_test',
@@ -8065,14 +8077,15 @@ function correrPruebasAuto(){
         return r.indexOf('Ejecución activa') > -1 && r.indexOf('1 en curso') > -1 && r.indexOf('1 bloqueada') > -1
           && r.indexOf('principal desvío: el ciclo comercial es más largo de lo previsto') > -1
           && r.indexOf('requiere recomprensión (1 señal') > -1 && r.indexOf('sin cierre todavía') > -1;
-      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+      } finally { cargarOrganismos = origCargar; guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
     chk('IMP·11 · sin ejecucion_actual, el resumen usa el último ejecuciones[] cerrado; sin ninguna, no menciona ejecución', (function(){
       var o1 = { id:'org_imp11a_test', nombre:'Ejecución Cerrada Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
       var o2 = { id:'org_imp11b_test', nombre:'Sin Ejecución Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
-      var origGuardar = guardarOrganismo, origState = state.organismo;
+      var origCargar = cargarOrganismos, origGuardar = guardarOrganismo, origState = state.organismo;
       try{
         state.organismo = null;
+        cargarOrganismos = function(){ return [o1]; };
         guardarOrganismo = function(org){ o1 = org; };
         adjuntarEvaluacionNegocioPro({ producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp11a_test',
           evaluacion: { alcance:'rapida', version:1, estado:'cerrada', dimensiones:[{cod:'B1',nombre:'x',estado:'estable'}], sintesis:'',
@@ -8082,6 +8095,7 @@ function correrPruebasAuto(){
         var r1 = o1.evaluaciones_negocio_pro[0].resumen;
         var ok1 = r1.indexOf('Ejecución cerrada') > -1 && r1.indexOf('ciclo cerrado') > -1 && r1.indexOf('Ejecución activa') === -1;
 
+        cargarOrganismos = function(){ return [o2]; };
         guardarOrganismo = function(org){ o2 = org; };
         adjuntarEvaluacionNegocioPro({ producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp11b_test',
           evaluacion: { alcance:'rapida', version:1, estado:'cerrada', dimensiones:[{cod:'B1',nombre:'x',estado:'estable'}], sintesis:'',
@@ -8090,7 +8104,7 @@ function correrPruebasAuto(){
         var ok2 = r2.indexOf('Ejecución') === -1 && r2.indexOf('B1 estable') > -1;
 
         return ok1 && ok2;
-      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+      } finally { cargarOrganismos = origCargar; guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
 
     chk('ORI·1 · el tipo orienta a la especialidad correcta (o a ninguna)', (function(){
