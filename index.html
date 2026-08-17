@@ -3881,7 +3881,10 @@ window.debugOrganismSnapshot = function(organismoId){
 
 var C1A2_ENGINE_VERSION = 'context-c1-a';
 var C1A2_MODEL = 'claude-sonnet-4-6';
-var C1A2_MAX_TOKENS = 700;
+var C1A2_MAX_TOKENS = 1000;   // ajustado 17/08 durante verificación de C1-B1: 700 fallaba de forma
+                               // intermitente (variabilidad normal de longitud del modelo) en
+                               // organismos con justificationSummary o criticalUnknowns más
+                               // extensos -- ver PENDIENTES.md
 var C1A2_LIMITE_RECUERDOS = 3;
 
 function nuevoIdOpening(){
