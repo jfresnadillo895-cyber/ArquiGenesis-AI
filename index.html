@@ -5495,6 +5495,455 @@ window.debugSelectNextCognitiveAction = function(organismoId, question, intentio
   });
 };
 
+/* ============================================================================
+   Contextos Universal · C1-C3A — Ejecución adaptativa mínima: ASK + TRACE
+   Entrada: ContextFront activo (de C1-C1) + NextCognitiveAction (de C1-C2). Ejecuta EXACTAMENTE
+   una de las dos únicas acciones materializadas en este corte (ASK o TRACE) y se detiene -- no
+   vuelve a llamar C1-C1/C1-C2, no encadena una segunda acción. Las otras 7 acciones del alfabeto
+   de C1-C2 (READ/RESEARCH/DEEPEN/EXPAND/CONTRAST/INTERPRET/CLOSE_FRONT) devuelven
+   "action_not_implemented_yet" explícito -- nunca fallback silencioso. Ver PENDIENTES.md.
+   ============================================================================ */
+
+var C1C3A_MODEL = 'claude-sonnet-4-6';
+var C1C3A_ASK_MAX_TOKENS = 900;
+var C1C3A_TRACE_MAX_TOKENS = 1800;
+var C1C3A_ACCIONES_IMPLEMENTADAS = ['ASK', 'TRACE'];
+var C1C3A_TRACE_ESTADOS = ['advanced', 'insufficient', 'contradicted'];
+var C1C3A_TRACE_ASSESSMENTS = ['sustentado', 'inferido', 'hueco', 'contradiccion'];
+
+/* ---- ASK: formular UNA pregunta discriminante (C1-C2 ya decidió que corresponde preguntar;
+   acá no se vuelve a evaluar esa decisión, solo se redacta) ---- */
+
+function C1C3A_ventanaAsk(front, nextAction){
+  return {
+    frontId: front.id,
+    formulation: front.formulation,
+    frontUncertainty: front.uncertainty,
+    uncertaintyAddressed: nextAction.uncertaintyAddressed,
+    requirementDescription: (nextAction.requirement && nextAction.requirement.description) ? nextAction.requirement.description : null,
+    possibleIncidence: front.possibleIncidence
+  };
+}
+
+/* Prompt propio de C1-C3A/ASK (continuación de C1-C2, motor propio). Universal entre dominios: no
+   hay ninguna rama por tipo de Organismo en esta función. */
+function C1C3A_PROMPT_ASK(ventana){
+  var ventanaTxt = JSON.stringify(ventana, null, 2);
+  return 'Sos el motor de ejecución de la acción ASK (C1-C3A) de Contextos Universal -- continuación ' +
+    'de C1-C2, motor propio, sin dimensiones ni sistemas de Contextos Legacy. C1-C2 ya decidió que ' +
+    'la próxima acción cognitiva para este Frente es ASK; tu única tarea es FORMULAR esa pregunta -- ' +
+    'no evaluar si corresponde preguntar, esa decisión ya se tomó antes y no te corresponde revisarla.\n\n' +
+    'FRENTE Y NECESIDAD DECLARADA:\n' + ventanaTxt + '\n\n' +
+    'REGLAS:\n' +
+    '1. Generá exactamente UNA pregunta en lenguaje natural, dirigida al usuario -- nunca un ' +
+    'formulario ni varias preguntas encadenadas con "y también".\n' +
+    '2. La pregunta tiene que responder exactamente a "uncertaintyAddressed" -- ni más amplia ni ' +
+    'más genérica que eso.\n' +
+    '3. Tiene que tener relación visible con el Frente ("formulation"): quien la lea tiene que poder ' +
+    'entender por qué se le pregunta eso.\n' +
+    '4. "resolves" identifica en una frase corta qué incertidumbre específica intenta discriminar la ' +
+    'pregunta.\n' +
+    '5. "whyNeeded" explica brevemente por qué Memoria, Recuerdos, evidencia disponible o el grafo no ' +
+    'alcanzaban para resolverlo sin preguntar -- reutilizá "requirementDescription" como base, no lo ' +
+    'reinventes desde cero.\n' +
+    '6. No expliques tu razonamiento paso a paso.\n\n' +
+    'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
+    'después. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
+    '[[ASK_QUESTION:{\n' +
+    '  "text": "...",\n' +
+    '  "resolves": "...",\n' +
+    '  "whyNeeded": "...",\n' +
+    '  "justificationSummary": "..."\n' +
+    '}]]';
+}
+
+function C1C3A_llamarIAAsk(systemPrompt, mensajes){
+  var t0 = Date.now();
+  return fetch(apiEndpoint(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ model: C1C3A_MODEL, max_tokens: C1C3A_ASK_MAX_TOKENS, system: systemPrompt, messages: mensajes })
+  }).then(function(res){
+    return res.json().then(function(data){
+      if(!res.ok || (data && data.error)){
+        throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+      }
+      var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
+    });
+  });
+}
+
+/* Parser defensivo: rechaza toda la respuesta si falta text/resolves/whyNeeded/justificationSummary,
+   o si el texto de la pregunta trae más de un signo "?" (regla dura: una sola pregunta, nunca una
+   batería encadenada). */
+function C1C3A_parseAskQuestion(texto){
+  var re = /\[\[ASK_QUESTION:([\s\S]*?)\]\]/;
+  var m = String(texto || '').match(re);
+  if(!m) return null;
+  var raw;
+  try{ raw = JSON.parse(m[1]); }catch(e){ return null; }
+  if(!raw || typeof raw !== 'object') return null;
+  var text = (typeof raw.text === 'string' && raw.text.trim()) ? raw.text.trim() : null;
+  var resolves = (typeof raw.resolves === 'string' && raw.resolves.trim()) ? raw.resolves.trim() : null;
+  var whyNeeded = (typeof raw.whyNeeded === 'string' && raw.whyNeeded.trim()) ? raw.whyNeeded.trim() : null;
+  var justificationSummary = (typeof raw.justificationSummary === 'string' && raw.justificationSummary.trim()) ? raw.justificationSummary.trim() : null;
+  if(!text || !resolves || !whyNeeded || !justificationSummary) return null;
+  if((text.match(/\?/g) || []).length > 1) return null;   // regla C3A-04: una sola pregunta
+  return { text: text, resolves: resolves, whyNeeded: whyNeeded, justificationSummary: justificationSummary };
+}
+
+/* ---- executeAsk: única forma de ejecutar ASK en este corte. No decide si preguntar (eso ya lo
+   hizo C1-C2) -- solo redacta. No escribe nada todavía: la pregunta queda en status "need_user"
+   hasta que applyUserAnswer() reciba una respuesta real. */
+async function executeAsk(front, nextAction){
+  if(!front || front.status !== 'active') return { ok:false, motivo:'front ausente o no activo' };
+  if(!nextAction || nextAction.action !== 'ASK') return { ok:false, motivo:'nextAction no es ASK' };
+  var ventana = C1C3A_ventanaAsk(front, nextAction);
+  var prompt = C1C3A_PROMPT_ASK(ventana);
+  var res;
+  try{
+    res = await C1C3A_llamarIAAsk(prompt, [{ role:'user', content:'(formulá la pregunta)' }]);
+  }catch(e){
+    return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
+  }
+  var parsed = C1C3A_parseAskQuestion(res.texto);
+  if(!parsed){
+    return { ok:false, motivo:'no se pudo interpretar la pregunta generada', usage: res.usage,
+             duracionMs: res.duracionMs, textoCrudo: res.texto };
+  }
+  var result = {
+    frontId: front.id, action: 'ASK', status: 'need_user',
+    observations: [], relationUpdates: [], routeUpdates: [],
+    evidenceNeeds: [], uncertainties: [ nextAction.uncertaintyAddressed ],
+    userQuestion: { text: parsed.text, resolves: parsed.resolves, whyNeeded: parsed.whyNeeded },
+    nextCandidates: [], justificationSummary: parsed.justificationSummary
+  };
+  result = JSON.parse(JSON.stringify(result));
+  return {
+    ok: true, result: result,
+    telemetry: { llamadasIA: 1, tokensInput: (res.usage && res.usage.input_tokens) || null,
+      tokensOutput: (res.usage && res.usage.output_tokens) || null, duracionMs: res.duracionMs }
+  };
+}
+
+/* ---- applyUserAnswer: incorpora la respuesta real del usuario. Determinista, sin llamada IA, sin
+   volver a invocar C1-C2. Adaptación explícita sobre la firma sugerida en el encargo
+   (applyUserAnswer(front, question, answer)): agrego "opening" como primer parámetro porque el
+   encargo pide registrar la respuesta "dentro del estado operativo de la Apertura" -- sin la
+   Apertura no hay dónde escribirla. Nunca toca o.ficha ni crea un Recuerdo: la respuesta vive en
+   una extensión en memoria de la Apertura (opening.cognitiveAnswers), igual de efímera que el resto
+   de ContextOpening (ver C1-A2, no se persiste en este corte). */
+function C1C3A_nuevaAperturaConRespuesta(opening, entry){
+  var clon = JSON.parse(JSON.stringify(opening));
+  if(!Array.isArray(clon.cognitiveAnswers)) clon.cognitiveAnswers = [];
+  clon.cognitiveAnswers.push(entry);
+  return clon;
+}
+
+function C1C3A_actualizarFrenteTrasRespuesta(front, entry){
+  var clon = JSON.parse(JSON.stringify(front));
+  if(!clon.operationalState){
+    clon.operationalState = { status:'open', history:[], pendingQuestion:null, answers:[], evidenceNeeds:[], uncertainties:[] };
+  }
+  clon.operationalState.pendingQuestion = null;
+  clon.operationalState.answers.push(entry);
+  clon.operationalState.status = 'completed';
+  clon.operationalState.history.push({ action:'ASK', event:'user_answer_incorporated', at: entry.respondedAt });
+  return clon;
+}
+
+function applyUserAnswer(opening, front, question, answer){
+  if(!opening || !front || !question || typeof answer !== 'string' || !answer.trim()){
+    return { ok:false, motivo:'opening, front, question o answer ausente/inválido' };
+  }
+  var entry = {
+    frontId: front.id, questionText: question.text, resolves: question.resolves,
+    whyNeeded: question.whyNeeded, answer: answer.trim(), procedencia: 'user',
+    respondedAt: new Date().toISOString()
+  };
+  var nuevaApertura = C1C3A_nuevaAperturaConRespuesta(opening, entry);
+  var nuevoFrente = C1C3A_actualizarFrenteTrasRespuesta(front, entry);
+  return { ok:true, opening: nuevaApertura, front: nuevoFrente, entry: entry };
+}
+
+/* ---- TRACE: reconstruir con lo YA EXISTENTE cómo se conecta una ruta ya sugerida. Nunca EXPAND
+   (no busca nada nuevo más allá del grafo ya recibido). Parte siempre de routeRefs/targetRefs de
+   NextCognitiveAction -- nunca del grafo completo. ---- */
+
+/* Arma, para cada ruta objetivo, los pasos consecutivos (nodo->nodo) y si cada uno tiene una
+   relación real que lo sostenga ("sustentadoEnGrafo") -- ese cálculo es 100% determinista en
+   código, nunca delegado al modelo, para que la IA no pueda "ver" un tramo que no existe. */
+function C1C3A_ventanaTrace(graphState, front, nextAction){
+  var porId = {};
+  (graphState.nodes || []).forEach(function(n){ porId[n.id] = n; });
+  var relPorPar = {};
+  (graphState.relations || []).forEach(function(r){ relPorPar[r.sourceNodeId + '>>' + r.targetNodeId] = r; });
+  var relPorId = {};
+  (graphState.relations || []).forEach(function(r){ relPorId[r.id] = r; });
+
+  var routeIdsObjetivo = (nextAction.targetRefs || []).filter(function(x){
+    return (graphState.routes || []).some(function(r){ return r.id === x; });
+  });
+  if(!routeIdsObjetivo.length) routeIdsObjetivo = (front.routeRefs || []).slice();
+
+  var rutas = routeIdsObjetivo.map(function(rid){
+    var rt = (graphState.routes || []).filter(function(x){ return x.id === rid; })[0];
+    if(!rt) return null;
+    var pasos = [];
+    for(var i = 1; i < rt.nodeIds.length; i++){
+      var fromId = rt.nodeIds[i - 1], toId = rt.nodeIds[i];
+      var rel = relPorPar[fromId + '>>' + toId] || null;
+      pasos.push({
+        from: porId[fromId] ? porId[fromId].label : fromId,
+        to: porId[toId] ? porId[toId].label : toId,
+        relationId: rel ? rel.id : null,
+        manifestation: rel ? rel.manifestation : null,
+        possibleIncidence: rel ? rel.possibleIncidence : null,
+        epistemicState: rel ? rel.epistemicState : null,
+        uncertainty: rel ? rel.uncertainty : null,
+        evidenceNeed: rel ? rel.evidenceNeed : null,
+        sustentadoEnGrafo: !!rel
+      });
+    }
+    return { routeId: rt.id, status: rt.status, closureReason: rt.closureReason, pasos: pasos };
+  }).filter(Boolean);
+
+  var idsEnRutas = {};
+  rutas.forEach(function(rt){ rt.pasos.forEach(function(p){ if(p.relationId) idsEnRutas[p.relationId] = true; }); });
+  var relacionesDirectas = (nextAction.targetRefs || [])
+    .filter(function(x){ return relPorId[x] && !idsEnRutas[x]; })
+    .map(function(id){
+      var r = relPorId[id];
+      return { id: r.id, from: porId[r.sourceNodeId] ? porId[r.sourceNodeId].label : null,
+        to: porId[r.targetNodeId] ? porId[r.targetNodeId].label : null,
+        manifestation: r.manifestation, possibleIncidence: r.possibleIncidence,
+        epistemicState: r.epistemicState, uncertainty: r.uncertainty, evidenceNeed: r.evidenceNeed };
+    });
+
+  return { frontId: front.id, uncertaintyAddressed: nextAction.uncertaintyAddressed,
+    rutas: rutas, relacionesDirectas: relacionesDirectas };
+}
+
+/* Prompt propio de C1-C3A/TRACE (continuación de C1-C2, motor propio). Universal entre dominios: no
+   hay ninguna rama por tipo de Organismo en esta función. */
+function C1C3A_PROMPT_TRACE(ventana){
+  var ventanaTxt = JSON.stringify(ventana, null, 2);
+  return 'Sos el motor de ejecución de la acción TRACE (C1-C3A) de Contextos Universal -- ' +
+    'continuación de C1-C2, motor propio, sin dimensiones ni sistemas de Contextos Legacy. C1-C2 ya ' +
+    'decidió que la próxima acción es TRACE: la cadena ya está sugerida por el grafo, tu tarea es ' +
+    'reconstruir CON LO QUE YA EXISTE cómo se conectan sus partes para entender la incidencia ' +
+    'potencial hacia el Organismo. Esto NO es EXPAND: no buscás nada más allá de lo ya conocido, ' +
+    'trabajás exclusivamente con las relaciones y rutas ya provistas.\n\n' +
+    'RUTA(S)/RELACIONES A RECONSTRUIR (ventana ya seleccionada, no es todo el grafo):\n' + ventanaTxt + '\n\n' +
+    'REGLAS:\n' +
+    '1. Nunca inventes un tramo, relación o nodo que no esté en la ventana. Cada paso trae ' +
+    '"sustentadoEnGrafo": si es false, no existe una relación real entre esos dos nodos consecutivos ' +
+    '-- tenés PROHIBIDO rellenarlo silenciosamente: registralo como hueco, nunca lo des por sabido.\n' +
+    '2. Para cada paso con relación real, evaluá su "assessment": "sustentado" (manifestation + ' +
+    'epistemicState sostienen firmemente el salto), "inferido" (depende de una inferencia razonable ' +
+    'pero no confirmada), "hueco" (aunque exista la relación, no alcanza para sostener el paso), o ' +
+    '"contradiccion" (choca con otro paso de la misma ruta o con algo ya sabido en la ventana).\n' +
+    '3. El resultado final es "advanced" si la reconstrucción ganó claridad real sobre cómo se ' +
+    'conecta la incidencia hacia el Organismo; "insufficient" si falta un tramo crítico que impide ' +
+    'seguir entendiendo la ruta; "contradicted" si la información ya existente rompe la ruta tal ' +
+    'como estaba sugerida.\n' +
+    '4. Si detectás un hueco o una contradicción, registralo en "evidenceNeeds" o "uncertainties" -- ' +
+    'nunca lo resuelvas inventando qué debería haber ahí.\n' +
+    '5. No interpretes todavía qué significa esto para Función, Foco o Dinámica -- eso no te ' +
+    'corresponde en este paso.\n' +
+    '6. No expliques tu razonamiento paso a paso.\n\n' +
+    'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
+    'después. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
+    '[[TRACE_RESULT:{\n' +
+    '  "status": "advanced"|"insufficient"|"contradicted",\n' +
+    '  "segments": [ { "relationId": "rel1"|null, "assessment": "sustentado"|"inferido"|"hueco"|"contradiccion", "note": "..." } ],\n' +
+    '  "evidenceNeeds": ["..."],\n' +
+    '  "uncertainties": ["..."],\n' +
+    '  "observations": ["..."],\n' +
+    '  "justificationSummary": "..."\n' +
+    '}]]';
+}
+
+function C1C3A_llamarIATrace(systemPrompt, mensajes){
+  var t0 = Date.now();
+  return fetch(apiEndpoint(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ model: C1C3A_MODEL, max_tokens: C1C3A_TRACE_MAX_TOKENS, system: systemPrompt, messages: mensajes })
+  }).then(function(res){
+    return res.json().then(function(data){
+      if(!res.ok || (data && data.error)){
+        throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+      }
+      var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
+    });
+  });
+}
+
+/* Parser defensivo: rechaza toda la respuesta si "status" no es uno de los 3 válidos o falta
+   justificationSummary. Cada segmento se valida individualmente; "relationId" se filtra contra lo
+   realmente ofrecido (nunca se confía en un id inventado por el modelo -- si no está en la ventana,
+   queda null, nunca se inventa el enlace). */
+function C1C3A_parseTraceResult(texto, relIdsOfrecidas){
+  var re = /\[\[TRACE_RESULT:([\s\S]*?)\]\]/;
+  var m = String(texto || '').match(re);
+  if(!m) return null;
+  var raw;
+  try{ raw = JSON.parse(m[1]); }catch(e){ return null; }
+  if(!raw || typeof raw !== 'object') return null;
+  if(C1C3A_TRACE_ESTADOS.indexOf(raw.status) === -1) return null;
+  var justificationSummary = (typeof raw.justificationSummary === 'string' && raw.justificationSummary.trim())
+    ? raw.justificationSummary.trim() : null;
+  if(!justificationSummary) return null;
+
+  var idsRel = relIdsOfrecidas || [];
+  var segments = Array.isArray(raw.segments) ? raw.segments.map(function(s){
+    if(!s || typeof s !== 'object') return null;
+    if(C1C3A_TRACE_ASSESSMENTS.indexOf(s.assessment) === -1) return null;
+    var relationId = (typeof s.relationId === 'string' && idsRel.indexOf(s.relationId) > -1) ? s.relationId : null;
+    var note = (typeof s.note === 'string' && s.note.trim()) ? s.note.trim() : null;
+    return { relationId: relationId, assessment: s.assessment, note: note };
+  }).filter(Boolean) : [];
+
+  function limpiarLista(arr){
+    return Array.isArray(arr) ? arr.filter(function(x){ return typeof x === 'string' && x.trim(); }).map(function(x){ return x.trim(); }) : [];
+  }
+
+  return {
+    status: raw.status, segments: segments,
+    evidenceNeeds: limpiarLista(raw.evidenceNeeds), uncertainties: limpiarLista(raw.uncertainties),
+    observations: limpiarLista(raw.observations), justificationSummary: justificationSummary
+  };
+}
+
+/* ---- executeTrace: única forma de ejecutar TRACE en este corte. Nunca llama a openField()/
+   propagateField() ni a ninguna función de C1-B2 -- si la ruta/relación no alcanza, se registra
+   como hueco, nunca se sale a buscar más Campo (eso sería EXPAND, no corresponde acá). */
+async function executeTrace(graphState, front, nextAction){
+  if(!front || front.status !== 'active') return { ok:false, motivo:'front ausente o no activo' };
+  if(!nextAction || nextAction.action !== 'TRACE') return { ok:false, motivo:'nextAction no es TRACE' };
+  if(!graphState) return { ok:false, motivo:'graphState ausente' };
+  var ventana = C1C3A_ventanaTrace(graphState, front, nextAction);
+  if(!ventana.rutas.length && !ventana.relacionesDirectas.length){
+    return { ok:false, motivo:'TRACE requiere al menos una ruta o relación real referenciada por el Frente/NextCognitiveAction' };
+  }
+  var prompt = C1C3A_PROMPT_TRACE(ventana);
+  var res;
+  try{
+    res = await C1C3A_llamarIATrace(prompt, [{ role:'user', content:'(reconstruí la ruta con lo ya disponible)' }]);
+  }catch(e){
+    return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
+  }
+
+  var idsRel = [];
+  ventana.rutas.forEach(function(rt){ rt.pasos.forEach(function(p){ if(p.relationId) idsRel.push(p.relationId); }); });
+  ventana.relacionesDirectas.forEach(function(r){ idsRel.push(r.id); });
+
+  var parsed = C1C3A_parseTraceResult(res.texto, idsRel);
+  if(!parsed){
+    return { ok:false, motivo:'no se pudo interpretar la reconstrucción', usage: res.usage,
+             duracionMs: res.duracionMs, textoCrudo: res.texto };
+  }
+
+  var result = {
+    frontId: front.id, action: 'TRACE', status: parsed.status,
+    observations: parsed.observations,
+    relationUpdates: parsed.segments.map(function(s){ return { relationId: s.relationId, assessment: s.assessment, note: s.note }; }),
+    routeUpdates: ventana.rutas.map(function(rt){ return { routeId: rt.routeId, traced: true }; }),
+    evidenceNeeds: parsed.evidenceNeeds, uncertainties: parsed.uncertainties,
+    userQuestion: null, nextCandidates: [], justificationSummary: parsed.justificationSummary
+  };
+  result = JSON.parse(JSON.stringify(result));
+  return {
+    ok: true, result: result,
+    telemetry: { llamadasIA: 1, tokensInput: (res.usage && res.usage.input_tokens) || null,
+      tokensOutput: (res.usage && res.usage.output_tokens) || null, duracionMs: res.duracionMs,
+      pasosEvaluados: idsRel.length }
+  };
+}
+
+/* Aplica el resultado de una ejecución (ASK o TRACE) al Frente, en una capa "operationalState"
+   nueva y propia de C1-C3A -- nunca toca el status de C1-C1 (active/latent/discarded), que sigue
+   significando otra cosa (cuál Frente merece atención). Devuelve SIEMPRE una copia nueva, nunca
+   muta el Frente recibido. */
+function C1C3A_aplicarResultadoAlFrente(front, result){
+  var clon = JSON.parse(JSON.stringify(front));
+  if(!clon.operationalState){
+    clon.operationalState = { status:'open', history:[], pendingQuestion:null, answers:[], evidenceNeeds:[], uncertainties:[] };
+  }
+  clon.operationalState.history.push({ action: result.action, status: result.status, at: new Date().toISOString() });
+  if(result.action === 'ASK'){
+    clon.operationalState.status = 'need_user';
+    clon.operationalState.pendingQuestion = result.userQuestion;
+  }else if(result.action === 'TRACE'){
+    clon.operationalState.status = result.status;
+    clon.operationalState.evidenceNeeds = (clon.operationalState.evidenceNeeds || []).concat(result.evidenceNeeds || []);
+    clon.operationalState.uncertainties = (clon.operationalState.uncertainties || []).concat(result.uncertainties || []);
+  }
+  return clon;
+}
+
+/* ---- executeCognitiveAction: punto de entrada único de C1-C3A. SELECT (ya resuelto por C1-C2,
+   recibido como nextAction) -> EXECUTE -> STOP. Regla dura: una sola acción por ciclo, nunca
+   encadena, nunca vuelve a llamar selectContextFronts()/selectNextCognitiveAction(). Cualquier
+   acción fuera de ASK/TRACE devuelve action_not_implemented_yet explícito -- jamás cae de forma
+   silenciosa en otra acción. */
+async function executeCognitiveAction(snapshot, opening, graphState, front, nextAction){
+  if(!nextAction || !nextAction.action) return { ok:false, motivo:'nextAction ausente' };
+  if(C1C3A_ACCIONES_IMPLEMENTADAS.indexOf(nextAction.action) === -1){
+    return {
+      ok:false, action_not_implemented_yet: true, action: nextAction.action,
+      motivo: 'La acción "' + nextAction.action + '" todavía no está implementada en C1-C3A ' +
+        '(solo ASK y TRACE en este corte). No se ejecuta ningún fallback silencioso.'
+    };
+  }
+  var ejecucion;
+  if(nextAction.action === 'ASK') ejecucion = await executeAsk(front, nextAction);
+  else ejecucion = await executeTrace(graphState, front, nextAction);
+  if(!ejecucion.ok) return ejecucion;
+  var frenteActualizado = C1C3A_aplicarResultadoAlFrente(front, ejecucion.result);
+  return { ok:true, action: nextAction.action, result: ejecucion.result, telemetry: ejecucion.telemetry, front: frenteActualizado };
+}
+
+/* Laboratorio interno C1-C3A (extiende el de C1-C2): encadena reconstructOrigin() -> openField() ->
+   propagateField() -> selectContextFronts() -> selectNextCognitiveAction() -> executeCognitiveAction()
+   sobre el Frente activo, si existe, e imprime el Frente antes/después de ejecutar. Solo consola,
+   sin UI nueva. */
+window.debugExecuteCognitiveAction = function(organismoId, question, intention){
+  var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
+  if(!o){ console.warn('[C1-C3A] organismo no encontrado:', organismoId); return null; }
+  var snap = OrganismSnapshotAdapter(o);
+  var opening = crearContextOpening(o.id, { basedOnVersion: snap.organismVersion, question: question, intention: intention });
+  return reconstructOrigin(snap, opening).then(function(r1){
+    if(!r1.ok || r1.assessment.status !== 'continue'){ console.warn('[C1-C3A] no se llega a openField():', r1.ok?r1.assessment.status:r1.motivo); return { origin:r1 }; }
+    return openField(snap, r1.opening, r1.assessment).then(function(r2){
+      if(!r2.ok){ console.warn('[C1-C3A] no se llega a propagateField():', r2.motivo); return { origin:r1, field:r2 }; }
+      return propagateField(snap, r1.opening, r1.assessment, r2.result).then(function(r3){
+        if(!r3.ok){ console.warn('[C1-C3A] no se llega a selectContextFronts():', r3.motivo); return { origin:r1, field:r2, graph:r3 }; }
+        return selectContextFronts(r3.result, r1.opening).then(function(r4){
+          if(!r4.ok || !r4.result.activeFrontId){ console.warn('[C1-C3A] no hay Frente activo:', r4.ok?r4.result.status:r4.motivo); return { origin:r1, field:r2, graph:r3, fronts:r4 }; }
+          var activo = r4.result.fronts.filter(function(f){ return f.id === r4.result.activeFrontId; })[0];
+          return selectNextCognitiveAction(snap, r1.opening, r3.result, activo).then(function(r5){
+            if(!r5.ok){ console.warn('[C1-C3A] no se pudo elegir próxima acción:', r5.motivo); return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5 }; }
+            console.log('[C1-C3A] Frente ANTES de ejecutar:', activo);
+            console.log('[C1-C3A] próxima acción elegida:', r5.result);
+            return executeCognitiveAction(snap, r1.opening, r3.result, activo, r5.result).then(function(r6){
+              console.log('[C1-C3A] resultado de ejecución:', r6.ok ? r6.result : r6);
+              if(r6.ok){
+                console.log('[C1-C3A] Frente DESPUÉS de ejecutar:', r6.front);
+                console.log('[C1-C3A] telemetry:', r6.telemetry);
+              }
+              return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5, execution:r6 };
+            });
+          });
+        });
+      });
+    });
+  });
+};
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
@@ -10896,6 +11345,197 @@ function correrPruebasAuto(){
 
       // C2-21 · Compatibilidad general: no es un chk() individual -- ES correr correrPruebasAuto()
       // completo en vivo, ver PENDIENTES.md para el resultado real de esa corrida.
+    })();
+
+    /* ---- Contextos Universal · Corte C1-C3A -- executeAsk()/applyUserAnswer()/executeTrace()/
+       executeCognitiveAction() (C3A-01..16, C3A-17 aislamiento por grep externo, C3A-18 en vivo) ----
+       Mismo límite que B1-15/B2-05/C1-08/C2-20: las funciones que hacen la llamada IA real son
+       async, así que lo que depende de esa orquestación se prueba por análisis estructural del
+       código fuente. Los parsers (C1C3A_parseAskQuestion/C1C3A_parseTraceResult) y las funciones
+       deterministas (C1C3A_ventanaTrace/applyUserAnswer) son síncronos -- se prueban con marcadores
+       y fixtures sintéticos, sin gastar ninguna llamada real. */
+    (function(){
+      function markerAsk(obj){ return '[[ASK_QUESTION:' + JSON.stringify(obj) + ']]'; }
+      function markerTrace(obj){ return '[[TRACE_RESULT:' + JSON.stringify(obj) + ']]'; }
+
+      chk('C3A-01 · ASK discriminante real (caso humano de C1-C2): la pregunta generada queda atada a la incertidumbre concreta, no genérica', (function(){
+        var texto = markerAsk({
+          text: '¿La diferencia de precio del proveedor secundario responde a condiciones negociables (volumen, anticipación) o es un costo fijo del insumo?',
+          resolves: 'si la brecha de costo del proveedor secundario es reducible o estructural',
+          whyNeeded: 'ni la Memoria vigente ni los Recuerdos disponibles registran la causa de esa brecha, y de eso depende qué palancas existen',
+          justificationSummary: 'pregunta generada para C1-C2:ASK del caso Estudio d'
+        });
+        var parsed = C1C3A_parseAskQuestion(texto);
+        return parsed && parsed.text.indexOf('proveedor secundario') > -1 && parsed.resolves.indexOf('brecha') > -1;
+      })());
+
+      chk('C3A-02 · ASK abstracto real (caso ArquiGénesis de C1-C2): mismo motor, mismo contrato, sin rama por dominio', (function(){
+        var texto = markerAsk({
+          text: '¿La metodología está documentada en materiales transmisibles (guías, protocolos) o vive principalmente en la práctica del autor?',
+          resolves: 'qué proporción de la metodología existe en materiales transmisibles versus saber tácito',
+          whyNeeded: 'no hay evidencia previa en Memoria ni Recuerdos sobre el estado de documentación',
+          justificationSummary: 'pregunta generada para C1-C2:ASK del caso ArquiGénesis'
+        });
+        var parsed = C1C3A_parseAskQuestion(texto);
+        return parsed && parsed.resolves.indexOf('materiales transmisibles') > -1 &&
+          C1C3A_PROMPT_ASK.toString().indexOf('.tipo') === -1;
+      })());
+
+      chk('C3A-03 · La pregunta responde exactamente a uncertaintyAddressed: el prompt lo incluye literal', (function(){
+        var front = { id:'f1', formulation:'¿el modelo de precios sigue siendo viable?', uncertainty:'no se sabe si el margen alcanza', possibleIncidence:'x' };
+        var nextAction = { action:'ASK', uncertaintyAddressed:'no se sabe si la brecha de costo del proveedor secundario es negociable o estructural', requirement:{ description:'nada en Memoria lo resuelve' } };
+        var ventana = C1C3A_ventanaAsk(front, nextAction);
+        var prompt = C1C3A_PROMPT_ASK(ventana);
+        return prompt.indexOf(nextAction.uncertaintyAddressed) > -1;
+      })());
+
+      chk('C3A-04 · Una sola pregunta: el parser rechaza un texto con más de un signo "?"', (function(){
+        var conDos = C1C3A_parseAskQuestion(markerAsk({ text:'¿pregunta uno? ¿y también pregunta dos?', resolves:'r', whyNeeded:'w', justificationSummary:'j' }));
+        var conUna = C1C3A_parseAskQuestion(markerAsk({ text:'¿pregunta única?', resolves:'r', whyNeeded:'w', justificationSummary:'j' }));
+        return conDos === null && conUna !== null;
+      })());
+
+      chk('C3A-05 · Respuesta ya existente prohibida: executeAsk no vuelve a evaluar Memoria/Recuerdos (esa decisión ya la tomó C1-C2 al elegir READ vs ASK, ver devolución C1-C2)', (function(){
+        var src = C1C3A_ventanaAsk.toString() + executeAsk.toString();
+        return src.indexOf('obtenerRecuerdos') === -1 && src.indexOf('seleccionarRecuerdosCandidatos') === -1 && src.indexOf('currentMemory') === -1;
+      })());
+
+      chk('C3A-06 · La respuesta del usuario queda en el estado operativo de la Apertura, nunca en Memoria/Recuerdo', (function(){
+        var o = { id:'o_c3a_ask', nombre:'Ask Test', tipo:'empresa', ficha:{ funcion:'integrar' }, principios:[] };
+        guardarOrganismo(o);
+        var antes = JSON.stringify(cargarOrganismos().find(function(x){ return x.id === 'o_c3a_ask'; }));
+        var opening = crearContextOpening(o.id, {});
+        var front = { id:'f1', status:'active', formulation:'x', uncertainty:'y' };
+        var question = { text:'¿sigue vigente la condición X?', resolves:'si X sigue vigente', whyNeeded:'no está en Memoria' };
+        var r = applyUserAnswer(opening, front, question, 'sí, sigue vigente');
+        var despues = JSON.stringify(cargarOrganismos().find(function(x){ return x.id === 'o_c3a_ask'; }));
+        var sinEscrituraSrc = (C1C3A_nuevaAperturaConRespuesta.toString() + applyUserAnswer.toString()).indexOf('guardarOrganismo(') === -1;
+        return r.ok && r.opening.cognitiveAnswers.length === 1 && r.opening.cognitiveAnswers[0].answer === 'sí, sigue vigente' &&
+          antes === despues && sinEscrituraSrc;
+      })());
+
+      chk('C3A-07 · Procedencia "user" preservada en la respuesta incorporada', (function(){
+        var opening = crearContextOpening('o_c3a_proc', {});
+        var front = { id:'f1', status:'active', formulation:'x', uncertainty:'y' };
+        var question = { text:'¿...?', resolves:'r', whyNeeded:'w' };
+        var r = applyUserAnswer(opening, front, question, 'respuesta real del usuario');
+        return r.ok && r.entry.procedencia === 'user' && r.opening.cognitiveAnswers[0].procedencia === 'user' &&
+          r.front.operationalState.status === 'completed' && r.front.operationalState.pendingQuestion === null;
+      })());
+
+      chk('C3A-08 · TRACE biológico real (caso de C1-C2): la reconstrucción preserva status y segmentos sobre relaciones realmente ofrecidas', (function(){
+        var texto = markerTrace({
+          status: 'advanced',
+          segments: [
+            { relationId:'rel1', assessment:'sustentado', note:'estado fisiológico documentado' },
+            { relationId:'rel4', assessment:'inferido', note:'factor de estrés vinculado por inferencia' },
+            { relationId:'rel7', assessment:'hueco', note:'falta el tramo que conecta estrés con balance energético' }
+          ],
+          evidenceNeeds: ['medición directa de balance energético de la colonia'],
+          uncertainties: ['si el estrés fisiológico se traduce en pérdida neta de energía'],
+          observations: ['la ruta gana claridad parcial'],
+          justificationSummary: 'reconstrucción del caso biológico de C1-C2'
+        });
+        var parsed = C1C3A_parseTraceResult(texto, ['rel1','rel4','rel7']);
+        return parsed && parsed.status === 'advanced' && parsed.segments.length === 3 &&
+          parsed.segments[2].assessment === 'hueco';
+      })());
+
+      chk('C3A-09 · TRACE con ruta completa: todos los pasos quedan sustentadoEnGrafo:true cuando existe una relación real por cada salto', (function(){
+        var graphState = {
+          nodes: [ { id:'n0', label:'Organismo' }, { id:'n1', label:'A' }, { id:'n2', label:'B' } ],
+          relations: [
+            { id:'rel1', sourceNodeId:'n0', targetNodeId:'n1', manifestation:'m1', possibleIncidence:'i1', epistemicState:'inferencia_contextos', uncertainty:[], evidenceNeed:null },
+            { id:'rel2', sourceNodeId:'n1', targetNodeId:'n2', manifestation:'m2', possibleIncidence:'i2', epistemicState:'inferencia_contextos', uncertainty:[], evidenceNeed:null }
+          ],
+          routes: [ { id:'route1', nodeIds:['n0','n1','n2'], status:'open_limit_reached', closureReason:null } ]
+        };
+        var front = { id:'f1', routeRefs:['route1'] };
+        var nextAction = { action:'TRACE', targetRefs:['route1'], uncertaintyAddressed:'x' };
+        var ventana = C1C3A_ventanaTrace(graphState, front, nextAction);
+        return ventana.rutas.length === 1 && ventana.rutas[0].pasos.length === 2 &&
+          ventana.rutas[0].pasos.every(function(p){ return p.sustentadoEnGrafo === true; });
+      })());
+
+      chk('C3A-10 · TRACE con hueco crítico: un salto sin relación real queda sustentadoEnGrafo:false y relationId null, nunca inventado', (function(){
+        var graphState = {
+          nodes: [ { id:'n0', label:'Organismo' }, { id:'n1', label:'A' }, { id:'n2', label:'B' } ],
+          relations: [
+            { id:'rel1', sourceNodeId:'n0', targetNodeId:'n1', manifestation:'m1', possibleIncidence:'i1', epistemicState:'inferencia_contextos', uncertainty:[], evidenceNeed:null }
+            // falta a propósito la relación n1->n2: hueco crítico real
+          ],
+          routes: [ { id:'route1', nodeIds:['n0','n1','n2'], status:'open_limit_reached', closureReason:null } ]
+        };
+        var front = { id:'f1', routeRefs:['route1'] };
+        var nextAction = { action:'TRACE', targetRefs:['route1'], uncertaintyAddressed:'x' };
+        var ventana = C1C3A_ventanaTrace(graphState, front, nextAction);
+        var pasoHueco = ventana.rutas[0].pasos[1];
+        return ventana.rutas[0].pasos[0].sustentadoEnGrafo === true &&
+          pasoHueco.sustentadoEnGrafo === false && pasoHueco.relationId === null;
+      })());
+
+      chk('C3A-11 · TRACE contradicho: el parser preserva status "contradicted" y segmentos "contradiccion"', (function(){
+        var texto = markerTrace({
+          status: 'contradicted',
+          segments: [ { relationId:'rel1', assessment:'contradiccion', note:'este tramo choca con la Memoria vigente' } ],
+          evidenceNeeds: [], uncertainties: ['la ruta sugerida no sostiene la incidencia como se pensaba'],
+          observations: [], justificationSummary: 'la información ya existente rompe la ruta inicial'
+        });
+        var parsed = C1C3A_parseTraceResult(texto, ['rel1']);
+        return parsed && parsed.status === 'contradicted' && parsed.segments[0].assessment === 'contradiccion';
+      })());
+
+      chk('C3A-12 · TRACE no expande el Campo silenciosamente: nunca llama a openField/propagateField ni a funciones de C1-B2', (function(){
+        var src = C1C3A_ventanaTrace.toString() + C1C3A_PROMPT_TRACE.toString() + executeTrace.toString();
+        return src.indexOf('propagateField(') === -1 && src.indexOf('openField(') === -1 && src.indexOf('C1B2_') === -1;
+      })());
+
+      chk('C3A-13 · No causalidad inventada: un relationId no ofrecido nunca se conserva en el resultado parseado', (function(){
+        var texto = markerTrace({
+          status: 'advanced',
+          segments: [ { relationId:'rel_inventado_por_el_modelo', assessment:'sustentado', note:'n' } ],
+          evidenceNeeds: [], uncertainties: [], observations: [], justificationSummary: 'j'
+        });
+        var parsed = C1C3A_parseTraceResult(texto, ['rel1','rel2']);
+        return parsed && parsed.segments[0].relationId === null;
+      })());
+
+      chk('C3A-14 · Una acción por ciclo: executeCognitiveAction ejecuta como mucho un executor y nunca vuelve a llamar a C1-C1/C1-C2', (function(){
+        var srcOrq = executeCognitiveAction.toString();
+        var unSoloAsk = (srcOrq.match(/executeAsk\s*\(/g) || []).length === 1;
+        var unSoloTrace = (srcOrq.match(/executeTrace\s*\(/g) || []).length === 1;
+        var sinReseleccion = srcOrq.indexOf('selectContextFronts(') === -1 && srcOrq.indexOf('selectNextCognitiveAction(') === -1;
+        var sinRecursionAsk = executeAsk.toString().indexOf('executeCognitiveAction(') === -1;
+        var sinRecursionTrace = executeTrace.toString().indexOf('executeCognitiveAction(') === -1;
+        return unSoloAsk && unSoloTrace && sinReseleccion && sinRecursionAsk && sinRecursionTrace;
+      })());
+
+      chk('C3A-15 · Acción no implementada devuelve action_not_implemented_yet explícito, nunca fallback silencioso', (function(){
+        var src = executeCognitiveAction.toString();
+        var iGuard = src.indexOf('action_not_implemented_yet');
+        var iAsk = src.indexOf('executeAsk(');
+        var iTrace = src.indexOf('executeTrace(');
+        return iGuard > -1 && iGuard < iAsk && iGuard < iTrace &&
+          C1C3A_ACCIONES_IMPLEMENTADAS.length === 2 &&
+          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('READ') === -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('RESEARCH') === -1 &&
+          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('DEEPEN') === -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('EXPAND') === -1 &&
+          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('CONTRAST') === -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('INTERPRET') === -1 &&
+          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('CLOSE_FRONT') === -1;
+      })());
+
+      chk('C3A-16 · Sin escritura en Organismo/Memoria/Recuerdos: ninguna función de C1-C3A persiste ni toca la ficha', (function(){
+        var src = [C1C3A_ventanaAsk, C1C3A_PROMPT_ASK, C1C3A_parseAskQuestion, executeAsk,
+          C1C3A_nuevaAperturaConRespuesta, C1C3A_actualizarFrenteTrasRespuesta, applyUserAnswer,
+          C1C3A_ventanaTrace, C1C3A_PROMPT_TRACE, C1C3A_parseTraceResult, executeTrace,
+          C1C3A_aplicarResultadoAlFrente, executeCognitiveAction].map(function(f){ return f.toString(); }).join('\n');
+        return src.indexOf('guardarOrganismo(') === -1 && src.indexOf('persistirOrganismos') === -1 &&
+          src.indexOf('crearRecuerdo(') === -1 && src.indexOf('.ficha.') === -1 && src.indexOf('.ficha=') === -1;
+      })());
+
+      // C3A-17 · Aislamiento: no es un chk() -- se verificó por grep contra urbanismo.html/
+      // negocios.html/contextos.html (0 coincidencias), ver PENDIENTES.md.
+      // C3A-18 · Banco general sin regresiones: no es un chk() individual -- ES correr
+      // correrPruebasAuto() completo en vivo, ver PENDIENTES.md para el resultado real.
     })();
 
     /* ---- N2.2 · compatibilidad del resumen con evaluaciones N2.1 sin tension_principal ---- */
