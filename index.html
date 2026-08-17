@@ -4194,7 +4194,9 @@ window.debugReconstructOrigin = function(organismoId, question, intention){
    llamada IA por ejecución, como máximo 4 candidatas (0 es un resultado válido). */
 
 var C1B1_MODEL = 'claude-sonnet-4-6';
-var C1B1_MAX_TOKENS = 1000;
+var C1B1_MAX_TOKENS = 1700;   // ajustado 17/08 tras verificación en vivo: 1000 cortaba el marcador
+                               // a mitad de camino con candidatas ricas (4 candidatas con
+                               // justificación detallada no entran en 1000 -- ver PENDIENTES.md)
 var C1B1_MAX_CANDIDATOS = 4;
 var C1B1_EPISTEMIC_STATES = ['relacion_declarada','memoria_gobernada','recuerdo_historico',
   'inferencia_contextos','evidencia_existente','hipotesis'];
@@ -4295,8 +4297,11 @@ function C1B1_PROMPT_OPEN_FIELD(ventana){
     'Función nueva, crear una Configuración, producir Foco o Retorno, evaluar suficiencia global, ' +
     'modificar la Memoria o crear Recuerdos. Ninguno de esos pasos te corresponde acá.\n\n' +
     'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador (sin texto antes ni ' +
-    'después -- esta llamada no tiene texto visible para ningún usuario). Cerrá con el marcador ' +
-    'exacto (JSON válido, sin comentarios ni texto extra adentro):\n' +
+    'después -- esta llamada no tiene texto visible para ningún usuario). Sé breve en cada campo ' +
+    'de texto (1-2 oraciones cortas, nunca un párrafo largo) -- es más importante que el marcador ' +
+    'cierre completo con hasta 4 candidatas que que cada una tenga una descripción extensa; si el ' +
+    'espacio aprieta, preferí menos candidatas o frases más cortas antes que dejar el marcador sin ' +
+    'cerrar. Cerrá con el marcador exacto (JSON válido, sin comentarios ni texto extra adentro):\n' +
     '[[BOUNDARY_OPENING:{\n' +
     '  "candidateRelations": [ { "id": "r1", "sourceRef": "...", ' +
     '"target": { "label": "...", "description": "..." }, "manifestation": "...", ' +
