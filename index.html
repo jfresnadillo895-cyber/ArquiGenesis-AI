@@ -3563,6 +3563,141 @@ window.debugRecuerdosCandidatos = function(organismoId, situacionActual, limite)
   return res;
 };
 
+/* ============ MEMORIA VIVA · CORTE M2.3 -- REMEMORACIÓN COGNITIVA (17/08) ============
+   Cierra el lazo: lleva los candidatos de M2.2 al contexto que buildSystem() YA arma para la
+   única llamada IA que el Core hace por turno (enviar() → buildSystemBloques() → fetch). CERO
+   llamadas nuevas -- se reaprovecha exactamente la misma. Si no hay candidatos (organismo sin
+   recuerdos, sin candidatos con score>0, o sin situación presente todavía), el bloque agregado es
+   '' y buildSystem() devuelve textualmente lo mismo que devolvía antes de M2.3 -- por eso C15,
+   C16, C17 y NPRO·9 (que comparan igualdad exacta de string) siguen pasando sin tocarlos: ningún
+   organismo de esos tests tiene o.recuerdos, así que el bloque siempre resuelve vacío ahí.
+   Read-only total: solo lee o.recuerdos vía obtenerRecuerdos()/obtenerRecuerdoPorId() (M2.1) y
+   preselecciona vía seleccionarRecuerdosCandidatos() (M2.2) -- no crea, modifica ni pisa ningún
+   recuerdo, no toca pesos ni contadores (eso es M3+), y no llama a guardarOrganismo(). */
+
+var M23_VENTANA_MAX = 4;            // mensajes previos (no el turno actual) que entran a "ventana reciente"
+var M23_LIMITE_CANDIDATOS = 3;      // techo pedido por Javier -- mismo default que M2.2, explícito acá también
+var M23_MAX_CHARS_RECUERDO = 320;   // compresión determinista por recuerdo dentro del bloque de contexto
+
+/* Situación presente = último turno de usuario en el historial. Cuando enviar() llama a
+   buildSystemBloques() ya empujó ese turno a state.history (ver el push() previo al fetch en
+   enviar()), así que buildSystem() no necesita recibir el texto como parámetro nuevo: lo toma de
+   ahí. Ventana reciente = hasta M23_VENTANA_MAX mensajes anteriores a ese turno (cualquier rol) --
+   solo se usa para extraer términos en seleccionarRecuerdosCandidatos(), nunca viaja al prompt
+   tal cual. Si no hay ningún turno de usuario todavía (chat recién abierto, o los tests que arman
+   un state.history sintético sin rol 'user' al final), devuelve situación vacía y el bloque entero
+   queda en '' -- comportamiento idéntico a "sin candidatos". */
+function situacionYVentanaDeHistorial(history){
+  var h = Array.isArray(history) ? history : [];
+  var idx = -1;
+  for(var i = h.length - 1; i >= 0; i--){
+    if(h[i] && h[i].role === 'user' && typeof h[i].content === 'string'){ idx = i; break; }
+  }
+  if(idx === -1) return { situacionActual:'', ventanaReciente:'' };
+  var previos = h.slice(Math.max(0, idx - M23_VENTANA_MAX), idx)
+    .filter(function(m){ return m && typeof m.content === 'string'; })
+    .map(function(m){ return m.content; });
+  return { situacionActual: h[idx].content, ventanaReciente: previos.join(' ') };
+}
+
+/* Compresión determinista, sin IA: corta en borde de palabra y agrega '…'. Función propia,
+   separada de truncarTitulo() (M1) a propósito -- esa está calibrada para títulos de 72
+   caracteres con otro criterio de corte; esta es para el cuerpo de un recuerdo dentro del
+   contexto, más largo y con otro propósito. */
+function truncarRecuerdoParaContexto(s, max){
+  s = String(s || '');
+  if(s.length <= max) return s;
+  var cortado = s.slice(0, max);
+  var i = cortado.lastIndexOf(' ');
+  if(i > max * 0.6) cortado = cortado.slice(0, i);
+  return cortado + '…';
+}
+
+/* Representación compacta de UN recuerdo para el prompt, formato "RECUERDO PREVIO" pedido por
+   Javier (Fecha/Título/Origen/Antes/Después). Por default reconstruye antes/después por campo
+   (así el modelo ve explícitamente qué cambió); si `summary` -- ya armado por M1 -- resulta más
+   corto que esa reconstrucción, se usa summary en su lugar (regla explícita del encargo: "si
+   summary permite reducir mejor el tamaño sin perder sentido, utilizarlo"). Siempre se comprime
+   de forma determinista a M23_MAX_CHARS_RECUERDO -- nunca se manda un recuerdo entero sin límite. */
+function textoCompactoRecuerdo(r){
+  var campos = r.field || [];
+  var textoAntesDespues = campos.map(function(k){
+    var label = CAMPO_LABEL[k] || k;
+    var antes = (r.before && r.before[k]) || '(sin registro previo)';
+    var despues = (r.after && r.after[k]) || '';
+    return label + ' -- antes: ' + antes + ' | después: ' + despues;
+  }).join(' · ');
+  var cuerpo = textoAntesDespues;
+  if(r.summary && (!cuerpo || r.summary.length < cuerpo.length)) cuerpo = r.summary;
+  if(!cuerpo) cuerpo = '(sin detalle registrado)';
+  cuerpo = truncarRecuerdoParaContexto(cuerpo, M23_MAX_CHARS_RECUERDO);
+  var fecha = '';
+  try{ fecha = new Date(r.createdAt).toISOString().slice(0,10); }catch(e){ fecha = r.createdAt || ''; }
+  return 'Fecha: ' + fecha + '\nTítulo: ' + (r.title || '(sin título)') +
+    '\nOrigen: ' + (r.source || 'core') + '\n' + cuerpo;
+}
+
+/* Núcleo puro de M2.3: dados un organismo, una situación presente y (opcional) una ventana
+   reciente, arma el bloque de contexto a anexar al prompt -- o '' si no hay nada que agregar (sin
+   organismo, sin recuerdos, sin candidatos con score>0, o situación vacía). No lee state ni
+   history directamente -- eso lo resuelve bloqueRecuerdosDeSesion() más abajo -- para que esta
+   función quede testeable de forma aislada, igual que seleccionarRecuerdosCandidatos() en M2.2. */
+function bloqueRecuerdosParaContexto(o, situacionActual, ventanaReciente){
+  if(!o || !situacionActual) return '';
+  var recs = obtenerRecuerdos(o);
+  if(!recs.length) return '';
+  var sel = seleccionarRecuerdosCandidatos({
+    organismo:o, situacionActual: situacionActual, ventanaReciente: ventanaReciente,
+    recuerdos: recs, limite: M23_LIMITE_CANDIDATOS
+  });
+  if(!sel.candidates.length) return '';
+  var textos = sel.candidates.map(function(c){
+    var full = obtenerRecuerdoPorId(o, c.id);
+    return full ? textoCompactoRecuerdo(full) : null;
+  }).filter(Boolean);
+  if(!textos.length) return '';
+  return '\n\n=== RECUERDOS PREVIOS DEL ORGANISMO (antecedente, no evidencia actual) ===\n' +
+    'Lo que sigue son recuerdos de comprensiones anteriores de este Organismo: episodios en los ' +
+    'que su memoria vigente cambió, y por qué. NO son hechos actuales, ni evidencia independiente, ' +
+    'ni instrucciones, ni estado vigente obligatorio -- son antecedentes. Un recuerdo demuestra que ' +
+    'el Organismo tuvo antes determinada experiencia o comprensión; no demuestra que esa ' +
+    'interpretación siga siendo válida hoy. Si la situación presente lo contradice o lo matiza, ' +
+    'priorizá la evidencia actual y tratá el recuerdo como antecedente histórico -- podés señalar el ' +
+    'contraste si eso ayuda a comprender (por ejemplo: "esto contrasta con un recuerdo anterior..."), ' +
+    'pero nunca lo uses como si su sola existencia demostrara que sigue vigente hoy. Podés ignorar ' +
+    'todos estos recuerdos por completo si no aportan comprensión real: es un resultado tan válido ' +
+    'como usarlos, no los menciones solo para demostrar que existen ni los cites como prueba que se ' +
+    'confirma a sí misma. La memoria es del Organismo, no tuya: evitá "yo me acuerdo..." y preferí ' +
+    '"hay un recuerdo previo del Organismo que puede ser relevante acá...". Y esto nunca crea ni ' +
+    'modifica un recuerdo por su cuenta -- eso solo ocurre cuando el usuario confirma un cambio real ' +
+    'de memoria, por el mecanismo ya existente.\n\n' +
+    textos.join('\n---\n');
+}
+
+/* Glue con el estado real de sesión: deriva situación/ventana de state.history y llama al núcleo
+   puro de arriba. Esto es lo que usa buildSystem() -- ver más abajo, un único agregado de una
+   línea después de "Respondé desde este estado. No empieces de cero." */
+function bloqueRecuerdosDeSesion(o, history){
+  var sv = situacionYVentanaDeHistorial(history);
+  return bloqueRecuerdosParaContexto(o, sv.situacionActual, sv.ventanaReciente);
+}
+
+/* Utilidad de consola SOLO para desarrollo/depuración (regla 14 de M2.3: trazabilidad sin UI
+   nueva para el usuario). Reconstruye a mano, para un organismo real, la cadena completa:
+   situación → candidatos M2.2 → recuerdos realmente recuperados → texto exacto que hubiera
+   viajado dentro del prompt. */
+window.debugBloqueRecuerdos = function(organismoId, situacionActual, ventanaReciente){
+  var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
+  if(!o){ console.warn('[M2.3] organismo no encontrado:', organismoId); return null; }
+  var recs = obtenerRecuerdos(o);
+  var sel = seleccionarRecuerdosCandidatos({ organismo:o, situacionActual:situacionActual, ventanaReciente:ventanaReciente, recuerdos:recs, limite:M23_LIMITE_CANDIDATOS });
+  var bloque = bloqueRecuerdosParaContexto(o, situacionActual, ventanaReciente);
+  console.log('[M2.3] situación:', situacionActual);
+  console.log('[M2.3] candidatos M2.2:', sel.candidates);
+  console.log('[M2.3] bloque final:', bloque);
+  return { candidates: sel.candidates, bloque: bloque };
+};
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
@@ -3660,6 +3795,7 @@ function buildSystem(){
       '\nEsto es una evaluación estructurada aparte, no la ficha confirmada: si el usuario quiere trabajarla, ayudalo a leerla desde lo ya comprendido, sin confundirla con las lecturas conversacionales de Negocios que puedan existir.';
   }
   ctx += '\nRespondé desde este estado. No empieces de cero.';
+  ctx += bloqueRecuerdosDeSesion(o, state.history);   /* M2.3 -- '' si no hay candidatos pertinentes */
   if(state.modoUrban) ctx += URBAN_PROMPT;
   if(state.modoContext) ctx += CONTEXT_PROMPT;
   if(state.modoNegocio) ctx += NEGOCIO_PROMPT;
@@ -7604,11 +7740,178 @@ function correrPruebasAuto(){
       })());
     })();
 
+    /* ---- Memoria Viva · Corte M2.3 (17/08) -- rememoración cognitiva ---- */
+    (function(){
+      chk('M2.3 integración · buildSystem() incorpora el bloque de recuerdos automáticamente vía state.history', (function(){
+        var g = state.organismo, h = state.history;
+        try{
+          state.organismo = { id:'o_m23_int', nombre:'Integración', tipo:'empresa', ficha:{funcion:'integrar'}, principios:[],
+            recuerdos:[{ id:'rInt', title:'Dependencia crítica del proveedor de maderas', createdAt:'2025-01-01T00:00:00.000Z',
+              source:'core', field:['tensiones'], before:{tensiones:'sin registro previo'},
+              after:{tensiones:'dependencia critica de proveedor de maderas'},
+              summary:'Tensiones activas: dependencia critica de proveedor de maderas' }] };
+          state.history = [{ role:'user', content:'volvimos a tener problemas con el proveedor de maderas' }];
+          var ctx = buildSystem();
+          return ctx.indexOf('RECUERDOS PREVIOS') > -1 && ctx.indexOf('Dependencia crítica del proveedor de maderas') > -1;
+        } finally { state.organismo = g; state.history = h; }
+      })());
+      chk('M2.3-01 · un recuerdo claramente relacionado con la situación presente entra al bloque de contexto', (function(){
+        var o = { id:'o_m23_01', recuerdos:[
+          { id:'r1', title:'Dependencia crítica del proveedor de maderas', createdAt:'2025-03-10T09:00:00.000Z', source:'core',
+            field:['tensiones'], before:{tensiones:'sin registro previo'},
+            after:{tensiones:'dependencia critica de un unico proveedor de maderas certificadas'},
+            summary:'Tensiones activas: dependencia critica de un unico proveedor de maderas certificadas' }
+        ]};
+        var bloque = bloqueRecuerdosParaContexto(o, 'volvimos a tener problemas con el proveedor de maderas', '');
+        return bloque.indexOf('RECUERDOS PREVIOS') > -1 && bloque.indexOf('Dependencia crítica del proveedor de maderas') > -1;
+      })());
+      chk('M2.3-02 · el bloque nunca instruye a usar los candidatos: siempre habilita ignorarlos', (function(){
+        var o = { id:'o_m23_02', recuerdos:[{ id:'r2', title:'Cambio de horario de atención', createdAt:'2026-08-01T00:00:00.000Z',
+          source:'core', field:['proximo'], after:{proximo:'publicar horario nuevo'}, summary:'Próximo paso: publicar horario nuevo' }] };
+        var bloque = bloqueRecuerdosParaContexto(o, 'necesitamos publicar el horario', '');
+        return bloque.length > 0 &&
+          bloque.indexOf('Podés ignorar todos estos recuerdos por completo si no aportan comprensión real') > -1;
+      })());
+      chk('M2.3-03 · sin candidatos pertinentes, el bloque es exactamente vacío (igual que antes de M2.3)', (function(){
+        var oSinRecuerdos = { id:'o_m23_03a', recuerdos:[] };
+        var oConRecuerdosNoPertinentes = { id:'o_m23_03b', recuerdos:[{ id:'r3', title:'x', createdAt:'2026-01-01T00:00:00.000Z',
+          source:'core', field:['diagnostico'], after:{diagnostico:'logistica de exportacion maritima'} }] };
+        var b1 = bloqueRecuerdosParaContexto(oSinRecuerdos, 'cualquier situación distinta', '');
+        var b2 = bloqueRecuerdosParaContexto(oConRecuerdosNoPertinentes, 'quiero hablar de otra cosa totalmente ajena', '');
+        var b3 = bloqueRecuerdosParaContexto(null, 'situación', '');
+        var b4 = bloqueRecuerdosParaContexto({ id:'x', recuerdos:[] }, '', '');
+        return b1 === '' && b2 === '' && b3 === '' && b4 === '';
+      })());
+      chk('M2.3-04 · un recuerdo antiguo pero pertinente entra al bloque aunque haya uno reciente sin relación', (function(){
+        var o = { id:'o_m23_04', recuerdos:[
+          { id:'r_viejo', title:'Dependencia crítica del proveedor de maderas', createdAt:'2024-01-01T00:00:00.000Z', source:'core',
+            field:['tensiones'], after:{tensiones:'dependencia critica de proveedor de maderas certificadas'},
+            summary:'Tensiones activas: dependencia critica de proveedor de maderas certificadas' },
+          { id:'r_reciente', title:'Se actualiza el horario de atención', createdAt:'2026-08-16T00:00:00.000Z', source:'core',
+            field:['proximo'], after:{proximo:'publicar horario'}, summary:'Próximo paso: publicar horario' }
+        ]};
+        var bloque = bloqueRecuerdosParaContexto(o, 'volvió el problema del proveedor de maderas certificadas', '');
+        return bloque.indexOf('Dependencia crítica del proveedor de maderas') > -1 &&
+               bloque.indexOf('Se actualiza el horario de atención') === -1;
+      })());
+      chk('M2.3-05 · un recuerdo reciente sin relación con la situación no entra al bloque solo por ser reciente', (function(){
+        var o = { id:'o_m23_05', recuerdos:[{ id:'r_reciente2', title:'Se actualiza el horario de atención al público',
+          createdAt:'2026-08-17T00:00:00.000Z', source:'core', field:['proximo'], after:{proximo:'publicar horario'} }] };
+        var bloque = bloqueRecuerdosParaContexto(o, 'estamos evaluando una alianza con un nuevo distribuidor internacional', '');
+        return bloque === '';
+      })());
+      chk('M2.3-06 · el bloque distingue explícitamente "se comprendió antes" de "sigue siendo cierto hoy"', (function(){
+        var o = { id:'o_m23_06', recuerdos:[{ id:'r6', title:'Dependencia crítica del proveedor X', createdAt:'2025-01-01T00:00:00.000Z',
+          source:'core', field:['tensiones'], after:{tensiones:'dependencia critica del proveedor equis'},
+          summary:'Tensiones activas: dependencia critica del proveedor equis' }] };
+        var bloque = bloqueRecuerdosParaContexto(o, 'volvimos a hablar del proveedor equis', '');
+        return bloque.indexOf('no demuestra que esa interpretación siga siendo válida hoy') > -1;
+      })());
+      chk('M2.3-07 · una situación que contradice al recuerdo no produce error y el bloque habilita señalar el contraste', (function(){
+        var o = { id:'o_m23_07', recuerdos:[{ id:'r7', title:'Dependencia crítica del proveedor X', createdAt:'2025-01-01T00:00:00.000Z',
+          source:'core', field:['tensiones'], before:{tensiones:'sin registro previo'},
+          after:{tensiones:'dependencia critica del proveedor equis'}, summary:'Tensiones activas: dependencia critica del proveedor equis' }] };
+        try{
+          var bloque = bloqueRecuerdosParaContexto(o, 'aparecieron alternativas y el proveedor equis dejo de ser critico', '');
+          return bloque.indexOf('esto contrasta con un recuerdo anterior') > -1;
+        }catch(e){ return false; }
+      })());
+      chk('M2.3-08 · el bloque deja explícito que un recuerdo no es evidencia independiente', (function(){
+        var o = { id:'o_m23_08', recuerdos:[{ id:'r8', title:'Conflicto en el equipo de ventas', createdAt:'2025-01-01T00:00:00.000Z',
+          source:'core', field:['diagnostico'], after:{diagnostico:'friccion recurrente en el equipo de ventas'},
+          summary:'Diagnóstico vigente: friccion recurrente en el equipo de ventas' }] };
+        var bloque = bloqueRecuerdosParaContexto(o, 'volvió a aparecer friccion en el equipo de ventas', '');
+        return bloque.indexOf('ni evidencia independiente') > -1 && bloque.indexOf('Conflicto en el equipo de ventas') > -1;
+      })());
+      chk('M2.3-09 · el bloque advierte contra usar el recuerdo como prueba que se confirma a sí misma', (function(){
+        var o = { id:'o_m23_09', recuerdos:[{ id:'r9', title:'Conflicto en el equipo de ventas', createdAt:'2025-01-01T00:00:00.000Z',
+          source:'core', field:['diagnostico'], after:{diagnostico:'friccion recurrente en el equipo de ventas'},
+          summary:'Diagnóstico vigente: friccion recurrente en el equipo de ventas' }] };
+        var bloque = bloqueRecuerdosParaContexto(o, 'otra vez friccion en el equipo de ventas', '');
+        return bloque.indexOf('los cites como prueba que se confirma a sí misma') > -1;
+      })());
+      chk('M2.3-10 · rememorar no crea ni modifica recuerdos por su cuenta', (function(){
+        var o = { id:'o_m23_10', recuerdos:[{ id:'r10', title:'Conflicto en el equipo de ventas', createdAt:'2025-01-01T00:00:00.000Z',
+          source:'core', field:['diagnostico'], after:{diagnostico:'friccion recurrente en el equipo de ventas'},
+          summary:'Diagnóstico vigente: friccion recurrente en el equipo de ventas' }] };
+        var antes = o.recuerdos.length;
+        bloqueRecuerdosParaContexto(o, 'otra vez friccion en el equipo de ventas', '');
+        bloqueRecuerdosDeSesion(o, [{ role:'user', content:'otra vez friccion en el equipo de ventas' }]);
+        var srcSinCrear = !/crearRecuerdo/.test(bloqueRecuerdosParaContexto.toString()) &&
+                           !/crearRecuerdo/.test(bloqueRecuerdosDeSesion.toString()) &&
+                           !/guardarOrganismo/.test(bloqueRecuerdosParaContexto.toString()) &&
+                           !/guardarOrganismo/.test(bloqueRecuerdosDeSesion.toString());
+        return o.recuerdos.length === antes && srcSinCrear;
+      })());
+      chk('M2.3-11 · construir el bloque de contexto no modifica organismo ni historial', (function(){
+        var o = { id:'o_m23_11', ficha:{diagnostico:'d'}, recuerdos:[{ id:'r11', title:'Conflicto en ventas', createdAt:'2025-01-01T00:00:00.000Z',
+          source:'core', field:['diagnostico'], after:{diagnostico:'friccion en ventas'}, summary:'Diagnóstico vigente: friccion en ventas' }] };
+        var snapO = JSON.stringify(o);
+        var hist = [{ role:'assistant', content:'ok' }, { role:'user', content:'otra vez friccion en ventas' }];
+        var snapH = JSON.stringify(hist);
+        bloqueRecuerdosDeSesion(o, hist);
+        return JSON.stringify(o) === snapO && JSON.stringify(hist) === snapH;
+      })());
+      chk('M2.3-12 · el bloque de un organismo nunca incluye recuerdos de otro organismo', (function(){
+        var oA = { id:'oA', recuerdos:[{ id:'rA', title:'Conflicto en ventas de A', createdAt:'2025-01-01T00:00:00.000Z',
+          source:'core', field:['diagnostico'], after:{diagnostico:'friccion en ventas'}, summary:'Diagnóstico vigente: friccion en ventas' }] };
+        var bloqueA = bloqueRecuerdosParaContexto(oA, 'otra vez friccion en ventas', '');
+        return bloqueA.indexOf('Conflicto en ventas de A') > -1 && bloqueA.indexOf('Conflicto en ventas de B') === -1;
+      })());
+      chk('M2.3-13 · el código de M2.3 no agrega ninguna llamada de red/IA propia', (function(){
+        var src = bloqueRecuerdosParaContexto.toString() + bloqueRecuerdosDeSesion.toString() +
+                   situacionYVentanaDeHistorial.toString() + textoCompactoRecuerdo.toString() +
+                   truncarRecuerdoParaContexto.toString();
+        return !/fetch\s*\(/.test(src) && !/anthropic/i.test(src) && !/api\//i.test(src);
+      })());
+      chk('M2.3-14 · con cero candidatos el bloque agrega 0 caracteres; con candidatos, el costo es acotado', (function(){
+        var oSin = { id:'o_m23_14a', ficha:{funcion:'integrar'}, principios:[], recuerdos:[] };
+        var muchos = [];
+        for(var i=0;i<5;i++){
+          muchos.push({ id:'m14_'+i, title:'Conflicto en ventas episodio '+i, createdAt:'2025-0'+((i%9)+1)+'-01T00:00:00.000Z',
+            source:'core', field:['diagnostico'],
+            after:{diagnostico:'friccion recurrente en el equipo de ventas episodio '+i},
+            summary:'Diagnóstico vigente: friccion recurrente en el equipo de ventas episodio '+i });
+        }
+        var oCon = { id:'o_m23_14b', ficha:{funcion:'integrar'}, principios:[], recuerdos:muchos };
+        var b0 = bloqueRecuerdosParaContexto(oSin, 'friccion recurrente en el equipo de ventas', '');
+        var b1 = bloqueRecuerdosParaContexto(oCon, 'friccion recurrente en el equipo de ventas', '');
+        var sel1 = seleccionarRecuerdosCandidatos({ organismo:oCon, situacionActual:'friccion recurrente en el equipo de ventas',
+          recuerdos:muchos, limite:1 });
+        return b0.length === 0 && b1.length > 0 && sel1.candidates.length === 1;
+      })());
+      chk('M2.3-15 · smoke test de compatibilidad: M1 + M2.1 + M2.2 siguen respondiendo igual tras integrar M2.3', (function(){
+        var o = { id:'o_m23_15', nombre:'Compat M23', tipo:'empresa', ficha:{ diagnostico:'viejo' }, principios:[] };
+        var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+        var cola = { version_cola: COLA_VERSION, propuestas: [] };
+        try{
+          cargarPropuestas = function(){ return cola; };
+          persistirPropuestas = function(c){ cola = c; return true; };
+          guardarOrganismo = function(org){ o = org; };
+          state.organismo = o;
+          var prop = proponerFicha({ diagnostico:'nuevo' }, null, null, null);
+          var r = resolverPropuesta(prop.id, 'confirmar');
+          var recs = obtenerRecuerdos(o);
+          var porId = obtenerRecuerdoPorId(o, recs[0] ? recs[0].id : null);
+          var sel = seleccionarRecuerdosCandidatos({ organismo:o, situacionActual:'nuevo diagnostico', recuerdos:recs, limite:3 });
+          return r.ok === true && recs.length === 1 && porId !== null && porId.after.diagnostico === 'nuevo' &&
+                 Array.isArray(sel.candidates);
+        } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+      })());
+    })();
+
     /* ---- N2.2 · compatibilidad del resumen con evaluaciones N2.1 sin tension_principal ---- */
     chk('IMP·3 · adjuntarEvaluacionNegocioPro arma el resumen igual con dims viejas (N2.1) y nuevas (N2.2) mezcladas', (function(){
       var o = { id:'org_imp3_test', nombre:'Compat Test', tipo:'empresa', ficha:{}, principios:[], evaluaciones_negocio_pro:[] };
-      var origGuardar = guardarOrganismo, origState = state.organismo;
+      // Fix 17/08: faltaba stubear cargarOrganismos() -- adjuntarEvaluacionNegocioPro() busca
+      // el organismo por id ahí (ver su código: `cargarOrganismos().find(...)`), y sin este
+      // stub buscaba 'org_imp3_test' entre los organismos REALES de localStorage, nunca lo
+      // encontraba, y el test rompía con "Cannot read properties of undefined (reading
+      // 'resumen')" al correr contra una cuenta con datos reales. Mismo patrón que ya usa
+      // NPRO·7/8 más arriba, que sí lo stubea.
+      var origCargar = cargarOrganismos, origGuardar = guardarOrganismo, origState = state.organismo;
       try{
+        cargarOrganismos = function(){ return [o]; };
         guardarOrganismo = function(org){ o = org; };
         state.organismo = null;
         var payload = { producto: PRODUCTO_NEGOCIOS_PRO, tipo:'evaluacion_negocio_pro', organismo_id:'org_imp3_test',
@@ -7619,7 +7922,7 @@ function correrPruebasAuto(){
         adjuntarEvaluacionNegocioPro(payload, true);
         var r = o.evaluaciones_negocio_pro[0].resumen;
         return r.indexOf('B1 estable') > -1 && r.indexOf('B3 tensionada (dependencia concentrada)') > -1;
-      } finally { guardarOrganismo = origGuardar; state.organismo = origState; }
+      } finally { cargarOrganismos = origCargar; guardarOrganismo = origGuardar; state.organismo = origState; }
     })());
 
     /* ---- N2.3 · el resumen suma el último diagnóstico integral confirmado, y sigue
