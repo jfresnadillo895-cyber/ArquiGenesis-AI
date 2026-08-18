@@ -7396,6 +7396,212 @@ window.debugExecuteReturnProposal = function(snapshot, opening, graphState, fron
   });
 };
 
+/* ============================================================================
+   Contextos Universal · C1-F2 — Gobernanza y aplicación del Retorno
+   Puente entre ContextReturnProposal (C1-F1) y la gobernanza HUMANA que el Core ya tiene --
+   NO crea un segundo sistema de propuestas. Reutiliza tal cual: proponerFicha() (entrada real
+   del lazo N1.0), resolverPropuesta() (única función que ya distingue confirmar/corregir/
+   rechazar, botones reales de cardPropuesta()), aplicarPropuesta() (con su chequeo de
+   concurrencia optimista fichaVersion(o) !== esperado_version, que ES la infraestructura de
+   conflicto de versión que pide el encargo -- no se reimplementa), y crearRecuerdo() (Memoria
+   Viva M1, invocado una sola vez por aplicarPropuesta() -- este corte nunca llama a
+   crearRecuerdo() directo). Sin llamadas IA: es puro puente determinista.
+
+   Dos fases, porque hay DOS puntos de conflicto de versión distintos:
+   1. C1F2_prepararGobernanza(): compara snapshot.organismVersion (la versión de Memoria sobre
+      la que se construyó el Foco/Retorno -- basedOnVersion) contra fichaVersion(state.organismo)
+      AHORA, antes de proponer nada. Si ya divergió, no se llega a crear ninguna Propuesta real
+      (proponerla sobre una Memoria que ya cambió sería engañoso). Usa la misma fichaVersion() ya
+      existente -- no una versión paralela.
+   2. aplicarPropuesta() (real, sin tocar) vuelve a chequear en el momento de la resolución
+      humana, por si la Memoria cambió DESPUÉS de crear la Propuesta pero ANTES de que el humano
+      decida -- ese caso lo cubre solo, ya estaba blindado.
+
+   mantener_abierto/rechazar NUNCA llaman a proponerFicha()/resolverPropuesta(): no hay nada que
+   proponerle a la cola real de Memoria (ag_core_propuestas) -- el hallazgo/rechazo queda
+   enteramente en la genealogía de la Apertura (Frente.operationalState.returnGovernance), sin
+   tocar Memoria, exactamente como pide el encargo. Sólo incorporar/editar tocan la cola real.
+   ============================================================================ */
+
+var C1F2_DECISIONES = ['incorporar', 'editar', 'mantener_abierto', 'rechazar'];
+/* Mapeo entre los nombres de C1A1_currentMemory (function/tensions/diagnosis/next/nextPending) y
+   los campos reales de o.ficha (CAMPOS_FICHA) que ya usa proponerFicha()/diffFicha(). Copia
+   propia intencional -- no se reutiliza CAMPOS_FICHA para construir esta tabla porque el mapeo
+   es semántico (une dos vocabularios de cortes distintos), no una lista plana. */
+var C1F2_CAMPO_POR_MEMORIA = { function:'funcion', tensions:'tensiones', diagnosis:'diagnostico',
+  next:'proximo', nextPending:'proximos' };
+
+/* Encuentra a qué campo REAL de Memoria corresponde el "before" de un cambio, comparando contra
+   el contenido real de currentMemory (nunca contra el "after" ni contra nada que el modelo haya
+   escrito) -- mismo principio de siempre: el código decide con datos ya conocidos, no confía en
+   una etiqueta. Devuelve null si "before" es null/no-string o no coincide con ningún campo real. */
+function C1F2_mapChangeToCampo(before, currentMemory){
+  if(typeof before !== 'string' || !before) return null;
+  var claves = ['function', 'tensions', 'diagnosis', 'next', 'nextPending'], i, k;
+  for(i=0;i<claves.length;i++){
+    k = claves[i];
+    if(typeof currentMemory[k] === 'string' && currentMemory[k] === before) return C1F2_CAMPO_POR_MEMORIA[k];
+  }
+  return null;
+}
+
+/* Traduce los changes[] de un ContextReturnProposal a un candidato de ficha apto para
+   proponerFicha(). Reglas: "keep_open" NUNCA se traduce (por diseño no cristaliza -- queda solo
+   en genealogía). "add" (before:null) va por defecto a "diagnostico" (único campo narrativo
+   abierto que tiene el Core para un hecho genuinamente nuevo -- nunca se inventa un campo que no
+   exista). Si dos cambios apuntan al mismo campo real, el segundo se descarta explícitamente
+   (nunca se pisan en silencio -- "Nunca aplicar silenciosamente" del encargo aplica también acá,
+   no sólo a la aplicación final). */
+function C1F2_construirFichaCandidata(returnProposal, currentMemory){
+  var fichaNueva = {}, mapeados = [], noMapeados = [];
+  (returnProposal.changes || []).forEach(function(c, i){
+    if(c.type === 'keep_open'){
+      noMapeados.push({ changeIndex:i, type:c.type,
+        motivo:'keep_open no se traduce a Memoria por diseño -- queda sólo en la genealogía de la Apertura' });
+      return;
+    }
+    var campo = C1F2_mapChangeToCampo(c.before, currentMemory);
+    if(!campo && c.type === 'add') campo = 'diagnostico';
+    if(!campo){
+      noMapeados.push({ changeIndex:i, type:c.type,
+        motivo:'el "before" no coincide con ningún campo real de la Memoria vigente -- no se adivina un destino' });
+      return;
+    }
+    if(Object.prototype.hasOwnProperty.call(fichaNueva, campo)){
+      noMapeados.push({ changeIndex:i, type:c.type,
+        motivo:'colisión: el campo "' + campo + '" ya fue tomado por otro cambio de este mismo Retorno' });
+      return;
+    }
+    fichaNueva[campo] = c.after;
+    mapeados.push({ changeIndex:i, type:c.type, campo:campo });
+  });
+  return { fichaNueva: fichaNueva, mapeados: mapeados, noMapeados: noMapeados };
+}
+
+/* ---- Fase 1: preparar (nunca escribe nada, nunca crea Propuesta). Detecta el conflicto de
+   versión "temprano" (basedOnVersion vs Memoria AHORA) antes de construir ningún candidato. ---- */
+function C1F2_prepararGobernanza(returnProposal, snapshot){
+  if(!returnProposal) return { ok:false, motivo:'ContextReturnProposal ausente' };
+  if(!returnProposal.hasMeaningfulReturn){
+    return { ok:false, motivo:'no hay Retorno significativo -- nada que gobernar', hasMeaningfulReturn:false };
+  }
+  if(!snapshot || typeof snapshot.organismVersion !== 'number'){
+    return { ok:false, motivo:'snapshot ausente o sin organismVersion' };
+  }
+  var o = state.organismo;
+  if(!o || o.id !== snapshot.organismId){
+    return { ok:false, motivo:'el organismo activo (state.organismo) no coincide con el Snapshot de este Retorno' };
+  }
+  var basedOnVersion = snapshot.organismVersion;
+  var currentVersion = fichaVersion(o);
+  if(currentVersion !== basedOnVersion){
+    return { ok:false, conflict:true,
+      motivo:'La Memoria cambió desde que se construyó este Retorno -- hace falta reconstruir el Foco sobre la versión actual antes de proponer.',
+      basedOnVersion: basedOnVersion, currentVersion: currentVersion };
+  }
+  var candidata = C1F2_construirFichaCandidata(returnProposal, snapshot.currentMemory);
+  if(!Object.keys(candidata.fichaNueva).length){
+    return { ok:false, motivo:'ningún cambio del Retorno se pudo traducir a un campo real de Memoria (todos keep_open o sin mapear)',
+      basedOnVersion: basedOnVersion, noMapeados: candidata.noMapeados };
+  }
+  return { ok:true, basedOnVersion: basedOnVersion, fichaCandidata: candidata.fichaNueva,
+    mapeados: candidata.mapeados, noMapeados: candidata.noMapeados };
+}
+
+/* ---- Fase 2: resolver según la decisión humana. "mantener_abierto"/"rechazar" nunca tocan la
+   cola real (ag_core_propuestas) ni Memoria. "incorporar"/"editar" son la ÚNICA vía de escritura,
+   y pasan íntegro por proponerFicha() -> resolverPropuesta() -> aplicarPropuesta() (con
+   crearRecuerdo() adentro, una sola vez) -- el mismo camino que ya usa un humano tocando los
+   botones reales de cardPropuesta(). "Nunca aplicar silenciosamente": esta función SIEMPRE
+   requiere una decisionHumana explícita -- no hay ninguna ruta que aplique sin ella. ---- */
+function C1F2_resolverGobernanzaRetorno(preparacion, decisionHumana, correccionUsuario){
+  if(C1F2_DECISIONES.indexOf(decisionHumana) === -1){
+    return { ok:false, motivo:'decisión humana inválida -- debe ser una de: ' + C1F2_DECISIONES.join(', ') };
+  }
+  var basedOnVersion = (preparacion && typeof preparacion.basedOnVersion === 'number') ? preparacion.basedOnVersion : null;
+
+  if(decisionHumana === 'mantener_abierto' || decisionHumana === 'rechazar'){
+    return { ok:true, decision: decisionHumana, aplicado:false, motivo:null, conflict:false,
+      propuestaId:null, organismVersionAntes: basedOnVersion, organismVersionDespues: basedOnVersion,
+      fichaFieldsApplied: [], recuerdoId: null };
+  }
+
+  // incorporar / editar: requieren una preparación válida (sin conflicto, con candidato real)
+  if(!preparacion || !preparacion.ok){
+    return { ok:false, decision: decisionHumana, motivo:'no hay una preparación válida sobre la cual gobernar (conflicto de versión o candidato sin campos reales)',
+      conflict: !!(preparacion && preparacion.conflict) };
+  }
+
+  var o = state.organismo;
+  var versionAntes = fichaVersion(o);
+  var recuerdosAntes = recuerdosDe(o).length;
+
+  var prop = proponerFicha(preparacion.fichaCandidata, null, null, null);
+  if(!prop){
+    return { ok:false, decision: decisionHumana,
+      motivo:'proponerFicha() no generó una propuesta (candidato inválido, o sin cambios reales sobre la Memoria actual)',
+      conflict:false, organismVersionAntes: versionAntes, organismVersionDespues: versionAntes,
+      fichaFieldsApplied: [], recuerdoId: null };
+  }
+
+  var correccion = (decisionHumana === 'editar') ? (correccionUsuario || {}) : null;
+  var accionCore = (decisionHumana === 'editar') ? 'corregir' : 'confirmar';   // strings reales de resolverPropuesta()
+  var r = resolverPropuesta(prop.id, accionCore, correccion);
+
+  var recuerdosDespues = recuerdosDe(o).length;
+  var recuerdoId = null;
+  if(r.ok && recuerdosDespues > recuerdosAntes){
+    var ultimos = obtenerRecuerdos(o, { orden:'desc', limite:1 });
+    recuerdoId = ultimos.length ? ultimos[0].id : null;
+  }
+
+  return {
+    ok: r.ok, decision: decisionHumana, aplicado: !!r.ok,
+    motivo: r.ok ? null : r.motivo,
+    conflict: !r.ok && r.motivo === 'la ficha cambió desde que se propuso',
+    propuestaId: prop.id,
+    organismVersionAntes: versionAntes,
+    organismVersionDespues: r.ok ? fichaVersion(o) : versionAntes,
+    fichaFieldsApplied: r.ok ? Object.keys(r.aplicado || {}) : [],
+    recuerdosAntes: recuerdosAntes, recuerdosDespues: recuerdosDespues,
+    recuerdoId: recuerdoId
+  };
+}
+
+/* Genealogía: se aplica únicamente al Frente (operationalState.returnGovernance), igual que
+   C1F1_aplicarResultadoAlFrente -- nunca toca Organismo/Memoria/Recuerdos directamente (eso ya
+   lo hizo, si correspondía, C1F2_resolverGobernanzaRetorno() por el camino real del Core).
+   Conserva los 5 elementos que pide el encargo: propuesta original, decisión humana, versión
+   editada (si existe), resultado de aplicación, y referencia a versión/Recuerdo generado. */
+function C1F2_aplicarGenealogiaAlFrente(front, returnProposal, decisionHumana, correccionUsuario, resolucion){
+  var clon = JSON.parse(JSON.stringify(front));
+  if(!clon.operationalState){ clon.operationalState = C1C3A_operationalStateInicial(); }
+  var estado = resolucion.ok ? decisionHumana : ('blocked_' + (resolucion.conflict ? 'conflict' : 'error'));
+  clon.operationalState.history.push({ action:'RETURN_GOVERNANCE', status: estado, at: new Date().toISOString() });
+  clon.operationalState.returnGovernance = {
+    originalProposal: JSON.parse(JSON.stringify(returnProposal)),
+    humanDecision: decisionHumana,
+    editedFicha: (decisionHumana === 'editar' && correccionUsuario) ? JSON.parse(JSON.stringify(correccionUsuario)) : null,
+    applicationResult: JSON.parse(JSON.stringify(resolucion)),
+    at: new Date().toISOString()
+  };
+  return clon;
+}
+
+/* Laboratorio interno C1-F2: toma un ContextReturnProposal (C1-F1) + Snapshot + Frente YA
+   producidos, prepara la gobernanza, la resuelve según la decisión humana pasada por parámetro
+   (nunca automática), y devuelve el Frente con la genealogía aplicada. Sin llamadas IA -- puro
+   determinista. Solo consola, sin UI nueva. */
+window.debugC1F2GobernarRetorno = function(returnProposal, snapshot, front, decisionHumana, correccionUsuario){
+  var preparacion = C1F2_prepararGobernanza(returnProposal, snapshot);
+  console.log('[C1-F2] preparación:', preparacion);
+  var resolucion = C1F2_resolverGobernanzaRetorno(preparacion, decisionHumana, correccionUsuario);
+  console.log('[C1-F2] resolución:', resolucion);
+  var frenteActualizado = C1F2_aplicarGenealogiaAlFrente(front, returnProposal, decisionHumana, correccionUsuario, resolucion);
+  console.log('[C1-F2] genealogía aplicada al Frente:', frenteActualizado.operationalState.returnGovernance);
+  return { preparacion: preparacion, resolucion: resolucion, front: frenteActualizado };
+};
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
