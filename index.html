@@ -13322,16 +13322,17 @@ function correrPruebasAuto(){
         return unSoloAsk && unSoloTrace && sinReseleccion && sinRecursionAsk && sinRecursionTrace;
       })());
 
-      chk('C3A-15 · Acción no implementada devuelve action_not_implemented_yet explícito, nunca fallback silencioso (actualizado por C1-C4A: INTERPRET ya está implementado, ver C4A-17)', (function(){
+      chk('C3A-15 · Acción no implementada devuelve action_not_implemented_yet explícito, nunca fallback silencioso (actualizado por C1-X2: READ y CLOSE_FRONT ya están implementadas, ver X2-09)', (function(){
         var src = executeCognitiveAction.toString();
         var iGuard = src.indexOf('action_not_implemented_yet');
         var iAsk = src.indexOf('executeAsk(');
         var iTrace = src.indexOf('executeTrace(');
         return iGuard > -1 && iGuard < iAsk && iGuard < iTrace &&
-          C1C3A_ACCIONES_IMPLEMENTADAS.length === 3 &&
-          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('READ') === -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('RESEARCH') === -1 &&
+          C1C3A_ACCIONES_IMPLEMENTADAS.length === 5 &&
+          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('READ') > -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('CLOSE_FRONT') > -1 &&
+          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('RESEARCH') === -1 &&
           C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('DEEPEN') === -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('EXPAND') === -1 &&
-          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('CONTRAST') === -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('CLOSE_FRONT') === -1;
+          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('CONTRAST') === -1;
       })());
 
       chk('C3A-16 · Sin escritura en Organismo/Memoria/Recuerdos: ninguna función de C1-C3A persiste ni toca la ficha', (function(){
@@ -13634,9 +13635,10 @@ function correrPruebasAuto(){
           actualizado.operationalState.uncertainties.indexOf('u_nueva') > -1;
       })());
 
-      chk('C4A-18 · Sin regresión sobre C3A/C3B: C1C3A_ACCIONES_IMPLEMENTADAS incluye INTERPRET, sigue sin incluir READ/RESEARCH/DEEPEN/EXPAND/CONTRAST/CLOSE_FRONT, y ASK/TRACE siguen presentes', (function(){
+      chk('C4A-18 · Sin regresión sobre C3A/C3B: C1C3A_ACCIONES_IMPLEMENTADAS incluye INTERPRET (actualizado por C1-X2: ahora también READ/CLOSE_FRONT, ver X2-09), sigue sin incluir RESEARCH/DEEPEN/EXPAND/CONTRAST, y ASK/TRACE siguen presentes', (function(){
         return C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('INTERPRET') > -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('ASK') > -1 &&
-          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('TRACE') > -1 && C1C3A_ACCIONES_IMPLEMENTADAS.length === 3;
+          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('TRACE') > -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('READ') > -1 &&
+          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('CLOSE_FRONT') > -1 && C1C3A_ACCIONES_IMPLEMENTADAS.length === 5;
       })());
 
       // C4A-19 · Banco general sin regresiones: no es un chk() individual -- ES correr
