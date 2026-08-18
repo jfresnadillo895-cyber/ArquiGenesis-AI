@@ -3980,6 +3980,38 @@ function C1A2_situacionDeOpening(opening){
 /* Prompt propio y mínimo de C1-A2 (regla 14/15): nada de CONTEXT_PROMPT ni de las categorías del
    Contextos Legacy. Se arma de cero en cada llamada, a partir SOLO del Snapshot (read-only) y la
    Apertura -- nunca de state.history ni de ningún otro estado de chat. */
+/* ============ C1-G2.6 · CACHÉ DE PROMPT PARA CONTEXTOS UNIVERSAL (18/08) ============
+   Mismo patrón que C-11 (buildSystemBloques): separa el bloque REALMENTE estable -- reglas y
+   formato del marcador, que no cambian entre llamadas de un mismo corte -- del bloque variable --
+   intro + ventana cognitiva específica de este Frente/Apertura/Organismo. Nunca reescribe ni edita
+   el texto de ningún prompt de C1-A2..C1-F1: solo reordena en qué bloque de la llamada a la API
+   viaja cada parte (estable primero y cacheado, variable después con un breve conector), igual
+   que ya hace buildSystemBloques() con SYSTEM_PROMPT + contexto del organismo.
+   Punto de corte: todo prompt de Contextos Universal declara su sección de reglas con el literal
+   'REGLAS:' (10 de los 11 cortes) o, únicamente en C1-F1 (sin lista numerada), con
+   'REGLA CENTRAL:' -- el mismo criterio que ya usan varios arneses de prueba existentes para
+   comparar prompts entre dominios (ver p.ej. los tests de C1-B1/C1-C1: 'p.substring(p.indexOf(
+   "REGLAS:"))'). Si un prompt no trae ninguno de los dos marcadores, se manda entero sin caché:
+   peor precio, nunca comportamiento distinto -- mismo resguardo que ya usa buildSystemBloques().
+   No cachea nunca estado dinámico del Organismo/Frente/Apertura: ese bloque queda siempre en la
+   parte "variable", sin cache_control. */
+var C1_MARCADORES_ESTABLE = ['REGLAS:', 'REGLA CENTRAL:'];
+function C1_bloquesSistema(promptCompleto){
+  var texto = String(promptCompleto || '');
+  var idx = -1;
+  for(var i = 0; i < C1_MARCADORES_ESTABLE.length; i++){
+    var pos = texto.indexOf(C1_MARCADORES_ESTABLE[i]);
+    if(pos > -1 && (idx === -1 || pos < idx)) idx = pos;
+  }
+  if(idx === -1) return [{ type:'text', text: texto }];   // resguardo: sin marcador, sin caché, mismo texto de siempre
+  var variable = texto.slice(0, idx);
+  var estable = texto.slice(idx);
+  return [
+    { type:'text', text: estable, cache_control:{ type:'ephemeral' } },
+    { type:'text', text: '\n\n=== CASO A EVALUAR AHORA (bajo las reglas de arriba) ===\n' + variable }
+  ];
+}
+
 function C1A2_PROMPT_RECONSTRUCT_ORIGIN(snapshot, opening, bloqueRecuerdos){
   var snapTxt = JSON.stringify({
     identity: snapshot.identity,
@@ -4172,7 +4204,7 @@ async function reconstructOrigin(snapshot, opening){
   if(!prep) return { ok:false, motivo:'snapshot u opening ausente' };
   var res;
   try{
-    res = await C1A2_llamarIA(prep.systemPrompt, prep.mensajes);
+    res = await C1A2_llamarIA(C1_bloquesSistema(prep.systemPrompt), prep.mensajes);   // C1-G2.6: caché
   }catch(e){
     return { ok:false, motivo:'error de red/API: ' + (e && e.message), candidatosRecuerdos: prep.candidatosRecuerdos.length };
   }
@@ -4475,7 +4507,7 @@ async function openField(snapshot, opening, assessment){
   if(!prep) return { ok:false, motivo:'snapshot, opening o assessment ausente' };
   var res;
   try{
-    res = await C1B1_llamarIA(prep.systemPrompt, prep.mensajes);
+    res = await C1B1_llamarIA(C1_bloquesSistema(prep.systemPrompt), prep.mensajes);   // C1-G2.6: caché
   }catch(e){
     return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
   }
@@ -4886,7 +4918,7 @@ async function propagateField(snapshot, opening, assessment, boundaryOpeningResu
     var prompt = C1B2_PROMPT_PROPAGATE(ventana);
     var res;
     try{
-      res = await C1B2_llamarIA(prompt, [{ role:'user', content:'(evaluá estas rutas y decidí cuáles continúan)' }]);
+      res = await C1B2_llamarIA(C1_bloquesSistema(prompt), [{ role:'user', content:'(evaluá estas rutas y decidí cuáles continúan)' }]);   // C1-G2.6: caché
     }catch(e){
       frontier.forEach(function(r){ r.status = 'closed'; r.closureReason = 'respuesta_invalida_del_modelo'; });
       break;
@@ -5180,7 +5212,7 @@ async function selectContextFronts(graphState, opening){
   var prompt = C1C1_PROMPT_SELECT_FRONTS(ventana);
   var res;
   try{
-    res = await C1C1_llamarIA(prompt, [{ role:'user', content:'(proponé Frentes candidatos y elegí cuál merece atención primero, si alguno)' }]);
+    res = await C1C1_llamarIA(C1_bloquesSistema(prompt), [{ role:'user', content:'(proponé Frentes candidatos y elegí cuál merece atención primero, si alguno)' }]);   // C1-G2.6: caché
   }catch(e){
     return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
   }
@@ -5394,9 +5426,10 @@ function C1C2_PROMPT_SELECT_ACTION(ventana, accionesDisponibles){
     '3. ASK tiene que ser costoso aunque sea técnicamente barato: solo elegilo si (a) existe una ' +
     'incertidumbre concreta, (b) el usuario es una fuente apropiada para resolverla, (c) la ' +
     'respuesta discriminaría entre interpretaciones o rutas reales, (d) esa información NO está ya ' +
-    'en Memoria/Recuerdos/evidencia, y (e) no hay una acción más económica o fiable. Si elegís ASK, ' +
-    '"requirement.description" tiene que formular la necesidad de la pregunta -- NUNCA generes ni ' +
-    'muestres la pregunta en sí, eso no te corresponde en este paso.\n' +
+    'en Memoria/Recuerdos/evidencia, y (e) no hay una acción más económica o fiable. Esta decisión ' +
+    'se toma primero y por sí sola -- la redacción de la pregunta (ver regla 8) nunca puede influir ' +
+    'sobre si corresponde o no elegir ASK. Si elegís ASK, "requirement.description" tiene que ' +
+    'formular la necesidad de la pregunta.\n' +
     '4. RESEARCH solo si podés expresar "requirement.targetClaim": qué afirmación externa concreta ' +
     'hay que comprobar y de qué relación depende. Sin eso, no elijas RESEARCH.\n' +
     '5. Un Recuerdo pertinente puede convertir un ASK en READ si recupera un antecedente ' +
@@ -5406,7 +5439,20 @@ function C1C2_PROMPT_SELECT_ACTION(ventana, accionesDisponibles){
     'No planifiques varios pasos por adelantado.\n' +
     '7. No ejecutes nada: no preguntes, no investigues, no expandas el grafo, no agregues evidencia, ' +
     'no reinterpretes, no crees Tensión/Función/Foco, no escribas Memoria. Solo decidís cuál acción ' +
-    'sigue.\n\n' +
+    'sigue.\n' +
+    /* C1-G2.6 (fusión A): antes esta regla prohibía generar la pregunta en este paso (C1-C3A la
+       redactaba en una segunda llamada aparte). Ahora, únicamente cuando "action" resulta ser ASK,
+       el mismo marcador puede incluir "userQuestion" ya redactada -- ahorra la segunda llamada en
+       ese caso. La redacción es un campo aparte y posterior a la decisión, nunca la reemplaza ni la
+       condiciona (ver regla 3). Si "action" no es ASK, "userQuestion" queda en null sin excepción. */
+    '8. Si (y solo si) "action" es exactamente "ASK", completá también "userQuestion" con exactamente ' +
+    'UNA pregunta en lenguaje natural dirigida al usuario: {"text":"...", "resolves":"...", ' +
+    '"whyNeeded":"..."}. "text" responde exactamente a "uncertaintyAddressed" (ni más amplia ni más ' +
+    'genérica), nunca más de un signo "?", nunca un formulario ni varias preguntas encadenadas con ' +
+    '"y también". "resolves" identifica en una frase corta qué incertidumbre específica discrimina la ' +
+    'pregunta. "whyNeeded" explica brevemente por qué Memoria/Recuerdos/evidencia/grafo no alcanzaban ' +
+    '-- reutilizá "requirement.description" como base. Si "action" NO es "ASK", dejá "userQuestion" ' +
+    'en null -- nunca generes una pregunta para otra acción.\n\n' +
     'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
     'después. Sé breve. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
     '[[NEXT_ACTION:{\n' +
@@ -5416,6 +5462,7 @@ function C1C2_PROMPT_SELECT_ACTION(ventana, accionesDisponibles){
     '  "expectedGain": "high"|"medium"|"low",\n' +
     '  "estimatedCost": "low"|"medium"|"high",\n' +
     '  "requirement": { "type": "...", "description": "...", "targetClaim": "..." } | null,\n' +
+    '  "userQuestion": { "text": "...", "resolves": "...", "whyNeeded": "..." } | null,\n' +
     '  "justificationSummary": "..."\n' +
     '}]]';
 }
@@ -5492,10 +5539,27 @@ function C1C2_parseNextAction(texto, refsOfrecidas, accionesDisponibles){
   if(raw.action === 'RESEARCH' && (!requirement || !requirement.targetClaim)) return null;   // regla 6, dura
   if(raw.action === 'ASK' && (!requirement || !requirement.description)) return null;        // regla 3
 
+  // C1-G2.6 (fusión A): userQuestion es SIEMPRE opcional -- su ausencia o invalidez nunca rechaza
+  // la respuesta completa (la decisión de acción sigue siendo válida por sí sola). Si action==='ASK'
+  // y viene una userQuestion bien formada, se adopta y ahorra la llamada aparte de executeAsk; si
+  // viene vacía/incompleta/inválida, queda en null y el flujo cae al camino anterior sin cambios
+  // (misma compatibilidad exacta que antes de este corte). Si action NO es 'ASK', cualquier
+  // userQuestion recibida se descarta sin excepción -- regla 8: nunca se expone pregunta para otra acción.
+  var userQuestion = null;
+  if(raw.action === 'ASK' && raw.userQuestion && typeof raw.userQuestion === 'object' && !Array.isArray(raw.userQuestion)){
+    var uqText = (typeof raw.userQuestion.text === 'string' && raw.userQuestion.text.trim()) ? raw.userQuestion.text.trim() : null;
+    var uqResolves = (typeof raw.userQuestion.resolves === 'string' && raw.userQuestion.resolves.trim()) ? raw.userQuestion.resolves.trim() : null;
+    var uqWhyNeeded = (typeof raw.userQuestion.whyNeeded === 'string' && raw.userQuestion.whyNeeded.trim()) ? raw.userQuestion.whyNeeded.trim() : null;
+    var uqUnaPregunta = !uqText || (uqText.match(/\?/g) || []).length <= 1;
+    if(uqText && uqResolves && uqWhyNeeded && uqUnaPregunta){
+      userQuestion = { text: uqText, resolves: uqResolves, whyNeeded: uqWhyNeeded };
+    }
+  }
+
   return {
     action: raw.action, targetRefs: targetRefs, uncertaintyAddressed: raw.uncertaintyAddressed.trim(),
     expectedGain: raw.expectedGain, estimatedCost: raw.estimatedCost,
-    requirement: requirement, justificationSummary: justificationSummary
+    requirement: requirement, userQuestion: userQuestion, justificationSummary: justificationSummary
   };
 }
 
@@ -5517,7 +5581,7 @@ async function selectNextCognitiveAction(snapshot, opening, graphState, front, a
   var prompt = C1C2_PROMPT_SELECT_ACTION(ventana, accionesDisponibles);
   var res;
   try{
-    res = await C1C2_llamarIA(prompt, [{ role:'user', content:'(elegí la próxima acción cognitiva para este Frente, si alguna)' }]);
+    res = await C1C2_llamarIA(C1_bloquesSistema(prompt), [{ role:'user', content:'(elegí la próxima acción cognitiva para este Frente, si alguna)' }]);   // C1-G2.6: caché
   }catch(e){
     return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
   }
@@ -5537,6 +5601,7 @@ async function selectNextCognitiveAction(snapshot, opening, graphState, front, a
     frontId: front.id, action: parsed.action, targetRefs: parsed.targetRefs,
     uncertaintyAddressed: parsed.uncertaintyAddressed, expectedGain: parsed.expectedGain,
     estimatedCost: parsed.estimatedCost, requirement: parsed.requirement,
+    userQuestion: parsed.userQuestion,   // C1-G2.6: null salvo action==='ASK' con pregunta fusionada válida
     justificationSummary: parsed.justificationSummary
   };
   result = JSON.parse(JSON.stringify(result));
@@ -5545,7 +5610,8 @@ async function selectNextCognitiveAction(snapshot, opening, graphState, front, a
     telemetry: {
       llamadasIA: 1, tokensInput: (res.usage && res.usage.input_tokens) || null,
       tokensOutput: (res.usage && res.usage.output_tokens) || null, duracionMs: res.duracionMs,
-      recuerdosOfrecidos: ventana.recuerdoIdsOfrecidos.length, accionElegida: parsed.action
+      recuerdosOfrecidos: ventana.recuerdoIdsOfrecidos.length, accionElegida: parsed.action,
+      preguntaFusionada: !!parsed.userQuestion   // C1-G2.6: true si ASK trajo la pregunta en la misma llamada
     }
   };
 }
@@ -5690,7 +5756,7 @@ async function executeAsk(front, nextAction){
   var prompt = C1C3A_PROMPT_ASK(ventana);
   var res;
   try{
-    res = await C1C3A_llamarIAAsk(prompt, [{ role:'user', content:'(formulá la pregunta)' }]);
+    res = await C1C3A_llamarIAAsk(C1_bloquesSistema(prompt), [{ role:'user', content:'(formulá la pregunta)' }]);   // C1-G2.6: caché
   }catch(e){
     return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
   }
@@ -5711,6 +5777,28 @@ async function executeAsk(front, nextAction){
     ok: true, result: result,
     telemetry: { llamadasIA: 1, tokensInput: (res.usage && res.usage.input_tokens) || null,
       tokensOutput: (res.usage && res.usage.output_tokens) || null, duracionMs: res.duracionMs }
+  };
+}
+
+/* ---- C1-G2.6 (fusión A): construye el mismo CognitiveActionResult que produciría executeAsk(),
+   pero SIN llamar a la IA -- reutiliza la userQuestion que C1-C2 ya redactó en la misma respuesta
+   del selector. Determinista, forma 100% idéntica a la de executeAsk() (mismo shape que consume
+   C1C3A_aplicarResultadoAlFrente() más abajo). Solo se usa cuando nextAction.userQuestion ya viene
+   validada por el parser de C1-C2 -- si no viene, executeCognitiveAction() cae al camino anterior
+   (executeAsk real) sin ningún cambio de comportamiento. */
+function C1C3A_construirResultadoAskFusionado(front, nextAction){
+  var result = {
+    frontId: front.id, action: 'ASK', status: 'need_user',
+    observations: [], relationUpdates: [], routeUpdates: [],
+    evidenceNeeds: [], uncertainties: [ nextAction.uncertaintyAddressed ],
+    userQuestion: { text: nextAction.userQuestion.text, resolves: nextAction.userQuestion.resolves,
+      whyNeeded: nextAction.userQuestion.whyNeeded },
+    nextCandidates: [], justificationSummary: nextAction.justificationSummary
+  };
+  result = JSON.parse(JSON.stringify(result));
+  return {
+    ok: true, result: result,
+    telemetry: { llamadasIA: 0, tokensInput: null, tokensOutput: null, duracionMs: 0, fusionadoDesdeC1C2: true }
   };
 }
 
@@ -5925,7 +6013,7 @@ async function executeTrace(graphState, front, nextAction){
   var prompt = C1C3A_PROMPT_TRACE(ventana);
   var res;
   try{
-    res = await C1C3A_llamarIATrace(prompt, [{ role:'user', content:'(reconstruí la ruta con lo ya disponible)' }]);
+    res = await C1C3A_llamarIATrace(C1_bloquesSistema(prompt), [{ role:'user', content:'(reconstruí la ruta con lo ya disponible)' }]);   // C1-G2.6: caché
   }catch(e){
     return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
   }
@@ -6170,7 +6258,15 @@ async function executeCognitiveAction(snapshot, opening, graphState, front, next
     };
   }
   var ejecucion;
-  if(nextAction.action === 'ASK') ejecucion = await executeAsk(front, nextAction);
+  if(nextAction.action === 'ASK'){
+    // C1-G2.6 (fusión A): si C1-C2 ya trajo la pregunta redactada en la misma respuesta, se
+    // reutiliza sin gastar la llamada al ejecutor de ASK. Si no vino (fixtures/replays anteriores
+    // a este corte, o el modelo no la completó), se cae al camino de siempre -- ningún llamador
+    // nota la diferencia salvo por telemetry.llamadasIA.
+    ejecucion = nextAction.userQuestion
+      ? C1C3A_construirResultadoAskFusionado(front, nextAction)
+      : await executeAsk(front, nextAction);
+  }
   else if(nextAction.action === 'TRACE') ejecucion = await executeTrace(graphState, front, nextAction);
   else if(nextAction.action === 'READ') ejecucion = executeRead(snapshot, graphState, front, nextAction);   // C1-X2: sin IA, sin await real
   else if(nextAction.action === 'CLOSE_FRONT') ejecucion = executeCloseFront(front, nextAction);   // C1-X2: sin IA, sin await real
@@ -6546,7 +6642,7 @@ async function executeInterpret(graphState, front, nextAction){
   var prompt = C1C4A_PROMPT_INTERPRET(ventana);
   var res;
   try{
-    res = await C1C4A_llamarIA(prompt, [{ role:'user', content:'(interpretá la configuración con lo ya disponible)' }]);
+    res = await C1C4A_llamarIA(C1_bloquesSistema(prompt), [{ role:'user', content:'(interpretá la configuración con lo ya disponible)' }]);   // C1-G2.6: caché
   }catch(e){
     return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
   }
@@ -6840,7 +6936,7 @@ async function executeFunctionalInterpretation(graphState, front, interpretation
   var prompt = C1C4B_PROMPT_FUNCTION(ventana);
   var res;
   try{
-    res = await C1C4B_llamarIA(prompt, [{ role:'user', content:'(extendé la interpretación con operador/función si es legítimo)' }]);
+    res = await C1C4B_llamarIA(C1_bloquesSistema(prompt), [{ role:'user', content:'(extendé la interpretación con operador/función si es legítimo)' }]);   // C1-G2.6: caché
   }catch(e){
     return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
   }
@@ -7085,7 +7181,7 @@ async function executeFocus(graphState, front, interpretationResult, functionalR
   var prompt = C1E1_PROMPT_FOCUS(ventana);
   var res;
   try{
-    res = await C1E1_llamarIA(prompt, [{ role:'user', content:'(construí el Foco si es legítimo, comprimiendo lo ya comprendido)' }]);
+    res = await C1E1_llamarIA(C1_bloquesSistema(prompt), [{ role:'user', content:'(construí el Foco si es legítimo, comprimiendo lo ya comprendido)' }]);   // C1-G2.6: caché
   }catch(e){
     return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
   }
@@ -7303,7 +7399,7 @@ async function executeSufficiencyAssessment(graphState, front, focusResult){
   var prompt = C1E2_PROMPT_SUFICIENCIA(ventana);
   var res;
   try{
-    res = await C1E2_llamarIA(prompt, [{ role:'user', content:'(evaluá si el Foco es suficiente, sin investigar nada nuevo)' }]);
+    res = await C1E2_llamarIA(C1_bloquesSistema(prompt), [{ role:'user', content:'(evaluá si el Foco es suficiente, sin investigar nada nuevo)' }]);   // C1-G2.6: caché
   }catch(e){
     return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
   }
@@ -7582,7 +7678,7 @@ async function executeReturnProposal(snapshot, opening, graphState, front, focus
   var prompt = C1F1_PROMPT_RETORNO(ventana);
   var res;
   try{
-    res = await C1F1_llamarIA(prompt, [{ role:'user', content:'(comparÁ contra la Memoria vigente y proponé Retorno sólo si hay delta real, sin escribir nada)' }]);
+    res = await C1F1_llamarIA(C1_bloquesSistema(prompt), [{ role:'user', content:'(comparÁ contra la Memoria vigente y proponé Retorno sólo si hay delta real, sin escribir nada)' }]);   // C1-G2.6: caché
   }catch(e){
     return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
   }
