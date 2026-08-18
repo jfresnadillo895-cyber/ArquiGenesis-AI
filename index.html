@@ -6906,6 +6906,217 @@ window.debugExecuteFocus = function(graphState, front, interpretationResult, fun
   });
 };
 
+/* ============================================================================
+   Contextos Universal · C1-E2 — executeSufficiencyAssessment() (suficiencia cognitiva)
+   Entrada: NO es una acción del alfabeto de C1-C2 -- evalúa, no investiga. Usa SOLO el Focus ya
+   construido (C1-E1) + las relaciones que lo sostienen + las incertidumbres ya existentes + el
+   estado del Frente + las evidenceNeeds ya detectadas (de TRACE, si las hubo). No propone ni ejecuta
+   ninguna acción nueva -- ni Research, ni ASK, ni ninguna otra. Pregunta central: no "¿queda algo por
+   investigar?" sino "¿algún próximo movimiento razonable tiene probabilidad suficiente de cambiar el
+   Foco, su soporte, o un futuro Retorno?". Suficiencia != exhaustividad. Aplica el resultado
+   únicamente al Frente -- nunca escribe Organismo, Memoria ni Recuerdos. No implementa todavía
+   Principio organizador ni Retorno. Ver PENDIENTES.md.
+   ============================================================================ */
+
+var C1E2_MODEL = 'claude-sonnet-4-6';
+var C1E2_MAX_TOKENS = 1100;
+var C1E2_GANANCIA_ESTADOS = ['high', 'medium', 'low'];
+var C1E2_RIESGO_ESTADOS = ['high', 'medium', 'low'];
+var C1E2_RECOMENDACION_ESTADOS = ['close', 'continue'];
+
+/* Ventana de suficiencia: SOLO el Focus (statement/explains/stability/interpretationShift/
+   functionRef), las relaciones que efectivamente lo sostienen (focusResult.supportRefs -- no todo
+   front.relationRefs, sólo lo que el Foco usa como soporte), las incertidumbres ya registradas en el
+   Focus, y el estado operativo del Frente (incluidas evidenceNeeds ya detectadas por TRACE si las
+   hubo). No se agrega nada nuevo -- nunca se investiga para llenar la ventana. */
+function C1E2_ventanaSuficiencia(graphState, front, focusResult){
+  var porId = {};
+  (graphState.nodes || []).forEach(function(n){ porId[n.id] = n; });
+  var relPorId = {};
+  (graphState.relations || []).forEach(function(r){ relPorId[r.id] = r; });
+
+  var relacionesSoporte = (focusResult.supportRefs || []).map(function(id){
+    var r = relPorId[id];
+    if(!r) return null;
+    return { id: r.id, from: porId[r.sourceNodeId] ? porId[r.sourceNodeId].label : null,
+      to: porId[r.targetNodeId] ? porId[r.targetNodeId].label : null,
+      manifestation: r.manifestation, possibleIncidence: r.possibleIncidence };
+  }).filter(Boolean);
+
+  var opState = front.operationalState || {};
+
+  return {
+    frontId: front.id,
+    focus: {
+      statement: focusResult.statement, explains: focusResult.explains || [],
+      stability: focusResult.stability, interpretationShift: focusResult.interpretationShift,
+      usesFunction: !!focusResult.functionRef
+    },
+    relacionesSoporte: relacionesSoporte,
+    uncertainties: focusResult.uncertainties || [],
+    estadoFrente: { status: opState.status || null, readiness: opState.readiness || null, lastActionOutcome: opState.lastActionOutcome || null },
+    evidenceNeeds: opState.evidenceNeeds || []
+  };
+}
+
+/* Prompt propio de C1-E2 (continuación de C1-E1, motor propio). Universal entre dominios: no hay
+   ninguna rama por tipo de Organismo. */
+function C1E2_PROMPT_SUFICIENCIA(ventana){
+  var ventanaTxt = JSON.stringify(ventana, null, 2);
+  return 'Sos el motor de ejecución de la evaluación de suficiencia cognitiva (C1-E2) de Contextos ' +
+    'Universal -- continuación de C1-E1, motor propio, sin dimensiones ni sistemas de Contextos ' +
+    'Legacy. Ya existe un Foco construido -- no lo vuelvas a cuestionar ni lo reconstruyas. Tu única ' +
+    'tarea es EVALUAR si es suficiente para cerrar provisionalmente esta exploración, o si existe una ' +
+    'incertidumbre cuya resolución probablemente lo modificaría de forma material. No investigás, no ' +
+    'proponés ninguna acción nueva -- sólo evaluás con lo que ya hay.\n\n' +
+    'YA COMPRENDIDO (Focus, su soporte, incertidumbres y estado del Frente -- no agregues nada que no ' +
+    'esté acá):\n' + ventanaTxt + '\n\n' +
+    'REGLAS:\n' +
+    '1. LA PREGUNTA CENTRAL NO ES "¿queda algo por investigar?" -- casi siempre queda algo. La ' +
+    'pregunta es: "¿algún próximo movimiento razonable (ASK, TRACE, RESEARCH, etc.) tiene ' +
+    'probabilidad suficiente de cambiar el Foco, su soporte, o un futuro Retorno?". Si la respuesta ' +
+    'es no (aunque técnicamente "queda algo por saber"), es suficiente.\n' +
+    '2. "sufficient":true cuando el Foco está trazado, sus límites/incertidumbres están explícitos, y ' +
+    'lo que falta no parece capaz de cambiarlo materialmente por un costo razonable.\n' +
+    '3. "sufficient":false cuando una incertidumbre pendiente PODRÍA cambiar el Foco, su estabilidad, ' +
+    'una relación crítica de su soporte, o una futura interpretación persistente del Organismo -- no ' +
+    'hace falta certeza de que lo cambiará, alcanza con que sea una posibilidad real y relevante.\n' +
+    '4. SUFICIENCIA NO ES EXHAUSTIVIDAD: no exijas que no quede absolutamente nada por saber. Un Foco ' +
+    'puede ser suficiente con incertidumbres secundarias abiertas, siempre que ninguna de ellas sea ' +
+    'capaz de cambiarlo materialmente.\n' +
+    '5. Si sentís que "ya se hizo bastante trabajo" pero identificás un riesgo epistemológico real ' +
+    '(una incertidumbre que sí podría cambiar el Foco), NO fuerces un cierre falso -- declará ' +
+    '"sufficient":false y "epistemicRisk" acorde, aunque eso signifique reconocer que la comprensión ' +
+    'sigue siendo provisional.\n' +
+    '6. "criticalOpenIssues" sólo puede salir de las incertidumbres/evidenceNeeds YA listadas en la ' +
+    'ventana (podés reformularlas de forma más compacta) -- nunca inventes una incertidumbre nueva.\n' +
+    '7. No expliques tu razonamiento paso a paso.\n\n' +
+    'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
+    'después. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
+    '[[SUFFICIENCY_RESULT:{\n' +
+    '  "sufficient": true|false,\n' +
+    '  "criticalOpenIssues": ["..."],\n' +
+    '  "expectedMarginalGain": "high"|"medium"|"low",\n' +
+    '  "epistemicRisk": "high"|"medium"|"low",\n' +
+    '  "recommendation": "close"|"continue",\n' +
+    '  "justificationSummary": "..."\n' +
+    '}]]';
+}
+
+function C1E2_llamarIA(systemPrompt, mensajes){
+  var t0 = Date.now();
+  return fetch(apiEndpoint(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ model: C1E2_MODEL, max_tokens: C1E2_MAX_TOKENS, system: systemPrompt, messages: mensajes })
+  }).then(function(res){
+    return res.json().then(function(data){
+      if(!res.ok || (data && data.error)){
+        throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+      }
+      var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
+    });
+  });
+}
+
+function C1E2_limpiarLista(arr){
+  return Array.isArray(arr) ? arr.filter(function(x){ return typeof x === 'string' && x.trim(); }).map(function(x){ return x.trim(); }) : [];
+}
+
+/* Parser defensivo: rechaza toda la respuesta si falta "justificationSummary", si "sufficient" no es
+   booleano, o si "expectedMarginalGain"/"epistemicRisk"/"recommendation" no son uno de sus valores
+   válidos. "criticalOpenIssues" nunca se fuerza -- puede quedar en [] legítimamente (un Foco
+   realmente suficiente puede no tener ningún pendiente crítico). "focusStability" NO se le pide al
+   modelo -- lo completa el ejecutor a partir del Focus real ya provisto, nunca de lo que el modelo
+   pudiera repetir (mismo principio que functionRef en C1-E1: nunca confiar en un dato ya conocido
+   cuando lo puede repetir mal). */
+function C1E2_parseSufficiencyResult(texto){
+  var re = /\[\[SUFFICIENCY_RESULT:([\s\S]*?)\]\]/;
+  var m = String(texto || '').match(re);
+  if(!m) return null;
+  var raw;
+  try{ raw = JSON.parse(m[1]); }catch(e){ return null; }
+  if(!raw || typeof raw !== 'object') return null;
+  if(typeof raw.sufficient !== 'boolean') return null;
+  if(C1E2_GANANCIA_ESTADOS.indexOf(raw.expectedMarginalGain) === -1) return null;
+  if(C1E2_RIESGO_ESTADOS.indexOf(raw.epistemicRisk) === -1) return null;
+  if(C1E2_RECOMENDACION_ESTADOS.indexOf(raw.recommendation) === -1) return null;
+  var justificationSummary = (typeof raw.justificationSummary === 'string' && raw.justificationSummary.trim())
+    ? raw.justificationSummary.trim() : null;
+  if(!justificationSummary) return null;
+
+  return {
+    sufficient: raw.sufficient,
+    criticalOpenIssues: C1E2_limpiarLista(raw.criticalOpenIssues),
+    expectedMarginalGain: raw.expectedMarginalGain,
+    epistemicRisk: raw.epistemicRisk,
+    recommendation: raw.recommendation,
+    justificationSummary: justificationSummary
+  };
+}
+
+/* ---- executeSufficiencyAssessment: única forma de evaluar suficiencia en este corte. Nunca llama a
+   executeFocus()/executeInterpret()/executeFunctionalInterpretation()/selectNextCognitiveAction() ni
+   a ningún ejecutor de acción (ASK/TRACE/RESEARCH/etc.) -- sólo evalúa lo que ya existe, nunca sale a
+   buscar más. ---- */
+async function executeSufficiencyAssessment(graphState, front, focusResult){
+  if(!front || !front.id) return { ok:false, motivo:'front ausente' };
+  if(!graphState) return { ok:false, motivo:'graphState ausente' };
+  if(!focusResult || !focusResult.statement){
+    return { ok:false, motivo:'focusResult ausente -- C1-E2 evalúa un Foco ya construido, no lo reemplaza' };
+  }
+
+  var ventana = C1E2_ventanaSuficiencia(graphState, front, focusResult);
+  var prompt = C1E2_PROMPT_SUFICIENCIA(ventana);
+  var res;
+  try{
+    res = await C1E2_llamarIA(prompt, [{ role:'user', content:'(evaluá si el Foco es suficiente, sin investigar nada nuevo)' }]);
+  }catch(e){
+    return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
+  }
+
+  var parsed = C1E2_parseSufficiencyResult(res.texto);
+  if(!parsed){
+    return { ok:false, motivo:'no se pudo interpretar la evaluación de suficiencia generada', usage: res.usage,
+             duracionMs: res.duracionMs, textoCrudo: res.texto };
+  }
+
+  var result = {
+    frontId: front.id, sufficient: parsed.sufficient,
+    focusStability: focusResult.stability,   // echo del dato real -- nunca lo que diga el modelo
+    criticalOpenIssues: parsed.criticalOpenIssues,
+    expectedMarginalGain: parsed.expectedMarginalGain, epistemicRisk: parsed.epistemicRisk,
+    recommendation: parsed.recommendation, justificationSummary: parsed.justificationSummary
+  };
+  result = JSON.parse(JSON.stringify(result));
+  return {
+    ok: true, result: result,
+    telemetry: { llamadasIA: 1, tokensInput: (res.usage && res.usage.input_tokens) || null,
+      tokensOutput: (res.usage && res.usage.output_tokens) || null, duracionMs: res.duracionMs }
+  };
+}
+
+/* Aplica el resultado únicamente al Frente (nunca a Organismo/Memoria/Recuerdos). No es una acción
+   del alfabeto de C1-C2, así que no pasa por C1C3A_aplicarResultadoAlFrente. */
+function C1E2_aplicarResultadoAlFrente(front, result){
+  var clon = JSON.parse(JSON.stringify(front));
+  if(!clon.operationalState){ clon.operationalState = C1C3A_operationalStateInicial(); }
+  clon.operationalState.history.push({ action: 'SUFFICIENCY', status: result.recommendation, at: new Date().toISOString() });
+  clon.operationalState.sufficiencyAssessment = result;
+  return clon;
+}
+
+/* Laboratorio interno C1-E2: toma un Frente + GraphState + Focus (C1-E1) YA producidos y evalúa
+   suficiencia sobre ellos -- no reconstruye la cadena previa. Solo consola, sin UI nueva. */
+window.debugExecuteSufficiencyAssessment = function(graphState, front, focusResult){
+  return executeSufficiencyAssessment(graphState, front, focusResult).then(function(r){
+    console.log('[C1-E2] resultado suficiencia:', r.ok ? r.result : r);
+    if(r.ok) console.log('[C1-E2] telemetry:', r.telemetry);
+    return r;
+  });
+};
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
