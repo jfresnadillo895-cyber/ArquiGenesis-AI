@@ -5505,7 +5505,7 @@ window.debugSelectNextCognitiveAction = function(organismoId, question, intentio
    ============================================================================ */
 
 var C1C3A_MODEL = 'claude-sonnet-4-6';
-var C1C3A_ASK_MAX_TOKENS = 900;
+var C1C3A_ASK_MAX_TOKENS = 1300; // C1-C4A (18/08): subido de 900 -- una pregunta con text+resolves+whyNeeded+justificationSummary largos se cortó a mitad de camino (respuesta inválida, JSON incompleto). Sólo cambia la capacidad de salida, no la lógica de formulación.
 var C1C3A_TRACE_MAX_TOKENS = 1800;
 // C1-C4A (18/08): se agrega INTERPRET a las acciones implementadas -- ver executeInterpret() más
 // abajo. Sigue sin incluir READ/RESEARCH/DEEPEN/EXPAND/CONTRAST/CLOSE_FRONT.
