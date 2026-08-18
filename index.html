@@ -339,6 +339,42 @@ header .spacer{flex:1}
 .btn.primary:hover{background:#26496E}
 .btn.danger{color:#D4756B;border-color:rgba(212,117,107,.4)}
 .btn.danger:hover{border-color:#D4756B}
+.btn.secundario{background:transparent}
+
+/* ---------- C1-G1 · Contextos Profesional, capa conversacional (demo/inspección visual) ---------- */
+#c1g1Demo{max-width:520px;width:100%;margin:0 auto;box-sizing:border-box}
+#c1g1Demo:empty{display:none}
+.c1g1-fase{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-sizing:border-box;max-width:100%}
+.c1g1-organismo{font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase;margin-bottom:8px}
+.c1g1-texto{font-size:14.5px;color:var(--text);line-height:1.5}
+.c1g1-subtexto{font-size:12.5px;color:var(--dim);margin-top:8px;line-height:1.45}
+.c1g1-respuesta{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.c1g1-input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
+.c1g1-input:focus{border-color:var(--accent)}
+.c1g1-trabajando{color:var(--faint);font-size:13px;font-style:italic}
+.c1g1-cierre{color:var(--dim);font-size:14px;line-height:1.5}
+.c1g1-principal{font-size:15.5px;color:var(--text);font-weight:600;line-height:1.45;margin-bottom:10px}
+.c1g1-cambio{font-size:13.5px;color:var(--dim);line-height:1.5;margin-bottom:8px}
+.c1g1-label{display:block;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:3px}
+.c1g1-incertidumbre{font-size:12.5px;color:var(--dim);background:var(--panel2);border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.45}
+.c1g1-verporque{margin-top:4px}
+.c1g1-porque{margin-top:10px;font-size:13px;color:var(--dim);display:flex;flex-direction:column;gap:6px}
+.c1g1-oculto{display:none}
+.c1g1-retorno{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
+.c1g1-retorno-titulo{font-weight:600;font-size:14px;color:var(--text);margin-bottom:8px}
+.c1g1-retorno-resumen{font-size:13px;color:var(--dim);margin-bottom:10px;line-height:1.45}
+.c1g1-cambio-item{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;font-size:13px}
+.c1g1-antes{color:var(--faint)}
+.c1g1-ahora{color:var(--text)}
+.c1g1-gobernanza-botones{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.c1g1-gobernanza-resuelta{color:var(--dim);font-size:13.5px;line-height:1.5}
+@media (max-width:480px){
+  #c1g1Demo{max-width:100%;padding:0 4px}
+  .c1g1-fase{padding:14px}
+  .c1g1-respuesta{flex-direction:column}
+  .c1g1-gobernanza-botones{flex-direction:column}
+  .c1g1-gobernanza-botones .btn{width:100%;text-align:center}
+}
 
 /* ---------- organismos ---------- */
 .orgsec{width:100%;max-width:560px;margin-top:34px;text-align:left}
@@ -661,6 +697,11 @@ header .spacer{flex:1}
 </div>
 
 <div id="overlay"><div class="card" id="cardContent"></div></div>
+
+<!-- C1-G1 · Contextos Profesional (capa conversacional) -- contenedor propio, separado de Legacy,
+     usado hoy sólo por window.debugC1G1Demo() para inspección visual manual (costo 0, sin llamadas
+     reales). No sustituye #stream/.msg.motor de Contextos Legacy. -->
+<div id="c1g1Demo"></div>
 
 <div id="onb"><div class="onb-paso" id="onbPaso"></div></div>
 
@@ -7791,6 +7832,337 @@ window.debugC1F2GobernarRetorno = function(returnProposal, snapshot, front, deci
   var frenteActualizado = C1F2_aplicarGenealogiaAlFrente(front, returnProposal, decisionHumana, correccionUsuario, resolucion);
   console.log('[C1-F2] genealogía aplicada al Frente:', frenteActualizado.operationalState.returnGovernance);
   return { preparacion: preparacion, resolucion: resolucion, front: frenteActualizado };
+};
+
+/* ============================================================================
+   Contextos Universal · C1-G1 — Capa conversacional (Contextos Profesional)
+   Traduce el motor universal ya cerrado (C1-A1..C1-X3, 302/302 en producción) a una experiencia
+   conversacional simple. Esta capa NO decide nada cognitivo -- nunca elige una acción (eso lo sigue
+   haciendo C1-C2/C1-C3B tal cual), nunca interpreta, nunca redacta un Foco ni una propuesta de
+   Retorno. Sólo SECUENCIA llamadas a las funciones ya existentes y auditadas de C1-A1..C1-F2, y
+   traduce sus resultados a un puñado de "vistas" (fases) que la interfaz puede mostrar directamente,
+   sin exponer nombres técnicos (OPEN/PROPAGATE/Front/TRACE/INTERPRET/Focus, etc.).
+   No sustituye Contextos Legacy: abrirEnContext()/CONTEXT_PROMPT/renderPanelContext()/
+   state.modoContext siguen exactamente igual, espacio de nombres separado (C1G1_*), contenedor DOM
+   propio (#c1g1Demo), nunca se tocan desde acá. No implementa DEEPEN/CONTRAST/EXPAND/RESEARCH
+   (siguen sin ejecutor, ver C1-X1/X2/X3) ni duplica la gobernanza F2 -- reutiliza
+   C1F2_prepararGobernanza()/C1F2_resolverGobernanzaRetorno()/C1F2_aplicarGenealogiaAlFrente() tal
+   cual. Ver PENDIENTES.md.
+   ============================================================================ */
+
+var C1G1_MAX_CICLOS = 6;   // tope defensivo de pasos silenciosos (READ/TRACE) antes de declarar
+                           // límite explícito -- nunca fabrica una comprensión para evitar el tope.
+var C1G1_DECISION_UI_A_CORE = { incorporar:'incorporar', editar:'editar', mantener_abierto:'mantener_abierto', no_incorporar:'rechazar' };
+
+/* ---- Vistas (fases): funciones puras, nunca DOM, nunca deciden nada -- sólo traducen un resultado
+   YA producido por el motor a lenguaje llano. Ningún nombre técnico del motor (action/Frente/Focus/
+   epistemicState/etc.) aparece en los textos que devuelven. ---- */
+
+function C1G1_vistaApertura(organismoNombre, opening, front){
+  var texto = (opening && (opening.question || opening.intention)) || (front && front.formulation) || '';
+  return { phase:'apertura', organismo: organismoNombre || null, texto: texto };
+}
+
+function C1G1_vistaPregunta(askResult){
+  var q = (askResult && askResult.userQuestion) || {};
+  return { phase:'pregunta', pregunta: q.text || '', porQue: q.whyNeeded || null };
+}
+
+function C1G1_vistaTrabajando(){
+  return { phase:'trabajando' };
+}
+
+/* Usada tanto para CLOSE_FRONT como para el sentinela NONE_AVAILABLE (C1-X3) y para cualquier corte
+   defensivo del pipeline (snapshot/campo/frente ausente, error de red, límite de ciclos). Deliberado:
+   de cara al usuario, "no hay más para hacer acá ahora" y "todavía no sabemos cómo seguir" se
+   presentan igual de tranquilos -- nunca como error técnico, nunca fabricando un resultado. */
+function C1G1_vistaCierre(motivoTexto){
+  return { phase:'cierre', texto: (motivoTexto && String(motivoTexto).trim()) || 'Por ahora no hay más para agregar acá.' };
+}
+
+function C1G1_vistaComprension(focusResult, sufficiencyResult){
+  var incertidumbres = focusResult.uncertainties || [];
+  return {
+    phase:'comprension',
+    principal: focusResult.statement,
+    cambio: focusResult.interpretationShift,
+    incertidumbre: incertidumbres.length ? incertidumbres[0] : null,
+    provisional: focusResult.stability !== 'stable',
+    verPorQue: { explica: (focusResult.explains || []).slice(), cantidadSoportes: (focusResult.supportRefs || []).length },
+    sugerenciaCierre: sufficiencyResult ? (sufficiencyResult.recommendation === 'close') : null
+  };
+}
+
+function C1G1_vistaRetorno(returnProposal){
+  return {
+    resumen: returnProposal.overallSummary,
+    cambios: (returnProposal.changes || []).map(function(c){ return { antes: c.before, ahora: c.after }; })
+  };
+}
+
+/* ---- Orquestador: sólo secuencia funciones ya existentes de C1-A1..C1-F2, nunca decide nada
+   cognitivo. Devuelve siempre { vista, estado } -- "estado" es lo que la interfaz guarda y vuelve a
+   pasar en la próxima llamada (responder la pregunta / decidir gobernanza), o null si la
+   conversación llegó a un punto terminal (cierre) y no hay nada que retomar. ---- */
+
+async function C1G1_iniciarConversacion(organismoId, question, intention){
+  var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
+  if(!o) return { ok:true, vista: C1G1_vistaCierre('No encontramos ese organismo.'), estado:null };
+  var snap = OrganismSnapshotAdapter(o);
+  var opening = crearContextOpening(o.id, { basedOnVersion: snap.organismVersion, question: question, intention: intention });
+
+  var r1 = await reconstructOrigin(snap, opening);
+  if(!r1.ok || r1.assessment.status !== 'continue'){
+    return { ok:true, vista: C1G1_vistaCierre('Todavía no hay suficiente para abrir un Contexto acá.'), estado:null };
+  }
+  var r2 = await openField(snap, r1.opening, r1.assessment);
+  if(!r2.ok) return { ok:true, vista: C1G1_vistaCierre('No pudimos abrir el campo de este organismo por ahora.'), estado:null };
+  var r3 = await propagateField(snap, r1.opening, r1.assessment, r2.result);
+  if(!r3.ok) return { ok:true, vista: C1G1_vistaCierre('No pudimos construir el mapa de relaciones por ahora.'), estado:null };
+  var r4 = await selectContextFronts(r3.result, r1.opening);
+  if(!r4.ok || !r4.result.activeFrontId){
+    return { ok:true, vista: C1G1_vistaCierre('No encontramos, por ahora, algo activo para trabajar acá.'), estado:null };
+  }
+  var front = r4.result.fronts.filter(function(f){ return f.id === r4.result.activeFrontId; })[0];
+
+  var vistaApertura = C1G1_vistaApertura(o.nombre, r1.opening, front);
+  var estadoBase = { snapshot: snap, opening: r1.opening, graphState: r3.result, front: front };
+  var siguiente = await C1G1_continuarCiclo(estadoBase, null);
+  return { ok:true, vista: { apertura: vistaApertura, siguiente: siguiente.vista }, estado: siguiente.estado };
+}
+
+/* Bucle silencioso: READ/TRACE nunca se muestran -- se ejecutan y se reevalúa (C1-C3B, reutilizado
+   tal cual, UNA vez por paso) hasta llegar a algo que sí corresponde mostrar (ASK/CLOSE_FRONT/
+   NONE_AVAILABLE/INTERPRET->Comprensión) o al tope defensivo C1G1_MAX_CICLOS. */
+async function C1G1_continuarCiclo(estado, accionInicial){
+  var snapshot = estado.snapshot, opening = estado.opening, graphState = estado.graphState, front = estado.front;
+  var accionPendiente = accionInicial || null;
+
+  for(var ciclo = 0; ciclo < C1G1_MAX_CICLOS; ciclo++){
+    var seleccion;
+    if(accionPendiente){
+      seleccion = { ok:true, result: accionPendiente };   // ya viene de una reevaluación C1-C3B
+    } else {
+      seleccion = await selectNextCognitiveAction(snapshot, opening, graphState, front);
+    }
+    if(!seleccion.ok){
+      return { vista: C1G1_vistaCierre('No pudimos decidir cómo seguir con esto por ahora.'), estado:null };
+    }
+    var accion = seleccion.result;
+
+    if(accion.action === C1X3_NINGUNA_DISPONIBLE){
+      return { vista: C1G1_vistaCierre(accion.justificationSummary), estado:null };
+    }
+
+    var ejecucion = await executeCognitiveAction(snapshot, opening, graphState, front, accion);
+    if(!ejecucion.ok){
+      if(ejecucion.limiteExplicito){
+        return { vista: C1G1_vistaCierre(ejecucion.motivo), estado:null };
+      }
+      return { vista: C1G1_vistaCierre('No pudimos avanzar con este Contexto por ahora.'), estado:null };
+    }
+
+    if(ejecucion.action === 'ASK'){
+      var estadoPausado = { snapshot: snapshot, opening: opening, graphState: graphState, front: ejecucion.front,
+        previousAction: accion, previousResult: ejecucion.result };
+      return { vista: C1G1_vistaPregunta(ejecucion.result), estado: estadoPausado };
+    }
+
+    if(ejecucion.action === 'CLOSE_FRONT'){
+      return { vista: C1G1_vistaCierre(ejecucion.result.reason), estado:null };
+    }
+
+    if(ejecucion.action === 'INTERPRET'){
+      return await C1G1_construirComprension(snapshot, opening, graphState, ejecucion.front, ejecucion.result);
+    }
+
+    // READ/TRACE: seguir en silencio -- una sola reevaluación (C1-C3B), nunca un segundo selector.
+    var reeval = await reassessCognitiveAction(snapshot, opening, graphState, ejecucion.front, accion, ejecucion.result, null);
+    if(!reeval.ok){
+      return { vista: C1G1_vistaCierre('No pudimos seguir evaluando este Contexto por ahora.'), estado:null };
+    }
+    front = ejecucion.front;
+    accionPendiente = reeval.result.nextAction;
+  }
+
+  return { vista: C1G1_vistaCierre('Llegamos al límite de pasos sin alcanzar todavía una comprensión clara.'), estado:null };
+}
+
+/* Comprensión: encadena C1-C4B (opcional) -> C1-E1 (Foco, obligatorio) -> C1-E2 (suficiencia) ->
+   C1-F1 (Retorno, sólo si hay Foco+suficiencia). Si el Foco no se puede construir, no se fabrica
+   ninguna comprensión -- se cierra en el mismo tono tranquilo que CLOSE_FRONT. */
+async function C1G1_construirComprension(snapshot, opening, graphState, front, interpretationResult){
+  var funcional = await executeFunctionalInterpretation(graphState, front, interpretationResult);
+  var frenteFuncional = funcional.ok ? C1C4B_aplicarResultadoAlFrente(front, funcional.result) : front;
+
+  var focusRes = await executeFocus(graphState, frenteFuncional, interpretationResult, funcional.ok ? funcional.result : null);
+  if(!focusRes.ok){
+    return { vista: C1G1_vistaCierre('Por ahora no llegamos a una comprensión clara sobre esto.'), estado:null };
+  }
+  var frenteFocus = C1E1_aplicarResultadoAlFrente(frenteFuncional, focusRes.result);
+
+  var sufRes = await executeSufficiencyAssessment(graphState, frenteFocus, focusRes.result);
+  var frenteFinal = sufRes.ok ? C1E2_aplicarResultadoAlFrente(frenteFocus, sufRes.result) : frenteFocus;
+
+  var vista = C1G1_vistaComprension(focusRes.result, sufRes.ok ? sufRes.result : null);
+  var estadoFinal = { snapshot: snapshot, opening: opening, graphState: graphState, front: frenteFinal,
+    focusResult: focusRes.result, sufficiencyResult: sufRes.ok ? sufRes.result : null };
+
+  if(sufRes.ok){
+    var retornoRes = await executeReturnProposal(snapshot, opening, graphState, frenteFinal, focusRes.result, sufRes.result);
+    if(retornoRes.ok && retornoRes.result.hasMeaningfulReturn){
+      vista.retorno = C1G1_vistaRetorno(retornoRes.result);
+      estadoFinal.returnProposal = retornoRes.result;
+      estadoFinal.gobernanzaPreparacion = C1F2_prepararGobernanza(retornoRes.result, snapshot);   // sólo lectura
+    }
+  }
+  return { vista: vista, estado: estadoFinal };
+}
+
+/* Retoma tras la única pregunta que la interfaz muestra: aplica la respuesta (applyUserAnswer, ya
+   auditado en C1-C3A) y reevalúa (C1-C3B) antes de seguir el mismo ciclo silencioso de arriba. */
+async function C1G1_responderPregunta(estadoPausado, respuestaTexto){
+  if(!estadoPausado){
+    return { vista: C1G1_vistaCierre('No hay una pregunta pendiente para responder.'), estado:null };
+  }
+  if(!respuestaTexto || !String(respuestaTexto).trim()){
+    return { vista: C1G1_vistaPregunta(estadoPausado.previousResult), estado: estadoPausado };
+  }
+  var texto = String(respuestaTexto).trim();
+  var aplicado = applyUserAnswer(estadoPausado.opening, estadoPausado.front, estadoPausado.previousResult.userQuestion, texto);
+  if(!aplicado.ok){
+    return { vista: C1G1_vistaCierre('No pudimos registrar la respuesta por ahora.'), estado: estadoPausado };
+  }
+  var reeval = await reassessCognitiveAction(estadoPausado.snapshot, aplicado.opening, estadoPausado.graphState, aplicado.front,
+    estadoPausado.previousAction, estadoPausado.previousResult, texto);
+  if(!reeval.ok){
+    return { vista: C1G1_vistaCierre('No pudimos seguir con este Contexto por ahora.'), estado:null };
+  }
+  var estadoContinuar = { snapshot: estadoPausado.snapshot, opening: aplicado.opening, graphState: estadoPausado.graphState, front: aplicado.front };
+  return await C1G1_continuarCiclo(estadoContinuar, reeval.result.nextAction);
+}
+
+/* Gobernanza F2, reutilizada tal cual -- esta capa nunca crea un segundo sistema de propuestas.
+   decisionUsuario viene de la UI en lenguaje llano ('incorporar'|'editar'|'mantener_abierto'|
+   'no_incorporar') y se traduce UNA vez a los 4 valores reales de C1F2_DECISIONES. */
+function C1G1_decidirGobernanza(estadoConRetorno, decisionUsuario, correccionUsuario){
+  var decisionCore = C1G1_DECISION_UI_A_CORE[decisionUsuario];
+  if(!decisionCore || !estadoConRetorno || !estadoConRetorno.returnProposal){
+    return { vista: C1G1_vistaCierre('Esa decisión no es válida acá.'), estado: estadoConRetorno || null };
+  }
+  var resolucion = C1F2_resolverGobernanzaRetorno(estadoConRetorno.gobernanzaPreparacion, decisionCore, correccionUsuario);
+  var frenteConGenealogia = C1F2_aplicarGenealogiaAlFrente(estadoConRetorno.front, estadoConRetorno.returnProposal, decisionCore, correccionUsuario, resolucion);
+  var texto;
+  if(decisionCore === 'mantener_abierto') texto = 'Quedó anotado como algo abierto, sin tocar la memoria del organismo todavía.';
+  else if(decisionCore === 'rechazar') texto = 'No se incorporó -- queda igual registrado, por si vuelve a aparecer más adelante.';
+  else if(resolucion.ok) texto = 'Listo, quedó incorporado a la comprensión del organismo.';
+  else texto = resolucion.conflict
+    ? 'La memoria del organismo cambió mientras tanto -- hace falta revisar esto de nuevo antes de aplicarlo.'
+    : 'No pudimos aplicar este cambio ahora.';
+  var estadoFinal = { snapshot: estadoConRetorno.snapshot, opening: estadoConRetorno.opening,
+    graphState: estadoConRetorno.graphState, front: frenteConGenealogia };
+  return { vista: { phase:'gobernanza_resuelta', texto: texto, aplicado: !!resolucion.aplicado }, estado: estadoFinal };
+}
+
+/* ---- Render mínimo (HTML plano, reutiliza .msg/.upanel/.btn ya existentes -- sin design system
+   paralelo) + un demo de consola para verificar visualmente cada fase sin gastar ninguna llamada
+   real. No reemplaza Legacy: contenedor propio #c1g1Demo, nunca toca #stream/.msg.motor de Legacy. */
+function C1G1_escapeHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+
+function C1G1_renderVista(vista){
+  var h = C1G1_escapeHtml;
+  if(!vista) return '';
+  if(vista.phase === 'apertura'){
+    return '<div class="c1g1-fase c1g1-apertura">' +
+      (vista.organismo ? '<div class="c1g1-organismo">' + h(vista.organismo) + '</div>' : '') +
+      '<div class="c1g1-texto">' + h(vista.texto) + '</div></div>';
+  }
+  if(vista.phase === 'pregunta'){
+    return '<div class="c1g1-fase c1g1-pregunta">' +
+      '<div class="c1g1-texto">' + h(vista.pregunta) + '</div>' +
+      (vista.porQue ? '<div class="c1g1-subtexto">' + h(vista.porQue) + '</div>' : '') +
+      '<div class="c1g1-respuesta"><input type="text" class="c1g1-input" placeholder="Tu respuesta">' +
+      '<button class="btn primary c1g1-enviar" type="button">Responder</button></div></div>';
+  }
+  if(vista.phase === 'trabajando'){
+    return '<div class="c1g1-fase c1g1-trabajando">Comprender AI está pensando…</div>';
+  }
+  if(vista.phase === 'cierre'){
+    return '<div class="c1g1-fase c1g1-cierre">' + h(vista.texto) + '</div>';
+  }
+  if(vista.phase === 'gobernanza_resuelta'){
+    return '<div class="c1g1-fase c1g1-gobernanza-resuelta">' + h(vista.texto) + '</div>';
+  }
+  if(vista.phase === 'comprension'){
+    var out = '<div class="c1g1-fase c1g1-comprension">' +
+      '<div class="c1g1-principal">' + h(vista.principal) + '</div>' +
+      '<div class="c1g1-cambio"><span class="c1g1-label">Qué cambia</span>' + h(vista.cambio) + '</div>';
+    if(vista.incertidumbre){
+      out += '<div class="c1g1-incertidumbre">' + h(vista.incertidumbre) + (vista.provisional ? ' <em>(todavía provisional)</em>' : '') + '</div>';
+    }
+    if((vista.verPorQue.explica || []).length){
+      out += '<button class="btn secundario c1g1-verporque" type="button">Ver por qué</button>' +
+        '<div class="c1g1-porque c1g1-oculto">' + vista.verPorQue.explica.map(function(e){ return '<div>' + h(e) + '</div>'; }).join('') + '</div>';
+    }
+    if(vista.retorno){
+      out += '<div class="c1g1-retorno">' +
+        '<div class="c1g1-retorno-titulo">Esto cambia nuestra comprensión</div>' +
+        '<div class="c1g1-retorno-resumen">' + h(vista.retorno.resumen) + '</div>' +
+        vista.retorno.cambios.map(function(c){
+          return '<div class="c1g1-cambio-item"><div class="c1g1-antes"><span class="c1g1-label">Antes</span>' + h(c.antes) + '</div>' +
+            '<div class="c1g1-ahora"><span class="c1g1-label">Ahora</span>' + h(c.ahora) + '</div></div>';
+        }).join('') +
+        '<div class="c1g1-gobernanza-botones">' +
+          '<button class="btn primary" type="button" data-decision="incorporar">Incorporar</button>' +
+          '<button class="btn secundario" type="button" data-decision="editar">Editar</button>' +
+          '<button class="btn secundario" type="button" data-decision="mantener_abierto">Mantener abierto</button>' +
+          '<button class="btn danger" type="button" data-decision="no_incorporar">No incorporar</button>' +
+        '</div></div>';
+    }
+    out += '</div>';
+    return out;
+  }
+  return '';
+}
+
+/* Demo de consola: renderiza vistas ya armadas (sin llamar al motor, costo 0) en #c1g1Demo si existe
+   en la página -- para inspección visual manual de cada fase. */
+window.debugC1G1Demo = function(caso){
+  var vistas = {
+    apertura: { phase:'apertura', organismo:'Estudio d', texto:'¿Por qué se repite la tensión entre lo urgente y lo importante?' },
+    pregunta: { phase:'pregunta', pregunta:'¿Ese patrón se repite con clientes distintos, o es sobre todo con uno en particular?',
+      porQue:'Ayuda a saber si el problema es del vínculo con un cliente puntual o de cómo está armado el estudio en general.' },
+    trabajando: { phase:'trabajando' },
+    comprension_simple: { phase:'comprension',
+      principal:'El estudio prioriza lo urgente porque no tiene un lugar donde lo importante quede protegido.',
+      cambio:'Antes se entendía como un problema de organización personal; ahora se ve como una falta de estructura del estudio.',
+      incertidumbre:null, provisional:false,
+      verPorQue:{ explica:['la carga de trabajo reactiva', 'la ausencia de bloqueos de agenda'] } },
+    comprension_incertidumbre: { phase:'comprension',
+      principal:'El estudio prioriza lo urgente porque no tiene un lugar donde lo importante quede protegido.',
+      cambio:'Antes se entendía como un problema de organización personal; ahora se ve como una falta de estructura del estudio.',
+      incertidumbre:'No está claro si esto pasa en todos los proyectos o sólo en los de mayor presión.', provisional:true,
+      verPorQue:{ explica:['la carga de trabajo reactiva'] } },
+    cierre: { phase:'cierre', texto:'Por ahora esto no parece dar para más -- no encontramos algo nuevo que valga la pena seguir mirando.' },
+    limite_explicito: { phase:'cierre', texto:'Todavía no tenemos una forma razonable de seguir profundizando esto acá.' },
+    retorno: { phase:'comprension',
+      principal:'El estudio prioriza lo urgente porque no tiene un lugar donde lo importante quede protegido.',
+      cambio:'Antes se entendía como un problema de organización personal; ahora se ve como una falta de estructura del estudio.',
+      incertidumbre:null, provisional:false, verPorQue:{ explica:['la carga reactiva'] },
+      retorno:{ resumen:'Esto cambia nuestra comprensión de por qué se posterga lo importante.',
+        cambios:[{ antes:'Se entendía como falta de disciplina personal.', ahora:'Se entiende como ausencia de un espacio protegido en el estudio.' }] } }
+  };
+  var vista = vistas[caso] || vistas.apertura;
+  var cont = (typeof document !== 'undefined') ? document.getElementById('c1g1Demo') : null;
+  if(!cont){ console.warn('[C1-G1] contenedor #c1g1Demo no existe en esta página'); return vista; }
+  cont.innerHTML = C1G1_renderVista(vista);
+  var btn = cont.querySelector('.c1g1-verporque');
+  if(btn){ btn.addEventListener('click', function(){ cont.querySelector('.c1g1-porque').classList.toggle('c1g1-oculto'); }); }
+  return vista;
 };
 
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
