@@ -5507,7 +5507,9 @@ window.debugSelectNextCognitiveAction = function(organismoId, question, intentio
 var C1C3A_MODEL = 'claude-sonnet-4-6';
 var C1C3A_ASK_MAX_TOKENS = 900;
 var C1C3A_TRACE_MAX_TOKENS = 1800;
-var C1C3A_ACCIONES_IMPLEMENTADAS = ['ASK', 'TRACE'];
+// C1-C4A (18/08): se agrega INTERPRET a las acciones implementadas -- ver executeInterpret() más
+// abajo. Sigue sin incluir READ/RESEARCH/DEEPEN/EXPAND/CONTRAST/CLOSE_FRONT.
+var C1C3A_ACCIONES_IMPLEMENTADAS = ['ASK', 'TRACE', 'INTERPRET'];
 var C1C3A_TRACE_ESTADOS = ['advanced', 'insufficient', 'contradicted'];
 var C1C3A_TRACE_ASSESSMENTS = ['sustentado', 'inferido', 'hueco', 'contradiccion'];
 
@@ -5909,6 +5911,16 @@ function C1C3A_aplicarResultadoAlFrente(front, result){
     clon.operationalState.readiness = 'ready_for_reassessment';
     clon.operationalState.evidenceNeeds = (clon.operationalState.evidenceNeeds || []).concat(result.evidenceNeeds || []);
     clon.operationalState.uncertainties = (clon.operationalState.uncertainties || []).concat(result.uncertainties || []);
+  }else if(result.action === 'INTERPRET'){
+    // C1-C4A (18/08): mismo patrón de separación que TRACE -- 'interpreted' describe el ciclo de la
+    // acción (ya se ejecutó); el veredicto epistémico real (interpreted/provisional/insufficient, en
+    // result.status) va aparte, en lastActionOutcome, para no repetir la ambigüedad que corrigió
+    // C1-C3B. La configuración resultante se guarda en el Frente (nunca en Organismo/Memoria).
+    clon.operationalState.status = 'interpreted';
+    clon.operationalState.lastActionOutcome = result.status;
+    clon.operationalState.readiness = 'ready_for_reassessment';
+    clon.operationalState.interpretation = result.configuration;
+    clon.operationalState.uncertainties = (clon.operationalState.uncertainties || []).concat((result.configuration && result.configuration.uncertainties) || []);
   }
   return clon;
 }
@@ -5923,13 +5935,14 @@ async function executeCognitiveAction(snapshot, opening, graphState, front, next
   if(C1C3A_ACCIONES_IMPLEMENTADAS.indexOf(nextAction.action) === -1){
     return {
       ok:false, action_not_implemented_yet: true, action: nextAction.action,
-      motivo: 'La acción "' + nextAction.action + '" todavía no está implementada en C1-C3A ' +
-        '(solo ASK y TRACE en este corte). No se ejecuta ningún fallback silencioso.'
+      motivo: 'La acción "' + nextAction.action + '" todavía no está implementada en C1-C3A/C1-C4A ' +
+        '(solo ASK, TRACE e INTERPRET por ahora). No se ejecuta ningún fallback silencioso.'
     };
   }
   var ejecucion;
   if(nextAction.action === 'ASK') ejecucion = await executeAsk(front, nextAction);
-  else ejecucion = await executeTrace(graphState, front, nextAction);
+  else if(nextAction.action === 'TRACE') ejecucion = await executeTrace(graphState, front, nextAction);
+  else ejecucion = await executeInterpret(graphState, front, nextAction);   // C1-C4A: INTERPRET
   if(!ejecucion.ok) return ejecucion;
   var frenteActualizado = C1C3A_aplicarResultadoAlFrente(front, ejecucion.result);
   return { ok:true, action: nextAction.action, result: ejecucion.result, telemetry: ejecucion.telemetry, front: frenteActualizado };
@@ -6106,6 +6119,273 @@ window.debugReassessCognitiveAction = function(organismoId, question, intention,
                 console.log('[C1-C3B] reevaluación:', r7.ok ? r7.result : r7);
                 if(r7.ok) console.log('[C1-C3B] telemetry:', r7.telemetry);
                 return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5, execution:r6, reassessment:r7 };
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+};
+
+/* ============================================================================
+   Contextos Universal · C1-C4A — executeInterpret() (ejecutor de INTERPRET)
+   Entrada: Frente activo (con relationRefs/routeRefs/uncertainty/operationalState ya acumulado por
+   C1-C3A/C1-C3B) + GraphState (de C1-B2) + NextCognitiveAction con action==='INTERPRET' (de C1-C2,
+   directo o vía reassessCognitiveAction). INTERPRET se usa cuando la información YA es suficiente --
+   el problema no es falta de datos, es falta de comprensión de la configuración que esos datos
+   forman. Busca: relaciones -> configuración significativa -> dinámica. Todavía NO obliga Operador,
+   Función, Principio, Foco ni Retorno -- eso queda para un corte posterior. No crea evidencia nueva,
+   no rellena huecos, no convierte correlación en causalidad. Aplica el resultado únicamente al
+   Frente operativo (vía C1C3A_aplicarResultadoAlFrente, extendida más abajo) -- nunca escribe
+   Organismo, Memoria ni Recuerdos. Ver PENDIENTES.md.
+   ============================================================================ */
+
+var C1C4A_MODEL = 'claude-sonnet-4-6';
+var C1C4A_MAX_TOKENS = 1600;
+var C1C4A_ESTADOS = ['interpreted', 'provisional', 'insufficient'];
+
+/* Ventana de interpretación: SOLO lo que el encargo autoriza -- relaciones/rutas pertinentes del
+   Frente (nunca todo graphState), el historial de acciones ya ejecutadas (ASK/TRACE) con su
+   veredicto, las respuestas reales ya registradas del usuario, y los huecos/incertidumbres ya
+   detectados por C1-C3A. Nunca se agrega nada nuevo -- si algo no está en el Frente/operationalState,
+   no entra a la ventana. */
+function C1C4A_ventanaInterpret(graphState, front, nextAction){
+  var porId = {};
+  (graphState.nodes || []).forEach(function(n){ porId[n.id] = n; });
+  var relPorId = {};
+  (graphState.relations || []).forEach(function(r){ relPorId[r.id] = r; });
+
+  var relacionesPertinentes = (front.relationRefs || []).map(function(id){
+    var r = relPorId[id];
+    if(!r) return null;
+    return { id: r.id, from: porId[r.sourceNodeId] ? porId[r.sourceNodeId].label : null,
+      to: porId[r.targetNodeId] ? porId[r.targetNodeId].label : null,
+      manifestation: r.manifestation, possibleIncidence: r.possibleIncidence,
+      epistemicState: r.epistemicState, uncertainty: r.uncertainty };
+  }).filter(Boolean);
+
+  var rutasPertinentes = (front.routeRefs || []).map(function(id){
+    var rt = (graphState.routes || []).filter(function(x){ return x.id === id; })[0];
+    if(!rt) return null;
+    return { id: rt.id, status: rt.status, closureReason: rt.closureReason,
+      path: rt.nodeIds.map(function(nid){ return porId[nid] ? porId[nid].label : nid; }) };
+  }).filter(Boolean);
+
+  var opState = front.operationalState || {};
+  var historialAccionesEjecutadas = (opState.history || []).map(function(h){
+    return { action: h.action, status: h.status };
+  });
+  var respuestasUsuario = (opState.answers || []).map(function(a){
+    return { pregunta: a.questionText, respuesta: a.answer };
+  });
+
+  return {
+    frontId: front.id, formulation: front.formulation, uncertainty: front.uncertainty,
+    relacionesPertinentes: relacionesPertinentes, rutasPertinentes: rutasPertinentes,
+    historialAccionesEjecutadas: historialAccionesEjecutadas, respuestasUsuario: respuestasUsuario,
+    evidenceNeeds: opState.evidenceNeeds || [], uncertainties: opState.uncertainties || [],
+    uncertaintyAddressed: nextAction.uncertaintyAddressed
+  };
+}
+
+/* Prompt propio de C1-C4A (continuación de C1-C2/C1-C3A/C1-C3B, motor propio). Universal entre
+   dominios: no hay ninguna rama por tipo de Organismo en esta función. */
+function C1C4A_PROMPT_INTERPRET(ventana){
+  var ventanaTxt = JSON.stringify(ventana, null, 2);
+  return 'Sos el motor de ejecución de la acción INTERPRET (C1-C4A) de Contextos Universal -- ' +
+    'continuación de C1-C2/C1-C3A/C1-C3B, motor propio, sin dimensiones ni sistemas de Contextos ' +
+    'Legacy. C1-C2 ya decidió que la información disponible es SUFICIENTE: tu tarea no es buscar ' +
+    'más datos -- eso no corresponde acá -- sino comprender qué CONFIGURACIÓN forman las relaciones/ ' +
+    'rutas/respuestas ya disponibles y qué DINÁMICA describe esa configuración.\n\n' +
+    'VENTANA YA SELECCIONADA (relaciones/rutas pertinentes del Frente, historial de ASK/TRACE ya ' +
+    'ejecutados, respuestas reales del usuario, huecos/incertidumbres ya detectados -- no es todo ' +
+    'el grafo ni información nueva):\n' + ventanaTxt + '\n\n' +
+    'REGLAS:\n' +
+    '1. Buscá: relaciones -> configuración significativa -> dinámica. Todavía NO identifiques ' +
+    'Operador, Función, Principio, Foco ni Retorno -- eso corresponde a un corte posterior.\n' +
+    '2. Una "configuration" solo es válida si (a) está sustentada por relaciones/rutas/respuestas ' +
+    'realmente incluidas en la ventana, (b) tiene incidencia real sobre el Organismo, y (c) explica ' +
+    'algo que esas relaciones AISLADAS no explicaban por sí solas -- si no aporta nada por encima de ' +
+    'sumar las partes, no es una interpretación válida.\n' +
+    '3. Prohibido crear evidencia nueva, rellenar huecos no sustentados, o convertir una correlación ' +
+    'en una causalidad que la ventana no sostiene. Si algo no se puede sostener con lo disponible, ' +
+    'registralo en "uncertainties" -- nunca lo inventes.\n' +
+    '4. "tension" es opcional y se DERIVA de la configuración -- solo la incluís si genuinamente ' +
+    'emerge de una fricción real entre elementos de la ventana; si no hay una fricción sostenida, ' +
+    'dejala en null. Nunca la fuerces para "completar" la respuesta.\n' +
+    '5. "status": "interpreted" si la configuración quedó comprendida con lo disponible; ' +
+    '"provisional" si hay una lectura razonable pero sostenida solo parcialmente (inferencia, no ' +
+    'certeza); "insufficient" si lo disponible en la ventana no alcanza para formar ninguna ' +
+    'configuración válida -- en ese caso "configuration" puede quedar mínima, nunca fabricada.\n' +
+    '6. "relationRefs" solo puede contener ids que realmente aparecen en la ventana -- nunca ' +
+    'inventes un id.\n' +
+    '7. No expliques tu razonamiento paso a paso.\n\n' +
+    'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
+    'después. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
+    '[[INTERPRET_RESULT:{\n' +
+    '  "status": "interpreted"|"provisional"|"insufficient",\n' +
+    '  "configuration": {\n' +
+    '    "relationRefs": ["rel1"],\n' +
+    '    "observation": "...",\n' +
+    '    "dynamics": "...",\n' +
+    '    "tension": null | { "description": "...", "between": ["...","..."] },\n' +
+    '    "uncertainties": ["..."]\n' +
+    '  },\n' +
+    '  "justificationSummary": "..."\n' +
+    '}]]';
+}
+
+function C1C4A_llamarIA(systemPrompt, mensajes){
+  var t0 = Date.now();
+  return fetch(apiEndpoint(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ model: C1C4A_MODEL, max_tokens: C1C4A_MAX_TOKENS, system: systemPrompt, messages: mensajes })
+  }).then(function(res){
+    return res.json().then(function(data){
+      if(!res.ok || (data && data.error)){
+        throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+      }
+      var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
+    });
+  });
+}
+
+/* Parser defensivo: rechaza toda la respuesta si falta "configuration" o "justificationSummary", o
+   si "status" no es uno de los 3 válidos. "observation"/"dynamics" son obligatorios salvo cuando
+   status es "insufficient" (ahí sí puede faltar contenido real -- eso es justamente lo que significa
+   insuficiente, nunca se rellena para simular una interpretación que no existe). "relationRefs" se
+   filtra contra lo realmente ofrecido (nunca se confía en un id inventado). "tension" solo se
+   conserva si trae una "description" real -- si el modelo la omite o la manda vacía, queda null. */
+function C1C4A_parseInterpretResult(texto, relIdsOfrecidas){
+  var re = /\[\[INTERPRET_RESULT:([\s\S]*?)\]\]/;
+  var m = String(texto || '').match(re);
+  if(!m) return null;
+  var raw;
+  try{ raw = JSON.parse(m[1]); }catch(e){ return null; }
+  if(!raw || typeof raw !== 'object') return null;
+  if(C1C4A_ESTADOS.indexOf(raw.status) === -1) return null;
+  var justificationSummary = (typeof raw.justificationSummary === 'string' && raw.justificationSummary.trim())
+    ? raw.justificationSummary.trim() : null;
+  if(!justificationSummary) return null;
+
+  var cfgRaw = (raw.configuration && typeof raw.configuration === 'object' && !Array.isArray(raw.configuration)) ? raw.configuration : null;
+  if(!cfgRaw) return null;
+  var observation = (typeof cfgRaw.observation === 'string' && cfgRaw.observation.trim()) ? cfgRaw.observation.trim() : null;
+  var dynamics = (typeof cfgRaw.dynamics === 'string' && cfgRaw.dynamics.trim()) ? cfgRaw.dynamics.trim() : null;
+  if(raw.status !== 'insufficient' && (!observation || !dynamics)) return null;   // no fabricar una interpretación vacía
+
+  var idsRel = relIdsOfrecidas || [];
+  var relationRefs = Array.isArray(cfgRaw.relationRefs)
+    ? cfgRaw.relationRefs.filter(function(x){ return typeof x === 'string' && idsRel.indexOf(x) > -1; })
+    : [];
+
+  var tension = null;
+  if(cfgRaw.tension && typeof cfgRaw.tension === 'object' && !Array.isArray(cfgRaw.tension)){
+    var desc = (typeof cfgRaw.tension.description === 'string' && cfgRaw.tension.description.trim()) ? cfgRaw.tension.description.trim() : null;
+    var between = Array.isArray(cfgRaw.tension.between) ? cfgRaw.tension.between.filter(function(x){ return typeof x === 'string' && x.trim(); }) : [];
+    if(desc) tension = { description: desc, between: between };   // sin description real, no hay tensión -- nunca se fuerza
+  }
+
+  function limpiarLista(arr){
+    return Array.isArray(arr) ? arr.filter(function(x){ return typeof x === 'string' && x.trim(); }).map(function(x){ return x.trim(); }) : [];
+  }
+
+  return {
+    status: raw.status,
+    configuration: {
+      relationRefs: relationRefs, observation: observation, dynamics: dynamics,
+      tension: tension, uncertainties: limpiarLista(cfgRaw.uncertainties)
+    },
+    justificationSummary: justificationSummary
+  };
+}
+
+/* ---- executeInterpret: única forma de ejecutar INTERPRET en este corte. Nunca llama a
+   openField()/propagateField()/executeAsk()/executeTrace() -- si la ventana no alcanza, el resultado
+   es "insufficient", nunca se sale a buscar más (eso no es INTERPRET). ---- */
+async function executeInterpret(graphState, front, nextAction){
+  if(!front || front.status !== 'active') return { ok:false, motivo:'front ausente o no activo' };
+  if(!nextAction || nextAction.action !== 'INTERPRET') return { ok:false, motivo:'nextAction no es INTERPRET' };
+  if(!graphState) return { ok:false, motivo:'graphState ausente' };
+  var ventana = C1C4A_ventanaInterpret(graphState, front, nextAction);
+  var prompt = C1C4A_PROMPT_INTERPRET(ventana);
+  var res;
+  try{
+    res = await C1C4A_llamarIA(prompt, [{ role:'user', content:'(interpretá la configuración con lo ya disponible)' }]);
+  }catch(e){
+    return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
+  }
+
+  var idsRel = (front.relationRefs || []).slice();
+  var parsed = C1C4A_parseInterpretResult(res.texto, idsRel);
+  if(!parsed){
+    return { ok:false, motivo:'no se pudo interpretar la configuración generada', usage: res.usage,
+             duracionMs: res.duracionMs, textoCrudo: res.texto };
+  }
+
+  var result = {
+    frontId: front.id, action: 'INTERPRET', status: parsed.status,
+    configuration: parsed.configuration, justificationSummary: parsed.justificationSummary
+  };
+  result = JSON.parse(JSON.stringify(result));
+  return {
+    ok: true, result: result,
+    telemetry: { llamadasIA: 1, tokensInput: (res.usage && res.usage.input_tokens) || null,
+      tokensOutput: (res.usage && res.usage.output_tokens) || null, duracionMs: res.duracionMs }
+  };
+}
+
+/* Laboratorio interno C1-C4A (extiende el de C1-C3B): encadena la cadena completa hasta reevaluar y,
+   si la nueva acción elegida es INTERPRET, la ejecuta -- si no lo es, se detiene y lo informa (nunca
+   fuerza INTERPRET). Solo consola, sin UI nueva. */
+window.debugExecuteInterpret = function(organismoId, question, intention, respuestaSiAsk){
+  var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
+  if(!o){ console.warn('[C1-C4A] organismo no encontrado:', organismoId); return null; }
+  var snap = OrganismSnapshotAdapter(o);
+  var opening = crearContextOpening(o.id, { basedOnVersion: snap.organismVersion, question: question, intention: intention });
+  return reconstructOrigin(snap, opening).then(function(r1){
+    if(!r1.ok || r1.assessment.status !== 'continue'){ console.warn('[C1-C4A] no se llega a openField():', r1.ok?r1.assessment.status:r1.motivo); return { origin:r1 }; }
+    return openField(snap, r1.opening, r1.assessment).then(function(r2){
+      if(!r2.ok){ console.warn('[C1-C4A] no se llega a propagateField():', r2.motivo); return { origin:r1, field:r2 }; }
+      return propagateField(snap, r1.opening, r1.assessment, r2.result).then(function(r3){
+        if(!r3.ok){ console.warn('[C1-C4A] no se llega a selectContextFronts():', r3.motivo); return { origin:r1, field:r2, graph:r3 }; }
+        return selectContextFronts(r3.result, r1.opening).then(function(r4){
+          if(!r4.ok || !r4.result.activeFrontId){ console.warn('[C1-C4A] no hay Frente activo:', r4.ok?r4.result.status:r4.motivo); return { origin:r1, field:r2, graph:r3, fronts:r4 }; }
+          var activo = r4.result.fronts.filter(function(f){ return f.id === r4.result.activeFrontId; })[0];
+          return selectNextCognitiveAction(snap, r1.opening, r3.result, activo).then(function(r5){
+            if(!r5.ok){ console.warn('[C1-C4A] no se pudo elegir próxima acción:', r5.motivo); return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5 }; }
+            if(r5.result.action === 'INTERPRET'){
+              console.log('[C1-C4A] C1-C2 eligió INTERPRET directamente, sin ASK/TRACE previo. Frente:', activo);
+              return executeCognitiveAction(snap, r1.opening, r3.result, activo, r5.result).then(function(r6){
+                console.log('[C1-C4A] resultado de ejecución:', r6.ok ? r6.result : r6);
+                return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5, execution:r6 };
+              });
+            }
+            return executeCognitiveAction(snap, r1.opening, r3.result, activo, r5.result).then(function(r6){
+              if(!r6.ok){ console.warn('[C1-C4A] no se pudo ejecutar la acción previa:', r6.motivo || r6); return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5, execution:r6 }; }
+              var aperturaParaReeval = r1.opening, frenteParaReeval = r6.front, respuesta = null;
+              if(r5.result.action === 'ASK' && respuestaSiAsk){
+                var aplicado = applyUserAnswer(r1.opening, r6.front, r6.result.userQuestion, respuestaSiAsk);
+                if(aplicado.ok){ aperturaParaReeval = aplicado.opening; frenteParaReeval = aplicado.front; respuesta = respuestaSiAsk; }
+              }
+              return reassessCognitiveAction(snap, aperturaParaReeval, r3.result, frenteParaReeval, r5.result, r6.result, respuesta).then(function(r7){
+                console.log('[C1-C4A] reevaluación:', r7.ok ? r7.result : r7);
+                if(!r7.ok || r7.result.nextAction.action !== 'INTERPRET'){
+                  console.warn('[C1-C4A] la reevaluación no produjo INTERPRET -- no se fuerza. Nueva acción real:', r7.ok ? r7.result.nextAction.action : r7.motivo);
+                  return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5, execution:r6, reassessment:r7 };
+                }
+                // Frente enriquecido con la nota de C1-C3B (misma función pura, reutilizada -- no se
+                // recalcula ni se inventa el estado, ver C1C3B_frenteReevaluado).
+                var frenteParaInterpret = C1C3B_frenteReevaluado(frenteParaReeval, r5.result.action, r6.result, respuesta);
+                console.log('[C1-C4A] Frente ANTES de interpretar:', frenteParaInterpret);
+                return executeInterpret(r3.result, frenteParaInterpret, r7.result.nextAction).then(function(r8){
+                  console.log('[C1-C4A] resultado de interpretación:', r8.ok ? r8.result : r8);
+                  if(r8.ok) console.log('[C1-C4A] telemetry:', r8.telemetry);
+                  return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5, execution:r6, reassessment:r7, interpretation:r8 };
+                });
               });
             });
           });
@@ -11696,17 +11976,16 @@ function correrPruebasAuto(){
         return unSoloAsk && unSoloTrace && sinReseleccion && sinRecursionAsk && sinRecursionTrace;
       })());
 
-      chk('C3A-15 · Acción no implementada devuelve action_not_implemented_yet explícito, nunca fallback silencioso', (function(){
+      chk('C3A-15 · Acción no implementada devuelve action_not_implemented_yet explícito, nunca fallback silencioso (actualizado por C1-C4A: INTERPRET ya está implementado, ver C4A-17)', (function(){
         var src = executeCognitiveAction.toString();
         var iGuard = src.indexOf('action_not_implemented_yet');
         var iAsk = src.indexOf('executeAsk(');
         var iTrace = src.indexOf('executeTrace(');
         return iGuard > -1 && iGuard < iAsk && iGuard < iTrace &&
-          C1C3A_ACCIONES_IMPLEMENTADAS.length === 2 &&
+          C1C3A_ACCIONES_IMPLEMENTADAS.length === 3 &&
           C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('READ') === -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('RESEARCH') === -1 &&
           C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('DEEPEN') === -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('EXPAND') === -1 &&
-          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('CONTRAST') === -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('INTERPRET') === -1 &&
-          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('CLOSE_FRONT') === -1;
+          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('CONTRAST') === -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('CLOSE_FRONT') === -1;
       })());
 
       chk('C3A-16 · Sin escritura en Organismo/Memoria/Recuerdos: ninguna función de C1-C3A persiste ni toca la ficha', (function(){
@@ -11856,6 +12135,168 @@ function correrPruebasAuto(){
 
       // C3B-18 · Banco general sin regresiones: no es un chk() individual -- ES correr
       // correrPruebasAuto() completo en vivo, ver PENDIENTES.md para el resultado real.
+    })();
+
+    /* ---- Contextos Universal · Corte C1-C4A -- executeInterpret() (C4A-01..18, C4A-19 en vivo) ----
+       Mismo límite que C3A/C3B: la interpretación real depende de una llamada IA, así que lo que
+       depende de esa llamada se prueba por análisis estructural del código fuente, y el parser
+       (determinista y síncrono) se prueba con marcadores sintéticos, sin gastar ninguna llamada
+       real. La emergencia real de una interpretación concreta se prueba en vivo -- ver
+       demostraciones A/B en PENDIENTES.md. */
+    (function(){
+      function markerInterpret(obj){ return '[[INTERPRET_RESULT:' + JSON.stringify(obj) + ']]'; }
+
+      chk('C4A-01 · Configuración válida con varias relaciones: el parser acepta status "interpreted", observation+dynamics reales y relationRefs realmente ofrecidos', (function(){
+        var texto = markerInterpret({
+          status: 'interpreted',
+          configuration: { relationRefs: ['rel1','rel2'],
+            observation: 'el proveedor secundario y el ajuste de precio están conectados por la misma decisión comercial',
+            dynamics: 'cuando sube el costo del insumo, el estudio traslada la diferencia al precio de venta casi de inmediato',
+            tension: null, uncertainties: [] },
+          justificationSummary: 'interpretación generada para C1-C2:INTERPRET del caso Estudio d'
+        });
+        var parsed = C1C4A_parseInterpretResult(texto, ['rel1','rel2','rel3']);
+        return parsed && parsed.status === 'interpreted' && parsed.configuration.relationRefs.length === 2 &&
+          parsed.configuration.observation.indexOf('proveedor secundario') > -1 && parsed.configuration.dynamics.length > 0;
+      })());
+
+      chk('C4A-02 · Información insuficiente: status "insufficient" no requiere observation/dynamics poblados -- no se fabrica una interpretación vacía', (function(){
+        var texto = markerInterpret({
+          status: 'insufficient',
+          configuration: { relationRefs: [], observation: '', dynamics: '', tension: null, uncertainties: ['falta saber si el proveedor es estable en el tiempo'] },
+          justificationSummary: 'la ventana no alcanza para formar una configuración sostenida'
+        });
+        var parsed = C1C4A_parseInterpretResult(texto, ['rel1']);
+        return parsed && parsed.status === 'insufficient' && parsed.configuration.observation === null &&
+          parsed.configuration.dynamics === null && parsed.configuration.uncertainties.length === 1;
+      })());
+
+      chk('C4A-03 · status "interpreted"/"provisional" sin observation u dynamics se rechaza (no fabricar una interpretación vacía disfrazada de completa)', (function(){
+        var texto = markerInterpret({
+          status: 'interpreted',
+          configuration: { relationRefs: [], observation: '', dynamics: '', tension: null, uncertainties: [] },
+          justificationSummary: 'j'
+        });
+        return C1C4A_parseInterpretResult(texto, []) === null;
+      })());
+
+      chk('C4A-04 · Caso sin Tensión: cuando el modelo no la reporta, el parser preserva tension:null tal cual -- nunca la inventa', (function(){
+        var texto = markerInterpret({
+          status: 'interpreted',
+          configuration: { relationRefs: ['rel1'], observation: 'obs', dynamics: 'din', tension: null, uncertainties: [] },
+          justificationSummary: 'j'
+        });
+        var parsed = C1C4A_parseInterpretResult(texto, ['rel1']);
+        return parsed && parsed.configuration.tension === null;
+      })());
+
+      chk('C4A-05 · Tensión válida: cuando el modelo sí la reporta con description real, se parsea completa (description + between)', (function(){
+        var texto = markerInterpret({
+          status: 'interpreted',
+          configuration: { relationRefs: ['rel1'], observation: 'obs', dynamics: 'din',
+            tension: { description: 'el estudio compite por diseño pero decide por precio', between: ['posicionamiento declarado','decisión de precio real'] },
+            uncertainties: [] },
+          justificationSummary: 'j'
+        });
+        var parsed = C1C4A_parseInterpretResult(texto, ['rel1']);
+        return parsed && parsed.configuration.tension && parsed.configuration.tension.description.indexOf('compite por diseño') > -1 &&
+          parsed.configuration.tension.between.length === 2;
+      })());
+
+      chk('C4A-06 · Tensión sin description real se descarta a null -- nunca se fuerza con datos vacíos', (function(){
+        var texto = markerInterpret({
+          status: 'interpreted',
+          configuration: { relationRefs: ['rel1'], observation: 'obs', dynamics: 'din', tension: { description: '', between: ['a','b'] }, uncertainties: [] },
+          justificationSummary: 'j'
+        });
+        var parsed = C1C4A_parseInterpretResult(texto, ['rel1']);
+        return parsed && parsed.configuration.tension === null;
+      })());
+
+      chk('C4A-07 · No causalidad falsa / no evidencia fabricada: un relationId no ofrecido en la ventana nunca se conserva en relationRefs', (function(){
+        var texto = markerInterpret({
+          status: 'interpreted',
+          configuration: { relationRefs: ['rel_inventado_por_el_modelo','rel1'], observation: 'obs', dynamics: 'din', tension: null, uncertainties: [] },
+          justificationSummary: 'j'
+        });
+        var parsed = C1C4A_parseInterpretResult(texto, ['rel1','rel2']);
+        return parsed && parsed.configuration.relationRefs.length === 1 && parsed.configuration.relationRefs[0] === 'rel1';
+      })());
+
+      chk('C4A-08 · Parser rechaza si falta justificationSummary', (function(){
+        var texto = markerInterpret({ status:'interpreted', configuration:{ relationRefs:[], observation:'o', dynamics:'d', tension:null, uncertainties:[] } });
+        return C1C4A_parseInterpretResult(texto, []) === null;
+      })());
+
+      chk('C4A-09 · Parser rechaza si status no es uno de los 3 válidos', (function(){
+        var texto = markerInterpret({ status:'resolved', configuration:{ relationRefs:[], observation:'o', dynamics:'d', tension:null, uncertainties:[] }, justificationSummary:'j' });
+        return C1C4A_parseInterpretResult(texto, []) === null;
+      })());
+
+      chk('C4A-10 · Parser rechaza si falta "configuration" por completo', (function(){
+        var texto = '[[INTERPRET_RESULT:' + JSON.stringify({ status:'interpreted', justificationSummary:'j' }) + ']]';
+        return C1C4A_parseInterpretResult(texto, []) === null;
+      })());
+
+      chk('C4A-11 · executeInterpret requiere front.status==="active" y nextAction.action==="INTERPRET"', (function(){
+        var srcSync = executeInterpret.toString();
+        return srcSync.indexOf("front.status !== 'active'") > -1 && srcSync.indexOf("nextAction.action !== 'INTERPRET'") > -1;
+      })());
+
+      chk('C4A-12 · executeInterpret requiere graphState', (function(){
+        return executeInterpret.toString().indexOf("motivo:'graphState ausente'") > -1;
+      })());
+
+      chk('C4A-13 · Ventana de interpretación usa solo front.relationRefs/routeRefs -- nunca todo graphState.relations/routes', (function(){
+        var src = C1C4A_ventanaInterpret.toString();
+        return src.indexOf('front.relationRefs') > -1 && src.indexOf('front.routeRefs') > -1 &&
+          src.indexOf('graphState.relations.map') === -1 && src.indexOf('graphState.routes.map') === -1;
+      })());
+
+      chk('C4A-14 · Ventana incluye historial de acciones ejecutadas y respuestas de usuario ya registradas -- nunca fabrica nuevas', (function(){
+        var graphState = { nodes:[], relations:[], routes:[] };
+        var front = { id:'f1', status:'active', formulation:'x', uncertainty:'y', relationRefs:[], routeRefs:[],
+          operationalState: { history:[{action:'ASK',status:'need_user'},{action:'TRACE',status:'advanced'}],
+            answers:[{questionText:'¿...?', answer:'sí, confirmado'}], evidenceNeeds:['e1'], uncertainties:['u1'] } };
+        var ventana = C1C4A_ventanaInterpret(graphState, front, { uncertaintyAddressed:'x' });
+        return ventana.historialAccionesEjecutadas.length === 2 && ventana.respuestasUsuario[0].respuesta === 'sí, confirmado' &&
+          ventana.evidenceNeeds[0] === 'e1' && ventana.uncertainties[0] === 'u1';
+      })());
+
+      chk('C4A-15 · Una acción por ciclo: executeCognitiveAction ejecuta como mucho un executor por INTERPRET, nunca vuelve a llamar a C1-C1/C1-C2', (function(){
+        var srcOrq = executeCognitiveAction.toString();
+        var unSoloInterpret = (srcOrq.match(/executeInterpret\s*\(/g) || []).length === 1;
+        var sinReseleccion = srcOrq.indexOf('selectContextFronts(') === -1 && srcOrq.indexOf('selectNextCognitiveAction(') === -1;
+        var sinRecursion = executeInterpret.toString().indexOf('executeCognitiveAction(') === -1;
+        return unSoloInterpret && sinReseleccion && sinRecursion;
+      })());
+
+      chk('C4A-16 · Sin escritura en Organismo/Memoria/Recuerdos: ninguna función de C1-C4A persiste ni toca la ficha', (function(){
+        var src = [C1C4A_ventanaInterpret, C1C4A_PROMPT_INTERPRET, C1C4A_parseInterpretResult, executeInterpret]
+          .map(function(f){ return f.toString(); }).join('\n');
+        return src.indexOf('guardarOrganismo(') === -1 && src.indexOf('persistirOrganismos') === -1 &&
+          src.indexOf('crearRecuerdo(') === -1 && src.indexOf('.ficha.') === -1 && src.indexOf('.ficha=') === -1;
+      })());
+
+      chk('C4A-17 · C1C3A_aplicarResultadoAlFrente separa el ciclo (status:"interpreted") del veredicto epistémico (lastActionOutcome) para INTERPRET, igual que hace con TRACE', (function(){
+        var front = { id:'f1', status:'active', formulation:'x', uncertainty:'y', operationalState:{ history:[], answers:[], evidenceNeeds:[], uncertainties:[] } };
+        var result = { action:'INTERPRET', status:'provisional', configuration:{ relationRefs:['rel1'], observation:'o', dynamics:'d', tension:null, uncertainties:['u_nueva'] }, justificationSummary:'j' };
+        var actualizado = C1C3A_aplicarResultadoAlFrente(front, result);
+        return actualizado.operationalState.status === 'interpreted' && actualizado.operationalState.lastActionOutcome === 'provisional' &&
+          actualizado.operationalState.readiness === 'ready_for_reassessment' &&
+          actualizado.operationalState.interpretation.dynamics === 'd' &&
+          actualizado.operationalState.uncertainties.indexOf('u_nueva') > -1;
+      })());
+
+      chk('C4A-18 · Sin regresión sobre C3A/C3B: C1C3A_ACCIONES_IMPLEMENTADAS incluye INTERPRET, sigue sin incluir READ/RESEARCH/DEEPEN/EXPAND/CONTRAST/CLOSE_FRONT, y ASK/TRACE siguen presentes', (function(){
+        return C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('INTERPRET') > -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('ASK') > -1 &&
+          C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('TRACE') > -1 && C1C3A_ACCIONES_IMPLEMENTADAS.length === 3;
+      })());
+
+      // C4A-19 · Banco general sin regresiones: no es un chk() individual -- ES correr
+      // correrPruebasAuto() completo en vivo, ver PENDIENTES.md para el resultado real.
+      // C4A-20 · Demostraciones en vivo A (Estudio d) y B (segundo dominio): no son chk() --
+      // ver PENDIENTES.md.
     })();
 
     /* ---- N2.2 · compatibilidad del resumen con evaluaciones N2.1 sin tension_principal ---- */
