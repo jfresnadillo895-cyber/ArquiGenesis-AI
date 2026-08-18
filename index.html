@@ -6456,20 +6456,37 @@ function C1C4B_PROMPT_FUNCTION(ventana){
     'CONFIGURACIÓN YA INTERPRETADA:\n' + ventanaTxt + '\n\n' +
     'REGLAS:\n' +
     '1. "operators" es una lista OPCIONAL -- puede quedar vacía ([]) si ningún operador es ' +
-    'identificable o necesario. No fuerces un operador para "completar" la respuesta.\n' +
+    'identificable o necesario. No fuerces un operador para "completar" la respuesta. Un operador ' +
+    'tiene que ser una PRESENCIA que efectivamente opera -- un mecanismo, una regla, un actor, un ' +
+    'acuerdo vigente, algo que activamente hace algo dentro de la configuración. Una AUSENCIA (que ' +
+    'no se haya negociado, que no se haya revisado, que algo no ocurrió) NO es un operador -- es la ' +
+    'falta de uno. Si lo único identificable es que "no se hizo X", dejá "operators" en [] (salvo ' +
+    'que puedas nombrar el mecanismo positivo que sostiene esa inacción -- por ejemplo, el acuerdo ' +
+    'inicial que sigue vigente sin mecanismo de revisión -- que sí es una presencia real, distinta ' +
+    'de la ausencia misma).\n' +
     '2. "function" es OPCIONAL -- si no se puede sostener con lo disponible, dejala en null. Nunca ' +
     'la inventes para llenar el campo; es preferible null a una función débil o forzada.\n' +
     '3. FUNCIÓN = la capacidad organizativa que la configuración REALIZA, SOSTIENE, MODIFICA o ' +
     'IMPIDE. Nunca confundas función con objetivo, intención, efecto superficial o solución ' +
-    'propuesta -- esas son categorías distintas y no corresponden acá.\n' +
+    'propuesta -- esas son categorías distintas y no corresponden acá. TEST DE CONTROL antes de ' +
+    'escribir "function": si tu descripción se limita a repetir lo que ya dice "dynamics" (la ' +
+    'ventana ya te la da) cambiando el verbo por "sostiene"/"realiza"/"mantiene", NO es una función ' +
+    'válida -- es la dinámica/el efecto disfrazado de función. Una función real nombra la CAPACIDAD ' +
+    'subyacente que EXPLICA por qué esa dinámica ocurre (por ejemplo: "tratar condiciones de ' +
+    'emergencia como piso permanente sin mecanismo de revisión" es una capacidad; "mantener una ' +
+    'brecha de margen" es solo el efecto ya descripto con otras palabras). Si al escribirla notás ' +
+    'que solo estás repitiendo el efecto, dejá "function" en null.\n' +
     '4. PROHIBIDO antropomorfizar sistemas no humanos: si el Organismo no es una persona u ' +
     'organización humana, no le atribuyas decisiones, intenciones, voluntad o agencia consciente. ' +
     'Describí la función en términos de capacidad organizativa del sistema, nunca de motivación.\n' +
-    '5. TEST DE INVARIANCIA -- aplicalo así: si cambiaran las formas, los actores o los mecanismos ' +
-    'concretos de esta configuración, ¿la función identificada podría seguir siendo la misma? Si sí ' +
-    'con claridad -> "strong". Si es razonable pero no evidente -> "provisional". Si la función ' +
-    'depende enteramente de la forma/actor/mecanismo específico y no sobreviviría el cambio -> ' +
-    '"failed". Si no identificaste ninguna función sobre la cual aplicar el test -> "unknown".\n' +
+    '5. TEST DE INVARIANCIA -- aplicalo SOLO sobre la función que identificaste en el campo ' +
+    '"function", nunca sobre el efecto/dinámica observado directamente (esa distinción ya la hizo ' +
+    'la regla 3). Si cambiaran las formas, los actores o los mecanismos concretos de esta ' +
+    'configuración, ¿esa función identificada podría seguir siendo la misma? Si sí con claridad -> ' +
+    '"strong". Si es razonable pero no evidente -> "provisional". Si la función depende enteramente ' +
+    'de la forma/actor/mecanismo específico y no sobreviviría el cambio -> "failed". Si "function" ' +
+    'quedó en null, no hay nada sobre lo cual aplicar el test -> "unknown" (nunca "strong" ni ' +
+    '"failed" sin una función real).\n' +
     '6. Los ids en "relationRefs" (tanto de cada operador como de la función) solo pueden ser ids ' +
     'que realmente aparecen en "relacionesPertinentes" -- nunca inventes un id.\n' +
     '7. No expliques tu razonamiento paso a paso.\n\n' +
@@ -6546,8 +6563,16 @@ function C1C4B_parseFunctionalResult(texto, relIdsOfrecidas){
     }
   }
 
+  // C1-C4B (18/08, auditoría semántica): la invariancia es un test SOBRE la función -- si no hay
+  // función (quedó en null), no hay nada sobre lo cual testear invariancia. No confiar en lo que
+  // el modelo haya puesto en "invariance" en ese caso: se fuerza "unknown", nunca se deja pasar un
+  // "strong"/"provisional"/"failed" sin una función real detrás (evita que el test de invariancia
+  // termine aplicado al efecto/dinámica en vez de a la función, que es justo la ambigüedad que se
+  // corrigió en el prompt).
+  var invariance = func ? raw.invariance : 'unknown';
+
   return {
-    operators: operators, function: func, invariance: raw.invariance,
+    operators: operators, function: func, invariance: invariance,
     uncertainties: C1C4B_limpiarLista(raw.uncertainties), justificationSummary: justificationSummary
   };
 }
@@ -6630,6 +6655,253 @@ window.debugExecuteFunctionalInterpretation = function(graphState, front, interp
   return executeFunctionalInterpretation(graphState, front, interpretationResult).then(function(r){
     console.log('[C1-C4B] resultado funcional:', r.ok ? r.result : r);
     if(r.ok) console.log('[C1-C4B] telemetry:', r.telemetry);
+    return r;
+  });
+};
+
+/* ============================================================================
+   Contextos Universal · C1-E1 — executeFocus() (compresión explicativa: Foco)
+   Entrada: NO es una acción del alfabeto de C1-C2 -- es una compresión, construida sobre lo que ya
+   está comprendido: relaciones -> configuración -> dinámica (C1-C4A) + operadores/función opcionales
+   (C1-C4B, puede no existir). Foco NO es un resumen ni una nueva interpretación: es la mínima
+   configuración suficientemente sustentada que reorganiza cómo entendemos al Organismo. No puede
+   introducir evidencia, relaciones, función ni causalidad nuevas -- si Función quedó null, el Foco
+   puede existir igualmente, sin inventarla. Aplica el resultado únicamente al Frente -- nunca escribe
+   Organismo, Memoria ni Recuerdos. No implementa todavía suficiencia global, Principio organizador
+   ni Retorno. Ver PENDIENTES.md.
+   ============================================================================ */
+
+var C1E1_MODEL = 'claude-sonnet-4-6';
+var C1E1_MAX_TOKENS = 1400;
+var C1E1_ESTABILIDAD_ESTADOS = ['stable', 'provisional', 'fragile'];
+
+/* Ventana de Foco: SOLO lo ya comprendido -- configuración de C1-C4A (observation/dynamics/tension/
+   relationRefs) + la extensión funcional de C1-C4B si existe (operators/function/invariance; null si
+   nunca se corrió C1-C4B o si Función quedó null) + relaciones pertinentes resueltas a etiquetas +
+   incertidumbres ya acumuladas (de la configuración y, si existe, de la extensión funcional). Nunca
+   se agrega nada nuevo. */
+function C1E1_ventanaFoco(graphState, front, interpretationResult, functionalResult){
+  var porId = {};
+  (graphState.nodes || []).forEach(function(n){ porId[n.id] = n; });
+  var relPorId = {};
+  (graphState.relations || []).forEach(function(r){ relPorId[r.id] = r; });
+
+  var relacionesPertinentes = (front.relationRefs || []).map(function(id){
+    var r = relPorId[id];
+    if(!r) return null;
+    return { id: r.id, from: porId[r.sourceNodeId] ? porId[r.sourceNodeId].label : null,
+      to: porId[r.targetNodeId] ? porId[r.targetNodeId].label : null,
+      manifestation: r.manifestation, possibleIncidence: r.possibleIncidence };
+  }).filter(Boolean);
+
+  var cfg = (interpretationResult && interpretationResult.configuration) || {};
+  var fi = (functionalResult && functionalResult.functionalInterpretation) || null;
+
+  var uncertaintiesAcumuladas = (cfg.uncertainties || []).concat(fi ? (fi.uncertainties || []) : []);
+
+  return {
+    frontId: front.id, formulation: front.formulation, uncertainty: front.uncertainty,
+    configuration: {
+      observation: cfg.observation || null, dynamics: cfg.dynamics || null,
+      tension: cfg.tension || null, relationRefs: cfg.relationRefs || []
+    },
+    functionalInterpretation: fi ? {
+      operators: fi.operators || [], function: fi.function || null, invariance: fi.invariance || 'unknown'
+    } : null,
+    relacionesPertinentes: relacionesPertinentes,
+    uncertaintiesAcumuladas: uncertaintiesAcumuladas
+  };
+}
+
+/* Prompt propio de C1-E1 (continuación de C1-C4A/C1-C4B, motor propio). Universal entre dominios: no
+   hay ninguna rama por tipo de Organismo. */
+function C1E1_PROMPT_FOCUS(ventana){
+  var ventanaTxt = JSON.stringify(ventana, null, 2);
+  return 'Sos el motor de ejecución de la compresión explicativa Foco (C1-E1) de Contextos Universal ' +
+    '-- continuación de C1-C4A/C1-C4B, motor propio, sin dimensiones ni sistemas de Contextos Legacy. ' +
+    'Ya existe una configuración interpretada (observación + dinámica, y opcionalmente tensión, ' +
+    'operadores y función) -- no la vuelvas a cuestionar, es un dato ya validado. Tu única tarea es ' +
+    'CONSTRUIR EL FOCO: la mínima configuración suficientemente sustentada que reorganiza cómo se ' +
+    'entiende al Organismo. Foco NO es un resumen de lo anterior ni una interpretación nueva.\n\n' +
+    'YA COMPRENDIDO (no lo vuelvas a cuestionar, no agregues nada que no esté acá):\n' + ventanaTxt + '\n\n' +
+    'REGLAS:\n' +
+    '1. PROHIBIDO introducir evidencia, relaciones, función o causalidad nuevas -- el Foco solo puede ' +
+    'reorganizar/comprimir lo que ya está en la ventana, nunca agregar un dato, un vínculo o una ' +
+    'función que no estuviera ahí.\n' +
+    '2. Si "functionalInterpretation" es null o su "function" es null, el Foco puede construirse ' +
+    'igual, sin inventar una función -- en ese caso "usesFunction" tiene que ser false.\n' +
+    '3. TEST DE COMPRESIÓN (obligatorio antes de responder): si tu "statement" simplemente enumera u ' +
+    'ordena observación + dinámica + función una detrás de otra, FALLASTE la tarea -- eso es un ' +
+    'resumen, no un Foco. Un Foco real dice, en una frase mínima, CUÁL es la configuración que hace ' +
+    'que todo lo demás tenga sentido -- tiene que ser más corto y más específico que la suma de sus ' +
+    'partes, nunca una lista de todo lo anterior.\n' +
+    '4. "explains" -- lista corta de qué fenómenos/observaciones concretas quedan explicados por el ' +
+    'Foco (no repitas la observación completa, nombralos brevemente).\n' +
+    '5. "interpretationShift" es OBLIGATORIO: tiene que decir concretamente qué cambia en cómo se ' +
+    'entiende al Organismo a partir de este Foco -- qué se entendía antes y qué se entiende distinto ' +
+    'ahora. Si no hay ningún cambio real de comprensión, el Foco no está listo -- decilo en ' +
+    '"justificationSummary" en vez de forzar un cambio inexistente.\n' +
+    '6. "uncertainties" -- preservá las incertidumbres relevantes ya existentes en la ventana (podés ' +
+    'reformularlas de forma más compacta), nunca inventes una incertidumbre nueva ni la borres sin ' +
+    'razón.\n' +
+    '7. TEST DE ESTABILIDAD (obligatorio, aplicalo a "supportRefs"): imaginá que quitás la relación ' +
+    'más débil o más secundaria de las que sostienen el Foco -- ¿el Foco se sigue sosteniendo con lo ' +
+    'que queda? Si sí, claramente, con varias relaciones independientes sosteniéndolo -> "stable". Si ' +
+    'se sostiene pero con menos margen, apoyado más en unas relaciones que en otras -> "provisional". ' +
+    'Si al quitar esa relación el Foco se cae o pierde su sustento central -> "fragile".\n' +
+    '8. Los ids en "supportRefs" solo pueden ser ids que realmente aparecen en "relacionesPertinentes" ' +
+    '-- nunca inventes un id.\n' +
+    '9. No expliques tu razonamiento paso a paso.\n\n' +
+    'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
+    'después. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
+    '[[FOCUS_RESULT:{\n' +
+    '  "statement": "...",\n' +
+    '  "explains": ["..."],\n' +
+    '  "supportRefs": ["..."],\n' +
+    '  "usesFunction": true|false,\n' +
+    '  "uncertainties": ["..."],\n' +
+    '  "stability": "stable"|"provisional"|"fragile",\n' +
+    '  "interpretationShift": "...",\n' +
+    '  "justificationSummary": "..."\n' +
+    '}]]';
+}
+
+function C1E1_llamarIA(systemPrompt, mensajes){
+  var t0 = Date.now();
+  return fetch(apiEndpoint(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ model: C1E1_MODEL, max_tokens: C1E1_MAX_TOKENS, system: systemPrompt, messages: mensajes })
+  }).then(function(res){
+    return res.json().then(function(data){
+      if(!res.ok || (data && data.error)){
+        throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+      }
+      var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
+    });
+  });
+}
+
+function C1E1_limpiarLista(arr){
+  return Array.isArray(arr) ? arr.filter(function(x){ return typeof x === 'string' && x.trim(); }).map(function(x){ return x.trim(); }) : [];
+}
+
+/* Parser defensivo: rechaza toda la respuesta si falta "statement"/"interpretationShift"/
+   "justificationSummary", si "stability" no es uno de los 3 valores válidos, o si "supportRefs" -- tras
+   filtrar contra lo realmente ofrecido -- queda vacío (un Foco sin ningún soporte real no es un Foco,
+   es una afirmación flotante). Guarda anti-resumen: si "statement" contiene textualmente la
+   observación o la dinámica completas, se rechaza -- eso es evidencia de que no hubo compresión, sólo
+   copia. "usesFunction" decide, en el ejecutor (nunca acá ni confiando ciegamente en el modelo), si
+   corresponde adjuntar la función real ya existente como "functionRef" -- si no había función real
+   provista, "functionRef" queda en null sin importar qué haya dicho el modelo. */
+function C1E1_parseFocusResult(texto, relIdsOfrecidas, observationReal, dynamicsReal){
+  var re = /\[\[FOCUS_RESULT:([\s\S]*?)\]\]/;
+  var m = String(texto || '').match(re);
+  if(!m) return null;
+  var raw;
+  try{ raw = JSON.parse(m[1]); }catch(e){ return null; }
+  if(!raw || typeof raw !== 'object') return null;
+
+  var statement = (typeof raw.statement === 'string' && raw.statement.trim()) ? raw.statement.trim() : null;
+  var interpretationShift = (typeof raw.interpretationShift === 'string' && raw.interpretationShift.trim()) ? raw.interpretationShift.trim() : null;
+  var justificationSummary = (typeof raw.justificationSummary === 'string' && raw.justificationSummary.trim()) ? raw.justificationSummary.trim() : null;
+  if(!statement || !interpretationShift || !justificationSummary) return null;
+  if(C1E1_ESTABILIDAD_ESTADOS.indexOf(raw.stability) === -1) return null;
+
+  // Guarda anti-resumen: si el statement es literalmente la observación/dinámica pegada, no hubo
+  // compresión -- se rechaza en vez de aceptar un "Foco" que en realidad es una copia.
+  if(observationReal && statement.indexOf(observationReal) > -1) return null;
+  if(dynamicsReal && statement.indexOf(dynamicsReal) > -1) return null;
+
+  var idsRel = relIdsOfrecidas || [];
+  var supportRefs = Array.isArray(raw.supportRefs)
+    ? raw.supportRefs.filter(function(x){ return typeof x === 'string' && idsRel.indexOf(x) > -1; })
+    : [];
+  if(supportRefs.length === 0) return null;   // sin soporte real, no es un Foco -- se rechaza
+
+  return {
+    statement: statement,
+    explains: C1E1_limpiarLista(raw.explains),
+    supportRefs: supportRefs,
+    usesFunction: raw.usesFunction === true,
+    uncertainties: C1E1_limpiarLista(raw.uncertainties),
+    stability: raw.stability,
+    interpretationShift: interpretationShift,
+    justificationSummary: justificationSummary
+  };
+}
+
+/* ---- executeFocus: única forma de construir el Foco en este corte. Nunca llama a
+   executeInterpret()/executeFunctionalInterpretation()/selectNextCognitiveAction() -- opera
+   exclusivamente sobre lo ya interpretado, nunca lo recalcula ni sale a buscar más. Si la
+   interpretación previa no dejó una configuración sustentada, no hay nada sobre lo cual comprimir --
+   se rechaza sin llamar a la API (a diferencia de C1-C4B, un Foco vacío no es un estado válido: no
+   hay "Foco:unknown", simplemente no hay Foco todavía). ---- */
+async function executeFocus(graphState, front, interpretationResult, functionalResult){
+  if(!front || !front.id) return { ok:false, motivo:'front ausente' };
+  if(!graphState) return { ok:false, motivo:'graphState ausente' };
+  if(!interpretationResult || !interpretationResult.status){
+    return { ok:false, motivo:'interpretationResult ausente -- C1-E1 comprime una interpretación ya hecha, no la reemplaza' };
+  }
+  var cfg = interpretationResult.configuration || {};
+  if(interpretationResult.status === 'insufficient' || (!cfg.observation && !cfg.dynamics)){
+    return { ok:false, motivo:'la interpretación previa no dejó una configuración sustentada -- no hay nada sobre lo cual construir un Foco' };
+  }
+
+  var ventana = C1E1_ventanaFoco(graphState, front, interpretationResult, functionalResult);
+  var prompt = C1E1_PROMPT_FOCUS(ventana);
+  var res;
+  try{
+    res = await C1E1_llamarIA(prompt, [{ role:'user', content:'(construí el Foco si es legítimo, comprimiendo lo ya comprendido)' }]);
+  }catch(e){
+    return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
+  }
+
+  var idsRel = (front.relationRefs || []).slice();
+  var parsed = C1E1_parseFocusResult(res.texto, idsRel, cfg.observation, cfg.dynamics);
+  if(!parsed){
+    return { ok:false, motivo:'no se pudo interpretar el Foco generado', usage: res.usage,
+             duracionMs: res.duracionMs, textoCrudo: res.texto };
+  }
+
+  // functionRef nunca se decide por lo que diga el modelo en crudo -- solo se adjunta la función
+  // REAL ya provista (nunca una descripta de nuevo por el modelo), y solo si efectivamente existía.
+  var funcReal = (functionalResult && functionalResult.functionalInterpretation && functionalResult.functionalInterpretation.function) || null;
+  var functionRef = (parsed.usesFunction && funcReal) ? funcReal : null;
+
+  var result = {
+    frontId: front.id, statement: parsed.statement, explains: parsed.explains,
+    supportRefs: parsed.supportRefs, functionRef: functionRef, uncertainties: parsed.uncertainties,
+    stability: parsed.stability, interpretationShift: parsed.interpretationShift,
+    justificationSummary: parsed.justificationSummary
+  };
+  result = JSON.parse(JSON.stringify(result));
+  return {
+    ok: true, result: result,
+    telemetry: { llamadasIA: 1, tokensInput: (res.usage && res.usage.input_tokens) || null,
+      tokensOutput: (res.usage && res.usage.output_tokens) || null, duracionMs: res.duracionMs }
+  };
+}
+
+/* Aplica el resultado únicamente al Frente (nunca a Organismo/Memoria/Recuerdos). No es una acción
+   del alfabeto de C1-C2, así que no pasa por C1C3A_aplicarResultadoAlFrente. */
+function C1E1_aplicarResultadoAlFrente(front, result){
+  var clon = JSON.parse(JSON.stringify(front));
+  if(!clon.operationalState){ clon.operationalState = C1C3A_operationalStateInicial(); }
+  clon.operationalState.history.push({ action: 'FOCUS', status: result.stability, at: new Date().toISOString() });
+  clon.operationalState.focus = result;
+  clon.operationalState.uncertainties = (clon.operationalState.uncertainties || []).concat(result.uncertainties || []);
+  return clon;
+}
+
+/* Laboratorio interno C1-E1: toma un Frente + GraphState + InterpretationResult (C1-C4A) +
+   opcionalmente un FunctionalInterpretationResult (C1-C4B) YA producidos, y construye el Foco sobre
+   ellos -- no repite ASK/TRACE/INTERPRET. Solo consola, sin UI nueva. */
+window.debugExecuteFocus = function(graphState, front, interpretationResult, functionalResult){
+  return executeFocus(graphState, front, interpretationResult, functionalResult || null).then(function(r){
+    console.log('[C1-E1] resultado Foco:', r.ok ? r.result : r);
+    if(r.ok) console.log('[C1-E1] telemetry:', r.telemetry);
     return r;
   });
 };
