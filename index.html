@@ -7117,6 +7117,285 @@ window.debugExecuteSufficiencyAssessment = function(graphState, front, focusResu
   });
 };
 
+/* ============================================================================
+   Contextos Universal · C1-F1 — executeReturnProposal() (Propuesta de Retorno)
+   Entrada: NO es una acción del alfabeto de C1-C2, NO es una extensión del Frente como C1-C4B/E1/E2
+   -- es una comparación entre lo ya comprendido (Focus de C1-E1 + Suficiencia de C1-E2) y la Memoria
+   VIGENTE del Organismo (snapshot.currentMemory = o.ficha, vía C1A1_currentMemory -- nunca lee o.ficha
+   directo, reutiliza el adaptador ya auditado). Decide si hay delta suficientemente significativo
+   como para proponer un Retorno -- pero SÓLO propone: este corte nunca escribe Memoria, nunca crea
+   Recuerdo, nunca incrementa fichaVersion, nunca cierra gobernanza. El resultado se aplica
+   únicamente al Frente (operationalState.returnProposal), igual que C1-C4B/E1/E2. Ver PENDIENTES.md.
+   ============================================================================ */
+
+var C1F1_MODEL = 'claude-sonnet-4-6';
+var C1F1_MAX_TOKENS = 1800;
+var C1F1_TIPOS_CAMBIO = ['add', 'reinterpret', 'weaken', 'contradict', 'keep_open'];
+/* Mismos 6 valores que C1B1_EPISTEMIC_STATES/C1B2_EPISTEMIC_STATES -- copia propia intencional,
+   mismo criterio que MODEL/MAX_TOKENS por corte (no generalizar constantes entre cortes). */
+var C1F1_EPISTEMIC_STATES = ['relacion_declarada', 'memoria_gobernada', 'recuerdo_historico',
+  'inferencia_contextos', 'evidencia_existente', 'hipotesis'];
+var C1F1_MAX_CAMBIOS = 3;
+
+/* Ventana de Retorno: SOLO Memoria vigente (snapshot.currentMemory) + Foco + Suficiencia + el
+   soporte/incertidumbres que el propio Foco ya trae (focusResult.supportRefs/uncertainties) --
+   nunca se vuelve a recorrer el GraphState completo (regla de entrada del encargo: "soporte/
+   incertidumbres existentes", no "todo el grafo"). graphState sólo se usa acá para resolver esos
+   ids de soporte a etiquetas legibles (from/to/manifestation), igual que hizo C1-E2. */
+function C1F1_ventanaRetorno(snapshot, opening, graphState, front, focusResult, sufficiencyResult){
+  var relPorId = {};
+  ((graphState && graphState.relations) || []).forEach(function(r){ relPorId[r.id] = r; });
+  var nodoPorId = {};
+  ((graphState && graphState.nodes) || []).forEach(function(n){ nodoPorId[n.id] = n; });
+
+  var relacionesSoporte = (focusResult.supportRefs || []).map(function(id){
+    var r = relPorId[id];
+    if(!r) return null;
+    return { id: r.id,
+      from: nodoPorId[r.sourceNodeId] ? nodoPorId[r.sourceNodeId].label : null,
+      to: nodoPorId[r.targetNodeId] ? nodoPorId[r.targetNodeId].label : null,
+      manifestation: r.manifestation, possibleIncidence: r.possibleIncidence };
+  }).filter(Boolean);
+
+  var mem = (snapshot && snapshot.currentMemory) || {};
+
+  return {
+    openingId: opening.openingId,
+    frontId: front.id,
+    currentMemory: {
+      function: mem.function || null,
+      tensions: mem.tensions || null,
+      diagnosis: mem.diagnosis || null,
+      next: mem.next || null,
+      nextPending: mem.nextPending || null
+    },
+    focus: {
+      statement: focusResult.statement,
+      explains: focusResult.explains || [],
+      stability: focusResult.stability,
+      interpretationShift: focusResult.interpretationShift
+    },
+    sufficiency: {
+      sufficient: sufficiencyResult.sufficient,
+      recommendation: sufficiencyResult.recommendation,
+      epistemicRisk: sufficiencyResult.epistemicRisk,
+      expectedMarginalGain: sufficiencyResult.expectedMarginalGain
+    },
+    relacionesSoporte: relacionesSoporte,
+    uncertainties: focusResult.uncertainties || []
+  };
+}
+
+function C1F1_PROMPT_RETORNO(ventana){
+  var ventanaTxt = JSON.stringify(ventana, null, 2);
+  return 'Sos el motor de ejecución de la propuesta de Retorno (C1-F1) de Contextos Universal -- ' +
+    'continuación de C1-E1 (Foco) y C1-E2 (Suficiencia), motor propio, sin dimensiones ni sistemas de ' +
+    'Contextos Legacy. Tu única tarea es COMPARAR la comprensión ya alcanzada (el Foco) contra la ' +
+    'Memoria vigente del Organismo, y decidir si existe un cambio suficientemente significativo como ' +
+    'para proponer un Retorno. NO escribís Memoria, NO creás Recuerdo, NO aplicás nada -- sólo ' +
+    'proponés.\n\n' +
+    'YA COMPRENDIDO (Memoria vigente, Foco, Suficiencia, soporte e incertidumbres -- no agregues nada ' +
+    'que no esté acá):\n' + ventanaTxt + '\n\n' +
+    'REGLA CENTRAL: Si NO incorporar esta comprensión dejaría al Organismo esencialmente entendido de ' +
+    'la misma manera que hoy (currentMemory), NO hay Retorno -- "hasMeaningfulReturn":false y ' +
+    '"changes":[]. No fuerces un cambio sólo para justificar el corte.\n\n' +
+    'SI hay delta real, describilo como 1 a 3 cambios COMO MÁXIMO (los más significativos, no todos los ' +
+    'matices posibles) usando estos tipos, sin confundirlos:\n' +
+    '- "add": algo que la Memoria vigente HOY no tenía en absoluto ("before" siempre null).\n' +
+    '- "reinterpret": algo que la Memoria vigente YA tenía, pero ahora se entiende distinto -- no es un ' +
+    'hecho nuevo, es una relectura de uno existente ("before" = el contenido real que estás ' +
+    'reinterpretando).\n' +
+    '- "weaken": algo que la Memoria vigente YA tenía se matiza o pierde fuerza, SIN invertir su ' +
+    'sentido.\n' +
+    '- "contradict": algo que la Memoria vigente YA tenía se revela efectivamente opuesto o erróneo -- ' +
+    'no es un matiz, es una inversión real.\n' +
+    '- "keep_open": algo cambia respecto de la Memoria vigente pero todavía no puede cristalizarse en ' +
+    'un enunciado firme -- sirve para marcar que hay un delta real sin forzar una conclusión ' +
+    'prematura.\n\n' +
+    'Para "reinterpret"/"weaken"/"contradict": "before" TIENE que ser contenido real de currentMemory ' +
+    '(function/tensions/diagnosis/next/nextPending) -- nunca lo inventes. Para "add": "before" es ' +
+    'siempre null. Para "keep_open": "before" puede ser null o el contenido real que empieza a ' +
+    'moverse.\n\n' +
+    '"after" tiene que estar escrito en términos de Memoria (qué diría la ficha si se actualizara), ' +
+    'NUNCA como una copia del "statement" del Foco -- traducilo y comprimilo, no lo pegues completo.\n\n' +
+    '"supportRefs" sólo puede contener ids reales de "relacionesSoporte" ya listadas arriba -- nunca ' +
+    'inventes un id nuevo.\n\n' +
+    '"epistemicState" describe qué tan sostenido está ESTE cambio puntual: "relacion_declarada" (surge ' +
+    'directo de una relación ya trazada), "memoria_gobernada" (ya pasó por el lazo propuesta/' +
+    'confirmación), "recuerdo_historico" (se apoya en un Recuerdo previo), "inferencia_contextos" ' +
+    '(inferencia propia de este razonamiento), "evidencia_existente" (evidencia ya reunida), ' +
+    '"hipotesis" (todavía especulativo).\n\n' +
+    'No expliques tu razonamiento paso a paso.\n\n' +
+    'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
+    'después. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
+    '[[RETURN_PROPOSAL:{\n' +
+    '  "hasMeaningfulReturn": true|false,\n' +
+    '  "changes": [\n' +
+    '    { "type": "add"|"reinterpret"|"weaken"|"contradict"|"keep_open",\n' +
+    '      "before": "..."|null,\n' +
+    '      "after": "...",\n' +
+    '      "supportRefs": ["..."],\n' +
+    '      "epistemicState": "...",\n' +
+    '      "justificationSummary": "..." }\n' +
+    '  ],\n' +
+    '  "overallSummary": "..."\n' +
+    '}]]';
+}
+
+function C1F1_llamarIA(systemPrompt, mensajes){
+  var t0 = Date.now();
+  return fetch(apiEndpoint(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ model: C1F1_MODEL, max_tokens: C1F1_MAX_TOKENS, system: systemPrompt, messages: mensajes })
+  }).then(function(res){
+    return res.json().then(function(data){
+      if(!res.ok || (data && data.error)){
+        throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+      }
+      var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
+    });
+  });
+}
+
+function C1F1_limpiarRefs(arr, idsOfrecidos){
+  return Array.isArray(arr) ? arr.filter(function(x){ return typeof x === 'string' && idsOfrecidos.indexOf(x) > -1; }) : [];
+}
+
+/* Parser defensivo. Salvaguarda estructural (mismo principio que invariance:"unknown" forzado en
+   C1-C4B cuando function es null): si el modelo declara hasMeaningfulReturn:false, "changes" se
+   fuerza a [] SIEMPRE, sin importar qué haya mandado el modelo -- no puede haber "no hay Retorno"
+   con cambios listados, eso es una contradicción estructural que el código nunca deja pasar.
+   Si hasMeaningfulReturn:true: cada cambio se valida (type/epistemicState contra su enum,
+   "after" no vacío y sin copiar el Foco entero, "before" forzado a null en "add" y exigido real
+   en reinterpret/weaken/contradict, supportRefs filtrados contra ids reales de soporte del Foco,
+   justificationSummary no vacío), se recorta a un máximo de 3, y si tras la validación no queda
+   ningún cambio real, se rechaza toda la respuesta (se declaró un Retorno significativo pero
+   ninguno de los cambios ofrecidos era válido -- no se inventa uno para completar). */
+function C1F1_parseReturnProposal(texto, relationIdsOfrecidas, focusStatement){
+  var re = /\[\[RETURN_PROPOSAL:([\s\S]*?)\]\]/;
+  var m = String(texto || '').match(re);
+  if(!m) return null;
+  var raw;
+  try{ raw = JSON.parse(m[1]); }catch(e){ return null; }
+  if(!raw || typeof raw !== 'object') return null;
+  if(typeof raw.hasMeaningfulReturn !== 'boolean') return null;
+  var overallSummary = (typeof raw.overallSummary === 'string' && raw.overallSummary.trim())
+    ? raw.overallSummary.trim() : null;
+  if(!overallSummary) return null;
+
+  if(raw.hasMeaningfulReturn === false){
+    return { hasMeaningfulReturn: false, changes: [], overallSummary: overallSummary };
+  }
+
+  if(!Array.isArray(raw.changes)) return null;
+  var idsValidos = (relationIdsOfrecidas || []).slice();
+
+  var changes = raw.changes.map(function(c){
+    if(!c || typeof c !== 'object') return null;
+    if(C1F1_TIPOS_CAMBIO.indexOf(c.type) === -1) return null;
+    if(typeof c.after !== 'string' || !c.after.trim()) return null;
+    var after = c.after.trim();
+    // Regla dura: no copiar el Foco entero a Memoria -- "after" no puede contener el statement
+    // completo del Foco (sería pegar, no traducir/comprimir).
+    if(focusStatement && after.indexOf(focusStatement) > -1) return null;
+
+    var beforeRaw = (typeof c.before === 'string' && c.before.trim()) ? c.before.trim() : null;
+    var before;
+    if(c.type === 'add'){
+      before = null;   // "add" nunca tiene before -- lo decide el código, no lo que mande el modelo
+    } else if(c.type === 'reinterpret' || c.type === 'weaken' || c.type === 'contradict'){
+      if(!beforeRaw) return null;   // estos tres siempre modifican algo que ya existía en Memoria
+      before = beforeRaw;
+    } else {   // keep_open
+      before = beforeRaw;
+    }
+
+    if(C1F1_EPISTEMIC_STATES.indexOf(c.epistemicState) === -1) return null;
+    var justificationSummary = (typeof c.justificationSummary === 'string' && c.justificationSummary.trim())
+      ? c.justificationSummary.trim() : null;
+    if(!justificationSummary) return null;
+
+    return {
+      type: c.type, before: before, after: after,
+      supportRefs: C1F1_limpiarRefs(c.supportRefs, idsValidos),
+      epistemicState: c.epistemicState,
+      justificationSummary: justificationSummary
+    };
+  }).filter(Boolean).slice(0, C1F1_MAX_CAMBIOS);
+
+  if(!changes.length) return null;
+
+  return { hasMeaningfulReturn: true, changes: changes, overallSummary: overallSummary };
+}
+
+/* ---- executeReturnProposal: única forma de proponer Retorno en este corte. Nunca llama a
+   executeFocus()/executeSufficiencyAssessment()/executeInterpret()/executeFunctionalInterpretation()/
+   selectNextCognitiveAction() (no reconstruye la cadena previa), y nunca llama a
+   guardarOrganismo()/persistirOrganismos() ni toca o.ficha/o.recuerdos/fichaVersion -- sólo
+   construye una propuesta y la devuelve. ---- */
+async function executeReturnProposal(snapshot, opening, graphState, front, focusResult, sufficiencyResult){
+  if(!front || !front.id) return { ok:false, motivo:'front ausente' };
+  if(!opening || !opening.openingId) return { ok:false, motivo:'opening ausente' };
+  if(!snapshot || !snapshot.currentMemory) return { ok:false, motivo:'snapshot ausente' };
+  if(!focusResult || !focusResult.statement){
+    return { ok:false, motivo:'focusResult ausente -- C1-F1 compara contra un Foco ya construido, no lo reemplaza' };
+  }
+  if(!sufficiencyResult || typeof sufficiencyResult.sufficient !== 'boolean'){
+    return { ok:false, motivo:'sufficiencyResult ausente' };
+  }
+
+  var ventana = C1F1_ventanaRetorno(snapshot, opening, graphState, front, focusResult, sufficiencyResult);
+  var prompt = C1F1_PROMPT_RETORNO(ventana);
+  var res;
+  try{
+    res = await C1F1_llamarIA(prompt, [{ role:'user', content:'(comparÁ contra la Memoria vigente y proponé Retorno sólo si hay delta real, sin escribir nada)' }]);
+  }catch(e){
+    return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
+  }
+
+  var relationIdsOfrecidas = (focusResult.supportRefs || []).slice();
+  var parsed = C1F1_parseReturnProposal(res.texto, relationIdsOfrecidas, focusResult.statement);
+  if(!parsed){
+    return { ok:false, motivo:'no se pudo interpretar la propuesta de Retorno generada', usage: res.usage,
+             duracionMs: res.duracionMs, textoCrudo: res.texto };
+  }
+
+  var result = {
+    openingId: opening.openingId, frontId: front.id,
+    hasMeaningfulReturn: parsed.hasMeaningfulReturn,
+    changes: parsed.changes, overallSummary: parsed.overallSummary
+  };
+  result = JSON.parse(JSON.stringify(result));
+  return {
+    ok: true, result: result,
+    telemetry: { llamadasIA: 1, tokensInput: (res.usage && res.usage.input_tokens) || null,
+      tokensOutput: (res.usage && res.usage.output_tokens) || null, duracionMs: res.duracionMs }
+  };
+}
+
+/* Aplica el resultado únicamente al Frente (nunca a Organismo/Memoria/Recuerdos). No es una acción
+   del alfabeto de C1-C2, así que no pasa por C1C3A_aplicarResultadoAlFrente. */
+function C1F1_aplicarResultadoAlFrente(front, result){
+  var clon = JSON.parse(JSON.stringify(front));
+  if(!clon.operationalState){ clon.operationalState = C1C3A_operationalStateInicial(); }
+  clon.operationalState.history.push({ action: 'RETURN_PROPOSAL', status: result.hasMeaningfulReturn ? 'meaningful' : 'no_delta', at: new Date().toISOString() });
+  clon.operationalState.returnProposal = result;
+  return clon;
+}
+
+/* Laboratorio interno C1-F1: toma Snapshot + Opening + GraphState + Frente + Focus (C1-E1) +
+   Suficiencia (C1-E2) YA producidos y propone Retorno sobre ellos -- no reconstruye la cadena
+   previa. Solo consola, sin UI nueva. */
+window.debugExecuteReturnProposal = function(snapshot, opening, graphState, front, focusResult, sufficiencyResult){
+  return executeReturnProposal(snapshot, opening, graphState, front, focusResult, sufficiencyResult).then(function(r){
+    console.log('[C1-F1] propuesta de retorno:', r.ok ? r.result : r);
+    if(r.ok) console.log('[C1-F1] telemetry:', r.telemetry);
+    return r;
+  });
+};
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
