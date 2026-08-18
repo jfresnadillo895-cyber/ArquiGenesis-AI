@@ -5508,8 +5508,10 @@ var C1C3A_MODEL = 'claude-sonnet-4-6';
 var C1C3A_ASK_MAX_TOKENS = 1300; // C1-C4A (18/08): subido de 900 -- una pregunta con text+resolves+whyNeeded+justificationSummary largos se cortó a mitad de camino (respuesta inválida, JSON incompleto). Sólo cambia la capacidad de salida, no la lógica de formulación.
 var C1C3A_TRACE_MAX_TOKENS = 1800;
 // C1-C4A (18/08): se agrega INTERPRET a las acciones implementadas -- ver executeInterpret() más
-// abajo. Sigue sin incluir READ/RESEARCH/DEEPEN/EXPAND/CONTRAST/CLOSE_FRONT.
-var C1C3A_ACCIONES_IMPLEMENTADAS = ['ASK', 'TRACE', 'INTERPRET'];
+// abajo. C1-X2 (18/08): se agregan READ y CLOSE_FRONT (ver executeRead()/executeCloseFront() más
+// abajo, ambas deterministas, sin IA). Sigue sin incluir RESEARCH/DEEPEN/EXPAND/CONTRAST -- ver
+// auditoría C1-X1 en PENDIENTES.md para el orden propuesto de lo que falta.
+var C1C3A_ACCIONES_IMPLEMENTADAS = ['ASK', 'TRACE', 'INTERPRET', 'READ', 'CLOSE_FRONT'];
 var C1C3A_TRACE_ESTADOS = ['advanced', 'insufficient', 'contradicted'];
 var C1C3A_TRACE_ASSESSMENTS = ['sustentado', 'inferido', 'hueco', 'contradiccion'];
 
@@ -5921,15 +5923,150 @@ function C1C3A_aplicarResultadoAlFrente(front, result){
     clon.operationalState.readiness = 'ready_for_reassessment';
     clon.operationalState.interpretation = result.configuration;
     clon.operationalState.uncertainties = (clon.operationalState.uncertainties || []).concat((result.configuration && result.configuration.uncertainties) || []);
+  }else if(result.action === 'READ'){
+    // C1-X2 (18/08): mismo patrón de separación -- 'read' describe el ciclo de la acción, el
+    // veredicto (advanced/insufficient) va en lastActionOutcome. Los retrievedRefs se ACUMULAN
+    // (nunca se pisan) porque distintas lecturas pueden traer procedencias distintas a lo largo
+    // del ciclo de vida del Frente.
+    clon.operationalState.status = 'read';
+    clon.operationalState.lastActionOutcome = result.status;
+    clon.operationalState.readiness = 'ready_for_reassessment';
+    clon.operationalState.retrievedRefs = (clon.operationalState.retrievedRefs || []).concat(result.retrievedRefs || []);
+    clon.operationalState.uncertainties = (clon.operationalState.uncertainties || []).concat(result.uncertainties || []);
+  }else if(result.action === 'CLOSE_FRONT'){
+    // C1-X2 (18/08): 'closed' ya estaba reservado en el comentario de operationalStateInicial --
+    // es la única acción que fija "readiness":"closed" (todas las demás dejan el Frente listo
+    // para reevaluar). Nunca toca front.status (el de C1-C1: active/latent/discarded) -- esa
+    // separación de capas es la misma que ya rige para todo lo demás en este applier.
+    clon.operationalState.status = 'closed';
+    clon.operationalState.lastActionOutcome = 'closed';
+    clon.operationalState.readiness = 'closed';
+    clon.operationalState.closeReason = result.reason;
+    clon.operationalState.unresolved = result.unresolved;
   }
   return clon;
 }
 
-/* ---- executeCognitiveAction: punto de entrada único de C1-C3A. SELECT (ya resuelto por C1-C2,
-   recibido como nextAction) -> EXECUTE -> STOP. Regla dura: una sola acción por ciclo, nunca
+/* ============================================================================
+   Contextos Universal · C1-X2 — READ + CLOSE_FRONT (ejecutores determinísticos, sin IA)
+   Auditados en C1-X1 (PENDIENTES.md) como las dos únicas acciones del alfabeto de C1-C2 que
+   pueden resolverse 100% en código: READ es recuperación pura de algo que YA existe (Memoria
+   vigente/Recuerdos/grafo) -- nunca produce interpretación nueva. CLOSE_FRONT es una transición de
+   estado pura a partir de expectedGain/estimatedCost que C1-C2 YA calculó al elegir la acción --
+   cerrar no es resolver ni declarar falso, y nunca dispara Retorno automático. Ninguna de las dos
+   llama a fetch()/apiEndpoint() ni a ningún ejecutor IA -- cero llamadas, cero tokens.
+   ============================================================================ */
+
+/* true si currentMemory trae al menos un campo real -- nunca se inventa contenido si está vacío. */
+function C1X2_memoriaNoVacia(mem){
+  if(!mem || typeof mem !== 'object') return false;
+  var claves = ['function', 'tensions', 'diagnosis', 'next', 'nextPending'], i;
+  for(i=0;i<claves.length;i++){
+    if(typeof mem[claves[i]] === 'string' && mem[claves[i]].trim()) return true;
+  }
+  return false;
+}
+
+/* ---- READ: recupera SOLO lo que ya existe, con procedencia explícita por cada item.
+   - Memoria vigente: siempre en alcance (no está indexada por id -- hay una sola por Organismo),
+     se incluye tal cual si tiene contenido real. epistemicState:"memoria_gobernada".
+   - Recuerdos: SOLO los que C1-C2 señaló con el prefijo "recuerdo:" en targetRefs (mismo formato
+     que ya usa el propio prompt de C1-C2, ver ejemplo "recuerdo:abc"), resueltos contra
+     snapshot.memories.refs real -- nunca se inventa un id. epistemicState SIEMPRE
+     "recuerdo_historico", nunca "evidencia_existente": un Recuerdo es antecedente histórico, no
+     evidencia de vigencia actual (regla dura del encargo).
+   - Grafo: relaciones/rutas ya trazadas que aparezcan en targetRefs, resueltas contra graphState
+     real. epistemicState hereda el de la relación real si existe, o "relacion_declarada".
+   Si no se recupera NADA real -> status:"insufficient" (nunca se fuerza un resultado). ---- */
+function executeRead(snapshot, graphState, front, nextAction){
+  if(!front || !front.id) return { ok:false, motivo:'front ausente' };
+  if(!nextAction || nextAction.action !== 'READ') return { ok:false, motivo:'nextAction no es READ' };
+
+  var retrievedRefs = [];
+
+  var mem = (snapshot && snapshot.currentMemory) || null;
+  if(C1X2_memoriaNoVacia(mem)){
+    retrievedRefs.push({
+      id: 'memoria_vigente', source: 'memoria', epistemicState: 'memoria_gobernada',
+      snapshot: { function: mem.function || null, tensions: mem.tensions || null,
+        diagnosis: mem.diagnosis || null, next: mem.next || null, nextPending: mem.nextPending || null }
+    });
+  }
+
+  var recuerdosOfrecidos = {};
+  ((snapshot && snapshot.memories && snapshot.memories.refs) || []).forEach(function(r){ recuerdosOfrecidos[r.id] = r; });
+  var relPorId = {}, routePorId = {};
+  ((graphState && graphState.relations) || []).forEach(function(r){ relPorId[r.id] = r; });
+  ((graphState && graphState.routes) || []).forEach(function(r){ routePorId[r.id] = r; });
+
+  (nextAction.targetRefs || []).forEach(function(ref){
+    if(typeof ref !== 'string' || !ref) return;
+    if(ref.indexOf('recuerdo:') === 0){
+      var rid = ref.slice('recuerdo:'.length);
+      var rec = recuerdosOfrecidos[rid];
+      if(!rec) return;   // no ofrecido realmente -- no se inventa
+      retrievedRefs.push({
+        id: 'recuerdo:' + rec.id, source: 'recuerdo', epistemicState: 'recuerdo_historico',
+        snapshot: { title: rec.title, createdAt: rec.createdAt, organismVersion: rec.organismVersion, field: (rec.field || []).slice() }
+      });
+    }else if(relPorId[ref]){
+      var rel = relPorId[ref];
+      retrievedRefs.push({
+        id: rel.id, source: 'grafo', epistemicState: rel.epistemicState || 'relacion_declarada',
+        snapshot: { manifestation: rel.manifestation || null, possibleIncidence: rel.possibleIncidence || null }
+      });
+    }else if(routePorId[ref]){
+      var rt = routePorId[ref];
+      retrievedRefs.push({
+        id: rt.id, source: 'grafo', epistemicState: 'relacion_declarada',
+        snapshot: { status: rt.status || null, nodeIds: (rt.nodeIds || []).slice() }
+      });
+    }
+  });
+
+  var status = retrievedRefs.length ? 'advanced' : 'insufficient';
+  var uncertainties = status === 'insufficient'
+    ? ['No se encontró información pertinente ya existente en Memoria, Recuerdos ni grafo para esta lectura.']
+    : [];
+
+  var result = { action:'READ', status: status, retrievedRefs: retrievedRefs, uncertainties: uncertainties };
+  result = JSON.parse(JSON.stringify(result));
+  return { ok:true, result: result,
+    telemetry: { llamadasIA: 0, tokensInput: 0, tokensOutput: 0, duracionMs: 0, refsRecuperadas: retrievedRefs.length } };
+}
+
+/* ---- CLOSE_FRONT: transición de estado pura. "reason" viene de la justificación que C1-C2 ya dio
+   al elegir CLOSE_FRONT (expectedGain/estimatedCost), nunca se inventa una nueva. "unresolved"
+   conserva -- nunca descarta -- las incertidumbres/evidenceNeeds que el Frente ya acumuló, para que
+   quede trazado qué quedó sin resolver al cerrar. No llama a executeFocus/executeReturnProposal ni
+   a ningún otro ejecutor: cerrar NO produce Foco ni Retorno nuevo, y no escribe Memoria. ---- */
+function executeCloseFront(front, nextAction){
+  if(!front || !front.id) return { ok:false, motivo:'front ausente' };
+  if(!nextAction || nextAction.action !== 'CLOSE_FRONT') return { ok:false, motivo:'nextAction no es CLOSE_FRONT' };
+
+  var reason = (typeof nextAction.justificationSummary === 'string' && nextAction.justificationSummary.trim())
+    ? nextAction.justificationSummary.trim()
+    : ('Ganancia esperada "' + (nextAction.expectedGain || '?') + '", costo estimado "' + (nextAction.estimatedCost || '?') + '".');
+
+  var opState = front.operationalState || {};
+  var vistos = {};
+  var unresolved = (opState.uncertainties || []).concat(opState.evidenceNeeds || []).filter(function(u){
+    if(typeof u !== 'string' || !u.trim()) return false;
+    if(vistos[u]) return false;
+    vistos[u] = true;
+    return true;
+  });
+
+  var result = { action:'CLOSE_FRONT', status:'closed', reason: reason, unresolved: unresolved };
+  result = JSON.parse(JSON.stringify(result));
+  return { ok:true, result: result, telemetry: { llamadasIA: 0, tokensInput: 0, tokensOutput: 0, duracionMs: 0 } };
+}
+
+/* ---- executeCognitiveAction: punto de entrada único de C1-C3A/C1-X2. SELECT (ya resuelto por
+   C1-C2, recibido como nextAction) -> EXECUTE -> STOP. Regla dura: una sola acción por ciclo, nunca
    encadena, nunca vuelve a llamar selectContextFronts()/selectNextCognitiveAction(). Cualquier
-   acción fuera de ASK/TRACE devuelve action_not_implemented_yet explícito -- jamás cae de forma
-   silenciosa en otra acción. */
+   acción fuera de ASK/TRACE/INTERPRET/READ/CLOSE_FRONT devuelve action_not_implemented_yet
+   explícito -- jamás cae de forma silenciosa en otra acción. */
 async function executeCognitiveAction(snapshot, opening, graphState, front, nextAction){
   if(!nextAction || !nextAction.action) return { ok:false, motivo:'nextAction ausente' };
   if(C1C3A_ACCIONES_IMPLEMENTADAS.indexOf(nextAction.action) === -1){
@@ -5942,6 +6079,8 @@ async function executeCognitiveAction(snapshot, opening, graphState, front, next
   var ejecucion;
   if(nextAction.action === 'ASK') ejecucion = await executeAsk(front, nextAction);
   else if(nextAction.action === 'TRACE') ejecucion = await executeTrace(graphState, front, nextAction);
+  else if(nextAction.action === 'READ') ejecucion = executeRead(snapshot, graphState, front, nextAction);   // C1-X2: sin IA, sin await real
+  else if(nextAction.action === 'CLOSE_FRONT') ejecucion = executeCloseFront(front, nextAction);   // C1-X2: sin IA, sin await real
   else ejecucion = await executeInterpret(graphState, front, nextAction);   // C1-C4A: INTERPRET
   if(!ejecucion.ok) return ejecucion;
   var frenteActualizado = C1C3A_aplicarResultadoAlFrente(front, ejecucion.result);
