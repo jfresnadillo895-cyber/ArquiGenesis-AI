@@ -5221,6 +5221,20 @@ var C1C2_LIMITE_RECUERDOS = 3;   // mismo techo que M2.2/C1-A2/C1-B1, no reinven
 var C1C2_NIVELES = ['high','medium','low'];
 var C1C2_ACCIONES = ['READ','ASK','RESEARCH','DEEPEN','EXPAND','TRACE','CONTRAST','INTERPRET','CLOSE_FRONT'];
 
+/* C1-X3 (18/08): subconjunto de C1C2_ACCIONES realmente habilitado para que C1-C2 elija en esta
+   resolución (Profesional). No es lo mismo que C1C3A_ACCIONES_IMPLEMENTADAS (que dice qué ejecutor
+   existe): esta lista dice qué puede SELECCIONAR el selector -- hoy coinciden en valor, pero son dos
+   conceptos distintos que pueden divergir (p.ej. una resolución que habilita menos de lo ya
+   implementado). C1C2_ACCIONES (el alfabeto general de 9) no se toca -- las acciones pendientes
+   siguen existiendo conceptualmente, sólo no están habilitadas ahora. Ampliar esta lista cuando se
+   implementen más ejecutores no cambia la ontología del selector. */
+var C1X3_ACCIONES_DISPONIBLES_PROFESIONAL = ['READ','ASK','TRACE','INTERPRET','CLOSE_FRONT'];
+
+/* Sentinela de "límite declarado explícitamente": ninguna acción disponible resuelve razonablemente
+   el Frente y CLOSE_FRONT tampoco corresponde. No es una acción del alfabeto (C1C2_ACCIONES no la
+   incluye) y nunca se ejecuta -- ver C1C2_parseNextAction y executeCognitiveAction. */
+var C1X3_NINGUNA_DISPONIBLE = 'NONE_AVAILABLE';
+
 /* Ventana cognitiva compacta (regla 14: una sola llamada, no todo el Campo): el Frente activo con
    sus relaciones/rutas pertinentes (filtradas por sus propias refs, no el grafo entero), Memoria
    vigente, y Recuerdos pertinentes -- reutilizando M2.2 (seleccionarRecuerdosCandidatos) y M2.1
@@ -5276,7 +5290,9 @@ function C1C2_ventanaAccion(snapshot, opening, graphState, front, o){
 
 /* Prompt propio de C1-C2 (continuación de OPEN/B2/C1, motor propio). Universal entre dominios: no
    hay ninguna rama por tipo de Organismo en esta función. */
-function C1C2_PROMPT_SELECT_ACTION(ventana){
+function C1C2_PROMPT_SELECT_ACTION(ventana, accionesDisponibles){
+  var disponibles = Array.isArray(accionesDisponibles) ? accionesDisponibles : C1X3_ACCIONES_DISPONIBLES_PROFESIONAL;
+  var noDisponibles = C1C2_ACCIONES.filter(function(a){ return disponibles.indexOf(a) === -1; });
   var ventanaTxt = JSON.stringify({
     frontId: ventana.frontId, formulation: ventana.formulation, uncertainty: ventana.uncertainty,
     possibleIncidence: ventana.possibleIncidence, priority: ventana.priority,
@@ -5314,6 +5330,17 @@ function C1C2_PROMPT_SELECT_ACTION(ventana){
     '- CLOSE_FRONT: seguir probablemente no produciría ganancia suficiente, o el Frente no resulta ' +
     'resoluble en esta Apertura. Cerrar no es resolver ni declarar falso -- es que no merece más ' +
     'gasto cognitivo ahora.\n\n' +
+    'ACCIONES DISPONIBLES AHORA (C1-X3 -- elegí SOLO entre éstas, aunque arriba se hayan descrito ' +
+    'las 9 del alfabeto general): ' + disponibles.join(', ') + '.\n' +
+    (noDisponibles.length ? ('Las siguientes existen conceptualmente en el alfabeto general pero NO ' +
+      'están habilitadas en esta resolución -- no las elijas aunque te parezcan más apropiadas, y no ' +
+      'fuerces una de las disponibles a cumplir el papel de una que no lo está: ' +
+      noDisponibles.join(', ') + '.\n') : '') +
+    'Si ninguna de las acciones disponibles resuelve razonablemente el Frente: elegí CLOSE_FRONT ' +
+    'sólo si realmente corresponde según su definición de arriba. Si CLOSE_FRONT tampoco ' +
+    'corresponde -- el Frente no está agotado, sólo faltan herramientas que hoy no están ' +
+    'disponibles -- respondé "action":"' + C1X3_NINGUNA_DISPONIBLE + '" y explicá en ' +
+    'justificationSummary qué haría falta. Nunca inventes ni sustituyas por otra acción.\n\n' +
     'REGLAS:\n' +
     '1. READ != INTERPRET: READ es cuando falta incorporar información que ya existe; INTERPRET es ' +
     'cuando la información ya está incorporada y lo que falta es comprenderla. No uses READ como ' +
@@ -5342,7 +5369,7 @@ function C1C2_PROMPT_SELECT_ACTION(ventana){
     'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
     'después. Sé breve. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
     '[[NEXT_ACTION:{\n' +
-    '  "action": "READ"|"ASK"|"RESEARCH"|"DEEPEN"|"EXPAND"|"TRACE"|"CONTRAST"|"INTERPRET"|"CLOSE_FRONT",\n' +
+    '  "action": "' + disponibles.concat([C1X3_NINGUNA_DISPONIBLE]).join('"|"') + '",\n' +
     '  "targetRefs": ["rel1","route1","recuerdo:abc"],\n' +
     '  "uncertaintyAddressed": "...",\n' +
     '  "expectedGain": "high"|"medium"|"low",\n' +
@@ -5374,7 +5401,7 @@ function C1C2_llamarIA(systemPrompt, mensajes){
    RESEARCH válido). ASK sin requirement.description también se rechaza (regla 3: tiene que
    formular la necesidad). Las refs se filtran contra lo realmente ofrecido (relaciones/rutas del
    Frente + recuerdos realmente recuperados), nunca se confía en un id inventado. */
-function C1C2_parseNextAction(texto, refsOfrecidas){
+function C1C2_parseNextAction(texto, refsOfrecidas, accionesDisponibles){
   var re = /\[\[NEXT_ACTION:([\s\S]*?)\]\]/;
   var m = String(texto || '').match(re);
   if(!m) return null;
@@ -5382,7 +5409,16 @@ function C1C2_parseNextAction(texto, refsOfrecidas){
   try{ raw = JSON.parse(m[1]); }catch(e){ return null; }
   if(!raw || typeof raw !== 'object') return null;
 
-  if(C1C2_ACCIONES.indexOf(raw.action) === -1) return null;
+  // C1-X3: el sentinela de límite explícito sólo es válido cuando hay una lista de disponibles
+  // contra la cual tuvo sentido declararlo -- si nadie pasó esa lista, no existe como opción (misma
+  // conducta que antes de C1-X3 para llamadas con 2 argumentos, sin romper pruebas previas).
+  var conDisponibles = Array.isArray(accionesDisponibles);
+  var esLimiteExplicito = conDisponibles && raw.action === C1X3_NINGUNA_DISPONIBLE;
+
+  if(!esLimiteExplicito && C1C2_ACCIONES.indexOf(raw.action) === -1) return null;
+  // C1-X3: si se pasó la lista de disponibles, nunca se acepta ni se sustituye una acción fuera de
+  // ella -- se rechaza toda la respuesta, igual que el resto de este parser defensivo.
+  if(conDisponibles && !esLimiteExplicito && accionesDisponibles.indexOf(raw.action) === -1) return null;
   if(typeof raw.uncertaintyAddressed !== 'string' || !raw.uncertaintyAddressed.trim()) return null;
   if(C1C2_NIVELES.indexOf(raw.expectedGain) === -1) return null;
   if(C1C2_NIVELES.indexOf(raw.estimatedCost) === -1) return null;
@@ -5422,17 +5458,22 @@ function C1C2_parseNextAction(texto, refsOfrecidas){
   };
 }
 
-/* ---- selectNextCognitiveAction: punto de entrada único de C1-C2 ---- */
-async function selectNextCognitiveAction(snapshot, opening, graphState, front){
+/* ---- selectNextCognitiveAction: punto de entrada único de C1-C2. C1-X3 (18/08): agrega el 5to
+   parámetro opcional availableActions -- si no se pasa, usa el subconjunto habilitado para
+   Profesional (C1X3_ACCIONES_DISPONIBLES_PROFESIONAL). Se propaga al prompt y al parser: el modelo
+   nunca ve como elegibles las acciones no disponibles, y el parser rechaza de plano cualquier
+   intento de elegir una fuera de esa lista (nunca la sustituye por otra). ---- */
+async function selectNextCognitiveAction(snapshot, opening, graphState, front, availableActions){
   if(!snapshot || !opening || !graphState || !front){
     return { ok:false, motivo:'snapshot, opening, graphState o front ausente' };
   }
   if(front.status !== 'active'){
     return { ok:false, motivo:'selectNextCognitiveAction() requiere un ContextFront con status "active"' };
   }
+  var accionesDisponibles = Array.isArray(availableActions) ? availableActions : C1X3_ACCIONES_DISPONIBLES_PROFESIONAL;
   var o = cargarOrganismos().find(function(x){ return x.id === snapshot.organismId; });   // solo lectura
   var ventana = C1C2_ventanaAccion(snapshot, opening, graphState, front, o);
-  var prompt = C1C2_PROMPT_SELECT_ACTION(ventana);
+  var prompt = C1C2_PROMPT_SELECT_ACTION(ventana, accionesDisponibles);
   var res;
   try{
     res = await C1C2_llamarIA(prompt, [{ role:'user', content:'(elegí la próxima acción cognitiva para este Frente, si alguna)' }]);
@@ -5444,9 +5485,10 @@ async function selectNextCognitiveAction(snapshot, opening, graphState, front){
     routeIds: (front.routeRefs || []).slice(), relationIds: (front.relationRefs || []).slice(),
     recuerdoIds: ventana.recuerdoIdsOfrecidos
   };
-  var parsed = C1C2_parseNextAction(res.texto, refsOfrecidas);
+  var parsed = C1C2_parseNextAction(res.texto, refsOfrecidas, accionesDisponibles);
   if(!parsed){
-    return { ok:false, motivo:'no se pudo interpretar la respuesta del modelo', usage: res.usage,
+    return { ok:false, motivo:'no se pudo interpretar la respuesta del modelo (o eligió una acción ' +
+      'fuera de las disponibles -- no se sustituye, se rechaza toda la respuesta)', usage: res.usage,
              duracionMs: res.duracionMs, textoCrudo: res.texto };
   }
 
@@ -6069,6 +6111,16 @@ function executeCloseFront(front, nextAction){
    explícito -- jamás cae de forma silenciosa en otra acción. */
 async function executeCognitiveAction(snapshot, opening, graphState, front, nextAction){
   if(!nextAction || !nextAction.action) return { ok:false, motivo:'nextAction ausente' };
+  if(nextAction.action === C1X3_NINGUNA_DISPONIBLE){
+    // C1-X3: esto NO es un hueco de implementación -- es que C1-C2 declaró explícitamente que
+    // ninguna acción disponible en esta resolución resuelve razonablemente el Frente, y CLOSE_FRONT
+    // tampoco correspondía. No se ejecuta nada, no se escribe nada, la incertidumbre queda intacta.
+    return {
+      ok:false, limiteExplicito: true, action: nextAction.action,
+      motivo: 'C1-C2 declaró un límite explícito: ninguna acción disponible resuelve el Frente ahora' +
+        (nextAction.justificationSummary ? (' -- ' + nextAction.justificationSummary) : '')
+    };
+  }
   if(C1C3A_ACCIONES_IMPLEMENTADAS.indexOf(nextAction.action) === -1){
     return {
       ok:false, action_not_implemented_yet: true, action: nextAction.action,
