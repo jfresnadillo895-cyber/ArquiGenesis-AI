@@ -5644,11 +5644,17 @@ function C1C3A_nuevaAperturaConRespuesta(opening, entry){
 function C1C3A_actualizarFrenteTrasRespuesta(front, entry){
   var clon = JSON.parse(JSON.stringify(front));
   if(!clon.operationalState){
-    clon.operationalState = { status:'open', history:[], pendingQuestion:null, answers:[], evidenceNeeds:[], uncertainties:[] };
+    clon.operationalState = C1C3A_operationalStateInicial();
   }
   clon.operationalState.pendingQuestion = null;
   clon.operationalState.answers.push(entry);
-  clon.operationalState.status = 'completed';
+  // Corrección C1-C3B (17/08, ver PENDIENTES.md "aclaración operationalState.status"): antes decía
+  // 'completed', lo que podía leerse como "Frente resuelto". 'answered' describe únicamente el ciclo
+  // de ESTA acción (la pregunta fue respondida) -- el estado del Frente en sí sigue siendo el de
+  // C1-C1 (active/latent/discarded), nunca tocado acá.
+  clon.operationalState.status = 'answered';
+  clon.operationalState.lastActionOutcome = null;   // ASK no produce un veredicto epistémico propio (a diferencia de TRACE)
+  clon.operationalState.readiness = 'ready_for_reassessment';
   clon.operationalState.history.push({ action:'ASK', event:'user_answer_incorporated', at: entry.respondedAt });
   return clon;
 }
@@ -5864,6 +5870,21 @@ async function executeTrace(graphState, front, nextAction){
   };
 }
 
+/* Estado operativo inicial de un Frente (antes de ejecutar cualquier acción). Tres capas separadas
+   a propósito (corrección C1-C3B, ver PENDIENTES.md):
+   - "status": ciclo de la ACCIÓN en curso (nunca del Frente): 'open'|'need_user'|'answered'|'traced'.
+   - "lastActionOutcome": el veredicto epistémico crudo de la última acción, solo cuando lo hay
+     (TRACE: 'advanced'|'insufficient'|'contradicted'; ASK no produce veredicto propio -> null).
+   - "readiness": disposición del Frente para C1-C3B, distinta del status de C1-C1
+     (active/latent/discarded, que sigue significando "cuál Frente merece atención" y nunca se toca
+     acá): 'active' (nada pendiente de reevaluar todavía) | 'ready_for_reassessment' (una acción
+     acaba de incorporarse y falta reevaluar) | 'unresolved' (reevaluado, sigue abierto) | 'latent'
+     (reservado, no lo produce este corte) | 'closed' (la reevaluación concluyó CLOSE_FRONT). */
+function C1C3A_operationalStateInicial(){
+  return { status:'open', readiness:'active', lastActionOutcome:null, history:[], pendingQuestion:null,
+    answers:[], evidenceNeeds:[], uncertainties:[] };
+}
+
 /* Aplica el resultado de una ejecución (ASK o TRACE) al Frente, en una capa "operationalState"
    nueva y propia de C1-C3A -- nunca toca el status de C1-C1 (active/latent/discarded), que sigue
    significando otra cosa (cuál Frente merece atención). Devuelve SIEMPRE una copia nueva, nunca
@@ -5871,14 +5892,21 @@ async function executeTrace(graphState, front, nextAction){
 function C1C3A_aplicarResultadoAlFrente(front, result){
   var clon = JSON.parse(JSON.stringify(front));
   if(!clon.operationalState){
-    clon.operationalState = { status:'open', history:[], pendingQuestion:null, answers:[], evidenceNeeds:[], uncertainties:[] };
+    clon.operationalState = C1C3A_operationalStateInicial();
   }
   clon.operationalState.history.push({ action: result.action, status: result.status, at: new Date().toISOString() });
   if(result.action === 'ASK'){
     clon.operationalState.status = 'need_user';
+    clon.operationalState.lastActionOutcome = null;
+    clon.operationalState.readiness = 'active';   // sigue "active": falta la respuesta, todavía no hay nada que reevaluar
     clon.operationalState.pendingQuestion = result.userQuestion;
   }else if(result.action === 'TRACE'){
-    clon.operationalState.status = result.status;
+    // 'traced' describe el ciclo de la acción (ya se ejecutó); el veredicto real de TRACE
+    // (advanced/insufficient/contradicted) va aparte, en lastActionOutcome -- nunca se mezclan en
+    // el mismo campo (esa mezcla era exactamente la ambigüedad que C1-C3B pidió corregir).
+    clon.operationalState.status = 'traced';
+    clon.operationalState.lastActionOutcome = result.status;
+    clon.operationalState.readiness = 'ready_for_reassessment';
     clon.operationalState.evidenceNeeds = (clon.operationalState.evidenceNeeds || []).concat(result.evidenceNeeds || []);
     clon.operationalState.uncertainties = (clon.operationalState.uncertainties || []).concat(result.uncertainties || []);
   }
@@ -5936,6 +5964,149 @@ window.debugExecuteCognitiveAction = function(organismoId, question, intention){
                 console.log('[C1-C3A] telemetry:', r6.telemetry);
               }
               return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5, execution:r6 };
+            });
+          });
+        });
+      });
+    });
+  });
+};
+
+/* ============================================================================
+   Contextos Universal · C1-C3B — Reevaluación adaptativa del Frente
+   Entrada: el Frente actualizado tras ejecutar ASK/TRACE (C1-C3A) + el NextCognitiveAction que se
+   ejecutó + el CognitiveActionResult que produjo. Reutiliza selectNextCognitiveAction() (C1-C2) SIN
+   modificarlo -- no crea un segundo selector -- alimentándolo con una ventana del Frente que
+   incorpora lo aprendido (la respuesta real del usuario si hubo ASK, o el resultado real de TRACE).
+   Devuelve la NUEVA acción elegida; NUNCA la ejecuta. Una sola reevaluación por ejecución, nunca
+   encadena. Ver PENDIENTES.md.
+   ============================================================================ */
+
+/* Nota de cambio observable (nunca chain-of-thought): resume en un texto breve y factual lo que
+   efectivamente pasó -- pregunta+respuesta real de ASK, o status+observaciones/huecos reales de
+   TRACE -- para dárselo a C1-C2 tal cual. C1-C3B reenvía hechos; es C1-C2 (ya validado) quien decide
+   qué implican -- C1-C3B nunca interpreta. */
+function C1C3B_construirNotaCambio(previousAction, previousActionResult, respuestaUsuario){
+  if(previousAction === 'ASK'){
+    var q = (previousActionResult.userQuestion && previousActionResult.userQuestion.text) || null;
+    return 'Pregunta formulada: "' + (q || '(sin registro)') + '". Respuesta del usuario: "' +
+      (respuestaUsuario || '(sin respuesta registrada todavía)') + '".';
+  }
+  if(previousAction === 'TRACE'){
+    var partes = [ 'Resultado de TRACE: ' + previousActionResult.status + '.' ];
+    if((previousActionResult.observations || []).length) partes.push('Observaciones: ' + previousActionResult.observations.join(' | '));
+    if((previousActionResult.evidenceNeeds || []).length) partes.push('Necesidades de evidencia detectadas: ' + previousActionResult.evidenceNeeds.join(' | '));
+    if((previousActionResult.uncertainties || []).length) partes.push('Incertidumbres nuevas: ' + previousActionResult.uncertainties.join(' | '));
+    return partes.join(' ');
+  }
+  return null;
+}
+
+/* stateChanges observable y breve (regla 10 del encargo): un renglón por hecho concreto, nunca
+   razonamiento interno. */
+function C1C3B_construirStateChanges(previousAction, previousActionResult, respuestaUsuario){
+  var cambios = [];
+  if(previousAction === 'ASK'){
+    cambios.push({ type:'user_answer',
+      description: respuestaUsuario ? ('El usuario respondió: "' + respuestaUsuario + '"') : 'Pregunta formulada, sin respuesta registrada' });
+  }else if(previousAction === 'TRACE'){
+    cambios.push({ type:'trace_status', description: 'TRACE devolvió status "' + previousActionResult.status + '"' });
+    (previousActionResult.evidenceNeeds || []).forEach(function(e){ cambios.push({ type:'evidence_need', description: e }); });
+    (previousActionResult.uncertainties || []).forEach(function(u){ cambios.push({ type:'uncertainty_nueva', description: u }); });
+    (previousActionResult.relationUpdates || []).filter(function(s){ return s.assessment === 'hueco' || s.assessment === 'contradiccion'; })
+      .forEach(function(s){ cambios.push({ type:'segmento_' + s.assessment, description: (s.relationId || '(sin relación)') + ': ' + (s.note || '') }); });
+  }
+  return cambios;
+}
+
+/* Frente reevaluado: SOLO enriquece "uncertainty" con la nota de cambio -- relationRefs/routeRefs
+   quedan igual (nunca se fabrica una relación/ruta nueva; TRACE no crea Campo, ver C1-C3A). Devuelve
+   siempre una copia nueva. */
+function C1C3B_frenteReevaluado(front, previousAction, previousActionResult, respuestaUsuario){
+  var clon = JSON.parse(JSON.stringify(front));
+  var nota = C1C3B_construirNotaCambio(previousAction, previousActionResult, respuestaUsuario);
+  if(nota){
+    clon.uncertainty = (clon.uncertainty || '') + '\n\nActualización tras ' + previousAction + ': ' + nota;
+  }
+  return clon;
+}
+
+/* Regla 6/C3B-08/09 (pura y determinista, extraída para poder probarla sin gastar una llamada real):
+   si la nueva acción es la MISMA que la anterior, tiene que poder mostrarse qué cambió en el target
+   o en la incertidumbre que atiende -- si ninguno de los dos cambió, es una repetición idéntica sin
+   nueva ganancia (sameActionNewTarget:false). Si la acción cambió, la pregunta no aplica (null). */
+function C1C3B_evaluarRepeticion(previousNextAction, nuevaAccion){
+  var actionChanged = nuevaAccion.action !== previousNextAction.action;
+  var targetsIguales = !actionChanged &&
+    JSON.stringify((nuevaAccion.targetRefs || []).slice().sort()) === JSON.stringify((previousNextAction.targetRefs || []).slice().sort());
+  var incertidumbreIgual = !actionChanged &&
+    String(nuevaAccion.uncertaintyAddressed || '').trim() === String(previousNextAction.uncertaintyAddressed || '').trim();
+  var sameActionNewTarget = actionChanged ? null : !(targetsIguales && incertidumbreIgual);
+  return { actionChanged: actionChanged, sameActionNewTarget: sameActionNewTarget };
+}
+
+/* ---- reassessCognitiveAction: punto de entrada único de C1-C3B. Reutiliza
+   selectNextCognitiveAction() (C1-C2) EXACTAMENTE UNA VEZ -- nunca crea un segundo selector, nunca
+   ejecuta la nueva acción, nunca se vuelve a llamar a sí mismo ni a executeCognitiveAction(). */
+async function reassessCognitiveAction(snapshot, opening, graphState, front, previousNextAction, previousActionResult, respuestaUsuario){
+  if(!snapshot || !opening || !graphState || !front || !previousNextAction || !previousActionResult){
+    return { ok:false, motivo:'faltan datos para reevaluar (snapshot, opening, graphState, front, previousNextAction o previousActionResult)' };
+  }
+  var previousAction = previousNextAction.action;
+  if(C1C3A_ACCIONES_IMPLEMENTADAS.indexOf(previousAction) === -1){
+    return { ok:false, motivo:'reassessCognitiveAction() solo reevalúa después de ASK o TRACE (las únicas acciones que C1-C3A ejecuta)' };
+  }
+
+  var frenteReevaluado = C1C3B_frenteReevaluado(front, previousAction, previousActionResult, respuestaUsuario);
+  var stateChanges = C1C3B_construirStateChanges(previousAction, previousActionResult, respuestaUsuario);
+
+  var nueva = await selectNextCognitiveAction(snapshot, opening, graphState, frenteReevaluado);
+  if(!nueva.ok) return nueva;
+
+  var repeticion = C1C3B_evaluarRepeticion(previousNextAction, nueva.result);
+
+  var result = {
+    frontId: front.id, previousAction: previousAction, previousActionResult: previousActionResult,
+    updatedUncertainty: (frenteReevaluado.uncertainty !== front.uncertainty) ? frenteReevaluado.uncertainty : null,
+    stateChanges: stateChanges, nextAction: nueva.result, actionChanged: repeticion.actionChanged,
+    sameActionNewTarget: repeticion.sameActionNewTarget, justificationSummary: nueva.result.justificationSummary
+  };
+  result = JSON.parse(JSON.stringify(result));
+  return { ok:true, result: result, telemetry: nueva.telemetry };
+}
+
+/* Laboratorio interno C1-C3B (extiende el de C1-C3A): encadena la cadena completa hasta ejecutar
+   ASK/TRACE y, si la acción fue ASK y se pasó una respuesta sintética, la incorpora vía
+   applyUserAnswer() antes de reevaluar. Solo consola, sin UI nueva. */
+window.debugReassessCognitiveAction = function(organismoId, question, intention, respuestaSiAsk){
+  var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
+  if(!o){ console.warn('[C1-C3B] organismo no encontrado:', organismoId); return null; }
+  var snap = OrganismSnapshotAdapter(o);
+  var opening = crearContextOpening(o.id, { basedOnVersion: snap.organismVersion, question: question, intention: intention });
+  return reconstructOrigin(snap, opening).then(function(r1){
+    if(!r1.ok || r1.assessment.status !== 'continue'){ console.warn('[C1-C3B] no se llega a openField():', r1.ok?r1.assessment.status:r1.motivo); return { origin:r1 }; }
+    return openField(snap, r1.opening, r1.assessment).then(function(r2){
+      if(!r2.ok){ console.warn('[C1-C3B] no se llega a propagateField():', r2.motivo); return { origin:r1, field:r2 }; }
+      return propagateField(snap, r1.opening, r1.assessment, r2.result).then(function(r3){
+        if(!r3.ok){ console.warn('[C1-C3B] no se llega a selectContextFronts():', r3.motivo); return { origin:r1, field:r2, graph:r3 }; }
+        return selectContextFronts(r3.result, r1.opening).then(function(r4){
+          if(!r4.ok || !r4.result.activeFrontId){ console.warn('[C1-C3B] no hay Frente activo:', r4.ok?r4.result.status:r4.motivo); return { origin:r1, field:r2, graph:r3, fronts:r4 }; }
+          var activo = r4.result.fronts.filter(function(f){ return f.id === r4.result.activeFrontId; })[0];
+          return selectNextCognitiveAction(snap, r1.opening, r3.result, activo).then(function(r5){
+            if(!r5.ok){ console.warn('[C1-C3B] no se pudo elegir próxima acción:', r5.motivo); return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5 }; }
+            return executeCognitiveAction(snap, r1.opening, r3.result, activo, r5.result).then(function(r6){
+              if(!r6.ok){ console.warn('[C1-C3B] no se pudo ejecutar la acción:', r6.motivo || r6); return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5, execution:r6 }; }
+              var aperturaParaReeval = r1.opening, frenteParaReeval = r6.front, respuesta = null;
+              if(r5.result.action === 'ASK' && respuestaSiAsk){
+                var aplicado = applyUserAnswer(r1.opening, r6.front, r6.result.userQuestion, respuestaSiAsk);
+                if(aplicado.ok){ aperturaParaReeval = aplicado.opening; frenteParaReeval = aplicado.front; respuesta = respuestaSiAsk; }
+              }
+              console.log('[C1-C3B] Frente ANTES de reevaluar:', frenteParaReeval);
+              return reassessCognitiveAction(snap, aperturaParaReeval, r3.result, frenteParaReeval, r5.result, r6.result, respuesta).then(function(r7){
+                console.log('[C1-C3B] reevaluación:', r7.ok ? r7.result : r7);
+                if(r7.ok) console.log('[C1-C3B] telemetry:', r7.telemetry);
+                return { origin:r1, field:r2, graph:r3, fronts:r4, action:r5, execution:r6, reassessment:r7 };
+              });
             });
           });
         });
@@ -11420,7 +11591,22 @@ function correrPruebasAuto(){
         var question = { text:'¿...?', resolves:'r', whyNeeded:'w' };
         var r = applyUserAnswer(opening, front, question, 'respuesta real del usuario');
         return r.ok && r.entry.procedencia === 'user' && r.opening.cognitiveAnswers[0].procedencia === 'user' &&
-          r.front.operationalState.status === 'completed' && r.front.operationalState.pendingQuestion === null;
+          r.front.operationalState.status === 'answered' && r.front.operationalState.pendingQuestion === null;
+      })());
+
+      chk('C3A-07b · Corrección C1-C3B: operationalState.status (ciclo de la acción) queda separado de lastActionOutcome (veredicto epistémico) y de readiness (disposición del Frente)', (function(){
+        var opening = crearContextOpening('o_c3a_sep', {});
+        var frontAsk = { id:'f1', status:'active', formulation:'x', uncertainty:'y' };
+        var rAsk = applyUserAnswer(opening, frontAsk, { text:'¿...?', resolves:'r', whyNeeded:'w' }, 'respuesta');
+        var okAsk = rAsk.front.operationalState.status === 'answered' && rAsk.front.operationalState.lastActionOutcome === null &&
+          rAsk.front.operationalState.readiness === 'ready_for_reassessment';
+        var frontTrace = { id:'f2', status:'active' };
+        var resultTrace = { action:'TRACE', status:'insufficient', evidenceNeeds:['x'], uncertainties:['y'] };
+        var frenteTrasTrace = C1C3A_aplicarResultadoAlFrente(frontTrace, resultTrace);
+        var okTrace = frenteTrasTrace.operationalState.status === 'traced' &&
+          frenteTrasTrace.operationalState.lastActionOutcome === 'insufficient' &&
+          frenteTrasTrace.operationalState.readiness === 'ready_for_reassessment';
+        return okAsk && okTrace;
       })());
 
       chk('C3A-08 · TRACE biológico real (caso de C1-C2): la reconstrucción preserva status y segmentos sobre relaciones realmente ofrecidas', (function(){
@@ -11535,6 +11721,140 @@ function correrPruebasAuto(){
       // C3A-17 · Aislamiento: no es un chk() -- se verificó por grep contra urbanismo.html/
       // negocios.html/contextos.html (0 coincidencias), ver PENDIENTES.md.
       // C3A-18 · Banco general sin regresiones: no es un chk() individual -- ES correr
+      // correrPruebasAuto() completo en vivo, ver PENDIENTES.md para el resultado real.
+    })();
+
+    /* ---- Contextos Universal · Corte C1-C3B -- reassessCognitiveAction() (C3B-01..17,
+       C3B-18 en vivo) ----
+       Mismo límite que B1-15/B2-05/C1-08/C2-20/C3A: la reevaluación real depende de una llamada IA
+       (reutiliza selectNextCognitiveAction de C1-C2), así que lo que depende de esa llamada se
+       prueba por análisis estructural del código fuente y probando por separado las piezas
+       deterministas y síncronas (C1C3B_construirNotaCambio/StateChanges/frenteReevaluado/
+       evaluarRepeticion), sin gastar ninguna llamada real. La emergencia real de cada transición
+       (ASK->INTERPRET, TRACE->RESEARCH, etc.) se prueba en vivo -- ver demostraciones A-D en
+       PENDIENTES.md. */
+    (function(){
+      chk('C3B-01 · ASK -> nota/cambios reflejan una respuesta suficiente tal cual, sin reinterpretarla', (function(){
+        var resultAsk = { action:'ASK', status:'need_user', userQuestion:{ text:'¿el margen se sostuvo?', resolves:'r', whyNeeded:'w' } };
+        var nota = C1C3B_construirNotaCambio('ASK', resultAsk, 'Sí, el margen se sostuvo sin cambios, ya lo confirmamos en la última revisión.');
+        var cambios = C1C3B_construirStateChanges('ASK', resultAsk, 'Sí, el margen se sostuvo sin cambios, ya lo confirmamos en la última revisión.');
+        return nota.indexOf('el margen se sostuvo') > -1 && nota.indexOf('¿el margen se sostuvo?') > -1 &&
+          cambios.length === 1 && cambios[0].type === 'user_answer' && cambios[0].description.indexOf('el margen se sostuvo') > -1;
+      })());
+
+      chk('C3B-02 · ASK -> respuesta contradictoria se reenvía sin que C1-C3B la marque como contradicción por su cuenta', (function(){
+        var resultAsk = { action:'ASK', status:'need_user', userQuestion:{ text:'¿el proveedor sigue siendo el único?', resolves:'r', whyNeeded:'w' } };
+        var respuesta = 'No, en realidad conseguimos un tercer proveedor hace dos meses, así que ya no dependemos de uno solo.';
+        var nota = C1C3B_construirNotaCambio('ASK', resultAsk, respuesta);
+        var srcSinDeteccionPropia = C1C3B_construirNotaCambio.toString().indexOf('contradic') === -1 &&
+          C1C3B_construirStateChanges.toString().indexOf("previousAction === 'ASK'") > -1;
+        return nota.indexOf(respuesta) > -1 && srcSinDeteccionPropia;
+      })());
+
+      chk('C3B-03 · ASK sigue insuficiente: sin respuesta registrada, la nota lo dice explícito, nunca fabrica suficiencia', (function(){
+        var resultAsk = { action:'ASK', status:'need_user', userQuestion:{ text:'¿...?', resolves:'r', whyNeeded:'w' } };
+        var nota = C1C3B_construirNotaCambio('ASK', resultAsk, null);
+        var cambios = C1C3B_construirStateChanges('ASK', resultAsk, null);
+        return nota.indexOf('(sin respuesta registrada todavía)') > -1 &&
+          cambios[0].description === 'Pregunta formulada, sin respuesta registrada';
+      })());
+
+      chk('C3B-04 · TRACE advanced -> nota/cambios reflejan status y observaciones reales', (function(){
+        var resultTrace = { action:'TRACE', status:'advanced', observations:['la ruta ganó claridad'], evidenceNeeds:[], uncertainties:[], relationUpdates:[] };
+        var nota = C1C3B_construirNotaCambio('TRACE', resultTrace, null);
+        var cambios = C1C3B_construirStateChanges('TRACE', resultTrace, null);
+        return nota.indexOf('advanced') > -1 && nota.indexOf('la ruta ganó claridad') > -1 &&
+          cambios.length === 1 && cambios[0].type === 'trace_status';
+      })());
+
+      chk('C3B-05 · TRACE insufficient + hueco -> cada evidenceNeed y cada segmento hueco queda como un cambio propio', (function(){
+        var resultTrace = { action:'TRACE', status:'insufficient',
+          observations:['falta un tramo crítico'], evidenceNeeds:['verificar el tramo faltante'], uncertainties:['no se sabe si conecta'],
+          relationUpdates:[ { relationId:null, assessment:'hueco', note:'no hay relación registrada' }, { relationId:'rel1', assessment:'sustentado', note:'ok' } ] };
+        var cambios = C1C3B_construirStateChanges('TRACE', resultTrace, null);
+        var tieneEvidenceNeed = cambios.some(function(c){ return c.type === 'evidence_need' && c.description === 'verificar el tramo faltante'; });
+        var tieneHueco = cambios.some(function(c){ return c.type === 'segmento_hueco'; });
+        var noIncluyeSustentado = !cambios.some(function(c){ return c.type === 'segmento_sustentado'; });
+        return tieneEvidenceNeed && tieneHueco && noIncluyeSustentado;
+      })());
+
+      chk('C3B-06 · TRACE contradicted -> el segmento contradiccion queda como cambio propio, con su nota real', (function(){
+        var resultTrace = { action:'TRACE', status:'contradicted',
+          observations:[], evidenceNeeds:[], uncertainties:['la ruta no se verifica'],
+          relationUpdates:[ { relationId:'rel2', assessment:'contradiccion', note:'la Memoria contradice el tramo' } ] };
+        var cambios = C1C3B_construirStateChanges('TRACE', resultTrace, null);
+        var seg = cambios.filter(function(c){ return c.type === 'segmento_contradiccion'; })[0];
+        return seg && seg.description.indexOf('la Memoria contradice el tramo') > -1;
+      })());
+
+      chk('C3B-07 · Sin plan prefijado: el código de C1-C3B nunca hardcodea el nombre de una acción distinta de ASK/TRACE', (function(){
+        var src = C1C3B_construirNotaCambio.toString() + C1C3B_construirStateChanges.toString() +
+          C1C3B_frenteReevaluado.toString() + C1C3B_evaluarRepeticion.toString() + reassessCognitiveAction.toString();
+        var prohibidas = ['READ','RESEARCH','DEEPEN','EXPAND','CONTRAST','INTERPRET','CLOSE_FRONT'];
+        return prohibidas.every(function(a){ return src.indexOf("'" + a + "'") === -1; });
+      })());
+
+      chk('C3B-08 · Misma acción con mismo target/incertidumbre -> sameActionNewTarget:false (repetición sin ganancia)', (function(){
+        var prev = { action:'ASK', targetRefs:['rel1','route1'], uncertaintyAddressed:'no se sabe si X' };
+        var nueva = { action:'ASK', targetRefs:['route1','rel1'], uncertaintyAddressed:'no se sabe si X' };
+        var r = C1C3B_evaluarRepeticion(prev, nueva);
+        return r.actionChanged === false && r.sameActionNewTarget === false;
+      })());
+
+      chk('C3B-09 · Misma acción con target o incertidumbre distinta -> sameActionNewTarget:true (repetición legítima)', (function(){
+        var prev = { action:'ASK', targetRefs:['rel1'], uncertaintyAddressed:'no se sabe si X' };
+        var nuevaTarget = { action:'ASK', targetRefs:['rel9'], uncertaintyAddressed:'no se sabe si X' };
+        var nuevaIncert = { action:'ASK', targetRefs:['rel1'], uncertaintyAddressed:'no se sabe si Y, algo distinto' };
+        var r1 = C1C3B_evaluarRepeticion(prev, nuevaTarget);
+        var r2 = C1C3B_evaluarRepeticion(prev, nuevaIncert);
+        var rCambioAccion = C1C3B_evaluarRepeticion(prev, { action:'TRACE', targetRefs:['rel1'], uncertaintyAddressed:'no se sabe si X' });
+        return r1.sameActionNewTarget === true && r2.sameActionNewTarget === true && rCambioAccion.sameActionNewTarget === null;
+      })());
+
+      chk('C3B-10 · Estado de la acción != estado del Frente: C1C3B_frenteReevaluado nunca toca front.status (C1-C1) ni el operationalState previo', (function(){
+        var front = { id:'f1', status:'active', formulation:'x', uncertainty:'y', operationalState:{ status:'traced', readiness:'ready_for_reassessment', lastActionOutcome:'insufficient' } };
+        var resultTrace = { action:'TRACE', status:'insufficient', observations:[], evidenceNeeds:[], uncertainties:[], relationUpdates:[] };
+        var reevaluado = C1C3B_frenteReevaluado(front, 'TRACE', resultTrace, null);
+        return reevaluado.status === 'active' && reevaluado.operationalState.status === 'traced' &&
+          reevaluado.operationalState.readiness === 'ready_for_reassessment';
+      })());
+
+      chk('C3B-11 · Segunda acción NO ejecutada: reassessCognitiveAction nunca llama a executeAsk/executeTrace/executeCognitiveAction', (function(){
+        var src = reassessCognitiveAction.toString();
+        return src.indexOf('executeAsk(') === -1 && src.indexOf('executeTrace(') === -1 && src.indexOf('executeCognitiveAction(') === -1;
+      })());
+
+      chk('C3B-12/13/14 · Misma lógica en los tres dominios: sin ninguna rama por tipo de Organismo en el código de C1-C3B', (function(){
+        var src = C1C3B_construirNotaCambio.toString() + C1C3B_construirStateChanges.toString() +
+          C1C3B_frenteReevaluado.toString() + C1C3B_evaluarRepeticion.toString() + reassessCognitiveAction.toString();
+        return src.indexOf('.tipo') === -1;
+      })());
+
+      chk('C3B-15 · Sin escritura en Organismo/Memoria/Recuerdos: ninguna función de C1-C3B persiste ni toca la ficha', (function(){
+        var src = C1C3B_construirNotaCambio.toString() + C1C3B_construirStateChanges.toString() +
+          C1C3B_frenteReevaluado.toString() + C1C3B_evaluarRepeticion.toString() + reassessCognitiveAction.toString();
+        return src.indexOf('guardarOrganismo(') === -1 && src.indexOf('persistirOrganismos') === -1 &&
+          src.indexOf('crearRecuerdo(') === -1 && src.indexOf('.ficha.') === -1 && src.indexOf('.ficha=') === -1;
+      })());
+
+      chk('C3B-16 · Máximo una nueva llamada de selección: un único call-site a selectNextCognitiveAction dentro de reassessCognitiveAction, ninguno en los helpers', (function(){
+        var srcPrincipal = reassessCognitiveAction.toString();
+        var unaSola = (srcPrincipal.match(/selectNextCognitiveAction\s*\(/g) || []).length === 1;
+        var helpersLimpios = [C1C3B_construirNotaCambio, C1C3B_construirStateChanges, C1C3B_frenteReevaluado, C1C3B_evaluarRepeticion]
+          .every(function(f){ return f.toString().indexOf('selectNextCognitiveAction(') === -1; });
+        return unaSola && helpersLimpios;
+      })());
+
+      chk('C3B-17 · Compatibilidad C3A: los campos que C1-C3B lee de CognitiveActionResult coinciden con los que executeAsk/executeTrace realmente producen', (function(){
+        var srcAsk = executeAsk.toString(), srcTrace = executeTrace.toString();
+        var askProduceLoQueSeLee = srcAsk.indexOf('userQuestion') > -1 && srcAsk.indexOf("status: 'need_user'") > -1;
+        var traceProduceLoQueSeLee = srcTrace.indexOf('observations') > -1 && srcTrace.indexOf('evidenceNeeds') > -1 &&
+          srcTrace.indexOf('uncertainties') > -1 && srcTrace.indexOf('relationUpdates') > -1;
+        var applyUserAnswerSigueDisponible = typeof applyUserAnswer === 'function' && typeof executeCognitiveAction === 'function';
+        return askProduceLoQueSeLee && traceProduceLoQueSeLee && applyUserAnswerSigueDisponible;
+      })());
+
+      // C3B-18 · Banco general sin regresiones: no es un chk() individual -- ES correr
       // correrPruebasAuto() completo en vivo, ver PENDIENTES.md para el resultado real.
     })();
 
