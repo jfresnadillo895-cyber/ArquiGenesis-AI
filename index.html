@@ -2391,7 +2391,10 @@ const state = {
   modoNegocio: false, // lectura empresarial en curso
   epoch: 0,           // token de sesión: invalida respuestas en vuelo al cambiar de organismo/sesión
   started: false,
-  busy: false
+  busy: false,
+  c1g3Epoch: 0        // C1-G3: token propio de la tarjeta "Contextos Universal", independiente del
+                       // epoch del chat principal -- invalida respuestas en vuelo de esa tarjeta si
+                       // el usuario navega afuera (Volver a Memoria / cerrar overlay / otro organismo)
 };
 
 const TIPOS_ORG = ['Ciudad / territorio urbano','Barrio / sector urbano','Empresa / institución','Proyecto / obra','Especie / ser vivo','Ecosistema','Investigación','Otro'];
@@ -10214,6 +10217,133 @@ function ofrecerDerivacionInterna(){
   el.stream.appendChild(d);
 }
 
+/* ============================================================================
+   Contextos Universal · C1-G3 -- Integración real en el Organismo (18/08)
+   Punto de entrada real: botón "Contextos Universal" en Memoria (mostrarFicha, más abajo),
+   mismo patrón visual/posicional que Abrir en Urbanismo/Contextos/Negocios. SÓLO
+   secuencia/renderiza el motor C1G1_* ya validado (C1-G1..C1-G2.6, 302/302) -- no decide
+   nada cognitivo, no cambia prompts, no toca el motor C1G1 ni C1F2 ni Función+Foco.
+   Vive enteramente dentro de la tarjeta/overlay ya existente (el.cardContent/el.overlay),
+   nunca en el chat principal: no toca el.stream, state.history, state.modoContext ni
+   ningún estado que Legacy o el chat use. Por eso no hace falta "aislar" contra Legacy --
+   son namespaces de DOM y de estado completamente separados.
+   Aislamiento entre organismos: cada apertura toma su propio state.c1g3Epoch; cualquier
+   respuesta en vuelo se descarta si el epoch cambió mientras tanto (Volver a Memoria,
+   cerrar overlay, cambiar de organismo). Además, como cada paso escribe sólo en el nodo
+   `cont` capturado por clausura, si el usuario ya navegó a otra tarjeta ese nodo quedó
+   desprendido del DOM real -- escribirle innerHTML es inerte, no hay corrupción visual
+   posible aunque el epoch no se revisara.
+   Loading: reutiliza el indicador ya existente y probado del chat principal (.pensando,
+   con su punto animado) en vez de inventar una barra de progreso -- "puede variar
+   suavemente si ya existe infraestructura equivalente" (brief C1-G3). Texto fijo,
+   sin nombres técnicos, sin porcentaje, nunca muestra OPEN/TRACE/INTERPRET.
+   Gobernanza: reutiliza C1G1_decidirGobernanza tal cual. "Editar" todavía no tiene UI de
+   corrección de campos (correccionUsuario queda null, que el motor ya tolera) -- fuera de
+   alcance de este corte, documentado en PENDIENTES.md. */
+
+function C1G3_htmlTrabajando(){
+  return '<div class="c1g1-fase"><div class="pensando"><i></i>Comprendiendo el contexto…</div></div>';
+}
+
+function abrirContextosUniversal(org){
+  if(!org) return;
+  var miEpoch = ++state.c1g3Epoch;
+  el.cardContent.innerHTML = '';
+  var h = document.createElement('h3'); h.textContent = 'Contextos Universal · ' + org.nombre;
+  el.cardContent.appendChild(h);
+  var cont = document.createElement('div'); cont.id = 'c1g3Card';
+  el.cardContent.appendChild(cont);
+  var row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '14px';
+  var bBack = document.createElement('button'); bBack.className = 'btn'; bBack.textContent = 'Volver a Memoria';
+  bBack.onclick = function(){ mostrarFicha(); };
+  row.appendChild(bBack);
+  el.cardContent.appendChild(row);
+  el.overlay.classList.add('open');
+
+  cont.innerHTML = C1G3_htmlTrabajando();
+  C1G3_correrApertura(org, miEpoch, cont);
+}
+
+async function C1G3_correrApertura(org, miEpoch, cont){
+  var r;
+  try{
+    r = await C1G1_iniciarConversacion(org.id, null, null);
+  }catch(e){
+    if(miEpoch !== state.c1g3Epoch) return;
+    cont.innerHTML = C1G1_renderVista(C1G1_vistaCierre('No pudimos abrir Contextos Universal por ahora.'));
+    return;
+  }
+  if(miEpoch !== state.c1g3Epoch) return;   // el usuario ya se fue de esta tarjeta
+  C1G3_mostrarResultado(org, r.vista, r.estado, miEpoch, cont);
+}
+
+function C1G3_mostrarResultado(org, vista, estado, miEpoch, cont){
+  var html = '';
+  if(vista && vista.apertura){
+    html += C1G1_renderVista(vista.apertura);
+    html += C1G1_renderVista(vista.siguiente);
+  } else {
+    html += C1G1_renderVista(vista);
+  }
+  cont.innerHTML = html;
+  C1G3_wireResultado(org, estado, miEpoch, cont);
+}
+
+function C1G3_wireResultado(org, estado, miEpoch, cont){
+  var btnVerPorque = cont.querySelector('.c1g1-verporque');
+  if(btnVerPorque){
+    btnVerPorque.addEventListener('click', function(){
+      var p = cont.querySelector('.c1g1-porque'); if(p) p.classList.toggle('c1g1-oculto');
+    });
+  }
+  var btnResponder = cont.querySelector('.c1g1-enviar');
+  var inputRespuesta = cont.querySelector('.c1g1-input');
+  if(btnResponder && inputRespuesta){
+    var enviarRespuesta = function(){
+      var texto = inputRespuesta.value;
+      if(!texto || !texto.trim()) return;
+      cont.innerHTML = C1G3_htmlTrabajando();
+      C1G3_correrRespuesta(org, estado, texto, miEpoch, cont);
+    };
+    btnResponder.addEventListener('click', enviarRespuesta);
+    inputRespuesta.addEventListener('keydown', function(ev){ if(ev.key === 'Enter') enviarRespuesta(); });
+  }
+  var botonesDecision = cont.querySelectorAll('[data-decision]');
+  botonesDecision.forEach(function(b){
+    b.addEventListener('click', function(){
+      var decision = b.getAttribute('data-decision');
+      C1G3_correrGobernanza(org, estado, decision, miEpoch, cont);
+    });
+  });
+}
+
+async function C1G3_correrRespuesta(org, estado, texto, miEpoch, cont){
+  var r;
+  try{
+    r = await C1G1_responderPregunta(estado, texto);
+  }catch(e){
+    if(miEpoch !== state.c1g3Epoch) return;
+    cont.innerHTML = C1G1_renderVista(C1G1_vistaCierre('No pudimos registrar la respuesta por ahora.'));
+    return;
+  }
+  if(miEpoch !== state.c1g3Epoch) return;
+  C1G3_mostrarResultado(org, r.vista, r.estado, miEpoch, cont);
+}
+
+function C1G3_correrGobernanza(org, estado, decisionUi, miEpoch, cont){
+  // Síncrona (reutiliza C1F2_* tal cual, sin llamada IA) -- no hace falta estado de carga.
+  var r;
+  try{
+    r = C1G1_decidirGobernanza(estado, decisionUi, null);
+  }catch(e){
+    if(miEpoch !== state.c1g3Epoch) return;
+    cont.innerHTML = C1G1_renderVista(C1G1_vistaCierre('No pudimos aplicar esa decisión por ahora.'));
+    return;
+  }
+  if(miEpoch !== state.c1g3Epoch) return;
+  cont.innerHTML = C1G1_renderVista(r.vista);
+}
+
 /* ================= CORTE C: Urban ================= */
 const ESTADO_COLOR = { critica:'#D4756B', tensionada:'#D4A95B', estable:'#8391A8', potencia:'#4FAE7E', desconocida:'#54617A' };
 const INTENSIDAD_COLOR = { dominante:'#D4756B', fuerte:'#D4A95B', moderada:'#8391A8', debil:'#4FAE7E', desconocida:'#54617A' };
@@ -10538,7 +10668,7 @@ function guardarSesion(destilado){
   }catch(e){ /* almacenamiento no disponible: la sesión sigue viva en pantalla */ }
 }
 
-function cerrarOverlay(){ el.overlay.classList.remove('open'); }
+function cerrarOverlay(){ state.c1g3Epoch++; el.overlay.classList.remove('open'); }
 
 function nuevaSesion(){
   state.epoch++;
@@ -10840,6 +10970,7 @@ function abrirOrganismo(org){
   if(org.avisoImportacionPro){ org.avisoImportacionPro = false; guardarOrganismo(org); }
   // invalidar cualquier respuesta en vuelo de la sesión anterior
   state.epoch++;
+  state.c1g3Epoch++;
   state.busy = false;
   el.send.disabled = false;
   el.dot.classList.remove('busy');
@@ -10877,6 +11008,7 @@ function abrirOrganismo(org){
 
 function mostrarFicha(){
   if(!state.organismo) return;
+  state.c1g3Epoch++;   // C1-G3: volver a Memoria invalida cualquier tarjeta de Contextos Universal en vuelo
   const o = state.organismo;
   const f = o.ficha || {};
   el.cardContent.innerHTML = '';
@@ -10926,6 +11058,11 @@ function mostrarFicha(){
   bC.style.borderColor = 'rgba(155,123,212,.5)'; bC.style.color = 'var(--trans)';
   bC.onclick = function(){ abrirEnContext(o); };
   row.appendChild(bC);
+  // C1-G3: Contextos Universal (motor C1G1_*), acción propia -- no sustituye ni gatea la de arriba.
+  const bCU = document.createElement('button'); bCU.className='btn'; bCU.textContent='Contextos Universal';
+  bCU.style.borderColor = 'rgba(155,123,212,.5)'; bCU.style.color = 'var(--trans)';
+  bCU.onclick = function(){ abrirContextosUniversal(o); };
+  row.appendChild(bCU);
   const esNegocio = (o.derivable && o.derivable.indexOf('negocio') > -1) || orientacionDeTipo(o.tipo) === 'negocio';
   if(esNegocio){
     const bN = document.createElement('button'); bN.className='btn'; bN.textContent='Abrir en Negocios';
