@@ -6395,6 +6395,245 @@ window.debugExecuteInterpret = function(organismoId, question, intention, respue
   });
 };
 
+/* ============================================================================
+   Contextos Universal · C1-C4B — executeFunctionalInterpretation() (extensión funcional de INTERPRET)
+   Entrada: NO es una acción del alfabeto de C1-C2 (ASK/TRACE/INTERPRET/READ/RESEARCH/DEEPEN/EXPAND/
+   CONTRAST/CLOSE_FRONT) -- es una extensión opcional de una interpretación YA producida por C1-C4A.
+   Toma el Frente (para relationRefs/formulation/uncertainty) + GraphState (de C1-B2) + el
+   InterpretationResult real de C1-C4A (status + configuration), y determina, solo si es legítimo,
+   Operador(es) y Función. Todavía NO obliga ni implementa Principio organizador, Foco, suficiencia
+   global, Retorno, ni escribe Memoria/Recuerdos -- eso queda para un corte posterior. Nunca reemplaza
+   ni recalcula la interpretación de C1-C4A: si no hay configuración sustentada (status:'insufficient'
+   o sin observation/dynamics), no hay nada legítimo que extender y se resuelve local, sin llamar a la
+   API. Aplica el resultado únicamente al Frente operativo -- nunca escribe Organismo, Memoria ni
+   Recuerdos. Ver PENDIENTES.md.
+   ============================================================================ */
+
+var C1C4B_MODEL = 'claude-sonnet-4-6';
+var C1C4B_MAX_TOKENS = 1400;
+var C1C4B_INVARIANCIA_ESTADOS = ['strong', 'provisional', 'failed', 'unknown'];
+
+/* Ventana funcional: SOLO la configuración ya interpretada por C1-C4A (observation/dynamics/tension/
+   relationRefs, tal cual quedaron validados -- nunca se vuelve a cuestionar esa interpretación acá) +
+   las relaciones pertinentes del Frente, resueltas a etiquetas, para que operador/función puedan
+   referenciar ids reales. No se agrega nada nuevo. */
+function C1C4B_ventanaFuncional(graphState, front, interpretationResult){
+  var porId = {};
+  (graphState.nodes || []).forEach(function(n){ porId[n.id] = n; });
+  var relPorId = {};
+  (graphState.relations || []).forEach(function(r){ relPorId[r.id] = r; });
+
+  var relacionesPertinentes = (front.relationRefs || []).map(function(id){
+    var r = relPorId[id];
+    if(!r) return null;
+    return { id: r.id, from: porId[r.sourceNodeId] ? porId[r.sourceNodeId].label : null,
+      to: porId[r.targetNodeId] ? porId[r.targetNodeId].label : null,
+      manifestation: r.manifestation, possibleIncidence: r.possibleIncidence };
+  }).filter(Boolean);
+
+  var cfg = (interpretationResult && interpretationResult.configuration) || {};
+
+  return {
+    frontId: front.id, formulation: front.formulation, uncertainty: front.uncertainty,
+    interpretationStatus: interpretationResult ? interpretationResult.status : null,
+    configuration: {
+      observation: cfg.observation || null, dynamics: cfg.dynamics || null,
+      tension: cfg.tension || null, relationRefs: cfg.relationRefs || []
+    },
+    relacionesPertinentes: relacionesPertinentes
+  };
+}
+
+/* Prompt propio de C1-C4B (continuación de C1-C4A, motor propio). Universal entre dominios: no hay
+   ninguna rama por tipo de Organismo. */
+function C1C4B_PROMPT_FUNCTION(ventana){
+  var ventanaTxt = JSON.stringify(ventana, null, 2);
+  return 'Sos el motor de ejecución de la extensión funcional (C1-C4B) de Contextos Universal -- ' +
+    'continuación de C1-C4A, motor propio, sin dimensiones ni sistemas de Contextos Legacy. C1-C4A ' +
+    'ya interpretó una configuración (observación + dinámica, y opcionalmente una tensión) -- no la ' +
+    'vuelvas a cuestionar, es un dato ya validado. Tu única tarea es, SOLO SI ES LEGÍTIMO, extenderla ' +
+    'identificando Operador(es) y Función.\n\n' +
+    'CONFIGURACIÓN YA INTERPRETADA:\n' + ventanaTxt + '\n\n' +
+    'REGLAS:\n' +
+    '1. "operators" es una lista OPCIONAL -- puede quedar vacía ([]) si ningún operador es ' +
+    'identificable o necesario. No fuerces un operador para "completar" la respuesta.\n' +
+    '2. "function" es OPCIONAL -- si no se puede sostener con lo disponible, dejala en null. Nunca ' +
+    'la inventes para llenar el campo; es preferible null a una función débil o forzada.\n' +
+    '3. FUNCIÓN = la capacidad organizativa que la configuración REALIZA, SOSTIENE, MODIFICA o ' +
+    'IMPIDE. Nunca confundas función con objetivo, intención, efecto superficial o solución ' +
+    'propuesta -- esas son categorías distintas y no corresponden acá.\n' +
+    '4. PROHIBIDO antropomorfizar sistemas no humanos: si el Organismo no es una persona u ' +
+    'organización humana, no le atribuyas decisiones, intenciones, voluntad o agencia consciente. ' +
+    'Describí la función en términos de capacidad organizativa del sistema, nunca de motivación.\n' +
+    '5. TEST DE INVARIANCIA -- aplicalo así: si cambiaran las formas, los actores o los mecanismos ' +
+    'concretos de esta configuración, ¿la función identificada podría seguir siendo la misma? Si sí ' +
+    'con claridad -> "strong". Si es razonable pero no evidente -> "provisional". Si la función ' +
+    'depende enteramente de la forma/actor/mecanismo específico y no sobreviviría el cambio -> ' +
+    '"failed". Si no identificaste ninguna función sobre la cual aplicar el test -> "unknown".\n' +
+    '6. Los ids en "relationRefs" (tanto de cada operador como de la función) solo pueden ser ids ' +
+    'que realmente aparecen en "relacionesPertinentes" -- nunca inventes un id.\n' +
+    '7. No expliques tu razonamiento paso a paso.\n\n' +
+    'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
+    'después. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
+    '[[FUNCTIONAL_RESULT:{\n' +
+    '  "operators": [ { "description": "...", "relationRefs": ["..."] } ],\n' +
+    '  "function": null | { "description": "...", "relationRefs": ["..."] },\n' +
+    '  "invariance": "strong"|"provisional"|"failed"|"unknown",\n' +
+    '  "uncertainties": ["..."],\n' +
+    '  "justificationSummary": "..."\n' +
+    '}]]';
+}
+
+function C1C4B_llamarIA(systemPrompt, mensajes){
+  var t0 = Date.now();
+  return fetch(apiEndpoint(), {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ model: C1C4B_MODEL, max_tokens: C1C4B_MAX_TOKENS, system: systemPrompt, messages: mensajes })
+  }).then(function(res){
+    return res.json().then(function(data){
+      if(!res.ok || (data && data.error)){
+        throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
+      }
+      var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
+    });
+  });
+}
+
+function C1C4B_limpiarRefs(arr, idsOfrecidos){
+  var ids = idsOfrecidos || [];
+  return Array.isArray(arr) ? arr.filter(function(x){ return typeof x === 'string' && ids.indexOf(x) > -1; }) : [];
+}
+
+function C1C4B_limpiarLista(arr){
+  return Array.isArray(arr) ? arr.filter(function(x){ return typeof x === 'string' && x.trim(); }).map(function(x){ return x.trim(); }) : [];
+}
+
+/* Parser defensivo: rechaza toda la respuesta si falta "justificationSummary" o si "invariance" no
+   es uno de los 4 valores válidos. "operators" nunca se fuerza -- si no es un array válido, o cada
+   item no trae una "description" real, se descarta ese item (nunca se inventa una descripción vacía);
+   el array puede quedar en [] legítimamente. "function" solo se conserva si trae una "description"
+   real -- si el modelo la omite, la manda vacía, o la manda como objeto sin texto, queda null (nunca
+   se rellena para simular una función que no existe). "relationRefs" (de operators y de function) se
+   filtra contra lo realmente ofrecido en la ventana -- nunca se confía en un id inventado. */
+function C1C4B_parseFunctionalResult(texto, relIdsOfrecidas){
+  var re = /\[\[FUNCTIONAL_RESULT:([\s\S]*?)\]\]/;
+  var m = String(texto || '').match(re);
+  if(!m) return null;
+  var raw;
+  try{ raw = JSON.parse(m[1]); }catch(e){ return null; }
+  if(!raw || typeof raw !== 'object') return null;
+  if(C1C4B_INVARIANCIA_ESTADOS.indexOf(raw.invariance) === -1) return null;
+  var justificationSummary = (typeof raw.justificationSummary === 'string' && raw.justificationSummary.trim())
+    ? raw.justificationSummary.trim() : null;
+  if(!justificationSummary) return null;
+
+  var idsRel = relIdsOfrecidas || [];
+
+  var operators = Array.isArray(raw.operators) ? raw.operators.map(function(op){
+    if(!op || typeof op !== 'object' || Array.isArray(op)) return null;
+    var desc = (typeof op.description === 'string' && op.description.trim()) ? op.description.trim() : null;
+    if(!desc) return null;   // sin descripción real, no es un operador -- se descarta, nunca se inventa
+    return { description: desc, relationRefs: C1C4B_limpiarRefs(op.relationRefs, idsRel) };
+  }).filter(Boolean) : [];
+
+  var func = null;
+  if(raw.function && typeof raw.function === 'object' && !Array.isArray(raw.function)){
+    var fdesc = (typeof raw.function.description === 'string' && raw.function.description.trim()) ? raw.function.description.trim() : null;
+    if(fdesc){
+      func = { description: fdesc, relationRefs: C1C4B_limpiarRefs(raw.function.relationRefs, idsRel) };
+    }
+  }
+
+  return {
+    operators: operators, function: func, invariance: raw.invariance,
+    uncertainties: C1C4B_limpiarLista(raw.uncertainties), justificationSummary: justificationSummary
+  };
+}
+
+/* ---- executeFunctionalInterpretation: única forma de ejecutar la extensión funcional en este
+   corte. Nunca llama a executeInterpret()/executeAsk()/executeTrace()/selectNextCognitiveAction() --
+   opera exclusivamente sobre un InterpretationResult ya producido, nunca lo recalcula ni sale a
+   buscar más datos. Si la interpretación previa no dejó una configuración sustentada, resuelve local
+   (0 llamadas IA) en vez de forzar una función sobre la nada. ---- */
+async function executeFunctionalInterpretation(graphState, front, interpretationResult){
+  if(!front || !front.id) return { ok:false, motivo:'front ausente' };
+  if(!graphState) return { ok:false, motivo:'graphState ausente' };
+  if(!interpretationResult || !interpretationResult.status){
+    return { ok:false, motivo:'interpretationResult ausente -- C1-C4B extiende una interpretación ya hecha, no la reemplaza' };
+  }
+
+  var cfg = interpretationResult.configuration || {};
+  var sinConfiguracionUtil = interpretationResult.status === 'insufficient' || (!cfg.observation && !cfg.dynamics);
+
+  if(sinConfiguracionUtil){
+    var resultCorto = {
+      frontId: front.id, action: 'INTERPRET_FUNCTION',
+      functionalInterpretation: {
+        operators: [], function: null, invariance: 'unknown',
+        uncertainties: (cfg.uncertainties || []).slice()
+      },
+      justificationSummary: 'La interpretación previa fue insuficiente o no dejó una configuración sustentada (observación/dinámica); no hay base legítima para identificar operador ni función.'
+    };
+    return { ok:true, result: resultCorto, telemetry: { llamadasIA: 0, tokensInput: null, tokensOutput: null, duracionMs: 0 } };
+  }
+
+  var ventana = C1C4B_ventanaFuncional(graphState, front, interpretationResult);
+  var prompt = C1C4B_PROMPT_FUNCTION(ventana);
+  var res;
+  try{
+    res = await C1C4B_llamarIA(prompt, [{ role:'user', content:'(extendé la interpretación con operador/función si es legítimo)' }]);
+  }catch(e){
+    return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
+  }
+
+  var idsRel = (front.relationRefs || []).slice();
+  var parsed = C1C4B_parseFunctionalResult(res.texto, idsRel);
+  if(!parsed){
+    return { ok:false, motivo:'no se pudo interpretar la extensión funcional generada', usage: res.usage,
+             duracionMs: res.duracionMs, textoCrudo: res.texto };
+  }
+
+  var result = {
+    frontId: front.id, action: 'INTERPRET_FUNCTION',
+    functionalInterpretation: {
+      operators: parsed.operators, function: parsed.function,
+      invariance: parsed.invariance, uncertainties: parsed.uncertainties
+    },
+    justificationSummary: parsed.justificationSummary
+  };
+  result = JSON.parse(JSON.stringify(result));
+  return {
+    ok: true, result: result,
+    telemetry: { llamadasIA: (sinConfiguracionUtil ? 0 : 1), tokensInput: (res.usage && res.usage.input_tokens) || null,
+      tokensOutput: (res.usage && res.usage.output_tokens) || null, duracionMs: res.duracionMs }
+  };
+}
+
+/* Aplica el resultado únicamente al Frente (nunca a Organismo/Memoria/Recuerdos), igual que todos los
+   ejecutores anteriores. No es una acción del alfabeto de C1-C2, así que no pasa por
+   C1C3A_aplicarResultadoAlFrente -- tiene su propio applier, más chico, específico de esta extensión. */
+function C1C4B_aplicarResultadoAlFrente(front, result){
+  var clon = JSON.parse(JSON.stringify(front));
+  if(!clon.operationalState){ clon.operationalState = C1C3A_operationalStateInicial(); }
+  clon.operationalState.history.push({ action: result.action, status: result.functionalInterpretation.invariance, at: new Date().toISOString() });
+  clon.operationalState.functionalInterpretation = result.functionalInterpretation;
+  clon.operationalState.uncertainties = (clon.operationalState.uncertainties || []).concat(result.functionalInterpretation.uncertainties || []);
+  return clon;
+}
+
+/* Laboratorio interno C1-C4B: toma un Frente + GraphState + InterpretationResult YA producidos (por
+   ejemplo, los de una corrida real de debugExecuteInterpret) y corre la extensión funcional sobre
+   ellos -- no repite la cadena ASK/TRACE/INTERPRET. Solo consola, sin UI nueva. */
+window.debugExecuteFunctionalInterpretation = function(graphState, front, interpretationResult){
+  return executeFunctionalInterpretation(graphState, front, interpretationResult).then(function(r){
+    console.log('[C1-C4B] resultado funcional:', r.ok ? r.result : r);
+    if(r.ok) console.log('[C1-C4B] telemetry:', r.telemetry);
+    return r;
+  });
+};
+
 /* ============ C-11 · CACHÉ DEL PROMPT DE SISTEMA ============
    Medición del 21/07/2026 sobre 19 consultas reales: el prompt base son ~3.730 tokens
    invariables que viajaban enteros en cada llamada, entre el 80 y el 90 % del costo de
