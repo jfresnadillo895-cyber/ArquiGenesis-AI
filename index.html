@@ -2399,9 +2399,16 @@ const state = {
   epoch: 0,           // token de sesión: invalida respuestas en vuelo al cambiar de organismo/sesión
   started: false,
   busy: false,
-  c1g3Epoch: 0        // C1-G3: token propio de la tarjeta "Contextos Universal", independiente del
+  c1g3Epoch: 0,       // C1-G3: token propio de la tarjeta "Contextos Universal", independiente del
                        // epoch del chat principal -- invalida respuestas en vuelo de esa tarjeta si
                        // el usuario navega afuera (Volver a Memoria / cerrar overlay / otro organismo)
+  c1g3Sesiones: {}     // C1-Z1.1-B: { [organismId]: {openingId, estado, vista} } -- Apertura de
+                       // Contextos Universal sin resolver, en memoria de la sesión actual (nunca
+                       // persistida). Sirve sólo para ofrecer "Continuar actual / Empezar nueva" si
+                       // se vuelve a pulsar el botón sobre el mismo organismo antes de resolver la
+                       // gobernanza. Se borra la entrada de un organismo cuando su gobernanza se
+                       // resuelve (Incorporar/Mantener abierto/No incorporar) o cuando el usuario
+                       // elige explícitamente "Empezar nueva".
 };
 
 const TIPOS_ORG = ['Ciudad / territorio urbano','Barrio / sector urbano','Empresa / institución','Proyecto / obra','Especie / ser vivo','Ecosistema','Investigación','Otro'];
@@ -7997,7 +8004,13 @@ window.debugC1F2GobernarRetorno = function(returnProposal, snapshot, front, deci
 
 var C1G1_MAX_CICLOS = 6;   // tope defensivo de pasos silenciosos (READ/TRACE) antes de declarar
                            // límite explícito -- nunca fabrica una comprensión para evitar el tope.
-var C1G1_DECISION_UI_A_CORE = { incorporar:'incorporar', editar:'editar', mantener_abierto:'mantener_abierto', no_incorporar:'rechazar' };
+// C1-Z1.1-A: 'editar' queda deliberadamente FUERA de este mapa -- todavía no existe una UI real de
+// corrección de campos, y antes (con correccionUsuario siempre vacío) "Editar" terminaba aplicando
+// el mismo candidato que "Incorporar" sin que el usuario corrigiera nada. Con 'editar' ausente acá,
+// C1G1_decidirGobernanza() cae sola en su rama existente "Esa decisión no es válida acá." (ver abajo)
+// si alguien la dispara -- sin tocar C1F2_* ni la gobernanza Core. El botón correspondiente tampoco
+// se renderiza más (ver C1G1_renderVista, fase 'comprension').
+var C1G1_DECISION_UI_A_CORE = { incorporar:'incorporar', mantener_abierto:'mantener_abierto', no_incorporar:'rechazar' };
 
 /* ---- C1-G4.1: traducción de lenguaje interno a lenguaje natural -- corrige un hallazgo real de
    C1-G4 (verificación en vivo): el texto que REDACTA el modelo a veces se nombra a sí mismo ("el
@@ -8337,7 +8350,9 @@ function C1G1_renderVista(vista){
         }).join('') +
         '<div class="c1g1-gobernanza-botones">' +
           '<button class="btn primary" type="button" data-decision="incorporar">Incorporar</button>' +
-          '<button class="btn secundario" type="button" data-decision="editar">Editar</button>' +
+          /* C1-Z1.1-A: "Editar" queda deliberadamente sin renderizar -- todavía no existe una UI
+             real de corrección de campos, y simularla (o dejar el botón sin efecto real) engañaría
+             al usuario. Ver PENDIENTES.md. Se vuelve a agregar acá el día que exista esa UI. */
           '<button class="btn secundario" type="button" data-decision="mantener_abierto">Mantener abierto</button>' +
           '<button class="btn danger" type="button" data-decision="no_incorporar">No incorporar</button>' +
         '</div></div>';
@@ -10365,9 +10380,11 @@ function C1G3_htmlTrabajando(){
   return '<div class="c1g1-fase"><div class="pensando"><i></i>Comprendiendo el contexto…</div></div>';
 }
 
-function abrirContextosUniversal(org){
-  if(!org) return;
-  var miEpoch = ++state.c1g3Epoch;
+/* C1-Z1.1-B: arma el DOM base de la tarjeta (título + contenedor #c1g3Card + "Volver a Memoria" +
+   overlay abierto), factorizado para reusarlo desde los tres puntos que necesitan una tarjeta
+   nueva: apertura real, confirmación de reapertura y "Continuar actual". Devuelve el contenedor
+   `cont` donde cada llamador escribe su propio contenido. */
+function C1G3_armarTarjeta(org){
   el.cardContent.innerHTML = '';
   var h = document.createElement('h3'); h.textContent = 'Contextos Universal · ' + org.nombre;
   el.cardContent.appendChild(h);
@@ -10379,9 +10396,58 @@ function abrirContextosUniversal(org){
   row.appendChild(bBack);
   el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
+  return cont;
+}
 
+function abrirContextosUniversal(org){
+  if(!org) return;
+  // C1-Z1.1-B: si ya hay una Apertura sin resolver para este organismo en la sesión actual, no se
+  // dispara otra automáticamente -- se ofrece continuar la existente o abandonarla a propósito.
+  var sesionExistente = state.c1g3Sesiones[org.id];
+  if(sesionExistente){
+    C1G3_mostrarConfirmacionReapertura(org, sesionExistente);
+    return;
+  }
+  C1G3_iniciarAperturaReal(org);
+}
+
+/* Apertura real (antes era el cuerpo entero de abrirContextosUniversal) -- separada para poder
+   reusarla también desde "Empezar nueva" en la confirmación de reapertura. */
+function C1G3_iniciarAperturaReal(org){
+  var miEpoch = ++state.c1g3Epoch;
+  var cont = C1G3_armarTarjeta(org);
   cont.innerHTML = C1G3_htmlTrabajando();
   C1G3_correrApertura(org, miEpoch, cont);
+}
+
+/* C1-Z1.1-B: pantalla de confirmación, sin llamada IA. "Continuar actual" re-renderiza el último
+   estado/vista guardado tal cual (mismo openingId, mismo objeto `estado` -- cero llamadas nuevas).
+   "Empezar nueva" descarta la sesión guardada e invalida cualquier respuesta en vuelo de la vieja
+   vía el epoch ya existente antes de arrancar una Apertura genuinamente nueva. */
+function C1G3_mostrarConfirmacionReapertura(org, sesion){
+  var cont = C1G3_armarTarjeta(org);
+  cont.innerHTML = '<div class="c1g1-fase c1g1-confirmacion">' +
+    '<div class="c1g1-texto">Ya hay una comprensión de Contextos en curso para este organismo. ' +
+    '¿Querés empezar una nueva y abandonar la actual?</div>' +
+    '<div class="c1g1-gobernanza-botones">' +
+      '<button class="btn secundario" type="button" data-c1g3-confirm="continuar">Continuar actual</button>' +
+      '<button class="btn danger" type="button" data-c1g3-confirm="nueva">Empezar nueva</button>' +
+    '</div></div>';
+  var btnContinuar = cont.querySelector('[data-c1g3-confirm="continuar"]');
+  var btnNueva = cont.querySelector('[data-c1g3-confirm="nueva"]');
+  if(btnContinuar){
+    btnContinuar.addEventListener('click', function(){
+      var miEpoch = ++state.c1g3Epoch;   // token propio de esta re-entrada, como cualquier otra
+      var cont2 = C1G3_armarTarjeta(org);
+      C1G3_mostrarResultado(org, sesion.vista, sesion.estado, miEpoch, cont2);
+    });
+  }
+  if(btnNueva){
+    btnNueva.addEventListener('click', function(){
+      delete state.c1g3Sesiones[org.id];
+      C1G3_iniciarAperturaReal(org);
+    });
+  }
 }
 
 async function C1G3_correrApertura(org, miEpoch, cont){
@@ -10406,6 +10472,16 @@ function C1G3_mostrarResultado(org, vista, estado, miEpoch, cont){
     html += C1G1_renderVista(vista);
   }
   cont.innerHTML = html;
+  // C1-Z1.1-B: guarda/actualiza el snapshot de la Apertura sin resolver de este organismo -- se
+  // pisa con cada paso (apertura, respuesta, o el propio "Continuar actual" redibujando lo mismo),
+  // siempre con el mismo openingId mientras no se arranque una Apertura nueva. Se borra sólo cuando
+  // la gobernanza se resuelve (C1G3_correrGobernanza) o cuando el usuario elige "Empezar nueva".
+  if(org && org.id && estado){
+    state.c1g3Sesiones[org.id] = {
+      openingId: (estado.opening && estado.opening.openingId) || null,
+      estado: estado, vista: vista
+    };
+  }
   C1G3_wireResultado(org, estado, miEpoch, cont);
 }
 
@@ -10460,6 +10536,11 @@ function C1G3_correrGobernanza(org, estado, decisionUi, miEpoch, cont){
     cont.innerHTML = C1G1_renderVista(C1G1_vistaCierre('No pudimos aplicar esa decisión por ahora.'));
     return;
   }
+  // C1-Z1.1-B: cualquier decisión real de gobernanza (incorporar/mantener_abierto/no_incorporar)
+  // resuelve la Apertura -- ya no queda nada que "continuar", así que se borra el snapshot
+  // guardado. Un próximo clic en "Contextos Universal" sobre este organismo arranca de cero sin
+  // preguntar, como corresponde.
+  if(org && org.id) delete state.c1g3Sesiones[org.id];
   if(miEpoch !== state.c1g3Epoch) return;
   cont.innerHTML = C1G1_renderVista(r.vista);
 }
