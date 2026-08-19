@@ -2063,8 +2063,15 @@ header .spacer{flex:1}
         else if(h){ for(var k in h){ if(Object.prototype.hasOwnProperty.call(h,k)) plano[k]=h[k]; } }
       }catch(e){}
       plano['Authorization'] = 'Bearer ' + t;
-      try{ plano['x-comprender-modulo'] = (typeof MODULE_ID === 'string' && MODULE_ID) ? MODULE_ID : 'core'; }
-      catch(e){ plano['x-comprender-modulo'] = 'core'; }
+      // C1-G4.2: si quien llama ya trae su propio x-comprender-modulo (p.ej. el motor de
+      // Contextos Universal, que pide 'contextos' explícitamente), se respeta -- antes esta
+      // línea lo pisaba siempre con MODULE_ID/'core' sin mirar si ya venía seteado, que es
+      // justamente la causa por la que esas llamadas nunca se contabilizaban como 'contextos'.
+      // Sin override explícito, el comportamiento es exactamente el de siempre.
+      if(!plano['x-comprender-modulo']){
+        try{ plano['x-comprender-modulo'] = (typeof MODULE_ID === 'string' && MODULE_ID) ? MODULE_ID : 'core'; }
+        catch(e){ plano['x-comprender-modulo'] = 'core'; }
+      }
       opciones.headers = plano;
 
       return _fetch.call(yo, recurso, opciones).then(function(resp){
@@ -4015,6 +4022,33 @@ function C1_bloquesSistema(promptCompleto){
   ];
 }
 
+/* ---- C1-G4.1: criterio compartido de "una sola pregunta" -- ni C1-C2 (ASK fusionada, G2.6) ni
+   C1-C3A (executeAsk standalone) inventan su propia versión de esto, los dos llaman a la misma
+   función. El conteo de signos "?" ya filtraba preguntas explícitamente encadenadas ("...? ...?"),
+   pero no una compuesta con un solo "?" que en el fondo pide dos datos independientes unidos por
+   "y" -- el caso real encontrado en C1-G4: "¿Cuántas unidades comprás... y hay algún otro
+   proveedor...?". Esta regla agrega esa segunda señal: "y" seguido de un disparador
+   interrogativo/existencial típico (hay/existe/tenés/sabés/podés/cuál/qué/cuánto/cómo/dónde/por
+   qué) casi siempre indica una segunda pregunta encadenada, a diferencia de un "y" que sólo une dos
+   sustantivos DENTRO de la misma pregunta (ej.: "¿cuál es la relación entre el costo y el margen?",
+   que sigue siendo unitaria -- no dispara el patrón porque después de "y" viene un sustantivo, no
+   un disparador interrogativo). Deliberadamente restringido a las formas con tilde correcta
+   (qué/cuál/cuánto/cómo, no "que"/"cual"/"cuanto" sin tilde) porque esas formas sin tilde son
+   además pronombres/conjunciones relativas de uso corriente en español -- incluirlas dispararía
+   falsos positivos contra preguntas únicas y bien formadas. */
+// C1-G4.1 (banco de pruebas g41_tests.js, B-05): \b después de una vocal acentuada (qué/por qué) no
+// es un límite de palabra real en JS -- \b se define sobre \w (ASCII), y una vocal con tilde ya es
+// no-\w, así que "é" seguida de espacio nunca cruza esa frontera y el \b final nunca matchea. Se
+// reemplaza por un lookahead explícito que exige que lo siguiente NO sea otra letra (así "qué" no
+// sigue matcheando dentro de una palabra más larga, sin depender de la frontera rota de \b).
+var C1_PATRON_PREGUNTA_ENCADENADA = /\by\s+(hay|existe|existen|tenés|tenes|sabés|sabes|podés|podes|cuál|cuáles|qué|cuánto|cuántos|cuántas|cómo|dónde|por qué)(?![a-zA-ZñÑáéíóúÁÉÍÓÚ])/i;
+function C1_preguntaEsUnitaria(text){
+  if(!text) return false;
+  if((text.match(/\?/g) || []).length > 1) return false;
+  if(C1_PATRON_PREGUNTA_ENCADENADA.test(text)) return false;
+  return true;
+}
+
 function C1A2_PROMPT_RECONSTRUCT_ORIGIN(snapshot, opening, bloqueRecuerdos){
   var snapTxt = JSON.stringify({
     identity: snapshot.identity,
@@ -4111,7 +4145,7 @@ function C1A2_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
     body: JSON.stringify({ model: C1A2_MODEL, max_tokens: C1A2_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -4424,7 +4458,7 @@ function C1B1_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
     body: JSON.stringify({ model: C1B1_MODEL, max_tokens: C1B1_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -4743,7 +4777,7 @@ function C1B2_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
     body: JSON.stringify({ model: C1B2_MODEL, max_tokens: C1B2_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -5107,7 +5141,7 @@ function C1C1_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
     body: JSON.stringify({ model: C1C1_MODEL, max_tokens: C1C1_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -5452,7 +5486,13 @@ function C1C2_PROMPT_SELECT_ACTION(ventana, accionesDisponibles){
     'UNA pregunta en lenguaje natural dirigida al usuario: {"text":"...", "resolves":"...", ' +
     '"whyNeeded":"..."}. "text" responde exactamente a "uncertaintyAddressed" (ni más amplia ni más ' +
     'genérica), nunca más de un signo "?", nunca un formulario ni varias preguntas encadenadas con ' +
-    '"y también". "resolves" identifica en una frase corta qué incertidumbre específica discrimina la ' +
+    '"y también". Una pregunta es UNA sola discriminación cognitiva, no dos datos independientes ' +
+    'unidos por "y" -- aunque quepan bajo un solo signo "?" siguen siendo dos preguntas si piden dos ' +
+    'cosas que no dependen la una de la otra. Mal: "¿Cuántas unidades comprás por colección y hay ' +
+    'algún otro proveedor con mejor precio?" (dos datos distintos). Bien: "¿Cuántas unidades comprás ' +
+    'por colección?" (una sola cosa) -- si el segundo dato también hace falta, elegí el más ' +
+    'discriminante de los dos y dejalo para una próxima pregunta, nunca los combines. "resolves" ' +
+    'identifica en una frase corta qué incertidumbre específica discrimina la ' +
     'pregunta. "whyNeeded" explica brevemente por qué Memoria/Recuerdos/evidencia/grafo no alcanzaban ' +
     '-- reutilizá "requirement.description" como base. Si "action" NO es "ASK", dejá "userQuestion" ' +
     'en null -- nunca generes una pregunta para otra acción.\n\n' +
@@ -5474,7 +5514,7 @@ function C1C2_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
     body: JSON.stringify({ model: C1C2_MODEL, max_tokens: C1C2_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -5553,7 +5593,7 @@ function C1C2_parseNextAction(texto, refsOfrecidas, accionesDisponibles){
     var uqText = (typeof raw.userQuestion.text === 'string' && raw.userQuestion.text.trim()) ? raw.userQuestion.text.trim() : null;
     var uqResolves = (typeof raw.userQuestion.resolves === 'string' && raw.userQuestion.resolves.trim()) ? raw.userQuestion.resolves.trim() : null;
     var uqWhyNeeded = (typeof raw.userQuestion.whyNeeded === 'string' && raw.userQuestion.whyNeeded.trim()) ? raw.userQuestion.whyNeeded.trim() : null;
-    var uqUnaPregunta = !uqText || (uqText.match(/\?/g) || []).length <= 1;
+    var uqUnaPregunta = !uqText || C1_preguntaEsUnitaria(uqText);   // C1-G4.1: también rechaza "y hay..."/"y qué..." encadenados (variante ASK fusionada de G2.6)
     if(uqText && uqResolves && uqWhyNeeded && uqUnaPregunta){
       userQuestion = { text: uqText, resolves: uqResolves, whyNeeded: uqWhyNeeded };
     }
@@ -5691,8 +5731,14 @@ function C1C3A_PROMPT_ASK(ventana){
     'no evaluar si corresponde preguntar, esa decisión ya se tomó antes y no te corresponde revisarla.\n\n' +
     'FRENTE Y NECESIDAD DECLARADA:\n' + ventanaTxt + '\n\n' +
     'REGLAS:\n' +
-    '1. Generá exactamente UNA pregunta en lenguaje natural, dirigida al usuario -- nunca un ' +
-    'formulario ni varias preguntas encadenadas con "y también".\n' +
+    '1. Generá exactamente UNA pregunta en lenguaje natural, dirigida al usuario: UNA sola ' +
+    'discriminación cognitiva, no dos datos independientes unidos por "y" -- aunque quepan bajo un ' +
+    'solo signo "?", si pedís dos cosas que no dependen la una de la otra siguen siendo dos ' +
+    'preguntas. Mal: "¿Cuántas unidades comprás por colección y hay algún otro proveedor con mejor ' +
+    'precio?" (pide dos datos distintos). Bien: "¿Cuántas unidades comprás por colección?" (una sola ' +
+    'cosa) -- si el segundo dato también hace falta, elegí el más discriminante de los dos y dejá el ' +
+    'otro para una próxima pregunta, nunca los combines. Nunca un formulario ni varias preguntas ' +
+    'encadenadas con "y también".\n' +
     '2. La pregunta tiene que responder exactamente a "uncertaintyAddressed" -- ni más amplia ni ' +
     'más genérica que eso.\n' +
     '3. Tiene que tener relación visible con el Frente ("formulation"): quien la lea tiene que poder ' +
@@ -5717,7 +5763,7 @@ function C1C3A_llamarIAAsk(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
     body: JSON.stringify({ model: C1C3A_MODEL, max_tokens: C1C3A_ASK_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -5745,7 +5791,7 @@ function C1C3A_parseAskQuestion(texto){
   var whyNeeded = (typeof raw.whyNeeded === 'string' && raw.whyNeeded.trim()) ? raw.whyNeeded.trim() : null;
   var justificationSummary = (typeof raw.justificationSummary === 'string' && raw.justificationSummary.trim()) ? raw.justificationSummary.trim() : null;
   if(!text || !resolves || !whyNeeded || !justificationSummary) return null;
-  if((text.match(/\?/g) || []).length > 1) return null;   // regla C3A-04: una sola pregunta
+  if(!C1_preguntaEsUnitaria(text)) return null;   // regla C3A-04 (C1-G4.1: también rechaza "y hay..."/"y qué..." encadenados)
   return { text: text, resolves: resolves, whyNeeded: whyNeeded, justificationSummary: justificationSummary };
 }
 
@@ -5953,7 +5999,7 @@ function C1C3A_llamarIATrace(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
     body: JSON.stringify({ model: C1C3A_MODEL, max_tokens: C1C3A_TRACE_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -6571,7 +6617,7 @@ function C1C4A_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
     body: JSON.stringify({ model: C1C4A_MODEL, max_tokens: C1C4A_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -6836,7 +6882,7 @@ function C1C4B_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
     body: JSON.stringify({ model: C1C4B_MODEL, max_tokens: C1C4B_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -7101,7 +7147,7 @@ function C1E1_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
     body: JSON.stringify({ model: C1E1_MODEL, max_tokens: C1E1_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -7338,7 +7384,7 @@ function C1E2_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
     body: JSON.stringify({ model: C1E2_MODEL, max_tokens: C1E2_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -7577,7 +7623,7 @@ function C1F1_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
     body: JSON.stringify({ model: C1F1_MODEL, max_tokens: C1F1_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -7953,18 +7999,68 @@ var C1G1_MAX_CICLOS = 6;   // tope defensivo de pasos silenciosos (READ/TRACE) a
                            // límite explícito -- nunca fabrica una comprensión para evitar el tope.
 var C1G1_DECISION_UI_A_CORE = { incorporar:'incorporar', editar:'editar', mantener_abierto:'mantener_abierto', no_incorporar:'rechazar' };
 
+/* ---- C1-G4.1: traducción de lenguaje interno a lenguaje natural -- corrige un hallazgo real de
+   C1-G4 (verificación en vivo): el texto que REDACTA el modelo a veces se nombra a sí mismo ("el
+   Foco", "el Frente") o cae en un token técnico en mayúsculas (TRACE/INTERPRET/OPEN/etc.) porque
+   esos nombres aparecen en sus propios prompts internos (C1-E1/C1-C1/etc.). Esta función NO cambia
+   ningún prompt ni el contenido cognitivo -- sólo repasa el texto YA generado, acá en la capa que
+   ya traduce resultados a vistas, antes de mostrarlo.
+   Los tokens de acción (OPEN/TRACE/INTERPRET/...) están siempre en MAYÚSCULAS en el código y nunca
+   así en prosa natural real -- coincidencia exacta de palabra completa, sin falsos positivos contra
+   verbos/sustantivos comunes en minúscula (p.ej. "interpretar"/"leer" quedan intactos).
+   "Foco"/"Frente" son distintos: el modelo los usa como nombre propio interno (con mayúscula inicial
+   AUNQUE aparezcan a mitad de oración, ej. observado en vivo: "El Foco introduce un delta..."). El
+   español no capitaliza sustantivos comunes a mitad de oración, así que exigir el artículo
+   ("el"/"un"/"este"/...) inmediatamente antes Y la mayúscula en la palabra misma es la señal
+   confiable de uso técnico -- deja intacto el uso corriente en minúscula ("el foco de atención...",
+   "frente al aumento de costos..."). */
+var C1G1_TOKENS_ACCION = [
+  ['NONE_AVAILABLE', 'sin más para hacer por ahora'],
+  ['CLOSE_FRONT', 'el cierre de este tema'],
+  ['PROPAGATE', 'la propagación'],
+  ['INTERPRET', 'la interpretación'],
+  ['TRACE', 'la revisión'],
+  ['OPEN', 'la apertura'],
+  ['READ', 'la lectura'],
+  ['ASK', 'la pregunta']
+];
+function C1G1_lenguajeNatural(texto){
+  var s = String(texto == null ? '' : texto);
+  if(!s) return s;
+  C1G1_TOKENS_ACCION.forEach(function(par){
+    s = s.replace(new RegExp('\\b' + par[0] + '\\b', 'g'), par[1]);
+  });
+  // C1-G4.1 (banco de pruebas g41_tests.js, A-05): "Contextuales?" exige literalmente una "e" antes
+  // de la "s" opcional (matchea "Contextuale"/"Contextuales", nunca el singular real "Contextual")
+  // -- se corrige a "Contextual(es)?" para cubrir singular y plural real.
+  s = s.replace(/\bFrentes?\s+Contextual(es)?\b/gi, function(m){ return /s\s*$/i.test(m) ? 'estos temas' : 'este tema'; });
+  // C1-G4.1 (banco de pruebas g41_tests.js, A-01/A-06): el artículo en minúscula exclusivamente
+  // dejaba pasar el caso real observado en vivo en G4 ("El Foco introduce...", con mayúscula por ir
+  // al inicio de la oración) -- se agregan las variantes con inicial mayúscula del artículo. La
+  // palabra técnica (Frentes?/Focos?) sigue exigiendo mayúscula propia, sin flag /i, así que el uso
+  // corriente en minúscula ("el foco de atención...") sigue intacto.
+  s = s.replace(/\b(el|El|un|Un|este|Este|del|Del|al|Al|los|Los|unos|Unos|estos|Estos)\s+(Frentes?)\b/g, function(m, art, palabra){
+    return /s$/.test(palabra) ? 'estos temas' : 'este tema';
+  });
+  s = s.replace(/\b(el|El|un|Un|este|Este|del|Del|al|Al|los|Los|unos|Unos|estos|Estos)\s+(Focos?)\b/g, function(m, art, palabra){
+    return /s$/.test(palabra) ? 'estas comprensiones' : 'esta comprensión';
+  });
+  return s;
+}
+
 /* ---- Vistas (fases): funciones puras, nunca DOM, nunca deciden nada -- sólo traducen un resultado
    YA producido por el motor a lenguaje llano. Ningún nombre técnico del motor (action/Frente/Focus/
-   epistemicState/etc.) aparece en los textos que devuelven. ---- */
+   epistemicState/etc.) aparece en los textos que devuelven -- lo que el motor haya redactado pasa
+   siempre por C1G1_lenguajeNatural() antes de salir de esta capa. ---- */
 
 function C1G1_vistaApertura(organismoNombre, opening, front){
   var texto = (opening && (opening.question || opening.intention)) || (front && front.formulation) || '';
-  return { phase:'apertura', organismo: organismoNombre || null, texto: texto };
+  return { phase:'apertura', organismo: organismoNombre || null, texto: C1G1_lenguajeNatural(texto) };
 }
 
 function C1G1_vistaPregunta(askResult){
   var q = (askResult && askResult.userQuestion) || {};
-  return { phase:'pregunta', pregunta: q.text || '', porQue: q.whyNeeded || null };
+  return { phase:'pregunta', pregunta: C1G1_lenguajeNatural(q.text || ''), porQue: q.whyNeeded ? C1G1_lenguajeNatural(q.whyNeeded) : null };
 }
 
 function C1G1_vistaTrabajando(){
@@ -7976,26 +8072,27 @@ function C1G1_vistaTrabajando(){
    de cara al usuario, "no hay más para hacer acá ahora" y "todavía no sabemos cómo seguir" se
    presentan igual de tranquilos -- nunca como error técnico, nunca fabricando un resultado. */
 function C1G1_vistaCierre(motivoTexto){
-  return { phase:'cierre', texto: (motivoTexto && String(motivoTexto).trim()) || 'Por ahora no hay más para agregar acá.' };
+  var base = (motivoTexto && String(motivoTexto).trim()) || 'Por ahora no hay más para agregar acá.';
+  return { phase:'cierre', texto: C1G1_lenguajeNatural(base) };
 }
 
 function C1G1_vistaComprension(focusResult, sufficiencyResult){
   var incertidumbres = focusResult.uncertainties || [];
   return {
     phase:'comprension',
-    principal: focusResult.statement,
-    cambio: focusResult.interpretationShift,
-    incertidumbre: incertidumbres.length ? incertidumbres[0] : null,
+    principal: C1G1_lenguajeNatural(focusResult.statement),
+    cambio: C1G1_lenguajeNatural(focusResult.interpretationShift),
+    incertidumbre: incertidumbres.length ? C1G1_lenguajeNatural(incertidumbres[0]) : null,
     provisional: focusResult.stability !== 'stable',
-    verPorQue: { explica: (focusResult.explains || []).slice(), cantidadSoportes: (focusResult.supportRefs || []).length },
+    verPorQue: { explica: (focusResult.explains || []).map(function(e){ return C1G1_lenguajeNatural(e); }), cantidadSoportes: (focusResult.supportRefs || []).length },
     sugerenciaCierre: sufficiencyResult ? (sufficiencyResult.recommendation === 'close') : null
   };
 }
 
 function C1G1_vistaRetorno(returnProposal){
   return {
-    resumen: returnProposal.overallSummary,
-    cambios: (returnProposal.changes || []).map(function(c){ return { antes: c.before, ahora: c.after }; })
+    resumen: C1G1_lenguajeNatural(returnProposal.overallSummary),
+    cambios: (returnProposal.changes || []).map(function(c){ return { antes: C1G1_lenguajeNatural(c.before), ahora: C1G1_lenguajeNatural(c.after) }; })
   };
 }
 
