@@ -8177,7 +8177,21 @@ async function C1G1_continuarCiclo(estado, accionInicial){
     if(!reeval.ok){
       return { vista: C1G1_vistaCierre('No pudimos seguir evaluando este Contexto por ahora.'), estado:null };
     }
+    // C1-G4.4 (19/08, ver PENDIENTES.md): reassessCognitiveAction() ya calcula internamente el
+    // Frente reevaluado (con la nota de cambio acumulada en "uncertainty"), pero antes de este fix
+    // ese cálculo se descartaba -- el ciclo seguía con "ejecucion.front" tal cual, que ningún
+    // aplicador (C1C3A_aplicarResultadoAlFrente/actualizarFrenteTrasRespuesta) toca en su campo
+    // "uncertainty". Resultado: el selector (C1-C2) sólo veía la nota del ciclo INMEDIATAMENTE
+    // anterior en cada reevaluación, nunca el historial acumulado -- causa confirmada por replay
+    // (g44_tests.js, R-06/R-07/R-12) de la reaparición de una pregunta ya respondida. Fix mínimo:
+    // aplicar reeval.result.updatedUncertainty (ya calculado, sólo faltaba usarse) al front que
+    // continúa el ciclo. No cambia prompts, decisiones ni economía -- sólo deja de tirar a la
+    // basura un valor que la propia reevaluación ya producía.
     front = ejecucion.front;
+    if(reeval.result.updatedUncertainty){
+      front = JSON.parse(JSON.stringify(front));
+      front.uncertainty = reeval.result.updatedUncertainty;
+    }
     accionPendiente = reeval.result.nextAction;
   }
 
@@ -8234,7 +8248,16 @@ async function C1G1_responderPregunta(estadoPausado, respuestaTexto){
   if(!reeval.ok){
     return { vista: C1G1_vistaCierre('No pudimos seguir con este Contexto por ahora.'), estado:null };
   }
-  var estadoContinuar = { snapshot: estadoPausado.snapshot, opening: aplicado.opening, graphState: estadoPausado.graphState, front: aplicado.front };
+  // C1-G4.4 (19/08, ver PENDIENTES.md): mismo fix que en C1G1_continuarCiclo -- sin esto, la nota
+  // que reassessCognitiveAction() ya calculó en updatedUncertainty se perdía acá (el ciclo seguía
+  // con "aplicado.front" sin ella), y el próximo ASK/reevaluación volvía a ver el Frente como si
+  // esta ronda de pregunta/respuesta nunca hubiera pasado.
+  var frontContinuar = aplicado.front;
+  if(reeval.result.updatedUncertainty){
+    frontContinuar = JSON.parse(JSON.stringify(frontContinuar));
+    frontContinuar.uncertainty = reeval.result.updatedUncertainty;
+  }
+  var estadoContinuar = { snapshot: estadoPausado.snapshot, opening: aplicado.opening, graphState: estadoPausado.graphState, front: frontContinuar };
   return await C1G1_continuarCiclo(estadoContinuar, reeval.result.nextAction);
 }
 
