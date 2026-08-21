@@ -3766,6 +3766,272 @@ window.debugBloqueRecuerdos = function(organismoId, situacionActual, ventanaReci
   return { candidates: sel.candidates, bloque: bloque };
 };
 
+/* ============ PUNTO 6 (21/08) -- Circulación pertinente de conocimiento especializado hacia el
+   Core ============
+   Brief de Javier/ChatGPT, sexto punto puntual de esta serie (después de C1G3-P1/C1F2-P2/
+   C1F1-P3/P5, cerrados). Problema confirmado por auditoría: o.diagnosticos_pro[] y
+   o.evaluaciones_negocio_pro[] conservan resultado COMPLETO de las especialidades (Urbanismo,
+   Contextos, Negocios Pro), pero buildSystem() solo usa `entry.resumen` de la última entrada de
+   cada arreglo -- todo lo demás (dimensiones, diagnósticos integrales, proyectivos, campo de
+   decisiones, ejecución, etc., adentro de `entry.datos`) queda persistido pero nunca vuelve a
+   circular hacia la conversación del Core.
+   Principio del brief: disponibilidad completa + recuperación PERTINENTE, nunca volcar todo el
+   payload especializado en cada prompt.
+   Separación epistemológica obligatoria (regla explícita del brief, la más importante de este
+   corte): esto NO es Memoria Viva. No se crea ningún Recuerdo, no se toca o.recuerdos[], no se
+   llama seleccionarRecuerdosCandidatos() ni se le pasan evaluaciones especializadas disfrazadas
+   de recuerdos. Es un canal de lectura aparte, con su propio extractor/selector/bloque -- mismo
+   patrón estructural que M2.2/M2.3 (extractor → selector → bloque de contexto → glue de sesión →
+   un solo agregado de una línea en buildSystem()), pero sin compartir ninguna función específica
+   de Recuerdo. Sí se reutilizan, porque son utilidades léxicas puras sin semántica de Recuerdo:
+   normalizarTexto()/terminosSignificativos() (para pertinencia por coincidencia de términos) y
+   situacionYVentanaDeHistorial() (para derivar situación/ventana del historial -- no se duplica
+   su lógica).
+   READ-ONLY total: ninguna función de este corte llama a guardarOrganismo(), proponerFicha(),
+   crearRecuerdo(), fetch() ni ninguna llamada IA. Solo lee el organismo recibido -- nunca
+   cargarOrganismos() ni state -- y nunca muta el objeto fuente (los payloads de o.diagnosticos_pro/
+   o.evaluaciones_negocio_pro se recorren, jamás se reescriben). */
+
+var P6_MAX_PROFUNDIDAD = 4;              // niveles de anidamiento recorridos dentro de cada entry.datos
+var P6_MAX_FRAGMENTOS_POR_ENTRADA = 14;  // techo de fragmentos crudos por entrada antes de seleccionar --
+                                          // protege contra un payload enorme, el recorte real por
+                                          // pertinencia lo hace el selector, no este límite
+var P6_MAX_CANDIDATOS = 3;               // mismo default que M2.2/M2.3, valor de referencia del brief
+var P6_MAX_CHARS_FRAGMENTO = 400;        // referencia del brief: 350-420
+var P6_MAX_CHARS_BLOQUE = 1200;          // referencia del brief: 1000-1300
+
+// Campos técnicos/de ruteo que un fragmento no debería exponer como si fueran contenido --
+// identificadores y envoltorios de importación, sin valor de comprensión por sí solos. Fecha y
+// versión de cada entrada NO están acá: se toman aparte, de `entry.version`/`entry.fecha` (los
+// campos reales del registro), no de cualquier campo interno que se llame igual dentro de `datos`.
+var P6_CAMPOS_IGNORAR = { id:1, organismo_id:1, marco_origen:1, marco_core:1, producto:1, forzado:1 };
+
+function p6EsPrimitivoUtil(v){
+  if(v === null || v === undefined) return false;
+  var t = typeof v;
+  if(t === 'string') return v.trim().length > 0;
+  if(t === 'number' || t === 'boolean') return true;
+  return false;
+}
+
+/* Texto de UN nodo objeto: une sus propios campos primitivos ("clave: valor"), ignorando
+   P6_CAMPOS_IGNORAR y valores vacíos -- agrupa primitivas cercanas que forman una unidad
+   semántica (ej. { cod:'B3', estado:'tensionada', nota:'...' } -> "cod: B3 · estado: tensionada
+   · nota: ..."). Un arreglo de puras primitivas (ej. ["algo","otro"]) se resume como un único
+   campo, no se lo trata como una lista de nodos propios. No baja a hijos objeto/array -- eso lo
+   hace p6RecorrerFragmentos(), que emite un fragmento aparte por cada uno de esos hijos. */
+function p6TextoDeNodo(obj){
+  var partes = [];
+  Object.keys(obj).forEach(function(k){
+    if(P6_CAMPOS_IGNORAR[k]) return;
+    var v = obj[k];
+    if(p6EsPrimitivoUtil(v)){
+      partes.push(k + ': ' + v);
+    } else if(Array.isArray(v) && v.length && v.every(function(x){ return p6EsPrimitivoUtil(x); })){
+      partes.push(k + ': ' + v.join(', '));
+    }
+  });
+  return partes.join(' · ');
+}
+
+/* Recorrido recursivo controlado y defensivo -- nunca muta `valor` (solo lee sus propiedades),
+   nunca hace JSON.stringify() del payload entero. Por cada objeto que encuentra (a cualquier
+   profundidad, hasta P6_MAX_PROFUNDIDAD) emite UN fragmento con el texto de sus campos primitivos
+   propios (si tiene alguno) y sigue bajando a sus hijos objeto/array para emitir fragmentos aparte
+   de esos. No intenta "comprender" los datos -- solo los vuelve recuperables, con su `path`. */
+function p6RecorrerFragmentos(valor, pathBase, meta, fragmentos, profundidad){
+  if(!valor || typeof valor !== 'object') return;
+  if(profundidad > P6_MAX_PROFUNDIDAD) return;
+  if(fragmentos.length >= P6_MAX_FRAGMENTOS_POR_ENTRADA) return;
+
+  if(Array.isArray(valor)){
+    valor.forEach(function(item, i){
+      if(fragmentos.length >= P6_MAX_FRAGMENTOS_POR_ENTRADA) return;
+      var path = pathBase + '[' + i + ']';
+      if(item && typeof item === 'object'){
+        var texto = p6TextoDeNodo(item);
+        if(texto) fragmentos.push({ id: meta.source + '_v' + (meta.version||'0') + '_' + path,
+          source: meta.source, version: meta.version, date: meta.date, path: path, text: texto });
+        p6RecorrerFragmentos(item, path, meta, fragmentos, profundidad + 1);
+      } else if(p6EsPrimitivoUtil(item)){
+        fragmentos.push({ id: meta.source + '_v' + (meta.version||'0') + '_' + path,
+          source: meta.source, version: meta.version, date: meta.date, path: path, text: String(item) });
+      }
+    });
+    return;
+  }
+  var textoPropio = p6TextoDeNodo(valor);
+  if(textoPropio){
+    fragmentos.push({ id: meta.source + '_v' + (meta.version||'0') + '_' + pathBase,
+      source: meta.source, version: meta.version, date: meta.date, path: pathBase, text: textoPropio });
+  }
+  Object.keys(valor).forEach(function(k){
+    if(P6_CAMPOS_IGNORAR[k]) return;
+    if(fragmentos.length >= P6_MAX_FRAGMENTOS_POR_ENTRADA) return;
+    var v = valor[k];
+    if(v && typeof v === 'object'){
+      var path = (pathBase && pathBase !== 'raíz') ? (pathBase + '.' + k) : k;
+      p6RecorrerFragmentos(v, path, meta, fragmentos, profundidad + 1);
+    }
+  });
+}
+
+/* fragmentosEspecializadosDelOrganismo(o) -- extracción determinista, read-only. Recibe un
+   organismo EXPLÍCITO (nunca lee state ni cargarOrganismos()), recorre únicamente
+   o.diagnosticos_pro[] y o.evaluaciones_negocio_pro[] (las dos fuentes mínimas del brief -- no se
+   amplía a otras estructuras legacy en este corte) y devuelve fragmentos semánticos pequeños, sin
+   seleccionar todavía (eso es responsabilidad de seleccionarFragmentosEspecializados(), más
+   abajo). Para evaluaciones_negocio_pro se recorre `entry.datos` completo (no solo
+   `entry.datos.evaluacion`) a propósito: los campos de ruteo (producto/organismo_id/etc.) ya
+   quedan afuera por P6_CAMPOS_IGNORAR, y así el `evaluacion` real anidado produce paths del tipo
+   "evaluacion.dimensiones[0]", igual que los ejemplos del brief. */
+function fragmentosEspecializadosDelOrganismo(o){
+  var fragmentos = [];
+  if(!o || typeof o !== 'object') return fragmentos;
+  var dpros = Array.isArray(o.diagnosticos_pro) ? o.diagnosticos_pro : [];
+  dpros.forEach(function(entry){
+    if(!entry || !entry.datos || typeof entry.datos !== 'object') return;
+    var meta = { source: entry.origen || 'diagnostico_pro', version: entry.version || null, date: entry.fecha || null };
+    var propios = [];
+    p6RecorrerFragmentos(entry.datos, 'raíz', meta, propios, 0);
+    fragmentos = fragmentos.concat(propios);
+  });
+  var enpros = Array.isArray(o.evaluaciones_negocio_pro) ? o.evaluaciones_negocio_pro : [];
+  enpros.forEach(function(entry){
+    if(!entry || !entry.datos || typeof entry.datos !== 'object') return;
+    var meta = { source: 'negocios_pro', version: entry.version || null, date: entry.fecha || null };
+    var propios = [];
+    p6RecorrerFragmentos(entry.datos, 'raíz', meta, propios, 0);
+    fragmentos = fragmentos.concat(propios);
+  });
+  return fragmentos;
+}
+
+/* seleccionarFragmentosEspecializados({ organismo, situacionActual, ventanaReciente, fragmentos,
+   limite }) -- mismo criterio de pertinencia que seleccionarRecuerdosCandidatos() (M2.2:
+   coincidencia de términos significativos, pertinencia antes que recencia, recencia solo como
+   desempate) pero implementado aparte, sobre fragmentos especializados, sin tocar ni reutilizar
+   ninguna función específica de Recuerdo. `organismo` solo viaja para trazabilidad de debug --
+   este selector no recorre el organismo por su cuenta, opera sobre `fragmentos` ya extraídos.
+   Determinista, read-only, sin IA. Devuelve { candidates: [...] }, nunca una afirmación de
+   pertinencia garantizada -- son candidatos. */
+function seleccionarFragmentosEspecializados(args){
+  var a = args || {};
+  var fragmentos = Array.isArray(a.fragmentos) ? a.fragmentos : [];
+  var limite = (typeof a.limite === 'number' && a.limite >= 0) ? a.limite : P6_MAX_CANDIDATOS;
+  if(!fragmentos.length || limite === 0) return { candidates: [] };
+  var textoQuery = a.situacionActual || '';
+  if(a.ventanaReciente){
+    textoQuery += ' ' + (Array.isArray(a.ventanaReciente) ? a.ventanaReciente.join(' ') : a.ventanaReciente);
+  }
+  var terminosQuery = terminosSignificativos(textoQuery);
+  if(!terminosQuery.length) return { candidates: [] };   // nada significativo para comparar -- sin candidatos
+  var puntuados = fragmentos.map(function(f){
+    var terminosFrag = {};
+    terminosSignificativos(f.text).forEach(function(t){ terminosFrag[t] = true; });
+    var score = 0, senales = [];
+    terminosQuery.forEach(function(t){
+      if(terminosFrag[t]){ score += 1; senales.push(t); }
+    });
+    return { f: f, score: score, senales: senales };
+  }).filter(function(x){ return x.score > 0; });          // cero coincidencia real = no candidato
+  puntuados.sort(function(x, y){
+    if(y.score !== x.score) return y.score - x.score;      // 1° criterio: pertinencia (puntaje)
+    var fx = x.f.date ? new Date(x.f.date).getTime() : 0;
+    var fy = y.f.date ? new Date(y.f.date).getTime() : 0;
+    return fy - fx;                                        // 2° criterio, SOLO desempate: recencia
+  });
+  return {
+    candidates: puntuados.slice(0, limite).map(function(x){
+      return {
+        id: x.f.id, source: x.f.source, version: x.f.version, date: x.f.date, path: x.f.path,
+        text: x.f.text, relevanceSignals: x.senales, score: x.score
+      };
+    })
+  };
+}
+
+/* Compresión determinista, sin IA -- mismo criterio de corte en borde de palabra que
+   truncarRecuerdoParaContexto() (M2.3), pero función propia: no se comparte la de Recuerdos a
+   propósito, separación epistemológica también en el nombre. */
+function truncarFragmentoEspecializado(s, max){
+  s = String(s || '');
+  if(s.length <= max) return s;
+  var cortado = s.slice(0, max);
+  var i = cortado.lastIndexOf(' ');
+  if(i > max * 0.6) cortado = cortado.slice(0, i);
+  return cortado + '…';
+}
+
+/* Núcleo puro: dados un organismo, una situación presente y (opcional) una ventana reciente,
+   arma el bloque de contexto -- o '' si no hay nada que agregar (sin organismo, sin fragmentos,
+   sin candidatos con score>0, o situación vacía). No lee state ni history directamente -- eso lo
+   resuelve bloqueEspecialidadesDeSesion() más abajo -- para quedar testeable de forma aislada,
+   igual que bloqueRecuerdosParaContexto() en M2.3. Presupuesto de caracteres: corta por fragmento
+   (P6_MAX_CHARS_FRAGMENTO) y además por bloque completo (P6_MAX_CHARS_BLOQUE) -- si sumar el
+   siguiente candidato se pasa del total y ya hay al menos uno incluido, se corta ahí, no se sigue
+   sumando solo porque "todavía entraría parcialmente". */
+function bloqueEspecialidadesParaContexto(o, situacionActual, ventanaReciente){
+  if(!o || !situacionActual) return '';
+  var fragmentos = fragmentosEspecializadosDelOrganismo(o);
+  if(!fragmentos.length) return '';
+  var sel = seleccionarFragmentosEspecializados({
+    organismo: o, situacionActual: situacionActual, ventanaReciente: ventanaReciente,
+    fragmentos: fragmentos, limite: P6_MAX_CANDIDATOS
+  });
+  if(!sel.candidates.length) return '';
+  var acumulado = 0, textos = [];
+  for(var i = 0; i < sel.candidates.length; i++){
+    var c = sel.candidates[i];
+    var cuerpo = truncarFragmentoEspecializado(c.text, P6_MAX_CHARS_FRAGMENTO);
+    var fecha = '';
+    try{ fecha = c.date ? new Date(c.date).toISOString().slice(0,10) : ''; }catch(e){ fecha = c.date || ''; }
+    var lineaFuente = 'Fuente: ' + (c.source || '—') + (c.version ? (' · v' + c.version) : '') +
+      (fecha ? (' · ' + fecha) : '') + ' · ' + c.path;
+    var pieza = lineaFuente + '\n' + cuerpo;
+    if(acumulado + pieza.length > P6_MAX_CHARS_BLOQUE && textos.length) break;
+    textos.push(pieza);
+    acumulado += pieza.length;
+  }
+  if(!textos.length) return '';
+  return '\n\n=== INTERPRETACIONES ESPECIALIZADAS PERTINENTES DEL ORGANISMO ===\n' +
+    'Lo que sigue son fragmentos de resultados anteriores de módulos especializados (Urbanismo, ' +
+    'Contextos, Negocios) sobre este organismo. NO reemplazan la Memoria vigente ni son evidencia ' +
+    'independiente por el solo hecho de venir de una especialidad -- conservan el mismo nivel ' +
+    'epistemológico que tenían en su origen (puede ser un dato, una inferencia, una interpretación, ' +
+    'una decisión o una hipótesis, según corresponda a cada fragmento). Podés ignorarlos por ' +
+    'completo si no ayudan a comprender la situación presente. Si algo acá contradice o matiza la ' +
+    'Memoria vigente, señalá el contraste en tu respuesta -- nunca lo resuelvas en silencio ni le ' +
+    'des más peso que a la Memoria vigente, que tiene prioridad.\n\n' +
+    textos.join('\n---\n');
+}
+
+/* Glue con el estado real de sesión -- mismo patrón que bloqueRecuerdosDeSesion() (M2.3), pero
+   sin compartirla: deriva situación/ventana con situacionYVentanaDeHistorial() (reutilizada tal
+   cual, no es específica de Recuerdos) y llama al núcleo puro de arriba. */
+function bloqueEspecialidadesDeSesion(o, history){
+  var sv = situacionYVentanaDeHistorial(history);
+  return bloqueEspecialidadesParaContexto(o, sv.situacionActual, sv.ventanaReciente);
+}
+
+/* Utilidad de consola SOLO para desarrollo (regla 12 del brief: sin UI nueva para el usuario).
+   Uso manual desde devtools: debugBloqueEspecialidades('org_xxx', 'texto de la situación',
+   'ventana reciente opcional'). */
+window.debugBloqueEspecialidades = function(organismoId, situacionActual, ventanaReciente){
+  var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
+  if(!o){ console.warn('[P6] organismo no encontrado:', organismoId); return null; }
+  var fragments = fragmentosEspecializadosDelOrganismo(o);
+  var candidates = seleccionarFragmentosEspecializados({
+    organismo: o, situacionActual: situacionActual, ventanaReciente: ventanaReciente,
+    fragmentos: fragments, limite: P6_MAX_CANDIDATOS
+  }).candidates;
+  var bloque = bloqueEspecialidadesParaContexto(o, situacionActual, ventanaReciente);
+  console.log('[P6] fragmentos totales del organismo:', fragments.length);
+  console.log('[P6] candidatos:', candidates);
+  console.log('[P6] bloque final:', bloque);
+  return { fragments: fragments, candidates: candidates, bloque: bloque };
+};
+
 /* ============ CONTEXTOS UNIVERSAL · CORTE C1-A1 -- OrganismSnapshotAdapter (17/08) ============
    Primer corte técnico de Contextos Universal (distinto del Contextos Legacy ligado a
    Urbanismo -- ver deslinde en PENDIENTES.md). Capa nueva, aislada y READ-ONLY: convierte el
@@ -8606,6 +8872,7 @@ function buildSystem(){
       '\nEsto es una evaluación estructurada aparte, no la ficha confirmada: si el usuario quiere trabajarla, ayudalo a leerla desde lo ya comprendido, sin confundirla con las lecturas conversacionales de Negocios que puedan existir.';
   }
   ctx += '\nRespondé desde este estado. No empieces de cero.';
+  ctx += bloqueEspecialidadesDeSesion(o, state.history);   /* Punto 6 (21/08) -- '' si no hay candidato pertinente */
   ctx += bloqueRecuerdosDeSesion(o, state.history);   /* M2.3 -- '' si no hay candidatos pertinentes */
   if(state.modoUrban) ctx += URBAN_PROMPT;
   if(state.modoContext) ctx += CONTEXT_PROMPT;
@@ -12526,6 +12793,198 @@ function correrPruebasAuto(){
         return ctx.indexOf('evaluación de Negocios Pro') > -1 && ctx.indexOf('B1 estable') > -1;
       } finally { state.organismo = g; }
     })());
+
+    /* ========== Punto 6 (21/08) -- Circulación pertinente de conocimiento especializado hacia
+       el Core. Banco dirigido pedido por el brief, costo API 0 (todo determinista, sin fetch/
+       IA) -- incorporado al banco general a propósito, siguiendo la instrucción explícita del
+       encargo ("al agregar nuevos tests, el total naturalmente aumentará"). P6-01 a P6-17. */
+    chk('P6-01 · organismo sin diagnosticos_pro ni evaluaciones_negocio_pro -> bloque vacío', (function(){
+      var o = { id:'p6_01', nombre:'Vacío', tipo:'empresa', ficha:{} };
+      return bloqueEspecialidadesParaContexto(o, 'cualquier situación con caja y proveedores', '') === '';
+    })());
+    chk('P6-02 · info especializada existe pero sin relación con la consulta -> bloque vacío', (function(){
+      var o = { id:'p6_02', nombre:'Irrelevante', tipo:'empresa', ficha:{},
+        evaluaciones_negocio_pro: [{ version:1, fecha:'2025-01-01', resumen:'B2 estable',
+          datos: { evaluacion: { dimensiones: [{ cod:'B2', estado:'estable', nota:'los proveedores logisticos entregan a tiempo' }] } } }] };
+      return bloqueEspecialidadesParaContexto(o, '¿Cómo definimos la identidad de marca?', '') === '';
+    })());
+    chk('P6-03 · detalle pertinente enterrado en dimensiones (no en resumen) -> recuperado', (function(){
+      var o = { id:'p6_03', nombre:'Panaderia', tipo:'empresa', ficha:{},
+        evaluaciones_negocio_pro: [{ version:1, fecha:'2025-01-01', resumen:'B1 estable · B3 tensionada',
+          datos: { evaluacion: { dimensiones: [{ cod:'B3', estado:'tensionada',
+            nota:'la caja esta tensionada porque los plazos de cobro son mucho mayores que los pagos a proveedores' }] } } }] };
+      var bloque = bloqueEspecialidadesParaContexto(o, '¿Por qué habíamos visto un problema con la caja?', '');
+      return bloque.indexOf('caja') > -1 && bloque.indexOf('B3') > -1 && bloque.indexOf('INTERPRETACIONES ESPECIALIZADAS') > -1;
+    })());
+    chk('P6-04 · detalle pertinente dentro de diagnosticos_pro[].datos -> recuperado', (function(){
+      var o = { id:'p6_04', nombre:'Ciudad X', tipo:'ciudad', ficha:{},
+        diagnosticos_pro: [{ origen:'urban_pro', version:2, fecha:'2025-02-01', resumen:'2 diagnósticos de Ciudad X',
+          datos: { diagnosticos: [{ ciudad:'Ciudad X', centralidad:'debilitada por la falta de equipamientos en el borde norte' }] } }] };
+      var bloque = bloqueEspecialidadesParaContexto(o, '¿Por qué dijimos que la centralidad estaba debilitada?', '');
+      return bloque.indexOf('centralidad') > -1 && bloque.indexOf('debilitada') > -1;
+    })());
+    chk('P6-05 · evaluación antigua pertinente gana a evaluación nueva irrelevante', (function(){
+      var o = { id:'p6_05', nombre:'Marca Co', tipo:'empresa', ficha:{},
+        evaluaciones_negocio_pro: [
+          { version:1, fecha:'2024-01-01', resumen:'B4 tensionada',
+            datos: { evaluacion: { dimensiones: [{ cod:'B4', estado:'tensionada', nota:'identidad de marca debil y posicionamiento confuso' }] } } },
+          { version:2, fecha:'2025-06-01', resumen:'B5 estable',
+            datos: { evaluacion: { dimensiones: [{ cod:'B5', estado:'estable', nota:'logistica de transporte y distribucion de productos marca' }] } } }
+        ] };
+      var sel = seleccionarFragmentosEspecializados({
+        situacionActual: '¿Cómo definimos la identidad de marca?', ventanaReciente:'',
+        fragmentos: fragmentosEspecializadosDelOrganismo(o), limite: 3 });
+      return sel.candidates.length >= 1 && sel.candidates[0].version === 1;
+    })());
+    chk('P6-06 · máximo de candidatos respetado', (function(){
+      var dims = [];
+      for(var i=0;i<6;i++){ dims.push({ cod:'B'+i, estado:'tensionada', nota:'tension operativa numero '+i+' relacionada con capital de trabajo' }); }
+      var o = { id:'p6_06', nombre:'Muchas', tipo:'empresa', ficha:{},
+        evaluaciones_negocio_pro: [{ version:1, fecha:'2025-01-01', resumen:'x',
+          datos: { evaluacion: { dimensiones: dims } } }] };
+      var sel = seleccionarFragmentosEspecializados({
+        situacionActual: 'tension operativa capital de trabajo', ventanaReciente:'',
+        fragmentos: fragmentosEspecializadosDelOrganismo(o) });
+      return sel.candidates.length === P6_MAX_CANDIDATOS;
+    })());
+    chk('P6-07 · truncarFragmentoEspecializado respeta el máximo por fragmento', (function(){
+      var largo = 'palabra '.repeat(200);
+      var cortado = truncarFragmentoEspecializado(largo, P6_MAX_CHARS_FRAGMENTO);
+      return cortado.length <= P6_MAX_CHARS_FRAGMENTO + 1;
+    })());
+    chk('P6-07b · el fragmento largo queda acotado dentro del bloque final (integración)', (function(){
+      var largo = ('la caja esta muy tensionada por los plazos de cobro con los proveedores ').repeat(200);
+      var o = { id:'p6_07b', nombre:'LargoB', tipo:'empresa', ficha:{},
+        evaluaciones_negocio_pro: [{ version:1, fecha:'2025-01-01', resumen:'x',
+          datos: { evaluacion: { dimensiones: [{ cod:'B1', estado:'tensionada', nota: largo }] } } }] };
+      var bloque = bloqueEspecialidadesParaContexto(o, 'caja tensionada proveedores plazos cobro', '');
+      return bloque.length > 0 && bloque.length < largo.length / 2;
+    })());
+    chk('P6-08 · máximo total del bloque -- corta candidatos si el acumulado se pasa del presupuesto', (function(){
+      var dims = [];
+      for(var i=0;i<3;i++){
+        dims.push({ cod:'B'+i, estado:'tensionada',
+          nota: ('fragmento numero '+i+' sobre capital de trabajo y flujo de caja de la empresa ').repeat(15) });
+      }
+      var o = { id:'p6_08', nombre:'Bloque', tipo:'empresa', ficha:{},
+        evaluaciones_negocio_pro: [{ version:1, fecha:'2025-01-01', resumen:'x',
+          datos: { evaluacion: { dimensiones: dims } } }] };
+      var bloque = bloqueEspecialidadesParaContexto(o, 'capital de trabajo flujo de caja empresa', '');
+      var fuentes = (bloque.match(/Fuente:/g) || []).length;
+      return fuentes >= 1 && fuentes < 3;
+    })());
+    chk('P6-09 · no muta los objetos de origen (comparación byte a byte)', (function(){
+      var o = { id:'p6_09', nombre:'Intacto', tipo:'empresa', ficha:{diagnostico:'x'},
+        evaluaciones_negocio_pro: [{ version:1, fecha:'2025-01-01', resumen:'B1 estable',
+          datos: { evaluacion: { dimensiones: [{ cod:'B1', estado:'estable', nota:'todo en orden con la caja' }] } } }],
+        diagnosticos_pro: [{ origen:'urban_pro', version:1, fecha:'2025-01-01', resumen:'y',
+          datos: { diagnosticos: [{ ciudad:'X', centralidad:'fuerte' }] } }] };
+      var antes = JSON.stringify(o);
+      fragmentosEspecializadosDelOrganismo(o);
+      bloqueEspecialidadesParaContexto(o, 'caja centralidad', '');
+      var despues = JSON.stringify(o);
+      return antes === despues;
+    })());
+    chk('P6-10 · el selector no accede a otro organismo (no llama cargarOrganismos)', (function(){
+      var orig = cargarOrganismos;
+      var llamado = false;
+      cargarOrganismos = function(){ llamado = true; return orig.apply(this, arguments); };
+      try{
+        var o = { id:'p6_10', nombre:'Solo', tipo:'empresa', ficha:{},
+          evaluaciones_negocio_pro: [{ version:1, fecha:'2025-01-01', resumen:'x',
+            datos: { evaluacion: { dimensiones: [{ cod:'B1', estado:'tensionada', nota:'caja tensionada' }] } } }] };
+        var frags = fragmentosEspecializadosDelOrganismo(o);
+        seleccionarFragmentosEspecializados({ situacionActual:'caja tensionada', fragmentos: frags });
+        bloqueEspecialidadesParaContexto(o, 'caja tensionada', '');
+      } finally { cargarOrganismos = orig; }
+      return llamado === false;
+    })());
+    chk('P6-11 · ninguna función nueva de recuperación contiene fetch/anthropic//api/', (function(){
+      var fns = [fragmentosEspecializadosDelOrganismo, p6RecorrerFragmentos, p6TextoDeNodo,
+        seleccionarFragmentosEspecializados, bloqueEspecialidadesParaContexto, bloqueEspecialidadesDeSesion,
+        truncarFragmentoEspecializado];
+      return fns.every(function(fn){
+        var src = fn.toString();
+        return src.indexOf('fetch(') === -1 && src.indexOf('anthropic') === -1 && src.indexOf('/api/') === -1;
+      });
+    })());
+    chk('P6-12 · buildSystem() no agrega el bloque si no hay candidato pertinente', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = { id:'p6_12', nombre:'SinPertinencia', tipo:'empresa', ficha:{},
+          evaluaciones_negocio_pro: [{ version:1, fecha:'2025-01-01', resumen:'B1 estable',
+            datos: { evaluacion: { dimensiones: [{ cod:'B1', estado:'estable', nota:'logistica de transporte' }] } } }] };
+        state.history = [{ role:'user', content:'¿Cómo definimos la identidad de marca?' }];
+        var ctx = buildSystem();
+        return ctx.indexOf('INTERPRETACIONES ESPECIALIZADAS') === -1;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('P6-13 · buildSystem() agrega el bloque cuando hay detalle pertinente', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = { id:'p6_13', nombre:'ConPertinencia', tipo:'empresa', ficha:{},
+          evaluaciones_negocio_pro: [{ version:1, fecha:'2025-01-01', resumen:'B3 tensionada',
+            datos: { evaluacion: { dimensiones: [{ cod:'B3', estado:'tensionada',
+              nota:'la caja esta tensionada por los plazos de cobro con proveedores' }] } } }] };
+        state.history = [{ role:'user', content:'¿Por qué teníamos un problema con la caja y los proveedores?' }];
+        var ctx = buildSystem();
+        return ctx.indexOf('INTERPRETACIONES ESPECIALIZADAS PERTINENTES DEL ORGANISMO') > -1 && ctx.indexOf('proveedores') > -1;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('P6-14 · orden: ORGANISMO ACTIVO antes que INTERPRETACIONES ESPECIALIZADAS', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = { id:'p6_14', nombre:'Orden', tipo:'empresa', ficha:{},
+          evaluaciones_negocio_pro: [{ version:1, fecha:'2025-01-01', resumen:'B3 tensionada',
+            datos: { evaluacion: { dimensiones: [{ cod:'B3', estado:'tensionada', nota:'la caja tensionada por proveedores' }] } } }] };
+        state.history = [{ role:'user', content:'caja tensionada proveedores' }];
+        var ctx = buildSystem();
+        var iOrg = ctx.indexOf('=== ORGANISMO ACTIVO ===');
+        var iEsp = ctx.indexOf('=== INTERPRETACIONES ESPECIALIZADAS');
+        return iOrg > -1 && iEsp > -1 && iOrg < iEsp;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('P6-15 · cuando también hay Recuerdos: ESPECIALIZADAS antes que RECUERDOS PREVIOS', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = { id:'p6_15', nombre:'OrdenDos', tipo:'empresa', ficha:{},
+          evaluaciones_negocio_pro: [{ version:1, fecha:'2025-01-01', resumen:'B3 tensionada',
+            datos: { evaluacion: { dimensiones: [{ cod:'B3', estado:'tensionada', nota:'la caja tensionada por proveedores' }] } } }],
+          recuerdos: [{ id:'r1', title:'Cambio de diagnóstico sobre la caja', createdAt:'2025-01-01T00:00:00.000Z',
+            source:'core', field:['diagnostico'], before:{diagnostico:'x'},
+            after:{diagnostico:'la caja y los proveedores mejoraron'}, summary:'la caja y los proveedores mejoraron' }] };
+        state.history = [{ role:'user', content:'caja tensionada proveedores' }];
+        var ctx = buildSystem();
+        var iEsp = ctx.indexOf('=== INTERPRETACIONES ESPECIALIZADAS');
+        var iRec = ctx.indexOf('=== RECUERDOS PREVIOS');
+        return iEsp > -1 && iRec > -1 && iEsp < iRec;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('P6-16 · contradicción entre Memoria vigente y especialidad: ambas presentes, Memoria primero', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = { id:'p6_16', nombre:'Contradiccion', tipo:'empresa',
+          ficha:{ diagnostico:'La dependencia del fundador ya fue reducida.' },
+          evaluaciones_negocio_pro: [{ version:1, fecha:'2024-01-01', resumen:'B1 tensionada',
+            datos: { evaluacion: { dimensiones: [{ cod:'B1', estado:'tensionada',
+              nota:'el fundador concentra decisiones operativas criticas' }] } } }] };
+        state.history = [{ role:'user', content:'¿el fundador sigue concentrando decisiones?' }];
+        var ctx = buildSystem();
+        var iMemoria = ctx.indexOf('La dependencia del fundador ya fue reducida.');
+        var iEspecialidad = ctx.indexOf('fundador concentra decisiones');
+        return iMemoria > -1 && iEspecialidad > -1 && iMemoria < iEspecialidad;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('P6-17 · NPRO·9 sigue intacto (misma aserción, verificación directa)', (function(){
+      var g = state.organismo;
+      try{
+        state.organismo = { id:'org_test_npro2_p6', nombre:'Empresa Y', tipo:'empresa', ficha:{}, principios:[],
+          evaluaciones_negocio_pro: [{ version:1, resumen:'B1 estable · B2 tensionada', fecha:'x' }] };
+        var ctx = buildSystem();
+        return ctx.indexOf('evaluación de Negocios Pro') > -1 && ctx.indexOf('B1 estable') > -1;
+      } finally { state.organismo = g; }
+    })());
+
     chk('NPRO·10 · el rollback es reversible sin tocar Urbanismo/Contextos/candado', (function(){
       // el slot se desactiva quitando "archivo"; los otros módulos Pro no dependen de este.
       var copia = Object.assign({}, ACCESO_MODULOS.negocios);
