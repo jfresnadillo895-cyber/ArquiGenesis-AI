@@ -9024,6 +9024,71 @@ function ofrecerGuardado(textoDestilado){
    Dirección B: exports de Comprender Urbanismo / Comprender Contextos → diagnosticos_pro de la ficha.
 ====================================================================== */
 
+/* ============ PUNTO 7 (21/08) -- Circulación Core -> especialidades ============
+   antecedentesEspecializadosParaMarco(o): panorama MÍNIMO y trazable de antecedentes
+   especializados para sumar al marco que el Core deja al abrir Urbanismo/Negocios
+   (construirMarcoCore() / abrirModulo() / ag_marco_pendiente). Distinto del Punto 6
+   (que resuelve UNA PREGUNTA CONCRETA -> pertinencia -> fragmentos detallados): acá
+   todavía no hay pregunta del usuario -- es apertura de módulo, no respuesta -- así
+   que NO se llama al selector de P6 ni se fabrican consultas de pertinencia con
+   palabras inventadas. Puro READ, determinista, cero IA nueva: usa exclusivamente
+   entrada.resumen / entrada.version / entrada.fecha / entrada.origen, ya presentes
+   en o.diagnosticos_pro[] / o.evaluaciones_negocio_pro[] (mismas fuentes mínimas del
+   Punto 6). No toca o.ficha, Recuerdos, propuestas, fichaVersion ni genealogia_contextos.
+   Última entrada por fuente (no el historial completo): en diagnosticos_pro, cada
+   entrada.origen distinto es una fuente distinta (urban_pro, context_pro, ...);
+   evaluaciones_negocio_pro es una sola fuente (ya tiene su propio sistema de
+   continuidad longitudinal aparte, sin tocar acá). Presupuesto documentado abajo. */
+var P7_MAX_ANTECEDENTES = 3, P7_MAX_CHARS_RESUMEN = 400, P7_MAX_CHARS_TOTAL = 1000;
+
+function p7TruncarResumen(s, max){
+  s = String(s || '');
+  return s.length > max ? s.slice(0, max) + '…' : s;
+}
+
+function antecedentesEspecializadosParaMarco(o){
+  if(!o) return [];
+  const porFuente = {};   // fuente -> última entrada vista (gana el orden de aparición del
+                          // array -- misma convención que arr[arr.length-1] usada en todo el
+                          // archivo -- salvo que la entrada nueva traiga una versión numérica
+                          // menor a la ya guardada, caso defensivo de datos no ordenados).
+  function considerar(fuente, entrada){
+    if(!entrada || !entrada.resumen) return;
+    const actual = porFuente[fuente];
+    if(actual){
+      const vActual = Number(actual.version), vNueva = Number(entrada.version);
+      if(!isNaN(vActual) && !isNaN(vNueva) && vNueva < vActual) return;
+    }
+    porFuente[fuente] = {
+      source: fuente,
+      version: (entrada.version != null ? entrada.version : null),
+      date: entrada.fecha || null,
+      summary: p7TruncarResumen(entrada.resumen, P7_MAX_CHARS_RESUMEN)
+    };
+  }
+  (o.diagnosticos_pro || []).forEach(function(entrada){ considerar(entrada.origen || 'diagnostico_pro', entrada); });
+  (o.evaluaciones_negocio_pro || []).forEach(function(entrada){ considerar('negocio_pro', entrada); });
+
+  const candidatos = Object.keys(porFuente).map(function(k){ return porFuente[k]; });
+  // Recencia global entre fuentes distintas: fecha ISO 8601 más reciente primero
+  // (comparación de strings alcanza en ese formato); sin fecha, al final.
+  candidatos.sort(function(a, b){
+    const fa = a.date || '', fb = b.date || '';
+    if(fa === fb) return 0;
+    return fa > fb ? -1 : 1;
+  });
+
+  const resultado = [];
+  let acumulado = 0;
+  for(let i = 0; i < candidatos.length && resultado.length < P7_MAX_ANTECEDENTES; i++){
+    const c = candidatos[i];
+    if(acumulado + c.summary.length > P7_MAX_CHARS_TOTAL && resultado.length > 0) break;
+    resultado.push(c);
+    acumulado += c.summary.length;
+  }
+  return resultado;
+}
+
 function construirMarcoCore(o){
   const f = o.ficha || {};
   const ideas = (o.principios || []).map(function(p){ return p.texto; });
@@ -9039,13 +9104,17 @@ function construirMarcoCore(o){
   const abierto = [];
   if(f.tensiones) abierto.push('Tensiones activas: ' + f.tensiones);
   if(f.proximo) abierto.push('Próximo paso que ordena el caso: ' + f.proximo);
+  const marcoObj = { ideas: ideas, correspondencias: correspondencias, abierto: abierto };
+  // Punto 7 (21/08): campo opcional, retrocompatible -- sólo se agrega si hay algo que decir.
+  const antecedentes = antecedentesEspecializadosParaMarco(o);
+  if(antecedentes.length) marcoObj.antecedentes_especializados = antecedentes;
   return sellarContrato({
     producto: 'Comprender AI',
     tipo: 'marco_de_comprension',
     generado: new Date().toISOString(),
     organismo_id: o.id,
     investigacion: o.nombre + ' (' + o.tipo + ')',
-    marco: { ideas: ideas, correspondencias: correspondencias, abierto: abierto }
+    marco: marcoObj
   });
 }
 
@@ -10397,22 +10466,13 @@ function mostrarAyuda(){
 
 function fichaTieneLectura(o){
   const f = o.ficha || {};
-  return !!(f.diagnostico || (o.lecturas_urban && o.lecturas_urban.length) || (o.evaluaciones_context && o.evaluaciones_context.length) || (o.diagnosticos_pro && o.diagnosticos_pro.length));
+  return !!(f.diagnostico || (o.lecturas_urban && o.lecturas_urban.length) || (o.evaluaciones_context && o.evaluaciones_context.length) || (o.diagnosticos_pro && o.diagnosticos_pro.length) || (o.evaluaciones_negocio_pro && o.evaluaciones_negocio_pro.length));
 }
 
-async function generarInforme(o){
-  if(!fichaTieneLectura(o)){
-    cardMensaje('No hay informe sin lectura', 'La ficha de «' + o.nombre + '» todavía no tiene diagnóstico ni lecturas. Pro Estudio comunica comprensión existente: trabajá primero el organismo en el chat, Urbanismo o Contextos, y el informe va a tener sustancia real.');
-    return;
-  }
-  if(!credAlcanza('informe')){ cardSinCreditos('informe'); return; }
-  if(state.busy) return;
-  credConsumir('informe');
-  state.busy = true;
-  const epoch = state.epoch;
-  el.dot.classList.add('busy');
-  cardMensaje('Generando informe…', 'El motor está redactando la síntesis ejecutiva desde la comprensión acumulada de «' + o.nombre + '».');
-
+/* Punto 8 (21/08): insumos de Studio factoreados en función propia, pura y sincrónica --
+   idéntica lógica que tenía generarInforme() inline, sólo con nombre y testeable aparte
+   (mismo criterio que otras construirX() del archivo). No cambia ningún comportamiento. */
+function construirInsumosInforme(o){
   const f = o.ficha || {};
   let insumos = 'ORGANISMO: ' + o.nombre + ' (' + o.tipo + ')\n' +
     'Función vigente: ' + (f.funcion||'—') + '\nTensiones activas: ' + (f.tensiones||'—') +
@@ -10432,6 +10492,32 @@ async function generarInforme(o){
   }
   if(o.paradigmas && o.paradigmas.length) insumos += 'Paradigma de intervención: ' + o.paradigmas[o.paradigmas.length-1].texto + '\n';
   if(o.diagnosticos_pro && o.diagnosticos_pro.length) insumos += 'Diagnóstico profesional: ' + o.diagnosticos_pro[o.diagnosticos_pro.length-1].resumen + '\n';
+  // Punto 8 (21/08): última evaluación de Negocios Pro como insumo -- snapshot explícito para
+  // Studio (sólo resumen persistido, nunca enp.datos), no recuperación conversacional. No usa el
+  // extractor del Punto 6 ni antecedentes_especializados del Punto 7 -- es otro canal, más simple.
+  if(o.evaluaciones_negocio_pro && o.evaluaciones_negocio_pro.length){
+    const enp = o.evaluaciones_negocio_pro[o.evaluaciones_negocio_pro.length - 1];
+    if(enp && enp.resumen){
+      insumos += 'Evaluación de Negocios Pro' + (enp.version != null ? (' v' + enp.version) : '') + ': ' + enp.resumen + '\n';
+    }
+  }
+  return insumos;
+}
+
+async function generarInforme(o){
+  if(!fichaTieneLectura(o)){
+    cardMensaje('No hay informe sin lectura', 'La ficha de «' + o.nombre + '» todavía no tiene diagnóstico ni lecturas. Studio comunica comprensión existente: trabajá primero el organismo en el Core o en una especialidad, y el informe va a tener sustancia real.');
+    return;
+  }
+  if(!credAlcanza('informe')){ cardSinCreditos('informe'); return; }
+  if(state.busy) return;
+  credConsumir('informe');
+  state.busy = true;
+  const epoch = state.epoch;
+  el.dot.classList.add('busy');
+  cardMensaje('Generando informe…', 'El motor está redactando la síntesis ejecutiva desde la comprensión acumulada de «' + o.nombre + '».');
+
+  const insumos = construirInsumosInforme(o);
 
   const sistema = 'Sos el módulo Studio de Comprender AI, producto de ARQUIGÉNESIS. Studio comunica comprensión existente: NO inventás diagnóstico nuevo, redactás desde los insumos. Respondé EXCLUSIVAMENTE un JSON válido sin markdown: {"resumen":"resumen ejecutivo de 4-6 frases: qué es este organismo, qué tensión raíz lo organiza, qué función la resuelve, hacia dónde puede evolucionar y qué ordena la acción","recomendaciones":["tres recomendaciones concretas de 1-2 frases, ordenadas por relación con la tensión raíz"]}. Lenguaje llano, sin jerga interna, tono profesional sobrio. Si un insumo falta, no lo inventes.';
 
@@ -10499,6 +10585,15 @@ function renderInforme(o, red){
   if(o.diagnosticos_pro && o.diagnosticos_pro.length){
     sec('Diagnóstico profesional incorporado');
     parr(o.diagnosticos_pro[o.diagnosticos_pro.length-1].resumen);
+  }
+  // Punto 8 (21/08): huella visible de la última evaluación de Negocios Pro usada como insumo --
+  // sólo el resumen persistido, sin reconstruir dimensiones/decisiones ni mostrar JSON.
+  if(o.evaluaciones_negocio_pro && o.evaluaciones_negocio_pro.length){
+    const enp = o.evaluaciones_negocio_pro[o.evaluaciones_negocio_pro.length - 1];
+    if(enp && enp.resumen){
+      sec('Evaluación de Negocios Pro' + (enp.version != null ? (' (v' + enp.version + ')') : ''));
+      parr(enp.resumen);
+    }
   }
   if(o.proyectivos && o.proyectivos.length){
     const pv = o.proyectivos[o.proyectivos.length-1];
@@ -12983,6 +13078,257 @@ function correrPruebasAuto(){
         var ctx = buildSystem();
         return ctx.indexOf('evaluación de Negocios Pro') > -1 && ctx.indexOf('B1 estable') > -1;
       } finally { state.organismo = g; }
+    })());
+
+    /* ============ PUNTO 7 (21/08) -- pruebas dirigidas P7-01 a P7-14, sobre
+       antecedentesEspecializadosParaMarco()/construirMarcoCore() (ambas en index.html).
+       P7-15 a P7-20 (marcoCoreParaPrompt() en urbanismo.html, resumenMarcoTexto() en
+       negocios.html) viven en archivos aparte: esos dos módulos no tienen un banco
+       general/correrPruebasAuto() propio donde fusionarlas, a diferencia de index.html.
+       Mismo criterio del Punto 6: se agregan directo al banco real, el total sube. */
+    chk('P7-01 · sin diagnosticos_pro ni evaluaciones_negocio_pro -> antecedentesEspecializadosParaMarco vacío', (function(){
+      var o = { id:'o1', nombre:'X', tipo:'proyecto' };
+      return antecedentesEspecializadosParaMarco(o).length === 0;
+    })());
+    chk('P7-02 · un solo diagnosticos_pro -> 1 antecedente con source=origen y shape completo', (function(){
+      var o = { id:'o2', diagnosticos_pro: [{ origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'diagnóstico urbano X' }] };
+      var a = antecedentesEspecializadosParaMarco(o);
+      return a.length === 1 && a[0].source === 'urban_pro' && a[0].summary === 'diagnóstico urbano X' && a[0].version === 1 && a[0].date === '2026-01-01';
+    })());
+    chk('P7-03 · diagnosticos_pro con dos orígenes distintos -> 2 antecedentes (uno por fuente)', (function(){
+      var o = { id:'o3', diagnosticos_pro: [
+        { origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'urbano' },
+        { origen:'context_pro', version:1, fecha:'2026-01-02', resumen:'contextos' }
+      ]};
+      var a = antecedentesEspecializadosParaMarco(o);
+      var fuentes = a.map(function(x){ return x.source; }).sort();
+      return a.length === 2 && fuentes[0] === 'context_pro' && fuentes[1] === 'urban_pro';
+    })());
+    chk('P7-04 · mismo origen con dos versiones -> sólo la de versión más alta queda', (function(){
+      var o = { id:'o4', diagnosticos_pro: [
+        { origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'v1 vieja' },
+        { origen:'urban_pro', version:2, fecha:'2026-01-05', resumen:'v2 nueva' }
+      ]};
+      var a = antecedentesEspecializadosParaMarco(o);
+      return a.length === 1 && a[0].version === 2 && a[0].summary === 'v2 nueva';
+    })());
+    chk('P7-05 · evaluaciones_negocio_pro con dos entradas -> sólo 1 antecedente (la última), fuente negocio_pro', (function(){
+      var o = { id:'o5', evaluaciones_negocio_pro: [
+        { version:1, fecha:'2026-01-01', resumen:'negocio v1' },
+        { version:2, fecha:'2026-02-01', resumen:'negocio v2' }
+      ]};
+      var a = antecedentesEspecializadosParaMarco(o);
+      return a.length === 1 && a[0].source === 'negocio_pro' && a[0].version === 2 && a[0].summary === 'negocio v2';
+    })());
+    chk('P7-06 · diagnosticos_pro + evaluaciones_negocio_pro juntas -> 2 antecedentes (una fuente cada una)', (function(){
+      var o = { id:'o6',
+        diagnosticos_pro: [{ origen:'context_pro', version:1, fecha:'2026-01-01', resumen:'contextos Y' }],
+        evaluaciones_negocio_pro: [{ version:1, fecha:'2026-01-02', resumen:'negocio Y' }]
+      };
+      var a = antecedentesEspecializadosParaMarco(o);
+      var fuentes = a.map(function(x){ return x.source; }).sort();
+      return a.length === 2 && fuentes[0] === 'context_pro' && fuentes[1] === 'negocio_pro';
+    })());
+    chk('P7-07 · más de 3 fuentes distintas -> tope de 3 antecedentes (P7_MAX_ANTECEDENTES)', (function(){
+      var o = { id:'o7', diagnosticos_pro: [
+        { origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'a' },
+        { origen:'context_pro', version:1, fecha:'2026-01-02', resumen:'b' },
+        { origen:'otra_pro', version:1, fecha:'2026-01-03', resumen:'c' },
+        { origen:'mas_pro', version:1, fecha:'2026-01-04', resumen:'d' }
+      ]};
+      var a = antecedentesEspecializadosParaMarco(o);
+      return a.length === 3;
+    })());
+    chk('P7-08 · resumen largo (>400 chars) se trunca a P7_MAX_CHARS_RESUMEN', (function(){
+      var largo = 'x'.repeat(600);
+      var o = { id:'o8', diagnosticos_pro: [{ origen:'urban_pro', version:1, fecha:'2026-01-01', resumen: largo }] };
+      var a = antecedentesEspecializadosParaMarco(o);
+      return a[0].summary.length === P7_MAX_CHARS_RESUMEN + 1 && a[0].summary.slice(-1) === '…';
+    })());
+    chk('P7-09 · presupuesto acumulado (~1000 chars) corta antes de exceder, dejando al menos 1', (function(){
+      var largo = 'y'.repeat(400);
+      var o = { id:'o9', diagnosticos_pro: [
+        { origen:'a_pro', version:1, fecha:'2026-03-01', resumen: largo },
+        { origen:'b_pro', version:1, fecha:'2026-02-01', resumen: largo },
+        { origen:'c_pro', version:1, fecha:'2026-01-01', resumen: largo }
+      ]};
+      var a = antecedentesEspecializadosParaMarco(o);
+      return a.length === 2;
+    })());
+    chk('P7-10 · con más candidatos que el tope, se priorizan los de fecha más reciente', (function(){
+      var o = { id:'o10', diagnosticos_pro: [
+        { origen:'a_pro', version:1, fecha:'2026-01-01', resumen:'vieja' },
+        { origen:'b_pro', version:1, fecha:'2026-04-01', resumen:'nueva1' },
+        { origen:'c_pro', version:1, fecha:'2026-03-01', resumen:'nueva2' },
+        { origen:'d_pro', version:1, fecha:'2026-02-01', resumen:'media' }
+      ]};
+      var a = antecedentesEspecializadosParaMarco(o);
+      var fuentes = a.map(function(x){ return x.source; });
+      return a.length === 3 && fuentes.indexOf('a_pro') === -1;
+    })());
+    chk('P7-11 · construirMarcoCore sin antecedentes -> marco NO trae la key antecedentes_especializados', (function(){
+      var o = { id:'o11', nombre:'Sin especialidades', tipo:'proyecto', ficha:{}, principios:[] };
+      var m = construirMarcoCore(o);
+      return !('antecedentes_especializados' in m.marco);
+    })());
+    chk('P7-12 · construirMarcoCore con antecedentes -> marco.antecedentes_especializados con shape {source,version,date,summary}', (function(){
+      var o = { id:'o12', nombre:'Con especialidad', tipo:'proyecto', ficha:{}, principios:[],
+        diagnosticos_pro: [{ origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'urbano Z' }] };
+      var m = construirMarcoCore(o);
+      var a = m.marco.antecedentes_especializados;
+      return Array.isArray(a) && a.length === 1 &&
+        a[0].source === 'urban_pro' && a[0].version === 1 && a[0].date === '2026-01-01' && a[0].summary === 'urbano Z';
+    })());
+    chk('P7-13 · construirMarcoCore sigue sellando version_contrato 2.1 y tipo marco_de_comprension', (function(){
+      var o = { id:'o13', nombre:'X', tipo:'proyecto', ficha:{}, principios:[],
+        diagnosticos_pro: [{ origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'x' }] };
+      var m = construirMarcoCore(o);
+      return m.version_contrato === '2.1' && m.tipo === 'marco_de_comprension';
+    })());
+    chk('P7-14 · cero IA (sin fetch/anthropic/api en el código fuente) y READ-only (no muta el organismo)', (function(){
+      var fns = [antecedentesEspecializadosParaMarco, p7TruncarResumen, construirMarcoCore];
+      var sinIA = fns.every(function(fn){
+        var src = fn.toString();
+        return src.indexOf('fetch(') === -1 && src.indexOf('anthropic') === -1 && src.indexOf('/api/') === -1;
+      });
+      var o = { id:'o14', nombre:'X', tipo:'proyecto', ficha:{ diagnostico:'d' }, principios:[],
+        diagnosticos_pro: [{ origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'x' }],
+        evaluaciones_negocio_pro: [{ version:1, fecha:'2026-01-01', resumen:'y' }] };
+      var antes = JSON.stringify(o);
+      construirMarcoCore(o);
+      var despues = JSON.stringify(o);
+      return sinIA && antes === despues;
+    })());
+
+    /* ============ PUNTO 8 (21/08) -- pruebas dirigidas P8-01 a P8-18, sobre fichaTieneLectura(),
+       construirInsumosInforme() (factoreada de generarInforme(), misma lógica) y renderInforme()
+       -- las tres en index.html. P8-19 (node --check) no es una aserción de runtime, se reporta
+       aparte, igual que en los cortes anteriores. P8-17/P8-18 son guardas livianas de que las
+       funciones de los Puntos 6/7 siguen presentes y con comportamiento base sin cambios -- la
+       verificación exhaustiva real es que los propios P6-01..17/P7-01..14 de arriba se re-corren
+       enteros en cada ejecución de este banco (por eso el total sube de 320 a 334, no baja). */
+    chk('P8-01 · sólo evaluaciones_negocio_pro -> fichaTieneLectura(o) true', (function(){
+      var o = { ficha:{}, evaluaciones_negocio_pro:[{ version:1, resumen:'x' }] };
+      return fichaTieneLectura(o) === true;
+    })());
+    chk('P8-02 · organismo realmente vacío -> fichaTieneLectura(o) false', (function(){
+      var o = { ficha:{} };
+      return fichaTieneLectura(o) === false;
+    })());
+    chk('P8-03 · sólo diagnóstico Core -> fichaTieneLectura(o) sigue true', (function(){
+      var o = { ficha:{ diagnostico:'d' } };
+      return fichaTieneLectura(o) === true;
+    })());
+    chk('P8-04 · sólo lecturas_urban -> fichaTieneLectura(o) sigue true', (function(){
+      var o = { ficha:{}, lecturas_urban:[{ version:1, dimensiones:[] }] };
+      return fichaTieneLectura(o) === true;
+    })());
+    chk('P8-05 · sólo evaluaciones_context -> fichaTieneLectura(o) sigue true', (function(){
+      var o = { ficha:{}, evaluaciones_context:[{ version:1, fuerzas:[], campo:'c' }] };
+      return fichaTieneLectura(o) === true;
+    })());
+    chk('P8-06 · sólo diagnosticos_pro -> fichaTieneLectura(o) sigue true', (function(){
+      var o = { ficha:{}, diagnosticos_pro:[{ origen:'urban_pro', version:1, resumen:'d' }] };
+      return fichaTieneLectura(o) === true;
+    })());
+    chk('P8-07 · tres evaluaciones Negocios -> el insumo contiene exclusivamente la última', (function(){
+      var o = { nombre:'X', tipo:'proyecto', ficha:{}, evaluaciones_negocio_pro: [
+        { version:1, resumen:'RESUMEN_V1_UNICO' },
+        { version:2, resumen:'RESUMEN_V2_UNICO' },
+        { version:3, resumen:'RESUMEN_V3_UNICO' }
+      ]};
+      var ins = construirInsumosInforme(o);
+      return ins.indexOf('RESUMEN_V3_UNICO') > -1 && ins.indexOf('RESUMEN_V1_UNICO') === -1 && ins.indexOf('RESUMEN_V2_UNICO') === -1;
+    })());
+    chk('P8-08 · el insumo contiene el encabezado "Evaluación de Negocios Pro" y el resumen', (function(){
+      var o = { nombre:'X', tipo:'proyecto', ficha:{}, evaluaciones_negocio_pro: [{ version:5, resumen:'B1 estable · B2 tensionada' }] };
+      var ins = construirInsumosInforme(o);
+      return ins.indexOf('Evaluación de Negocios Pro') > -1 && ins.indexOf('v5') > -1 && ins.indexOf('B1 estable · B2 tensionada') > -1;
+    })());
+    chk('P8-09 · el insumo NO serializa evaluaciones_negocio_pro[].datos', (function(){
+      var o = { nombre:'X', tipo:'proyecto', ficha:{}, evaluaciones_negocio_pro: [{
+        version:1, resumen:'resumen corto',
+        datos: { producto:'Comprender Negocios Pro', evaluacion: { dimensiones: [{ marcador:'MARCADOR_INTERNO_DATOS_NO_DEBE_SALIR' }] } }
+      }]};
+      var ins = construirInsumosInforme(o);
+      return ins.indexOf('MARCADOR_INTERNO_DATOS_NO_DEBE_SALIR') === -1 && ins.indexOf('Comprender Negocios Pro') === -1;
+    })());
+    chk('P8-10 · renderInforme() muestra sección Negocios Pro cuando existe', (function(){
+      var o = { nombre:'Test10', tipo:'proyecto', ficha:{}, evaluaciones_negocio_pro:[{ version:2, resumen:'RESUMEN_VISIBLE_P8_10' }] };
+      var creados = [];
+      var real = document.createElement;
+      document.createElement = function(tag){ var e = real.call(document, tag); creados.push({ tag:tag, el:e }); return e; };
+      try{ renderInforme(o, { resumen:'', recomendaciones:[] }); } finally { document.createElement = real; }
+      var titulos = creados.filter(function(c){ return c.tag === 'h2'; }).map(function(c){ return c.el.textContent; });
+      var parrafos = creados.filter(function(c){ return c.tag === 'p'; }).map(function(c){ return c.el.textContent; });
+      var tieneTitulo = titulos.some(function(t){ return t.indexOf('Evaluación de Negocios Pro') === 0; });
+      var tieneResumen = parrafos.indexOf('RESUMEN_VISIBLE_P8_10') > -1;
+      return tieneTitulo && tieneResumen;
+    })());
+    chk('P8-11 · renderInforme() no muestra sección Negocios Pro si no existe', (function(){
+      var o = { nombre:'Test11', tipo:'proyecto', ficha:{ diagnostico:'d' } };
+      var creados = [];
+      var real = document.createElement;
+      document.createElement = function(tag){ var e = real.call(document, tag); creados.push({ tag:tag, el:e }); return e; };
+      try{ renderInforme(o, { resumen:'', recomendaciones:[] }); } finally { document.createElement = real; }
+      var titulos = creados.filter(function(c){ return c.tag === 'h2'; }).map(function(c){ return c.el.textContent; });
+      return !titulos.some(function(t){ return t.indexOf('Evaluación de Negocios Pro') === 0; });
+    })());
+    chk('P8-12 · la versión visible en el título corresponde a la última evaluación', (function(){
+      var o = { nombre:'Test12', tipo:'proyecto', ficha:{}, evaluaciones_negocio_pro:[
+        { version:1, resumen:'v1' }, { version:2, resumen:'v2' }, { version:7, resumen:'v7' }
+      ]};
+      var creados = [];
+      var real = document.createElement;
+      document.createElement = function(tag){ var e = real.call(document, tag); creados.push({ tag:tag, el:e }); return e; };
+      try{ renderInforme(o, { resumen:'', recomendaciones:[] }); } finally { document.createElement = real; }
+      var titulos = creados.filter(function(c){ return c.tag === 'h2'; }).map(function(c){ return c.el.textContent; });
+      return titulos.indexOf('Evaluación de Negocios Pro (v7)') > -1;
+    })());
+    chk('P8-13 · construirInsumosInforme()/renderInforme() no modifican el organismo (READ-only)', (function(){
+      var o = { nombre:'Test13', tipo:'proyecto', ficha:{ diagnostico:'d' }, principios:[],
+        evaluaciones_negocio_pro:[{ version:3, resumen:'resumen13' }],
+        diagnosticos_pro:[{ origen:'urban_pro', version:1, resumen:'urb' }] };
+      var antes = JSON.stringify(o);
+      construirInsumosInforme(o);
+      renderInforme(o, { resumen:'r', recomendaciones:['a'] });
+      var despues = JSON.stringify(o);
+      return antes === despues;
+    })());
+    chk('P8-14 · construirInsumosInforme()/renderInforme() no agregan ninguna llamada fetch() nueva', (function(){
+      return construirInsumosInforme.toString().indexOf('fetch(') === -1 &&
+        renderInforme.toString().indexOf('fetch(') === -1;
+    })());
+    chk('P8-15 · una entrada con la forma real que produce adjuntarEvaluacionNegocioPro() sigue reconociéndose', (function(){
+      // Misma forma exacta del push real de adjuntarEvaluacionNegocioPro(): { version, fecha,
+      // resumen, datos, forzado } -- sin invocar la función completa acá (hace lookup de
+      // organismo real / guarda / sincroniza con el servidor, fuera de alcance de este test).
+      var o = { nombre:'X', tipo:'proyecto', ficha:{}, evaluaciones_negocio_pro: [
+        { version:1, fecha:new Date().toISOString(), resumen:'B1 estable', datos:{ producto:'Comprender Negocios Pro' }, forzado:null }
+      ]};
+      return fichaTieneLectura(o) === true && construirInsumosInforme(o).indexOf('B1 estable') > -1;
+    })());
+    chk('P8-16 · NPRO·9 sigue intacto tras los cambios de Punto 8 (buildSystem no tocado)', (function(){
+      var g = state.organismo;
+      try{
+        state.organismo = { id:'org_test_npro2_p8', nombre:'Empresa Z', tipo:'empresa', ficha:{}, principios:[],
+          evaluaciones_negocio_pro: [{ version:1, resumen:'B1 estable · B2 tensionada', fecha:'x' }] };
+        var ctx = buildSystem();
+        return ctx.indexOf('evaluación de Negocios Pro') > -1 && ctx.indexOf('B1 estable') > -1;
+      } finally { state.organismo = g; }
+    })());
+    chk('P8-17 · funciones del Punto 6 siguen presentes y con comportamiento base sin cambios', (function(){
+      var o = { id:'o_p8_17' };
+      return typeof bloqueEspecialidadesDeSesion === 'function' &&
+        typeof seleccionarFragmentosEspecializados === 'function' &&
+        bloqueEspecialidadesDeSesion(o, []) === '';
+    })());
+    chk('P8-18 · funciones del Punto 7 siguen presentes y con comportamiento base sin cambios', (function(){
+      var o1 = { id:'o_p8_18' };
+      var o2 = { id:'o_p8_18b', nombre:'X', tipo:'proyecto', ficha:{}, principios:[] };
+      return typeof antecedentesEspecializadosParaMarco === 'function' &&
+        antecedentesEspecializadosParaMarco(o1).length === 0 &&
+        !('antecedentes_especializados' in construirMarcoCore(o2).marco);
     })());
 
     chk('NPRO·10 · el rollback es reversible sin tocar Urbanismo/Contextos/candado', (function(){

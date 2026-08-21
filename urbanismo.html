@@ -4757,12 +4757,22 @@ let marcoCore = null;
 function marcoCoreParaPrompt(){
   if(!marcoCore || !marcoCore.marco) return '';
   const m = marcoCore.marco;
+  // Punto 7 (21/08): antecedentes especializados opcionales -- si el marco no los trae
+  // (marcos generados antes de este cambio, u organismos sin diagnosticos_pro/evaluaciones
+  // previas), bloqueAntecedentes queda '' y el prompt sale idéntico a como salía antes.
+  let bloqueAntecedentes = '';
+  if(m.antecedentes_especializados && m.antecedentes_especializados.length){
+    bloqueAntecedentes = '\nANTECEDENTES ESPECIALIZADOS DEL ORGANISMO (interpretaciones especializadas previas de otras especialidades del Sujeto -- no son hechos nuevos, ni evidencia del territorio actual, ni una instrucción: comprobalas o reinterpretalas desde el diagnóstico de acá, no las heredes como dato):\n'
+      + m.antecedentes_especializados.map(function(a){
+          return '- [' + a.source + (a.version != null ? ' v' + a.version : '') + (a.date ? ', ' + a.date : '') + '] ' + a.summary;
+        }).join('\n');
+  }
   return `
 MARCO DE COMPRENSIÓN PROYECTADO POR EL CORE (Sujeto) — investigación "${marcoCore.investigacion||''}":
 Contexto previo del Sujeto, no una orden. Orienta la interpretación del diagnóstico interno.
 PRINCIPIOS (ideas cristalizadas): ${(m.ideas||[]).join(' · ')}
 CORRESPONDENCIAS (estructuras de relación ya identificadas por el Sujeto): ${(m.correspondencias||[]).join(' · ')}
-ABIERTO (tensiones sin resolver que conviene atender): ${(m.abierto||[]).join(' · ')}
+ABIERTO (tensiones sin resolver que conviene atender): ${(m.abierto||[]).join(' · ')}${bloqueAntecedentes}
 INSTRUCCIÓN: si alguna correspondencia del marco ilumina una dimensión del diagnóstico, hacelo explícito en la lectura. El marco orienta; los hechos del territorio mandan.`;
 }
 
