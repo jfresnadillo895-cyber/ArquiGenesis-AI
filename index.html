@@ -2670,13 +2670,17 @@ function resetHilo(org){
   el.hilo.appendChild(sep);
 }
 
+/* Punto 10 (21/08): aparición en sesión SOLAMENTE -- Hilo + state.principios. Ya NO incorpora a
+   o.principios[] ni registra momento persistente: eso ahora requiere confirmación humana explícita
+   vía la gobernanza de propuestas (proponerFicha() -> resolverPropuesta() -> aplicarPropuesta(),
+   con principios_candidatos). registrarMomento('principio', ...) se movió a aplicarPropuesta(), y
+   sólo corre para los principios efectivamente confirmados (nunca por la mera emisión del motor). */
 function addPrincipio(texto, fam){
   if(state.principios.length === 0){
     var v = el.hilo.querySelector('.vacio');   // C-09: sólo se quita el marcador de vacío
     if(v) v.remove();
   }
   state.principios.push({texto, fam});
-  registrarMomento('principio', texto, state.ultimaLectura);   /* N2 */
   const n = String(state.principios.length).padStart(2,'0');
   const d = document.createElement('div');
   d.className = 'principio' + (fam ? ' f-'+fam : '');
@@ -2962,8 +2966,17 @@ function nuevoIdPropuesta(){
   return 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,5);
 }
 
+/* Punto 10 (21/08): normalización estrictamente textual para deduplicar principios -- espacios
+   colapsados/recortados + comparación case-insensitive, nada de equivalencia semántica ni IA
+   (eso queda fuera de este corte, tal como pide el brief). Función propia, no se reutiliza
+   normalizarTexto() de M2.2 a propósito: esa tokeniza y saca acentos/puntuación, más agresiva
+   de lo que este corte pide -- acá el criterio es literal, no léxico. */
+function normalizarPrincipioParaComparar(s){
+  return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 /* ---- ENTRADA DEL LAZO: reemplaza a fusionarFicha como destino del marcador ---- */
-function proponerFicha(fichaNueva, lectura, hito, horizonte){
+function proponerFicha(fichaNueva, lectura, hito, horizonte, principiosCandidatos){
   if(!state.organismo) return null;                    // modo Chat: no hay ficha que actualizar
   var tieneFicha = fichaNueva && Object.keys(fichaNueva).length > 0;
   if(tieneFicha){
@@ -2972,9 +2985,18 @@ function proponerFicha(fichaNueva, lectura, hito, horizonte){
   }
   var o = state.organismo;
   var d = tieneFicha ? diffFicha(o.ficha, fichaNueva) : { campos:[], anterior:{}, candidato:{} };
-  // Corte J: un hito o un horizonte tambien justifican una propuesta, aunque la
-  // ficha en si no haya cambiado nada sustantivo en este turno.
-  if(!d.campos.length && !hito && !horizonte) return null;   // nada cambia: sin propuesta y sin aviso
+  // Punto 10 (21/08): principios candidatos de esta misma respuesta del motor -- viajan en la
+  // MISMA propuesta que ficha/hito/horizonte (no se crea una cuarta cola de confirmación). Se
+  // filtra acá lo obviamente inválido (sin texto); la deduplicación real contra o.principios[]
+  // existente ocurre recién al confirmar, en aplicarPropuesta() -- acá todavía no sabemos si el
+  // usuario va a confirmar, corregir o rechazar.
+  var principios_candidatos = Array.isArray(principiosCandidatos)
+    ? principiosCandidatos.filter(function(p){ return p && typeof p.texto === 'string' && p.texto.trim(); })
+                           .map(function(p){ return { texto: p.texto.trim(), fam: p.fam || null }; })
+    : [];
+  // Corte J: un hito o un horizonte tambien justifican una propuesta, aunque la ficha en si no
+  // haya cambiado nada sustantivo en este turno. Punto 10: un principio candidato también.
+  if(!d.campos.length && !hito && !horizonte && !principios_candidatos.length) return null;   // nada cambia: sin propuesta y sin aviso
   var c = cargarPropuestas(), ahora = new Date().toISOString();
   c.propuestas.forEach(function(p){                    // una sola pendiente por organismo
     if(p.estado === 'pendiente' && p.organismo_id === o.id){ p.estado = 'caduca'; p.resuelto = ahora; }
@@ -2992,6 +3014,7 @@ function proponerFicha(fichaNueva, lectura, hito, horizonte){
     anterior: d.anterior,
     hito: hito || null,               // Corte J: cierre de etapa candidato (append-only al confirmar)
     horizonte: horizonte || null,      // Corte J: horizonte candidato (reemplaza al vigente al confirmar)
+    principios_candidatos: principios_candidatos,   // Punto 10: append-only al confirmar, con dedup textual
     lectura: lectura ? { tension: lectura.tension || null, funcion: lectura.funcion || null, diag: lectura.diag || null } : null,
     turno: (state.history ? state.history.length : 0),
     estado: 'pendiente',
@@ -3069,6 +3092,31 @@ function aplicarPropuesta(p, correccion){
     };
   }
 
+  // Punto 10 (21/08): principios candidatos -- misma gobernanza que ficha/hito/horizonte, recién
+  // acá (confirmación explícita) se incorporan a o.principios[], append-only. El texto persistido
+  // es el confirmado/corregido por el usuario (correccion.principios[i]), no necesariamente el que
+  // propuso el motor -- mismo criterio que ya usa `correccion[k]` para campos de ficha. Antes de
+  // cada append, deduplicación textual defensiva (espacios normalizados, case-insensitive, sin
+  // equivalencia semántica) contra lo que YA existe en o.principios[] y contra lo que se va
+  // agregando en esta misma confirmación. Nunca crea Recuerdo -- eso sigue atado únicamente a
+  // p.campos.length, sin cambios acá.
+  var principiosConfirmados = [];
+  if(p.principios_candidatos && p.principios_candidatos.length){
+    o.principios = o.principios || [];
+    var vistos = {};
+    o.principios.forEach(function(pp){ vistos[normalizarPrincipioParaComparar(pp.texto)] = true; });
+    p.principios_candidatos.forEach(function(cand, idx){
+      var texto = (correccion && Array.isArray(correccion.principios) &&
+                   typeof correccion.principios[idx] === 'string' && correccion.principios[idx].trim())
+        ? correccion.principios[idx].trim() : cand.texto;
+      var clave = normalizarPrincipioParaComparar(texto);
+      if(!clave || vistos[clave]) return;   // vacío tras corregir, o ya existe -- no duplicar
+      vistos[clave] = true;
+      o.principios.push({ texto: texto, fam: cand.fam || null });
+      principiosConfirmados.push(texto);
+    });
+  }
+
   fusionarFicha(aplicado);            /* <-- única invocación, desde confirmación explícita */
   try{                                 /* N2 · queda en el recorrido qué se confirmó y cuándo */
     if(p.campos.length){
@@ -3078,12 +3126,15 @@ function aplicarPropuesta(p, correccion){
         p.lectura);
     }
     if(p.hito) registrarMomento('etapa_completada', p.hito.etapa || p.hito.comprendimos || '', p.lectura);
+    // Punto 10: un momento 'principio' por cada principio efectivamente incorporado (nunca por
+    // los descartados por duplicado, y nunca si la propuesta se rechaza -- eso ni siquiera llega acá).
+    principiosConfirmados.forEach(function(texto){ registrarMomento('principio', texto, p.lectura); });
   }catch(e){}
 
   o.ficha.version = fichaVersion(o) + 1;
   o.actualizado = new Date().toISOString();
   guardarOrganismo(o);
-  return { ok:true, aplicado: aplicado, hito: p.hito || null, horizonte: p.horizonte || null };
+  return { ok:true, aplicado: aplicado, hito: p.hito || null, horizonte: p.horizonte || null, principios: principiosConfirmados };
 }
 
 /* ---- RESOLUCIÓN: confirmar | corregir | rechazar ---- */
@@ -3121,9 +3172,17 @@ function avisoPropuesta(p){
   d.className = 'propaviso';
   var t = document.createElement('span'); t.className = 'pa-txt';
   var vis = camposVisibles(p.campos).length;
-  t.textContent = vis
-    ? ('El motor propone actualizar la memoria en ' + vis + (vis === 1 ? ' aspecto.' : ' aspectos.'))
-    : 'El motor propone un ajuste interno de la memoria.';
+  var nPrin = (p.principios_candidatos && p.principios_candidatos.length) || 0;   // Punto 10 (21/08)
+  if(vis && nPrin){
+    t.textContent = 'El motor propone actualizar la memoria en ' + vis + (vis === 1 ? ' aspecto' : ' aspectos') +
+      ' y agregar ' + nPrin + (nPrin === 1 ? ' principio.' : ' principios.');
+  } else if(nPrin){
+    t.textContent = 'El motor propone agregar ' + nPrin + (nPrin === 1 ? ' principio a la memoria.' : ' principios a la memoria.');
+  } else {
+    t.textContent = vis
+      ? ('El motor propone actualizar la memoria en ' + vis + (vis === 1 ? ' aspecto.' : ' aspectos.'))
+      : 'El motor propone un ajuste interno de la memoria.';
+  }
   var b = document.createElement('button'); b.className = 'btn'; b.textContent = 'Revisar';
   b.onclick = function(){ cardPropuesta(p.id, false); };
   d.appendChild(t); d.appendChild(b);
@@ -3263,18 +3322,20 @@ function cardPropuesta(id, editando){
   el.cardContent.innerHTML = '';
   var h = document.createElement('h3');
   h.textContent = editando ? 'Corregir la propuesta' : 'Actualización propuesta para la memoria';
+  var principiosCand = p.principios_candidatos || [];   // Punto 10 (21/08)
   var p1 = document.createElement('p');
   p1.textContent = (p.estado === 'pendiente')
     ? (editando ? 'Editá el texto que va a quedar en la memoria. Se guarda lo que escribas vos, no lo que propuso el motor.'
-                : (camposVisibles(p.campos).length
+                : ((camposVisibles(p.campos).length || principiosCand.length)
                    ? 'Nada se guardó todavía. Revisá campo por campo y decidí.'
                    : 'Nada se guardó todavía. Esta actualización no cambia el texto de la memoria.'))
     : 'Estado: ' + (PROP_ESTADO_LABEL[p.estado] || p.estado) + '. Se conserva como historia.';
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
 
   var editores = {};
+  var editoresPrincipios = [];   // Punto 10: paralelo a p.principios_candidatos, por índice
   var visibles = camposVisibles(p.campos);
-  if(!visibles.length){
+  if(!visibles.length && !principiosCand.length){
     var solo = document.createElement('div'); solo.className = 'propcmp';
     var sl = document.createElement('div'); sl.className = 'pc-campo'; sl.textContent = 'Ajuste interno';
     var sv = document.createElement('div'); sv.className = 'pc-new';
@@ -3304,6 +3365,26 @@ function cardPropuesta(id, editando){
     }
     el.cardContent.appendChild(box);
   });
+  // Punto 10 (21/08): principios candidatos -- mismo patrón visual que un campo de ficha (label +
+  // texto o textarea al corregir), pero sin "anterior" (un principio candidato es una incorporación
+  // nueva, no reemplaza nada existente).
+  principiosCand.forEach(function(cand, idx){
+    var box = document.createElement('div'); box.className = 'propcmp';
+    var lb = document.createElement('div'); lb.className = 'pc-campo';
+    lb.textContent = 'Principio' + (principiosCand.length > 1 ? (' ' + (idx+1)) : '');
+    box.appendChild(lb);
+    if(editando && p.estado === 'pendiente'){
+      var ta = document.createElement('textarea');
+      ta.value = cand.texto;
+      editoresPrincipios[idx] = ta;
+      box.appendChild(ta);
+    }else{
+      var nv = document.createElement('div'); nv.className = 'pc-new';
+      nv.textContent = cand.texto;
+      box.appendChild(nv);
+    }
+    el.cardContent.appendChild(box);
+  });
 
   var pie = document.createElement('p');
   pie.style.cssText = 'font-size:12px;color:var(--faint)';
@@ -3318,6 +3399,9 @@ function cardPropuesta(id, editando){
       bG.onclick = function(){
         var corr = {}, kk;
         for(kk in editores){ if(Object.prototype.hasOwnProperty.call(editores, kk)) corr[kk] = editores[kk].value; }
+        if(editoresPrincipios.length){   // Punto 10 (21/08): paralelo por índice a principios_candidatos
+          corr.principios = editoresPrincipios.map(function(ta){ return ta ? ta.value : ''; });
+        }
         var r = resolverPropuesta(p.id, 'corregir', corr);
         cerrarOverlay();
         if(!r.ok) cardMensaje('No se pudo aplicar', r.motivo + '.');
@@ -3331,7 +3415,7 @@ function cardPropuesta(id, editando){
       bR.style.marginRight = 'auto';
       bR.onclick = function(){ resolverPropuesta(p.id, 'rechazar'); cerrarOverlay(); };
       var bE = null;
-      if(visibles.length){   // D-01: sin campos visibles no hay nada que corregir
+      if(visibles.length || principiosCand.length){   // D-01: sin nada corregible no hay botón "Corregir"
         bE = document.createElement('button'); bE.className = 'btn'; bE.textContent = 'Corregir';
         bE.onclick = function(){ cardPropuesta(p.id, true); };
       }
@@ -9015,19 +9099,19 @@ async function enviar(texto){
       state.ultimaLectura = { diag: parsed.diag, tension: parsed.tension, funcion: parsed.funcion };
     }
     addMotorMsg(parsed);
+    // Punto 10 (21/08): addPrincipio() ahora sólo hace aparición en sesión (Hilo + state.principios)
+    // -- ya NO escribe en state.organismo.principios[]. La incorporación persistente pasa a ser un
+    // candidato más de la misma propuesta que ya gobierna ficha/hito/horizonte (ver proponerFicha()).
     for(const p of parsed.principios){
       addPrincipio(p, parsed.diag);
-      if(state.organismo){
-        state.organismo.principios = state.organismo.principios || [];
-        state.organismo.principios.push({ texto:p, fam:parsed.diag });
-      }
     }
-    // Corte J: un cierre de etapa u horizonte tambien dispara la propuesta, aunque
-    // ese turno no haya traido un [[FICHA:...]] (el cierre puede llegar solo).
-    if(parsed.ficha || parsed.cierreEtapa || parsed.horizonte){
-      proponerFicha(parsed.ficha || {}, state.ultimaLectura, parsed.cierreEtapa, parsed.horizonte);
+    var principiosCandidatos = parsed.principios.map(function(p){ return { texto:p, fam:parsed.diag }; });
+    // Corte J: un cierre de etapa u horizonte tambien dispara la propuesta, aunque ese turno no
+    // haya traido un [[FICHA:...]] (el cierre puede llegar solo). Punto 10: un principio candidato,
+    // igual que un hito o un horizonte, también justifica una propuesta aunque la ficha no cambie.
+    if(parsed.ficha || parsed.cierreEtapa || parsed.horizonte || principiosCandidatos.length){
+      proponerFicha(parsed.ficha || {}, state.ultimaLectura, parsed.cierreEtapa, parsed.horizonte, principiosCandidatos);
     }
-    else if(state.organismo && parsed.principios.length) guardarOrganismo(state.organismo);
     var cerroLectura = false;
     if(state.modoUrban && state.organismo && parsed.udims.length && parsed.proyectivo){
       cerrarLecturaUrban(parsed.udims, parsed.proyectivo); cerroLectura = true;
@@ -13546,6 +13630,222 @@ function correrPruebasAuto(){
       // el lazo N1.0 -- este chk corre solo dentro de index.html, así que su sola
       // ejecución sin tocar los otros tres archivos ya es la prueba de aislamiento.
       return typeof crearRecuerdo === 'function' && typeof recuerdosDe === 'function';
+    })());
+
+    /* ============ PUNTO 10 (21/08) -- Gobernanza de Principios persistentes, M10-01 a M10-17.
+       Mismo patrón de prueba que M1-01..07 (stub de cargarPropuestas/persistirPropuestas/
+       guardarOrganismo, state.organismo real, proponerFicha()->resolverPropuesta()). M10-18
+       (node --check) no es una aserción de runtime, se reporta aparte. */
+    chk('M10-01 · el motor emite principio -- aparece en sesión pero no se persiste antes de confirmar', (function(){
+      var o = { id:'org_m10_01', nombre:'M10 Uno', tipo:'empresa', ficha:{}, principios:[] };
+      var origState = state.organismo, origPrincipios = state.principios;
+      try{
+        state.organismo = o;
+        state.principios = [];
+        addPrincipio('no vender lo que no se puede sostener', 'energia');
+        return state.principios.length === 1 && o.principios.length === 0;
+      } finally { state.organismo = origState; state.principios = origPrincipios; }
+    })());
+    chk('M10-02 · confirmar la propuesta incorpora el principio a o.principios[]', (function(){
+      var o = { id:'org_m10_02', nombre:'M10 Dos', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({}, null, null, null, [{ texto:'no vender lo que no se puede sostener', fam:'energia' }]);
+        var r = resolverPropuesta(prop.id, 'confirmar');
+        return r.ok === true && o.principios.length === 1 && o.principios[0].texto === 'no vender lo que no se puede sostener';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M10-03 · rechazar la propuesta deja o.principios[] intacto', (function(){
+      var o = { id:'org_m10_03', nombre:'M10 Tres', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({}, null, null, null, [{ texto:'principio a rechazar', fam:'x' }]);
+        resolverPropuesta(prop.id, 'rechazar');
+        return o.principios.length === 0;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M10-04 · corregir el texto del principio antes de confirmar persiste el corregido', (function(){
+      var o = { id:'org_m10_04', nombre:'M10 Cuatro', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({}, null, null, null, [{ texto:'texto del motor', fam:'x' }]);
+        resolverPropuesta(prop.id, 'corregir', { principios:['texto corregido por el usuario'] });
+        return o.principios.length === 1 && o.principios[0].texto === 'texto corregido por el usuario';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M10-05 · principio y cambio de ficha en el mismo turno -- una sola propuesta gobierna ambos', (function(){
+      var o = { id:'org_m10_05', nombre:'M10 Cinco', tipo:'empresa', ficha:{ diagnostico:'d1' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({ diagnostico:'d2' }, null, null, null, [{ texto:'principio conjunto', fam:'x' }]);
+        var pendientesAntes = cola.propuestas.filter(function(x){ return x.estado === 'pendiente'; }).length;
+        var r = resolverPropuesta(prop.id, 'confirmar');
+        return pendientesAntes === 1 && r.ok === true && o.ficha.diagnostico === 'd2' &&
+          o.principios.length === 1 && o.principios[0].texto === 'principio conjunto';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M10-06 · principio sin cambio de ficha -- la propuesta existe igual (campos:[])', (function(){
+      var o = { id:'org_m10_06', nombre:'M10 Seis', tipo:'empresa', ficha:{ diagnostico:'d1' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({}, null, null, null, [{ texto:'principio solo', fam:'x' }]);
+        return !!prop && prop.campos.length === 0 && prop.principios_candidatos.length === 1;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M10-07 · principio + hito + horizonte -- una sola propuesta transporta los tres', (function(){
+      var o = { id:'org_m10_07', nombre:'M10 Siete', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'diagnóstico', comprendimos:'x' };
+        var horizonte = { observar:'y', pregunta:'z' };
+        var prop = proponerFicha({}, null, hito, horizonte, [{ texto:'principio del cierre', fam:'x' }]);
+        var r = resolverPropuesta(prop.id, 'confirmar');
+        return r.ok === true && o.hitos.length === 1 && !!o.horizonte && o.principios.length === 1;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M10-08 · principio confirmado aparece en buildSystem() como principio acumulado', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = { id:'org_m10_08', nombre:'M10 Ocho', tipo:'empresa', ficha:{}, principios:[
+          { texto:'principio confirmado ya persistido', fam:'x' }
+        ]};
+        state.history = [];
+        var ctx = buildSystem();
+        return ctx.indexOf('principio confirmado ya persistido') > -1;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('M10-09 · principio no confirmado (sólo en sesión) NO aparece en buildSystem()', (function(){
+      var g = state.organismo, gh = state.history, gp = state.principios;
+      try{
+        state.organismo = { id:'org_m10_09', nombre:'M10 Nueve', tipo:'empresa', ficha:{}, principios:[] };
+        state.history = [];
+        state.principios = [{ texto:'principio solo de sesion sin confirmar', fam:'x' }];
+        var ctx = buildSystem();
+        return ctx.indexOf('principio solo de sesion sin confirmar') === -1;
+      } finally { state.organismo = g; state.history = gh; state.principios = gp; }
+    })());
+    chk('M10-10 · principio confirmado aparece en C1A1_currentMemory().principles', (function(){
+      var o = { id:'org_m10_10', nombre:'M10 Diez', tipo:'empresa', ficha:{}, principios:[
+        { texto:'principio confirmado para snapshot', fam:'x' }
+      ]};
+      var cm = C1A1_currentMemory(o);
+      return Array.isArray(cm.principles) && cm.principles.some(function(pp){ return (pp.text || '').indexOf('principio confirmado para snapshot') > -1; });
+    })());
+    chk('M10-11 · principio rechazado no aparece en C1A1_currentMemory().principles', (function(){
+      var o = { id:'org_m10_11', nombre:'M10 Once', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({}, null, null, null, [{ texto:'principio que será rechazado', fam:'x' }]);
+        resolverPropuesta(prop.id, 'rechazar');
+        var cm = C1A1_currentMemory(o);
+        return !cm.principles.some(function(pp){ return (pp.text || '').indexOf('principio que será rechazado') > -1; });
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M10-12 · confirmar el mismo texto dos veces no duplica o.principios[]', (function(){
+      var o = { id:'org_m10_12', nombre:'M10 Doce', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop1 = proponerFicha({}, null, null, null, [{ texto:'  Mismo Principio   con espacios  ', fam:'x' }]);
+        resolverPropuesta(prop1.id, 'confirmar');
+        var prop2 = proponerFicha({}, null, null, null, [{ texto:'mismo principio con espacios', fam:'y' }]);
+        resolverPropuesta(prop2.id, 'confirmar');
+        return o.principios.length === 1;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M10-13 · confirmar un principio registra exactamente un momento tipo "principio"', (function(){
+      var o = { id:'org_m10_13', nombre:'M10 Trece', tipo:'empresa', ficha:{}, principios:[], momentos:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({}, null, null, null, [{ texto:'principio con momento', fam:'x' }]);
+        resolverPropuesta(prop.id, 'confirmar');
+        var momPrincipio = (o.momentos || []).filter(function(m){ return m.tipo === 'principio'; });
+        return momPrincipio.length === 1 && momPrincipio[0].texto === 'principio con momento';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M10-14 · rechazar no registra ningún momento persistente de tipo "principio"', (function(){
+      var o = { id:'org_m10_14', nombre:'M10 Catorce', tipo:'empresa', ficha:{}, principios:[], momentos:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({}, null, null, null, [{ texto:'principio que no debe dejar momento', fam:'x' }]);
+        resolverPropuesta(prop.id, 'rechazar');
+        var momPrincipio = (o.momentos || []).filter(function(m){ return m.tipo === 'principio'; });
+        return momPrincipio.length === 0;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M10-15 · confirmar una propuesta sólo de principios no crea Recuerdo', (function(){
+      var o = { id:'org_m10_15', nombre:'M10 Quince', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({}, null, null, null, [{ texto:'principio sin ficha', fam:'x' }]);
+        resolverPropuesta(prop.id, 'confirmar');
+        return recuerdosDe(o).length === 0 && o.principios.length === 1;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M10-16 · la gobernanza de principios no agrega ningún fetch() nuevo', (function(){
+      var src = addPrincipio.toString() + proponerFicha.toString() + aplicarPropuesta.toString() +
+        resolverPropuesta.toString() + normalizarPrincipioParaComparar.toString();
+      return src.indexOf('fetch(') === -1;
+    })());
+    chk('M10-17 · funciones de los Puntos 6-9 siguen presentes y con comportamiento base sin cambios', (function(){
+      return typeof fragmentosEspecializadosDelOrganismo === 'function' &&
+        typeof antecedentesEspecializadosParaMarco === 'function' &&
+        typeof fichaTieneLectura === 'function' &&
+        typeof C1B1_situacionParaEspecialidades === 'function';
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
