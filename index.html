@@ -4602,7 +4602,7 @@ var C1B1_EPISTEMIC_STATES = ['relacion_declarada','memoria_gobernada','recuerdo_
    relevantOpenQuestionRefs/relevantMemoryEventRefs/criticalUnknowns) -- si el Origen no marcó
    ningún campo de memoria como pertinente, cae a un mínimo razonable (función/tensiones/
    diagnóstico) para no dejar al motor completamente a ciegas. */
-function C1B1_ventanaCognitiva(snapshot, opening, assessment, antecedentes){
+function C1B1_ventanaCognitiva(snapshot, opening, assessment, recuerdosPertinentes, interpretacionesEspecializadasPertinentes){
   var CAMPOS_MEMORIA = ['function','tensions','diagnosis','next','nextPending','principles'];
   var refs = (Array.isArray(assessment.relevantMemoryRefs) && assessment.relevantMemoryRefs.length)
     ? assessment.relevantMemoryRefs : ['function','tensions','diagnosis'];
@@ -4625,7 +4625,11 @@ function C1B1_ventanaCognitiva(snapshot, opening, assessment, antecedentes){
     aperturaTexto: 'Pregunta declarada: ' + (opening.question || '(ninguna)') +
       '\nIntención declarada: ' + (opening.intention || '(ninguna)') +
       (opening.userAnswer ? ('\nRespuesta previa del usuario: ' + opening.userAnswer) : ''),
-    antecedentesPertinentes: antecedentes || [],
+    // Punto 9 (21/08): antes era un único array indistinguible ("antecedentes"). Se separan en dos
+    // categorías epistemológicas distintas -- Recuerdo histórico != Interpretación especializada --
+    // sin mezclarlas en ningún punto de acá en adelante.
+    recuerdosPertinentes: recuerdosPertinentes || [],
+    interpretacionesEspecializadasPertinentes: interpretacionesEspecializadasPertinentes || [],
     criticalUnknowns: assessment.criticalUnknowns || []
   };
 }
@@ -4643,9 +4647,28 @@ function C1B1_PROMPT_OPEN_FIELD(ventana){
     openQuestionsPertinentes: ventana.openQuestionsPertinentes,
     criticalUnknowns: ventana.criticalUnknowns
   }, null, 2);
-  var antecedentesTxt = ventana.antecedentesPertinentes.length
+  var antecedentesTxt = ventana.recuerdosPertinentes.length
     ? ('\n\nANTECEDENTES PERTINENTES YA RECUPERADOS (antecedente histórico, no evidencia actual de ' +
-       'que sigan vigentes):\n' + ventana.antecedentesPertinentes.join('\n---\n'))
+       'que sigan vigentes):\n' + ventana.recuerdosPertinentes.join('\n---\n'))
+    : '';
+  // Punto 9 (21/08): segundo bloque de antecedentes, separado del de Recuerdos -- interpretaciones
+  // especializadas pertinentes recuperadas del organismo real (P6 reutilizado en C1B1_prepararLlamada()).
+  // No se muestra si no hay candidatos (regla 7 del brief P9). Cada fragmento trae su propio ref
+  // estable ("especialidad:<id>") para que el modelo pueda citarlo en supportRefs/provenanceRefs.
+  var especialidadesTxt = (ventana.interpretacionesEspecializadasPertinentes && ventana.interpretacionesEspecializadasPertinentes.length)
+    ? ('\n\nINTERPRETACIONES ESPECIALIZADAS PERTINENTES DEL ORGANISMO (interpretaciones anteriores ' +
+       'producidas por especialidades del mismo organismo -- pueden sugerir por dónde atraviesa su ' +
+       'límite, pero no constituyen evidencia actual del Campo. Usalas como antecedentes para ' +
+       'descubrir relaciones candidatas; si una relación candidata depende sólo de una de estas ' +
+       'interpretaciones, conservá incertidumbre y no la presentes como comprobada -- preferí un ' +
+       'estado proporcional como "hipotesis" en vez de "evidencia_existente" o "memoria_gobernada", ' +
+       'salvo que además exista Memoria vigente o evidencia independiente que la sostenga. Si usás ' +
+       'una para sostener una candidata, citá su ref tal cual aparece entre corchetes, en ' +
+       'supportRefs o provenanceRefs):\n' +
+       ventana.interpretacionesEspecializadasPertinentes.map(function(f){
+         return '[' + f.refId + '] Fuente: ' + (f.source || '—') + (f.version != null ? (' · v' + f.version) : '') +
+           (f.date ? (' · ' + f.date) : '') + '\n' + f.text;
+       }).join('\n---\n'))
     : '';
   return 'Sos el motor de apertura de Campo (OPEN) de Contextos Universal -- un motor NUEVO y ' +
     'propio, distinto de cualquier Contextos anterior. NO uses las seis fuerzas del Contextos ' +
@@ -4658,7 +4681,7 @@ function C1B1_PROMPT_OPEN_FIELD(ventana){
     'dimensiones. Esto vale igual para una organización humana, un sistema biológico o un sistema ' +
     'abstracto (una metodología, una tecnología, un concepto) -- no ajustes el criterio por tipo.\n\n' +
     'VENTANA COGNITIVA (ya seleccionada, no es todo el Organismo):\n' + ventanaTxt + '\n' +
-    ventana.aperturaTexto + antecedentesTxt + '\n\n' +
+    ventana.aperturaTexto + antecedentesTxt + especialidadesTxt + '\n\n' +
     'REGLAS:\n' +
     '1. Una relación candidata vincula algo perteneciente o funcionalmente asociado al Organismo ' +
     'con algo situado más allá de su delimitación actual (ej.: "estudio <-> red de ejecutores ' +
@@ -4715,22 +4738,82 @@ function C1B1_PROMPT_OPEN_FIELD(ventana){
    vuelve a buscar en todos los Recuerdos -- solo reutiliza los que C1-A2 ya recuperó como
    pertinentes (assessment.relevantMemoryEventRefs), vía obtenerRecuerdoPorId() +
    textoCompactoRecuerdo() de M2.1/M2.3, sin crear un segundo sistema de recall. */
+/* Punto 9 (21/08): situación de selección para C1-B1, construida EXCLUSIVAMENTE a partir de la
+   Apertura real (opening.question/intention/userAnswer) y, si ayuda, assessment.originAnchor --
+   nunca state.history (C1-B1 es puro, no lee estado de chat) y sin ninguna palabra temática
+   hardcodeada por tipo de organismo (la universalidad de Contextos se mantiene: esta función no
+   sabe ni le importa si el organismo es una empresa, una ciudad o un sistema abstracto). */
+function C1B1_situacionParaEspecialidades(opening, assessment){
+  var partes = [];
+  if(opening){
+    if(opening.question) partes.push(opening.question);
+    if(opening.intention) partes.push(opening.intention);
+    if(opening.userAnswer) partes.push(opening.userAnswer);
+  }
+  if(assessment && assessment.originAnchor) partes.push(assessment.originAnchor);
+  return partes.join(' ').trim();
+}
+
 function C1B1_prepararLlamada(snapshot, opening, assessment){
   if(!snapshot || !opening || !assessment) return null;
   var o = cargarOrganismos().find(function(x){ return x.id === snapshot.organismId; });   // solo lectura
   var candIds = Array.isArray(assessment.relevantMemoryEventRefs) ? assessment.relevantMemoryEventRefs : [];
-  var antecedentes = [];
+  var recuerdosPertinentes = [];
   if(o && candIds.length){
     candIds.forEach(function(id){
       var r = obtenerRecuerdoPorId(o, id);
-      if(r) antecedentes.push(textoCompactoRecuerdo(r));
+      if(r) recuerdosPertinentes.push(textoCompactoRecuerdo(r));
     });
   }
-  var ventana = C1B1_ventanaCognitiva(snapshot, opening, assessment, antecedentes);
+  // Punto 9 (21/08): interpretaciones especializadas pertinentes para OPEN. Reutiliza las capas
+  // PURAS del Punto 6 (fragmentosEspecializadosDelOrganismo/seleccionarFragmentosEspecializados/
+  // truncarFragmentoEspecializado, mismos límites P6_MAX_CANDIDATOS/P6_MAX_CHARS_FRAGMENTO/
+  // P6_MAX_CHARS_BLOQUE) -- NO su bloque textual bloqueEspecialidadesParaContexto(), que está
+  // formateado para el chat, y NO seleccionarRecuerdosCandidatos ni ninguna función específica de
+  // Recuerdo. Read-only: fragmentosEspecializadosDelOrganismo() solo lee `o`, nunca lo muta.
+  var interpretacionesEspecializadasPertinentes = [];
+  var interpretacionesEspecializadasOfrecidas = [];
+  if(o){
+    var situacionEsp = C1B1_situacionParaEspecialidades(opening, assessment);
+    if(situacionEsp){
+      var fragmentosEsp = fragmentosEspecializadosDelOrganismo(o);
+      if(fragmentosEsp.length){
+        var selEsp = seleccionarFragmentosEspecializados({
+          situacionActual: situacionEsp, ventanaReciente: [], fragmentos: fragmentosEsp, limite: P6_MAX_CANDIDATOS
+        });
+        // Presupuesto medido sobre la pieza completa que efectivamente se renderiza en el prompt
+        // (ref + fuente + texto), mismo criterio de conteo que bloqueEspecialidadesParaContexto()
+        // del Punto 6 -- no solo el cuerpo del fragmento, para que el techo de P6_MAX_CHARS_BLOQUE
+        // sea real y no quede inalcanzable por construcción (3 fragmentos al tope de 400 c/u ya
+        // suman exactamente 1200, sin la línea de fuente nunca se cortaría un tercer candidato).
+        var acumuladoEsp = 0;
+        var idsVistos = {};   // p6RecorrerFragmentos() puede emitir el mismo fragmento dos veces
+                               // para un objeto dentro de un array (una vez al procesar el array,
+                               // otra al recursar sobre ese mismo objeto) -- mismo `id` en ambos
+                               // casos, así que alcanza con no ofrecer dos veces la misma ref acá;
+                               // no se toca el extractor de P6, es un descarte local a C1-B1.
+        for(var i = 0; i < selEsp.candidates.length; i++){
+          var c = selEsp.candidates[i];
+          if(idsVistos[c.id]) continue;
+          idsVistos[c.id] = true;
+          var texto = truncarFragmentoEspecializado(c.text, P6_MAX_CHARS_FRAGMENTO);
+          var refId = 'especialidad:' + c.id;
+          var pieza = '[' + refId + '] Fuente: ' + (c.source || '—') + (c.version != null ? (' · v' + c.version) : '') +
+            (c.date ? (' · ' + c.date) : '') + '\n' + texto;
+          if(acumuladoEsp + pieza.length > P6_MAX_CHARS_BLOQUE && interpretacionesEspecializadasPertinentes.length) break;
+          interpretacionesEspecializadasPertinentes.push({ refId: refId, source: c.source, version: c.version, date: c.date, text: texto });
+          interpretacionesEspecializadasOfrecidas.push(refId);
+          acumuladoEsp += pieza.length;
+        }
+      }
+    }
+  }
+  var ventana = C1B1_ventanaCognitiva(snapshot, opening, assessment, recuerdosPertinentes, interpretacionesEspecializadasPertinentes);
   return {
     systemPrompt: C1B1_PROMPT_OPEN_FIELD(ventana),
     mensajes: [{ role:'user', content:'(descubrí relaciones candidatas que atraviesan la delimitación de este Organismo, si las hay)' }],
-    candidatosRecuerdosOfrecidos: candIds
+    candidatosRecuerdosOfrecidos: candIds,
+    interpretacionesEspecializadasOfrecidas: interpretacionesEspecializadasOfrecidas
   };
 }
 
@@ -4760,7 +4843,7 @@ function C1B1_llamarIA(systemPrompt, mensajes){
    realmente ofrecidos, mismo criterio que C1-A2. `status` de cada candidata se fuerza siempre a
    "candidate" -- es el único valor arquitectónicamente válido en B1. Respaldo duro: nunca más de
    `C1B1_MAX_CANDIDATOS`, pase lo que pase. */
-function C1B1_parseBoundaryOpeningResult(texto, candIdsOfrecidos){
+function C1B1_parseBoundaryOpeningResult(texto, candIdsOfrecidos, interpEspRefsOfrecidos){
   var re = /\[\[BOUNDARY_OPENING:([\s\S]*?)\]\]/;
   var m = String(texto || '').match(re);
   if(!m) return null;
@@ -4776,6 +4859,7 @@ function C1B1_parseBoundaryOpeningResult(texto, candIdsOfrecidos){
   if(!justificationSummary) return null;
 
   var idsOfrecidos = candIdsOfrecidos || [];
+  var especialidadRefsOfrecidas = interpEspRefsOfrecidos || [];   // Punto 9 (21/08)
   function limpiarRefs(arr){
     return Array.isArray(arr) ? arr.filter(function(x){ return typeof x === 'string' && x.trim(); }).map(function(x){ return x.trim(); }) : [];
   }
@@ -4783,6 +4867,13 @@ function C1B1_parseBoundaryOpeningResult(texto, candIdsOfrecidos){
     var m2 = /^recuerdo:(.+)$/.exec(x);
     if(!m2) return true;   // no es una referencia a un recuerdo -- pasa
     return idsOfrecidos.indexOf(m2[1]) > -1;   // si lo es, tiene que ser uno de los realmente ofrecidos
+  }
+  // Punto 9 (21/08): mismo principio que refRecuerdoValido(), extendido a "especialidad:<id>" --
+  // nunca se acepta una referencia especializada fabricada por el modelo, sólo sobreviven las que
+  // realmente viajaron al prompt (interpEspRefsOfrecidos, armado en C1B1_prepararLlamada()).
+  function refEspecialidadValida(x){
+    if(!/^especialidad:/.test(x)) return true;   // no es una referencia a una interpretación especializada -- pasa
+    return especialidadRefsOfrecidas.indexOf(x) > -1;
   }
 
   var candidatesRaw = Array.isArray(raw.candidateRelations) ? raw.candidateRelations : [];
@@ -4802,8 +4893,8 @@ function C1B1_parseBoundaryOpeningResult(texto, candIdsOfrecidos){
                 description: (typeof c.target.description === 'string' && c.target.description.trim()) ? c.target.description.trim() : null },
       manifestation: c.manifestation.trim(),
       possibleIncidence: c.possibleIncidence.trim(),
-      supportRefs: limpiarRefs(c.supportRefs).filter(refRecuerdoValido),
-      provenanceRefs: limpiarRefs(c.provenanceRefs).filter(refRecuerdoValido),
+      supportRefs: limpiarRefs(c.supportRefs).filter(refRecuerdoValido).filter(refEspecialidadValida),
+      provenanceRefs: limpiarRefs(c.provenanceRefs).filter(refRecuerdoValido).filter(refEspecialidadValida),
       uncertainty: limpiarRefs(c.uncertainty),
       epistemicState: c.epistemicState,
       status: 'candidate'
@@ -4831,7 +4922,7 @@ async function openField(snapshot, opening, assessment){
   }catch(e){
     return { ok:false, motivo:'error de red/API: ' + (e && e.message) };
   }
-  var parsed = C1B1_parseBoundaryOpeningResult(res.texto, prep.candidatosRecuerdosOfrecidos);
+  var parsed = C1B1_parseBoundaryOpeningResult(res.texto, prep.candidatosRecuerdosOfrecidos, prep.interpretacionesEspecializadasOfrecidas);
   if(!parsed){
     return { ok:false, motivo:'no se pudo interpretar la respuesta del modelo', usage: res.usage,
              duracionMs: res.duracionMs, textoCrudo: res.texto };
@@ -14579,6 +14670,230 @@ function correrPruebasAuto(){
       })());
       // B1-16 · Compatibilidad general: no es un chk() individual -- ES correr correrPruebasAuto()
       // completo en vivo, ver PENDIENTES.md para el resultado real de esa corrida.
+
+      /* ============ PUNTO 9 (21/08) -- pruebas dirigidas P9-01 a P9-20, sobre la circulación de
+         interpretaciones especializadas pertinentes hacia C1-B1/openField(). P9-21 (node --check)
+         no es una aserción de runtime, se reporta aparte. Reutiliza los helpers snapConOrigin/
+         assessmentContinue/markerCon de este mismo bloque (misma IIFE que B1-01..15). */
+      chk('P9-01 · sin especialidades -> 0 fragmentos ofrecidos, sin bloque en el prompt', (function(){
+        var o = { id:'o_p9_01', nombre:'Sin Esp', tipo:'empresa', ficha:{funcion:'integrar'}, principios:[] };
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué condiciona hoy nuestra capacidad de producción?' });
+        var prep = C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        return !!prep && prep.interpretacionesEspecializadasOfrecidas.length === 0 &&
+          prep.systemPrompt.indexOf('INTERPRETACIONES ESPECIALIZADAS PERTINENTES DEL ORGANISMO') === -1;
+      })());
+      chk('P9-02 · especialidad irrelevante a la apertura -> 0 fragmentos (Caso B del brief, sin inflar el prompt)', (function(){
+        var o = { id:'o_p9_02', nombre:'Irrelevante', tipo:'empresa', ficha:{funcion:'integrar'}, principios:[],
+          evaluaciones_negocio_pro: [{ version:1, fecha:'2026-01-01', resumen:'r', datos:{ evaluacion:{ dimensiones:[
+            { cod:'B4', estado:'estable', nota:'los roles internos del equipo están bien distribuidos' }
+          ]}}}]};
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué condiciona hoy nuestra dependencia energética externa?' });
+        var prep = C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        return !!prep && prep.interpretacionesEspecializadasOfrecidas.length === 0;
+      })());
+      chk('P9-03 · fragmento de Negocios Pro pertinente llega a la ventana de OPEN (Caso A del brief)', (function(){
+        var o = { id:'o_p9_03', nombre:'Con Negocio', tipo:'empresa', ficha:{funcion:'producir'}, principios:[],
+          evaluaciones_negocio_pro: [{ version:1, fecha:'2026-01-01', resumen:'r', datos:{ evaluacion:{ dimensiones:[
+            { cod:'B2', estado:'tensionada', nota:'Dependencia crítica de un proveedor regional único' }
+          ]}}}]};
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué condiciona hoy nuestra dependencia de ese proveedor regional único?' });
+        var prep = C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        return !!prep && prep.interpretacionesEspecializadasOfrecidas.length === 1 &&
+          prep.systemPrompt.indexOf('proveedor regional único') > -1 &&
+          prep.systemPrompt.indexOf('INTERPRETACIONES ESPECIALIZADAS PERTINENTES DEL ORGANISMO') > -1;
+      })());
+      chk('P9-04 · fragmento de Urban Pro pertinente llega a la ventana de OPEN (Caso C del brief)', (function(){
+        var o = { id:'o_p9_04', nombre:'Con Urbano', tipo:'ciudad', ficha:{funcion:'situar'}, principios:[],
+          diagnosticos_pro: [{ origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'r', datos:{
+            nota:'centralidad desplazada hacia corredor norte' } }]};
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿cómo se relaciona la ciudad con la dinámica del corredor norte?' });
+        var prep = C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        return !!prep && prep.interpretacionesEspecializadasOfrecidas.length === 1 &&
+          prep.interpretacionesEspecializadasOfrecidas[0].indexOf('especialidad:urban_pro') === 0 &&
+          prep.systemPrompt.indexOf('corredor norte') > -1;
+      })());
+      chk('P9-05 · pertinencia vence a recencia entre fragmentos especializados', (function(){
+        var o = { id:'o_p9_05', nombre:'Precedencia', tipo:'empresa', ficha:{funcion:'x'}, principios:[],
+          diagnosticos_pro: [
+            { origen:'context_pro', version:1, fecha:'2025-01-01', resumen:'r', datos:{ nota:'corredor logístico tensionado por el tránsito pesado' } },
+            { origen:'context_pro', version:2, fecha:'2026-01-01', resumen:'r', datos:{ nota:'participación comunitaria en aumento' } }
+          ]};
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué pasa con el corredor logístico y el tránsito pesado?' });
+        var prep = C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        return !!prep && prep.systemPrompt.indexOf('tránsito pesado') > -1 && prep.systemPrompt.indexOf('participación comunitaria') === -1;
+      })());
+      chk('P9-06 · máximo de candidatos especializados respetado (P6_MAX_CANDIDATOS)', (function(){
+        var o = { id:'o_p9_06', nombre:'Muchas Fuentes', tipo:'empresa', ficha:{funcion:'x'}, principios:[],
+          diagnosticos_pro: [
+            { origen:'a_pro', version:1, fecha:'2026-01-01', resumen:'r', datos:{ nota:'palabraclave uno' } },
+            { origen:'b_pro', version:1, fecha:'2026-01-01', resumen:'r', datos:{ nota:'palabraclave dos' } },
+            { origen:'c_pro', version:1, fecha:'2026-01-01', resumen:'r', datos:{ nota:'palabraclave tres' } },
+            { origen:'d_pro', version:1, fecha:'2026-01-01', resumen:'r', datos:{ nota:'palabraclave cuatro' } },
+            { origen:'e_pro', version:1, fecha:'2026-01-01', resumen:'r', datos:{ nota:'palabraclave cinco' } }
+          ]};
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué dice palabraclave sobre la situación?' });
+        var prep = C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        return !!prep && prep.interpretacionesEspecializadasOfrecidas.length === P6_MAX_CANDIDATOS;
+      })());
+      chk('P9-07 · límite total de caracteres del bloque especializado respetado (P6_MAX_CHARS_BLOQUE)', (function(){
+        var largo = 'palabraclave ' + 'x'.repeat(500);
+        var o = { id:'o_p9_07', nombre:'Bloque Grande', tipo:'empresa', ficha:{funcion:'x'}, principios:[],
+          diagnosticos_pro: [
+            { origen:'a_pro', version:1, fecha:'2026-03-01', resumen:'r', datos:{ nota: largo } },
+            { origen:'b_pro', version:1, fecha:'2026-02-01', resumen:'r', datos:{ nota: largo } },
+            { origen:'c_pro', version:1, fecha:'2026-01-01', resumen:'r', datos:{ nota: largo } }
+          ]};
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué dice palabraclave sobre la situación?' });
+        var prep = C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        return !!prep && prep.interpretacionesEspecializadasOfrecidas.length >= 1 && prep.interpretacionesEspecializadasOfrecidas.length < 3;
+      })());
+      chk('P9-08 · no se serializa el payload completo (evaluación/diagnóstico) en el prompt de OPEN', (function(){
+        var o = { id:'o_p9_08', nombre:'Payload', tipo:'empresa', ficha:{funcion:'x'}, principios:[],
+          evaluaciones_negocio_pro: [{ version:1, fecha:'2026-01-01', resumen:'r', datos:{
+            producto:'Comprender Negocios Pro', organismo_id:'o_p9_08',
+            evaluacion:{ dimensiones:[{ cod:'B1', estado:'tensionada', nota:'palabraclave situación crítica del negocio' }] }
+          }}]};
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué dice palabraclave sobre la situación?' });
+        var prep = C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        return !!prep && prep.systemPrompt.indexOf('"producto"') === -1 && prep.systemPrompt.indexOf('"organismo_id"') === -1 &&
+          prep.systemPrompt.indexOf('palabraclave situación crítica del negocio') > -1;
+      })());
+      chk('P9-09 · el prompt marca expresamente que la interpretación especializada no es evidencia del Campo', (function(){
+        var o = { id:'o_p9_09', nombre:'Disclaimer', tipo:'empresa', ficha:{funcion:'x'}, principios:[],
+          diagnosticos_pro:[{ origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'r', datos:{ nota:'palabraclave dato urbano' } }]};
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué dice palabraclave?' });
+        var prep = C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        return !!prep && prep.systemPrompt.indexOf('no constituyen evidencia actual del Campo') > -1;
+      })());
+      chk('P9-10 · ref "especialidad:<id-ofrecido>" sobrevive el parser', (function(){
+        var o = { id:'o_p9_10', nombre:'RefOK', tipo:'empresa', ficha:{funcion:'x'}, principios:[],
+          diagnosticos_pro:[{ origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'r', datos:{ nota:'palabraclave dato urbano' } }]};
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué dice palabraclave?' });
+        var prep = C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        var refOfrecida = prep.interpretacionesEspecializadasOfrecidas[0];
+        var texto = '[[BOUNDARY_OPENING:{"candidateRelations":[{"id":"r1","sourceRef":"x",' +
+          '"target":{"label":"y"},"manifestation":"m","possibleIncidence":"p","supportRefs":["'+refOfrecida+'"],' +
+          '"provenanceRefs":[],"uncertainty":[],"epistemicState":"inferencia_contextos","status":"candidate"}],' +
+          '"unresolvedBoundaryQuestions":[],"status":"candidates_found","justificationSummary":"x"}]]';
+        var parsed = C1B1_parseBoundaryOpeningResult(texto, prep.candidatosRecuerdosOfrecidos, prep.interpretacionesEspecializadasOfrecidas);
+        return !!refOfrecida && !!parsed && parsed.candidateRelations[0].supportRefs.indexOf(refOfrecida) > -1;
+      })());
+      chk('P9-11 · ref "especialidad:no-ofrecido" fabricada por el modelo es eliminada por el parser', (function(){
+        var o = { id:'o_p9_11', nombre:'RefFake', tipo:'empresa', ficha:{funcion:'x'}, principios:[],
+          diagnosticos_pro:[{ origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'r', datos:{ nota:'palabraclave dato urbano' } }]};
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué dice palabraclave?' });
+        var prep = C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        var texto = '[[BOUNDARY_OPENING:{"candidateRelations":[{"id":"r1","sourceRef":"x",' +
+          '"target":{"label":"y"},"manifestation":"m","possibleIncidence":"p","supportRefs":["especialidad:no-ofrecido"],' +
+          '"provenanceRefs":[],"uncertainty":[],"epistemicState":"inferencia_contextos","status":"candidate"}],' +
+          '"unresolvedBoundaryQuestions":[],"status":"candidates_found","justificationSummary":"x"}]]';
+        var parsed = C1B1_parseBoundaryOpeningResult(texto, prep.candidatosRecuerdosOfrecidos, prep.interpretacionesEspecializadasOfrecidas);
+        return !!parsed && parsed.candidateRelations[0].supportRefs.indexOf('especialidad:no-ofrecido') === -1;
+      })());
+      chk('P9-12 · la validación de refs "recuerdo:*" sigue funcionando con la firma extendida del parser', (function(){
+        var o = { id:'o_p9_12', nombre:'ConRecuerdo', tipo:'empresa', ficha:{funcion:'integrar'}, principios:[],
+          recuerdos:[{ id:'rp9', title:'x', createdAt:'2025-01-01T00:00:00.000Z', source:'core', field:['tensiones'],
+            before:{tensiones:'a'}, after:{tensiones:'b'}, summary:'Tensiones activas: b', organismVersion:1,
+            originRef:{propuestaId:'p1',turno:1,resuelto_como:'confirmada'} }] };
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, {});
+        var assessment = assessmentContinue({ relevantMemoryEventRefs:['rp9'] });
+        var prep = C1B1_prepararLlamada(snap, opening, assessment);
+        var textoOk = '[[BOUNDARY_OPENING:{"candidateRelations":[{"id":"r1","sourceRef":"x",' +
+          '"target":{"label":"y"},"manifestation":"m","possibleIncidence":"p","supportRefs":["recuerdo:rp9","recuerdo:falso"],' +
+          '"provenanceRefs":[],"uncertainty":[],"epistemicState":"recuerdo_historico","status":"candidate"}],' +
+          '"unresolvedBoundaryQuestions":[],"status":"candidates_found","justificationSummary":"x"}]]';
+        var parsed = C1B1_parseBoundaryOpeningResult(textoOk, prep.candidatosRecuerdosOfrecidos, prep.interpretacionesEspecializadasOfrecidas);
+        return !!parsed && parsed.candidateRelations[0].supportRefs.indexOf('recuerdo:rp9') > -1 &&
+          parsed.candidateRelations[0].supportRefs.indexOf('recuerdo:falso') === -1;
+      })());
+      chk('P9-13 · el prompt exige un estado proporcional cuando una candidata depende sólo de una especialidad', (function(){
+        var o = { id:'o_p9_13', nombre:'Proporcional', tipo:'empresa', ficha:{funcion:'x'}, principios:[],
+          diagnosticos_pro:[{ origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'r', datos:{ nota:'palabraclave dato urbano' } }]};
+        guardarOrganismo(o);
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué dice palabraclave?' });
+        var prep = C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        return !!prep && prep.systemPrompt.indexOf('preferí un estado proporcional como "hipotesis"') > -1 &&
+          prep.systemPrompt.indexOf('en vez de "evidencia_existente" o "memoria_gobernada"') > -1;
+      })());
+      chk('P9-14 · Memoria vigente y una interpretación especializada contradictoria conviven en el prompt (Caso D)', (function(){
+        var snap = { organismId:'o_p9_14', organismVersion:1,
+          currentMemory:{ function:null, tensions:'La dependencia del proveedor fue reducida.', diagnosis:null, next:null, nextPending:null, principles:[], other:null },
+          knownRelations: [], openQuestions: [] };
+        var o = { id:'o_p9_14', nombre:'Contradiccion', tipo:'empresa', ficha:{funcion:'x'}, principios:[],
+          evaluaciones_negocio_pro:[{ version:1, fecha:'2026-01-01', resumen:'r', datos:{ evaluacion:{ dimensiones:[
+            { cod:'B2', estado:'tensionada', nota:'Dependencia crítica de proveedor único, palabraclave' } ] } } }]};
+        guardarOrganismo(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué pasa con la dependencia del proveedor, palabraclave?' });
+        var assessment = assessmentContinue({ relevantMemoryRefs:['tensions'], relevantTensionRefs:['currentMemory.tensions'] });
+        var prep = C1B1_prepararLlamada(snap, opening, assessment);
+        return !!prep && prep.systemPrompt.indexOf('La dependencia del proveedor fue reducida.') > -1 &&
+          prep.systemPrompt.indexOf('Dependencia crítica de proveedor único') > -1;
+      })());
+      chk('P9-15 · C1B1_prepararLlamada() con interpretaciones especializadas es READ-only respecto del organismo', (function(){
+        var o = { id:'o_p9_15', nombre:'ReadOnly', tipo:'empresa', ficha:{funcion:'x'}, principios:[],
+          diagnosticos_pro:[{ origen:'urban_pro', version:1, fecha:'2026-01-01', resumen:'r', datos:{ nota:'palabraclave dato urbano' } }]};
+        guardarOrganismo(o);
+        var antes = JSON.stringify(cargarOrganismos().find(function(x){ return x.id === 'o_p9_15'; }));
+        var snap = OrganismSnapshotAdapter(o);
+        var opening = crearContextOpening(o.id, { question:'¿qué dice palabraclave?' });
+        C1B1_prepararLlamada(snap, opening, assessmentContinue());
+        var despues = JSON.stringify(cargarOrganismos().find(function(x){ return x.id === 'o_p9_15'; }));
+        return antes === despues;
+      })());
+      chk('P9-16 · las funciones nuevas/tocadas del Punto 9 no agregan ningún fetch() nuevo', (function(){
+        var src = C1B1_situacionParaEspecialidades.toString() + C1B1_prepararLlamada.toString() +
+          C1B1_ventanaCognitiva.toString() + C1B1_PROMPT_OPEN_FIELD.toString() + C1B1_parseBoundaryOpeningResult.toString();
+        return src.indexOf('fetch(') === -1;
+      })());
+      chk('P9-17 · las capas puras del Punto 6 siguen presentes y con comportamiento base sin cambios', (function(){
+        var o = { id:'o_p9_17b' };
+        return typeof fragmentosEspecializadosDelOrganismo === 'function' &&
+          typeof seleccionarFragmentosEspecializados === 'function' &&
+          typeof truncarFragmentoEspecializado === 'function' &&
+          fragmentosEspecializadosDelOrganismo(o).length === 0;
+      })());
+      chk('P9-18 · C1-A2 (reconstructOrigin) permanece intacto -- no se tocó ninguna de sus funciones', (function(){
+        return typeof reconstructOrigin === 'function' && typeof C1A2_prepararLlamada === 'function' &&
+          C1A2_prepararLlamada.toString().indexOf('fragmentosEspecializadosDelOrganismo') === -1 &&
+          C1A2_prepararLlamada.toString().indexOf('C1B1_') === -1;
+      })());
+      chk('P9-19 · el contrato preexistente de C1-B1 (candidata sin refs de especialidad) sigue funcionando igual', (function(){
+        var texto = '[[BOUNDARY_OPENING:{"candidateRelations":[{"id":"r1","sourceRef":"x",' +
+          '"target":{"label":"y"},"manifestation":"m","possibleIncidence":"p","supportRefs":[],' +
+          '"provenanceRefs":[],"uncertainty":[],"epistemicState":"hipotesis","status":"candidate"}],' +
+          '"unresolvedBoundaryQuestions":[],"status":"candidates_found","justificationSummary":"x"}]]';
+        var parsed = C1B1_parseBoundaryOpeningResult(texto, [], []);
+        return !!parsed && parsed.candidateRelations.length === 1 && parsed.candidateRelations[0].epistemicState === 'hipotesis';
+      })());
+      chk('P9-20 · C1B1_EPISTEMIC_STATES no se amplió en este corte', (function(){
+        return C1B1_EPISTEMIC_STATES.length === 6 &&
+          C1B1_EPISTEMIC_STATES.join(',') === ['relacion_declarada','memoria_gobernada','recuerdo_historico','inferencia_contextos','evidencia_existente','hipotesis'].join(',');
+      })());
     })();
 
     /* ---- Contextos Universal · Corte C1-B2 -- propagateField() (B2-01..17, B2-18 en vivo) ----
