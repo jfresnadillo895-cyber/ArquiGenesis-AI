@@ -3395,7 +3395,8 @@ function construirTuEspacioConfig(){
   // Panel P3 (21/08): correo debajo de "Cuenta", mismo patrón visual que negocios.html --
   // unificación del panel lateral pedida por Javier (PENDIENTES.md, panel Negocios Pro punto 4).
   const bCuentaTitulo = document.createElement('div');
-  bCuentaTitulo.textContent = 'Cuenta';
+  // Panel P5 (21/08): nombre del plan al lado de "Cuenta", a pedido de Javier.
+  bCuentaTitulo.textContent = 'Cuenta · ' + ((CRED_PLANES[credPlan()] || CRED_PLANES.gratis).nombre);
   const bCuentaCorreo = document.createElement('div');
   bCuentaCorreo.style.cssText = 'font-size:11px;color:var(--tenue);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
   bCuenta.appendChild(bCuentaTitulo);

@@ -11929,7 +11929,8 @@ function construirTuEspacioConfig(){
   const bCuenta = document.createElement('button');
   bCuenta.className = 'mitem';
   const bCuentaTitulo = document.createElement('div');
-  bCuentaTitulo.textContent = 'Cuenta';
+  // Panel P5 (21/08): nombre del plan al lado de "Cuenta", a pedido de Javier.
+  bCuentaTitulo.textContent = 'Cuenta · ' + ((PLANES[planActual()] || PLANES.gratis).nombre);
   const bCuentaCorreo = document.createElement('div');
   bCuentaCorreo.style.cssText = 'font-size:11px;color:var(--faint);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
   bCuenta.appendChild(bCuentaTitulo);
