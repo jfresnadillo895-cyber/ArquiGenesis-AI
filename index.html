@@ -4152,7 +4152,7 @@ function C1A2_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos_universal' },   // C1-G4.2/P5 (21/08): identidad de consumo propia, distinta de contextos.html -- ver PENDIENTES.md
     body: JSON.stringify({ model: C1A2_MODEL, max_tokens: C1A2_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -4465,7 +4465,7 @@ function C1B1_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos_universal' },   // C1-G4.2/P5 (21/08): identidad de consumo propia, distinta de contextos.html -- ver PENDIENTES.md
     body: JSON.stringify({ model: C1B1_MODEL, max_tokens: C1B1_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -4784,7 +4784,7 @@ function C1B2_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos_universal' },   // C1-G4.2/P5 (21/08): identidad de consumo propia, distinta de contextos.html -- ver PENDIENTES.md
     body: JSON.stringify({ model: C1B2_MODEL, max_tokens: C1B2_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -5148,7 +5148,7 @@ function C1C1_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos_universal' },   // C1-G4.2/P5 (21/08): identidad de consumo propia, distinta de contextos.html -- ver PENDIENTES.md
     body: JSON.stringify({ model: C1C1_MODEL, max_tokens: C1C1_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -5521,7 +5521,7 @@ function C1C2_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos_universal' },   // C1-G4.2/P5 (21/08): identidad de consumo propia, distinta de contextos.html -- ver PENDIENTES.md
     body: JSON.stringify({ model: C1C2_MODEL, max_tokens: C1C2_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -5770,7 +5770,7 @@ function C1C3A_llamarIAAsk(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos_universal' },   // C1-G4.2/P5 (21/08): identidad de consumo propia, distinta de contextos.html -- ver PENDIENTES.md
     body: JSON.stringify({ model: C1C3A_MODEL, max_tokens: C1C3A_ASK_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -6006,7 +6006,7 @@ function C1C3A_llamarIATrace(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos_universal' },   // C1-G4.2/P5 (21/08): identidad de consumo propia, distinta de contextos.html -- ver PENDIENTES.md
     body: JSON.stringify({ model: C1C3A_MODEL, max_tokens: C1C3A_TRACE_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -6624,7 +6624,7 @@ function C1C4A_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos_universal' },   // C1-G4.2/P5 (21/08): identidad de consumo propia, distinta de contextos.html -- ver PENDIENTES.md
     body: JSON.stringify({ model: C1C4A_MODEL, max_tokens: C1C4A_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -6889,7 +6889,7 @@ function C1C4B_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos_universal' },   // C1-G4.2/P5 (21/08): identidad de consumo propia, distinta de contextos.html -- ver PENDIENTES.md
     body: JSON.stringify({ model: C1C4B_MODEL, max_tokens: C1C4B_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -7154,7 +7154,7 @@ function C1E1_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos_universal' },   // C1-G4.2/P5 (21/08): identidad de consumo propia, distinta de contextos.html -- ver PENDIENTES.md
     body: JSON.stringify({ model: C1E1_MODEL, max_tokens: C1E1_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -7391,7 +7391,7 @@ function C1E2_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos_universal' },   // C1-G4.2/P5 (21/08): identidad de consumo propia, distinta de contextos.html -- ver PENDIENTES.md
     body: JSON.stringify({ model: C1E2_MODEL, max_tokens: C1E2_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -7521,6 +7521,14 @@ var C1F1_EPISTEMIC_STATES = ['relacion_declarada', 'memoria_gobernada', 'recuerd
   'inferencia_contextos', 'evidencia_existente', 'hipotesis'];
 var C1F1_MAX_CAMBIOS = 3;
 
+/* C1F1-P3 (21/08) -- campos reales de o.ficha a los que un cambio de Retorno puede apuntar
+   explícitamente (targetField). Derivado de CAMPOS_FICHA (esquema real, no una lista inventada
+   aparte) excluyendo 'modo': 'modo' es un código de contrato M01-M09 (arquitectura protegida,
+   nunca texto narrativo libre) -- un hallazgo de Contextos nunca tiene sentido semántico
+   apuntando ahí. Mismo criterio que ya usaba C1F2_CAMPO_POR_MEMORIA (tampoco incluía 'modo'),
+   ahora como lista explícita de validación en vez de mapeo implícito por contenido. */
+var C1F1_TARGET_FIELDS_PERMITIDOS = CAMPOS_FICHA.filter(function(c){ return c !== 'modo'; });
+
 /* Ventana de Retorno: SOLO Memoria vigente (snapshot.currentMemory) + Foco + Suficiencia + el
    soporte/incertidumbres que el propio Foco ya trae (focusResult.supportRefs/uncertainties) --
    nunca se vuelve a recorrer el GraphState completo (regla de entrada del encargo: "soporte/
@@ -7602,6 +7610,15 @@ function C1F1_PROMPT_RETORNO(ventana){
     'moverse.\n\n' +
     '"after" tiene que estar escrito en términos de Memoria (qué diría la ficha si se actualizara), ' +
     'NUNCA como una copia del "statement" del Foco -- traducilo y comprimilo, no lo pegues completo.\n\n' +
+    '"targetField" declara EXPLÍCITAMENTE qué campo real de la ficha propone modificar este cambio ' +
+    'puntual -- nunca lo infieras vos mismo a partir del "type" (un "add" NO significa automáticamente ' +
+    '"diagnostico": una función nueva también se declara con "add", y va a "funcion"). Tiene que ser ' +
+    'uno de estos valores exactos: "' + C1F1_TARGET_FIELDS_PERMITIDOS.join('", "') + '", ' +
+    'o null si el cambio es real pero no podés justificar con seguridad a qué campo de la ficha ' +
+    'corresponde (en ese caso queda como antecedente, sin escribirse en Memoria -- mejor eso que ' +
+    'adivinar). Para "reinterpret"/"weaken"/"contradict", "targetField" tiene que ser el campo real ' +
+    'al que pertenece el "before" que declaraste (nunca otro). Para "keep_open" no importa, no se ' +
+    'escribe en Memoria de todas formas -- usá null.\n\n' +
     '"supportRefs" sólo puede contener ids reales de "relacionesSoporte" ya listadas arriba -- nunca ' +
     'inventes un id nuevo.\n\n' +
     '"epistemicState" describe qué tan sostenido está ESTE cambio puntual: "relacion_declarada" (surge ' +
@@ -7616,6 +7633,7 @@ function C1F1_PROMPT_RETORNO(ventana){
     '  "hasMeaningfulReturn": true|false,\n' +
     '  "changes": [\n' +
     '    { "type": "add"|"reinterpret"|"weaken"|"contradict"|"keep_open",\n' +
+    '      "targetField": "' + C1F1_TARGET_FIELDS_PERMITIDOS.join('"|"') + '"|null,\n' +
     '      "before": "..."|null,\n' +
     '      "after": "...",\n' +
     '      "supportRefs": ["..."],\n' +
@@ -7630,7 +7648,7 @@ function C1F1_llamarIA(systemPrompt, mensajes){
   var t0 = Date.now();
   return fetch(apiEndpoint(), {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos' },   // C1-G4.2: economía real
+    headers:{ 'Content-Type':'application/json', 'x-comprender-modulo':'contextos_universal' },   // C1-G4.2/P5 (21/08): identidad de consumo propia, distinta de contextos.html -- ver PENDIENTES.md
     body: JSON.stringify({ model: C1F1_MODEL, max_tokens: C1F1_MAX_TOKENS, system: systemPrompt, messages: mensajes })
   }).then(function(res){
     return res.json().then(function(data){
@@ -7701,8 +7719,16 @@ function C1F1_parseReturnProposal(texto, relationIdsOfrecidas, focusStatement){
       ? c.justificationSummary.trim() : null;
     if(!justificationSummary) return null;
 
+    // C1F1-P3 (21/08): targetField explícito -- nunca se infiere acá ni más adelante en C1-F2 a
+    // partir de "type"/"before". Cualquier valor que no sea exactamente uno de los campos reales
+    // de la ficha (C1F1_TARGET_FIELDS_PERMITIDOS) se normaliza a null -- "rechazo defensivo" sin
+    // descartar el cambio entero: sigue siendo información real (resumen, justificación, soporte),
+    // sólo que sin un destino seguro para escribir en Memoria (mismo tratamiento que null explícito).
+    var targetField = (typeof c.targetField === 'string' && C1F1_TARGET_FIELDS_PERMITIDOS.indexOf(c.targetField) > -1)
+      ? c.targetField : null;
+
     return {
-      type: c.type, before: before, after: after,
+      type: c.type, targetField: targetField, before: before, after: after,
       supportRefs: C1F1_limpiarRefs(c.supportRefs, idsValidos),
       epistemicState: c.epistemicState,
       justificationSummary: justificationSummary
@@ -7811,14 +7837,16 @@ var C1F2_DECISIONES = ['incorporar', 'editar', 'mantener_abierto', 'rechazar'];
 /* Mapeo entre los nombres de C1A1_currentMemory (function/tensions/diagnosis/next/nextPending) y
    los campos reales de o.ficha (CAMPOS_FICHA) que ya usa proponerFicha()/diffFicha(). Copia
    propia intencional -- no se reutiliza CAMPOS_FICHA para construir esta tabla porque el mapeo
-   es semántico (une dos vocabularios de cortes distintos), no una lista plana. */
+   es semántico (une dos vocabularios de cortes distintos), no una lista plana.
+   C1F1-P3 (21/08) -- DEPRECADO, sin llamadores: hasta este corte, C1F2_construirFichaCandidata()
+   usaba esto (vía C1F2_mapChangeToCampo, debajo) para ADIVINAR el campo destino comparando texto,
+   con un fallback adicional "add -> diagnostico" cuando ni eso coincidía. Ambos son exactamente el
+   tipo de inferencia implícita que el encargo de C1F1-P3 pidió eliminar -- reemplazados por
+   "targetField" explícito en el propio returnProposal (ver C1F1_TARGET_FIELDS_PERMITIDOS y el
+   parser de C1-F1). Se dejan definidas sin borrar, mismo criterio de reversibilidad que el resto
+   del proyecto -- no las llama nada más. */
 var C1F2_CAMPO_POR_MEMORIA = { function:'funcion', tensions:'tensiones', diagnosis:'diagnostico',
   next:'proximo', nextPending:'proximos' };
-
-/* Encuentra a qué campo REAL de Memoria corresponde el "before" de un cambio, comparando contra
-   el contenido real de currentMemory (nunca contra el "after" ni contra nada que el modelo haya
-   escrito) -- mismo principio de siempre: el código decide con datos ya conocidos, no confía en
-   una etiqueta. Devuelve null si "before" es null/no-string o no coincide con ningún campo real. */
 function C1F2_mapChangeToCampo(before, currentMemory){
   if(typeof before !== 'string' || !before) return null;
   var claves = ['function', 'tensions', 'diagnosis', 'next', 'nextPending'], i, k;
@@ -7830,10 +7858,15 @@ function C1F2_mapChangeToCampo(before, currentMemory){
 }
 
 /* Traduce los changes[] de un ContextReturnProposal a un candidato de ficha apto para
-   proponerFicha(). Reglas: "keep_open" NUNCA se traduce (por diseño no cristaliza -- queda solo
-   en genealogía). "add" (before:null) va por defecto a "diagnostico" (único campo narrativo
-   abierto que tiene el Core para un hecho genuinamente nuevo -- nunca se inventa un campo que no
-   exista). Si dos cambios apuntan al mismo campo real, el segundo se descarta explícitamente
+   proponerFicha(). C1F1-P3 (21/08): el destino ya no se infiere -- se usa el "targetField"
+   explícito que trae cada change (declarado por el modelo en C1-F1, validado por
+   C1F1_parseReturnProposal contra C1F1_TARGET_FIELDS_PERMITIDOS). Reglas: "keep_open" NUNCA se
+   traduce (por diseño no cristaliza -- queda solo en genealogía, sin mirar targetField siquiera).
+   "targetField: null" -- sea porque el modelo no encontró un destino seguro, o porque venía
+   inválido y el parser ya lo normalizó a null -- significa lo mismo en los dos casos: ningún
+   campo real, no se adivina, la propuesta contextual queda sin incorporación canónica para ese
+   cambio puntual. Ya NO existe ningún fallback "add -> diagnostico" ni matching por contenido de
+   "before". Si dos cambios apuntan al mismo campo real, el segundo se descarta explícitamente
    (nunca se pisan en silencio -- "Nunca aplicar silenciosamente" del encargo aplica también acá,
    no sólo a la aplicación final). */
 function C1F2_construirFichaCandidata(returnProposal, currentMemory){
@@ -7844,11 +7877,13 @@ function C1F2_construirFichaCandidata(returnProposal, currentMemory){
         motivo:'keep_open no se traduce a Memoria por diseño -- queda sólo en la genealogía de la Apertura' });
       return;
     }
-    var campo = C1F2_mapChangeToCampo(c.before, currentMemory);
-    if(!campo && c.type === 'add') campo = 'diagnostico';
+    var campoValido = typeof c.targetField === 'string' && C1F1_TARGET_FIELDS_PERMITIDOS.indexOf(c.targetField) > -1;
+    var campo = campoValido ? c.targetField : null;
     if(!campo){
       noMapeados.push({ changeIndex:i, type:c.type,
-        motivo:'el "before" no coincide con ningún campo real de la Memoria vigente -- no se adivina un destino' });
+        motivo: (c.targetField == null)
+          ? 'sin targetField (sin destino canónico seguro) -- no se adivina un campo, la propuesta contextual queda sin incorporación canónica'
+          : 'targetField inválido/no reconocido -- rechazo defensivo, no se adivina un campo real' });
       return;
     }
     if(Object.prototype.hasOwnProperty.call(fichaNueva, campo)){
