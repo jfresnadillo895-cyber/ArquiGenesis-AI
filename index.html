@@ -11814,6 +11814,14 @@ function construirTuEspacioOrganismos(){
   const vacio = document.getElementById('teOrgVacio');
   const buscador = document.getElementById('teOrgSearch');
   cont.innerHTML = '';
+  // 21/08: en mobile, el organismo activo (state.organismo) despliega su panel "⋯"
+  // automáticamente -- ahí viven ahora "Memoria" y "Guardar sesión" (ver renderOrgItem() más
+  // abajo), a pedido de Javier: no tiene sentido pedirle que toque "⋯" para algo que ya sabemos
+  // que corresponde al organismo que tiene abierto. En desktop no cambia nada -- ese organismo
+  // sigue con "⋯" manual como el resto, porque ahí "Memoria"/"Guardar sesión" ya viven en el
+  // header. Se calcula una sola vez acá y se pasa a renderOrgItem() en vez de leer
+  // window.innerWidth adentro de cada ítem.
+  const esMobileTuOrg = window.innerWidth <= 840;
   const list = cargarOrganismos();
   renderAvisoImportarNegocioProPendiente(list, cont);
   if(!list.length){
@@ -11855,22 +11863,48 @@ function construirTuEspacioOrganismos(){
     left.appendChild(tp);
     const st = document.createElement('span'); st.className='ostado';
     st.textContent = (org.ficha && org.ficha.proximo) ? org.ficha.proximo : 'Listo para comenzar';
-    const menuBtn = document.createElement('span');
-    menuBtn.className = 'orgMenuBtn';
-    menuBtn.textContent = '⋯';
-    menuBtn.addEventListener('click', function(e){
-      e.stopPropagation();
-      teCarpetaMenuAbierto = (teCarpetaMenuAbierto === org.id) ? null : org.id;
-      teMenuNuevaCarpeta = false;
-      construirTuEspacioOrganismos();
-    });
-    b.appendChild(left); b.appendChild(st); b.appendChild(menuBtn);
+    // 21/08: el organismo activo, en mobile, despliega su panel solo -- no necesita el botón
+    // "⋯" (nada que togglear: mientras siga activo, el panel queda abierto). Para todos los
+    // demás casos (desktop, o cualquier organismo que no sea el activo) "⋯" sigue igual.
+    const esActivo = !!(state.organismo && state.organismo.id === org.id);
+    const autoAbierto = esActivo && esMobileTuOrg;
+    if(!autoAbierto){
+      const menuBtn = document.createElement('span');
+      menuBtn.className = 'orgMenuBtn';
+      menuBtn.textContent = '⋯';
+      menuBtn.addEventListener('click', function(e){
+        e.stopPropagation();
+        teCarpetaMenuAbierto = (teCarpetaMenuAbierto === org.id) ? null : org.id;
+        teMenuNuevaCarpeta = false;
+        construirTuEspacioOrganismos();
+      });
+      b.appendChild(left); b.appendChild(st); b.appendChild(menuBtn);
+    } else {
+      b.appendChild(left); b.appendChild(st);
+    }
     b.addEventListener('click', function(){ cerrarTuEspacio(); abrirOrganismo(org); });
     wrap.appendChild(b);
 
-    if(teCarpetaMenuAbierto === org.id){
+    if(autoAbierto || teCarpetaMenuAbierto === org.id){
       const panel = document.createElement('div');
       panel.className = 'orgMenuPanel';
+      if(autoAbierto){
+        // "Memoria" y "Guardar sesión" -- mismo gate que sus contrapartes del header
+        // (state.organismo ya está garantizado por esActivo; "Guardar sesión" además respeta
+        // state.started, igual que #btnGuardar en startChat()/nuevaSesion()).
+        const bFicha = document.createElement('button');
+        bFicha.className = 'orgMenuItem';
+        bFicha.textContent = 'Memoria';
+        bFicha.addEventListener('click', function(e){ e.stopPropagation(); cerrarTuEspacio(); mostrarFicha(); });
+        panel.appendChild(bFicha);
+        if(state.started){
+          const bGuardar = document.createElement('button');
+          bGuardar.className = 'orgMenuItem';
+          bGuardar.textContent = 'Guardar sesión';
+          bGuardar.addEventListener('click', function(e){ e.stopPropagation(); cerrarTuEspacio(); ofrecerGuardado(null); });
+          panel.appendChild(bGuardar);
+        }
+      }
       nombresCarpetas.filter(function(n){ return n !== org.carpeta; }).forEach(function(n){
         const mb = document.createElement('button');
         mb.className = 'orgMenuItem';
@@ -12012,32 +12046,17 @@ function construirTuEspacioConfig(){
   // acá también los duplicaba. "Propuestas" se queda: no tiene botón propio en ningún
   // otro lado, así que va aparte, sin agrupar bajo "Configuración y ayuda".
   //
-  // 21/08: excepción puntual para mobile -- "Memoria" y "Guardar sesión" SÍ se agregan acá,
-  // pero solo en pantallas angostas (max-width:840px, mismo corte que el resto del CSS mobile
-  // del header): en el header móvil ya no tienen lugar fijo (ver la regla @media de arriba y
-  // su comentario -- desbordaban ☰/Módulos si convivían con Principios). En desktop el header
-  // sigue siendo su único camino, sin duplicar -- por eso el chequeo de ancho.
-  var esMobileTuEspacio = window.innerWidth <= 840;
+  // 21/08: "Memoria" y "Guardar sesión" pasaron por acá brevemente (excepción mobile) y se
+  // sacaron de nuevo el mismo día -- terminaron viviendo en el panel "⋯" del organismo activo,
+  // dentro de la lista de organismos (ver construirTuEspacioOrganismos()/renderOrgItem()), a
+  // pedido de Javier: tienen más sentido ahí, junto con las otras acciones de ese organismo
+  // (mover a carpeta, pegar evaluación Pro), que sueltas acá abajo.
   if(state.organismo){
     const bp = document.createElement('button');
     bp.className = 'mitem';
     bp.textContent = 'Propuestas';
     bp.addEventListener('click', function(){ cerrarTuEspacio(); cardPropuestas(); });
     cfg.appendChild(bp);
-    if(esMobileTuEspacio){
-      const bFicha = document.createElement('button');
-      bFicha.className = 'mitem';
-      bFicha.textContent = 'Memoria';
-      bFicha.addEventListener('click', function(){ cerrarTuEspacio(); mostrarFicha(); });
-      cfg.appendChild(bFicha);
-    }
-  }
-  if(esMobileTuEspacio && state.started){
-    const bGuardarTe = document.createElement('button');
-    bGuardarTe.className = 'mitem';
-    bGuardarTe.textContent = 'Guardar sesión';
-    bGuardarTe.addEventListener('click', function(){ cerrarTuEspacio(); ofrecerGuardado(null); });
-    cfg.appendChild(bGuardarTe);
   }
   // Etapa 1c (09/08): agrupados bajo un título, a pedido de Javier -- eran seis ítems
   // sueltos, uno abajo del otro, sin ninguna jerarquía visual.
