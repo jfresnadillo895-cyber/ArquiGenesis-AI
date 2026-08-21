@@ -553,8 +553,16 @@ header .spacer{flex:1}
   header{padding:12px 12px;gap:7px}
   #orgchip{min-width:0;flex:1 1 auto;max-width:none;overflow:hidden}
   header .spacer{display:none}
-  #btnGuardar,#btnNueva,#btnAcerca,#btnFicha,#btnPromover{display:none!important}
+  #btnGuardar,#btnNueva,#btnAcerca,#btnPromover{display:none!important}
   #btnMenu{display:inline-block}
+  /* 21/08: "Memoria" (#btnFicha) dejó de forzarse oculto en mobile -- Javier lo reportó: no
+     había NINGÚN otro camino para llegar a la ficha de un organismo desde el celular (el pie
+     móvil unificado está vacío -- ver botones=[] en mostrarFooterMovil, candado.txt -- y el
+     menú "⋯" de "Tu espacio" solo mueve de carpeta / pega evaluación Pro, nunca abre Memoria).
+     No hizo falta JS nuevo: el mismo botón ya tiene su propio show/hide correcto atado a
+     state.organismo (abrirOrganismo/abrirEnContext/nuevaSesion, candado.txt) -- estaba oculto
+     solo por esta regla CSS, ahora sigue esa lógica también en mobile, igual que #btnPrincipios
+     desde el 10/08. "Memoria" (7 letras) es más corto que "Principios" (10), que ya entraba. */
   /* 10/08: "Principios" pasa a estar disponible en el header también en mobile -- antes
      #btnPrincipios estaba oculto siempre (línea ~73) porque en desktop el panel fijo ya
      está a la vista sin necesitar botón, y en mobile el pie de página (candado.txt) era el
