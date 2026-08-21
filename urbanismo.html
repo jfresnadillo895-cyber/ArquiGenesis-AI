@@ -2214,7 +2214,10 @@ canvas{animation:none !important}
   <header class="cai-header">
     <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Urbanismo</b></div><div class="cai-baja">Versión profesional</div></div></div>
     <span style="flex:1"></span>
-    <button id="cai-cred" onclick="credTarjeta()" title="Tus créditos"><span class="cred-b"><i class="cred-i"></i></span><span class="cred-t">—</span></button>
+    <!-- Panel P4 (21/08): el medidor fijo de créditos en el header se sacó -- mismo criterio ya
+         aplicado en el Core (index.html, 10/08): "Tus créditos" (credTarjeta()) sigue existiendo
+         igual, solo que ahora se abre desde "Cuenta" (candado.txt, window.comprenderVerCreditos)
+         en vez de tener su propio botón siempre visible en el header. Ver credTarjeta() más abajo. -->
     <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
     <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
   </header>
@@ -2413,7 +2416,8 @@ canvas{animation:none !important}
       <button class="btn-back" onclick="nuevaCiudad()" title="Nueva ciudad">+</button>
       <button class="btn-back" onclick="toggleHistorial()" title="Historial" style="display:flex;align-items:center;gap:3px">⊙<span class="hist-badge" id="hist-badge">0</span></button>
       <button class="btn-back" onclick="back()" title="Inicio">⌂</button>
-      <button id="cai-cred" onclick="credTarjeta()" title="Tus créditos"><span class="cred-b"><i class="cred-i"></i></span><span class="cred-t">—</span></button>
+      <!-- Panel P4 (21/08): ver misma nota en el header de #p-inicio más arriba -- el botón fijo
+           de créditos se sacó, "Tus créditos" ahora vive en "Cuenta". -->
     <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
     <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
     </div>
@@ -6388,6 +6392,10 @@ function caiEstilos(){
   .cai-vu{border:1px dashed #E2DFD8;border-radius:12px;padding:12px 15px;margin-top:6px;font-size:12.5px;color:#5C6B7D;line-height:1.55}
   .cai-vu b{color:#1C2A3A}
 
+  /* Panel P4 (21/08): reglas de #cai-cred quedan sin uso (botón sacado del header, ver más
+     arriba) -- se dejan comentadas en vez de borradas, mismo criterio que el resto del proyecto
+     (nunca borrar, solo dejar de renderizar). */
+  /*
   #cai-cred{display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;
     font-size:10.5px;letter-spacing:.05em;color:#5C6B7D;border:1px solid #E2DFD8;border-radius:20px;
     padding:4px 10px;cursor:pointer;flex-shrink:0;background:none;transition:border-color .2s}
@@ -6399,6 +6407,7 @@ function caiEstilos(){
   #cai-cred.agotado{border-color:rgba(193,85,63,.5);color:#C1553F}
   #cai-cred.agotado .cred-i{background:#C1553F}
   @media (max-width:840px){ #cai-cred .cred-t{display:none} #cai-cred{padding:4px 8px} }
+  */
   .cai-ham{background:none;border:1px solid #E2DFD8;color:#5C6B7D;border-radius:9px;padding:6px 11px;
     font-size:15px;cursor:pointer;line-height:1;flex-shrink:0;font-family:inherit}
   .cai-ham:hover{border-color:#2E5A87;color:#2E5A87}
@@ -6802,6 +6811,9 @@ function credTarjeta(){
   row.appendChild(b1); card.appendChild(row);
   caiAbrir();
 }
+// Panel P4 (21/08): mismo hook que el Core (candado.txt, window.comprenderVerCreditos) --
+// ahora "Tus créditos" se abre desde "Cuenta" en vez de un botón fijo en el header.
+window.comprenderVerCreditos = credTarjeta;
 
 /* ============ C-05 · ACCESO POR MÓDULO ============
    module_id estable, en minúscula, sin tildes y sin traducir: es el identificador
