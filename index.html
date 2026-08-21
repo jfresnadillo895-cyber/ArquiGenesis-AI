@@ -3125,7 +3125,10 @@ function aplicarPropuesta(p, correccion){
                 .map(function(k){ return (CAMPO_LABEL[k] || k) + ': ' + aplicado[k]; }).join(' · '),
         p.lectura);
     }
-    if(p.hito) registrarMomento('etapa_completada', p.hito.etapa || p.hito.comprendimos || '', p.lectura);
+    if(p.hito){                          /* Punto 11: texto determinista, ya no `etapa||comprendimos` */
+      var textoEtapa = textoMomentoEtapaCompletada(p.hito);
+      if(textoEtapa) registrarMomento('etapa_completada', textoEtapa, p.lectura);
+    }
     // Punto 10: un momento 'principio' por cada principio efectivamente incorporado (nunca por
     // los descartados por duplicado, y nunca si la propuesta se rechaza -- eso ni siquiera llega acá).
     principiosConfirmados.forEach(function(texto){ registrarMomento('principio', texto, p.lectura); });
@@ -8974,6 +8977,101 @@ function buildSystemBloques(){
   return [{ type:'text', text: completo }];
 }
 
+/* Punto 11 (21/08): continuidad temporal activa -- hito (o.hitos[], append-only) y horizonte
+   (o.horizonte, singular/reemplazable) YA están gobernados y persistidos desde antes (Punto 10
+   y M1), pero el Core nunca los reincorporaba al retomar un organismo. Este helper es puro y
+   READ-only: nunca toca o.hitos/o.horizonte, sólo lee el ÚLTIMO hito (nunca el array completo --
+   el resto queda disponible como historial append-only, fuera del prompt) y el horizonte tal
+   cual está. No fusiona con o.ficha, no lo convierte en Recuerdo, no agrega IA. */
+function continuidadTemporalDelOrganismo(o){
+  var hitos = (o && Array.isArray(o.hitos)) ? o.hitos : [];
+  var h = hitos.length ? hitos[hitos.length - 1] : null;
+  var hz = (o && o.horizonte) ? o.horizonte : null;
+  return {
+    ultimoHito: h ? {
+      fecha: h.fecha || null,
+      etapa: h.etapa || null,
+      comprendimos: h.comprendimos || null,
+      tension_principal: h.tension_principal || null,
+      relaciones: h.relaciones || null,
+      que_cambio: h.que_cambio || null
+    } : null,
+    horizonte: hz ? {
+      fecha: hz.fecha || null,
+      observar: hz.observar || null,
+      pregunta: hz.pregunta || null,
+      relacion: hz.relacion || null,
+      consecuencias: hz.consecuencias || null,
+      escala: hz.escala || null,
+      accion: hz.accion || null,
+      cuando: hz.cuando || null
+    } : null
+  };
+}
+/* Bloque compacto para buildSystem(): '' si no hay ni hito ni horizonte (no agrega nada).
+   Framing epistemológico explícito -- hito no es Memoria vigente, horizonte no es próximo paso
+   de ficha ni predicción ni Recuerdo; la ficha sigue mandando como estado presente; una
+   contradicción entre hito y ficha es señal de evolución del organismo, nunca motivo para
+   restaurar el pasado. */
+function bloqueContinuidadTemporal(o){
+  var ct = continuidadTemporalDelOrganismo(o);
+  if(!ct.ultimoHito && !ct.horizonte) return '';
+  var partes = [];
+  if(ct.ultimoHito){
+    var h = ct.ultimoHito;
+    if(h.etapa) partes.push('Última etapa cerrada: ' + h.etapa);
+    if(h.comprendimos) partes.push('Qué comprendimos en ese cierre: ' + h.comprendimos);
+    if(h.que_cambio) partes.push('Qué cambió desde ahí: ' + h.que_cambio);
+    if(h.tension_principal) partes.push('Tensión principal de ese cierre: ' + h.tension_principal);
+    if(h.relaciones) partes.push('Relaciones registradas en ese cierre: ' + h.relaciones);
+  }
+  if(ct.horizonte){
+    var hz = ct.horizonte;
+    var hzPartes = [];
+    if(hz.observar) hzPartes.push('  Qué observar: ' + hz.observar);
+    if(hz.pregunta) hzPartes.push('  Pregunta abierta: ' + hz.pregunta);
+    if(hz.relacion) hzPartes.push('  Relación a profundizar: ' + hz.relacion);
+    if(hz.accion) hzPartes.push('  Acción de validación: ' + hz.accion);
+    if(hz.cuando) hzPartes.push('  Cuándo volver a observar: ' + hz.cuando);
+    if(hz.consecuencias) hzPartes.push('  Consecuencias posibles: ' + hz.consecuencias);
+    if(hz.escala) hzPartes.push('  Escala: ' + hz.escala);
+    if(hzPartes.length) partes.push('Horizonte vigente (no es próximo paso ni predicción ni Recuerdo):\n' + hzPartes.join('\n'));
+  }
+  if(!partes.length) return '';
+  return '\n\n=== CONTINUIDAD TEMPORAL CONFIRMADA ===' +
+    '\nEl hito es una comprensión ya confirmada que cerró una etapa: no es la Memoria vigente ni la reemplaza.' +
+    '\nEl horizonte no es el próximo paso de la ficha, ni una predicción, ni un Recuerdo: es lo que quedó legítimamente abierto para observar después de ese cierre.' +
+    '\nLa ficha (Memoria vigente, arriba) sigue teniendo prioridad como estado presente del organismo.' +
+    '\nSi algo de esto contradice la Memoria vigente, leelo como señal de que el organismo evolucionó -- nunca como motivo para restaurar un estado anterior.\n' +
+    partes.join('\n');
+}
+
+/* Punto 12 (21/08): vigencia funcional de derivados -- "último" no significa automáticamente
+   "vigente". Helper puro READ-only: contrasta paradigma.sobre_proyectivo contra el ÚLTIMO
+   proyectivo registrado (busca primero si esa versión referenciada existe en o.proyectivos[] --
+   si no existe, no hay forma honesta de opinar -> sin_trazabilidad; si existe pero no es la
+   última, el paradigma quedó desfasado -> requiere_revision; si es la última, sigue alineado ->
+   compatible). Nunca infiere vigencia desde fechas ni usa umbrales temporales -- eso es justo lo
+   que el brief prohíbe. No modifica o, o.paradigmas ni o.proyectivos. */
+function vigenciaParadigma(o, paradigma){
+  if(!paradigma || typeof paradigma.sobre_proyectivo !== 'number'){
+    return { estado:'sin_trazabilidad', motivo:'el paradigma no registra sobre qué proyectivo fue construido (falta sobre_proyectivo)' };
+  }
+  var proys = (o && Array.isArray(o.proyectivos)) ? o.proyectivos : [];
+  if(!proys.length){
+    return { estado:'sin_trazabilidad', motivo:'no hay proyectivos registrados para ubicar la versión referenciada (v' + paradigma.sobre_proyectivo + ')' };
+  }
+  var referenciado = proys.filter(function(p){ return p && p.version === paradigma.sobre_proyectivo; })[0];
+  if(!referenciado){
+    return { estado:'sin_trazabilidad', motivo:'no se encontró el proyectivo v' + paradigma.sobre_proyectivo + ' referenciado por el paradigma' };
+  }
+  var ultimo = proys[proys.length - 1];
+  if(paradigma.sobre_proyectivo === ultimo.version){
+    return { estado:'compatible', motivo:'el paradigma fue construido sobre el último proyectivo registrado (v' + ultimo.version + ')' };
+  }
+  return { estado:'requiere_revision', motivo:'el paradigma fue construido sobre el proyectivo v' + paradigma.sobre_proyectivo + ', y desde entonces se registró un proyectivo más reciente (v' + ultimo.version + ')' };
+}
+
 function buildSystem(){
   if(!state.organismo) return SYSTEM_PROMPT;
   const o = state.organismo;
@@ -8991,10 +9089,11 @@ function buildSystem(){
     '\nDiagnóstico vigente: ' + (f.diagnostico || 'aún no formulado') +
     '\nPróximo paso que ordena el caso: ' + (f.proximo || 'aún no definido') +
     '\nPrincipios acumulados del caso: ' + prin;
+  ctx += bloqueContinuidadTemporal(o);   /* Punto 11 (21/08) -- '' si no hay hito ni horizonte */
   const proys = o.proyectivos || [];
   if(proys.length){
     const pv = proys[proys.length - 1];
-    ctx += '\nProyectivo vigente (v' + pv.version + ', alcance ' + pv.alcance + '): ' + pv.texto;
+    ctx += '\nÚltimo proyectivo registrado (v' + pv.version + ', alcance ' + pv.alcance + '): ' + pv.texto;
   }
   const lects = o.lecturas_urban || [];
   if(lects.length){
@@ -9011,7 +9110,12 @@ function buildSystem(){
   const pars = o.paradigmas || [];
   if(pars.length){
     const pp = pars[pars.length - 1];
-    ctx += '\nParadigma de intervención vigente (construido por el usuario' + (pp.sobre_proyectivo ? (' sobre el proyectivo v' + pp.sobre_proyectivo) : '') + '): ' + pp.texto;
+    ctx += '\nÚltimo paradigma registrado (construido por el usuario' + (pp.sobre_proyectivo ? (' sobre el proyectivo v' + pp.sobre_proyectivo) : '') + '): ' + pp.texto;
+    const vp12 = vigenciaParadigma(o, pp);
+    if(vp12.estado === 'requiere_revision') ctx += '\nEstado respecto del proyectivo actual: requiere revisión.';
+  }
+  if(proys.length || pars.length){   /* Punto 12 -- una sola regla general, no repetir el disclaimer por bloque */
+    ctx += '\nLos derivados previos (proyectivo, paradigma) ayudan a comprender trayectoria y dirección explorada, pero no reemplazan la Memoria vigente. Si existe contradicción, la Memoria gobernada actual tiene prioridad.';
   }
   const evals = o.evaluaciones_context || [];
   if(evals.length){
@@ -9271,10 +9375,19 @@ function construirMarcoCore(o){
   if(f.diagnostico) correspondencias.push('Diagnóstico vigente del Core: ' + f.diagnostico);
   if(f.funcion) correspondencias.push('Función organizadora en juego: ' + f.funcion);
   if(f.modo) correspondencias.push('Modo dominante (código de contrato): ' + f.modo);
-  if(o.paradigmas && o.paradigmas.length) correspondencias.push('Paradigma de intervención del Sujeto: ' + o.paradigmas[o.paradigmas.length-1].texto);
+  if(o.paradigmas && o.paradigmas.length){
+    // Punto 12 (21/08): "último" ya no se anuncia como "vigente" -- si quedó desfasado respecto
+    // del último proyectivo (vigenciaParadigma), Urbanismo/Negocios reciben la advertencia en la
+    // misma línea en vez de recibir una dirección antigua como si siguiera activa sin más.
+    const ultimoParadigmaMarco = o.paradigmas[o.paradigmas.length-1];
+    const vpMarco = vigenciaParadigma(o, ultimoParadigmaMarco);
+    correspondencias.push('Último paradigma registrado' +
+      (vpMarco.estado === 'requiere_revision' ? ' — requiere revisión porque fue construido sobre un proyectivo anterior' : '') +
+      ': ' + ultimoParadigmaMarco.texto);
+  }
   if(o.proyectivos && o.proyectivos.length){
     const pv = o.proyectivos[o.proyectivos.length-1];
-    correspondencias.push('Proyectivo vigente (' + pv.alcance + '): ' + pv.texto);
+    correspondencias.push('Último proyectivo registrado (' + pv.alcance + '): ' + pv.texto);
   }
   const abierto = [];
   if(f.tensiones) abierto.push('Tensiones activas: ' + f.tensiones);
@@ -9772,8 +9885,24 @@ var TIPO_MOMENTO = {
   principio:       'Principio',
   paradigma:       'Paradigma',
   destilado:       'Síntesis de sesión',
-  ficha_confirmada:'Ficha confirmada'
+  ficha_confirmada:'Ficha confirmada',
+  etapa_completada:'Etapa comprendida'
 };
+/* Punto 11 (21/08): texto determinista para el momento 'etapa_completada' -- reemplaza el previo
+   `p.hito.etapa || p.hito.comprendimos` (pobre, sólo mostraba uno de los dos). Combina etapa +
+   comprendimos cuando ambos existen; nunca serializa el hito completo; tope ~280 caracteres.
+   Cero IA nueva -- puro armado de texto. */
+function textoMomentoEtapaCompletada(hito){
+  if(!hito) return '';
+  var partes = [];
+  if(hito.etapa) partes.push(hito.etapa);
+  if(hito.comprendimos) partes.push('comprendimos que ' + hito.comprendimos);
+  if(!partes.length) return '';
+  var txt = partes.join(' — ');
+  var MAX = 280;
+  if(txt.length > MAX) txt = txt.slice(0, MAX - 1).trim() + '…';
+  return txt;
+}
 function turnoActual(){
   try{ return state.history ? Math.ceil(state.history.length / 2) : 0; }catch(e){ return 0; }
 }
@@ -10663,9 +10792,16 @@ function construirInsumosInforme(o){
   }
   if(o.proyectivos && o.proyectivos.length){
     const pv = o.proyectivos[o.proyectivos.length-1];
-    insumos += 'Proyectivo vigente (' + pv.alcance + '): ' + pv.texto + '\n';
+    insumos += 'Último proyectivo registrado (' + pv.alcance + '): ' + pv.texto + '\n';
   }
-  if(o.paradigmas && o.paradigmas.length) insumos += 'Paradigma de intervención: ' + o.paradigmas[o.paradigmas.length-1].texto + '\n';
+  if(o.paradigmas && o.paradigmas.length){
+    // Punto 12 (21/08): Studio conserva el contenido igual -- una salida desactualizada puede
+    // seguir siendo históricamente valiosa -- sólo deja de llamarla "vigente" sin evidencia.
+    const ultimoParadigmaIns = o.paradigmas[o.paradigmas.length-1];
+    const vpIns = vigenciaParadigma(o, ultimoParadigmaIns);
+    insumos += 'Último paradigma registrado: ' + ultimoParadigmaIns.texto +
+      (vpIns.estado === 'requiere_revision' ? ' (Estado: requiere revisión)' : '') + '\n';
+  }
   if(o.diagnosticos_pro && o.diagnosticos_pro.length) insumos += 'Diagnóstico profesional: ' + o.diagnosticos_pro[o.diagnosticos_pro.length-1].resumen + '\n';
   // Punto 8 (21/08): última evaluación de Negocios Pro como insumo -- snapshot explícito para
   // Studio (sólo resumen persistido, nunca enp.datos), no recuperación conversacional. No usa el
@@ -10772,12 +10908,16 @@ function renderInforme(o, red){
   }
   if(o.proyectivos && o.proyectivos.length){
     const pv = o.proyectivos[o.proyectivos.length-1];
-    sec('Proyectivo vigente · alcance ' + pv.alcance);
+    sec('Último proyectivo registrado · alcance ' + pv.alcance);
     parr(pv.texto);
   }
   if(o.paradigmas && o.paradigmas.length){
-    sec('Paradigma de intervención');
-    parr(o.paradigmas[o.paradigmas.length-1].texto);
+    // Punto 12 (21/08): mismo criterio visible que Studio -- sobrio, sin alertas rojas dramáticas,
+    // sólo el sufijo "· requiere revisión" en el título de la sección cuando corresponda.
+    const ultimoParadigmaRI = o.paradigmas[o.paradigmas.length-1];
+    const vpRI = vigenciaParadigma(o, ultimoParadigmaRI);
+    sec('Paradigma de intervención' + (vpRI.estado === 'requiere_revision' ? ' · requiere revisión' : ''));
+    parr(ultimoParadigmaRI.texto);
   }
   if(red.recomendaciones && red.recomendaciones.length){
     sec('Recomendaciones');
@@ -11967,12 +12107,44 @@ function mostrarFicha(){
     ['Evaluaciones de campo', (o.evaluaciones_context && o.evaluaciones_context.length) ? o.evaluaciones_context.length + ' realizadas (última v' + o.evaluaciones_context.length + ')' : 'ninguna todavía'],
     ['Lecturas de negocio', (o.lecturas_negocio && o.lecturas_negocio.length) ? o.lecturas_negocio.length + ' realizadas (última v' + o.lecturas_negocio.length + ')' : 'ninguna todavía'],
     ['Diagnósticos Pro', (o.diagnosticos_pro && o.diagnosticos_pro.length) ? o.diagnosticos_pro[o.diagnosticos_pro.length-1].resumen : 'ninguno incorporado'],
-    ['Proyectivo vigente', (o.proyectivos && o.proyectivos.length) ? ('v' + o.proyectivos[o.proyectivos.length-1].version + ' · alcance ' + o.proyectivos[o.proyectivos.length-1].alcance) : 'aún no generado'],
-    ['Paradigma vigente', (o.paradigmas && o.paradigmas.length) ? o.paradigmas[o.paradigmas.length-1].texto : 'aún no construido'],
+  ];
+  /* Punto 11 (21/08): última etapa (hito) y horizonte vigente -- compacto, sólo si existen (a
+     diferencia del resto de esta grilla no llevan fallback "aún no..."; la cronología completa
+     de hitos vive en el Recorrido, acá sólo el último). Reusa el mismo helper puro que buildSystem(). */
+  var ct11 = continuidadTemporalDelOrganismo(o);
+  if(ct11.ultimoHito){
+    var h11 = ct11.ultimoHito;
+    var partesEtapa = [];
+    if(h11.etapa) partesEtapa.push(h11.etapa);
+    if(h11.comprendimos) partesEtapa.push('comprendimos que ' + h11.comprendimos);
+    if(h11.que_cambio) partesEtapa.push('cambió: ' + h11.que_cambio);
+    if(partesEtapa.length) campos.push(['Última etapa comprendida', partesEtapa.join(' · ')]);
+  }
+  if(ct11.horizonte){
+    var hz11 = ct11.horizonte;
+    var partesHz = [];
+    if(hz11.observar) partesHz.push('observar: ' + hz11.observar);
+    if(hz11.pregunta) partesHz.push('pregunta: ' + hz11.pregunta);
+    if(hz11.relacion) partesHz.push('relación: ' + hz11.relacion);
+    if(hz11.accion) partesHz.push('acción: ' + hz11.accion);
+    if(hz11.cuando) partesHz.push('cuándo: ' + hz11.cuando);
+    if(partesHz.length) campos.push(['Horizonte vigente', partesHz.join(' · ')]);
+  }
+  campos.push(
+    // Punto 12 (21/08): "último" ya no se anuncia como "vigente" en la tarjeta de Memoria --
+    // una posición de array no es una afirmación epistemológica. Estado del paradigma sólo si
+    // es verificable (vigenciaParadigma), nunca inferido de fechas.
+    ['Último proyectivo', (o.proyectivos && o.proyectivos.length) ? ('v' + o.proyectivos[o.proyectivos.length-1].version + ' · alcance ' + o.proyectivos[o.proyectivos.length-1].alcance) : 'aún no generado'],
+    ['Último paradigma', (function(){
+      if(!o.paradigmas || !o.paradigmas.length) return 'aún no construido';
+      var ultimoParadigmaFicha = o.paradigmas[o.paradigmas.length-1];
+      var vpFicha = vigenciaParadigma(o, ultimoParadigmaFicha);
+      return ultimoParadigmaFicha.texto + (vpFicha.estado === 'requiere_revision' ? ' · requiere revisión' : '');
+    })()],
     ['Historial de memoria', textoHistorialFicha(o)],
     ['Recuerdos', obtenerRecuerdos(o).length ? (obtenerRecuerdos(o).length + (obtenerRecuerdos(o).length === 1 ? ' recuerdo guardado' : ' recuerdos guardados')) : 'ninguno todavía'],
-    ['Proyectivo vigente', (o.proyectivos && o.proyectivos.length) ? '(v' + o.proyectivos[o.proyectivos.length-1].version + ' · ' + o.proyectivos[o.proyectivos.length-1].alcance + ') ' + o.proyectivos[o.proyectivos.length-1].texto : 'ninguno todavía']
-  ];
+    ['Último proyectivo (texto)', (o.proyectivos && o.proyectivos.length) ? '(v' + o.proyectivos[o.proyectivos.length-1].version + ' · ' + o.proyectivos[o.proyectivos.length-1].alcance + ') ' + o.proyectivos[o.proyectivos.length-1].texto : 'ninguno todavía']
+  );
   for(const c of campos){
     const it = document.createElement('div'); it.className='fitem';
     const lb = document.createElement('span'); lb.className='flabel'; lb.textContent = c[0];
@@ -13842,6 +14014,367 @@ function correrPruebasAuto(){
       return src.indexOf('fetch(') === -1;
     })());
     chk('M10-17 · funciones de los Puntos 6-9 siguen presentes y con comportamiento base sin cambios', (function(){
+      return typeof fragmentosEspecializadosDelOrganismo === 'function' &&
+        typeof antecedentesEspecializadosParaMarco === 'function' &&
+        typeof fichaTieneLectura === 'function' &&
+        typeof C1B1_situacionParaEspecialidades === 'function';
+    })());
+
+    /* ============ PUNTO 11 (21/08) -- Hito + Horizonte como continuidad temporal activa,
+       M11-01 a M11-21. M11-22 (node --check) no es una aserción de runtime, se reporta aparte
+       (mismo criterio que M10-18). Reusa el patrón de stub de cargarPropuestas/persistirPropuestas/
+       guardarOrganismo ya establecido en M1-01..07 y M10-01..17. */
+    chk('M11-01 · sin hitos ni horizonte -> continuidadTemporalDelOrganismo(o) da ambos null', (function(){
+      var ct = continuidadTemporalDelOrganismo({ id:'m11_01', hitos:[], ficha:{} });
+      return ct.ultimoHito === null && ct.horizonte === null;
+    })());
+    chk('M11-02 · con varios hitos, continuidadTemporalDelOrganismo() selecciona sólo el último', (function(){
+      var o = { id:'m11_02', hitos:[
+        { fecha:'2026-01-01T00:00:00.000Z', etapa:'H1', comprendimos:'primero' },
+        { fecha:'2026-02-01T00:00:00.000Z', etapa:'H2', comprendimos:'segundo' },
+        { fecha:'2026-03-01T00:00:00.000Z', etapa:'H3', comprendimos:'tercero' }
+      ]};
+      var ct = continuidadTemporalDelOrganismo(o);
+      return ct.ultimoHito.etapa === 'H3' && ct.ultimoHito.comprendimos === 'tercero';
+    })());
+    chk('M11-03 · continuidadTemporalDelOrganismo() no modifica o.hitos', (function(){
+      var o = { id:'m11_03', hitos:[{ fecha:'2026-01-01T00:00:00.000Z', etapa:'H1' }, { fecha:'2026-02-01T00:00:00.000Z', etapa:'H2' }] };
+      var antes = JSON.stringify(o.hitos);
+      continuidadTemporalDelOrganismo(o);
+      return JSON.stringify(o.hitos) === antes && o.hitos.length === 2;
+    })());
+    chk('M11-04 · continuidadTemporalDelOrganismo() no modifica o.horizonte', (function(){
+      var o = { id:'m11_04', horizonte:{ fecha:'2026-01-01T00:00:00.000Z', observar:'y' } };
+      var antes = JSON.stringify(o.horizonte);
+      continuidadTemporalDelOrganismo(o);
+      return JSON.stringify(o.horizonte) === antes;
+    })());
+    chk('M11-05 · buildSystem() sin hito ni horizonte -> sin encabezado de continuidad temporal', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = { id:'m11_05', nombre:'Sin Temporalidad', tipo:'empresa', ficha:{} };
+        state.history = [];
+        var ctx = buildSystem();
+        return ctx.indexOf('CONTINUIDAD TEMPORAL CONFIRMADA') === -1;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('M11-06 · buildSystem() con último hito -> aparecen etapa, comprendimos y qué cambió', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = { id:'m11_06', nombre:'Con Hito', tipo:'empresa', ficha:{},
+          hitos:[{ fecha:'2026-01-01T00:00:00.000Z', etapa:'diagnóstico inicial',
+            comprendimos:'la tension viene del area comercial', que_cambio:'se identifico el cuello de botella' }] };
+        state.history = [];
+        var ctx = buildSystem();
+        return ctx.indexOf('diagnóstico inicial') > -1 && ctx.indexOf('la tension viene del area comercial') > -1 &&
+          ctx.indexOf('se identifico el cuello de botella') > -1;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('M11-07 · buildSystem() con horizonte -> aparecen sus campos vigentes', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = { id:'m11_07', nombre:'Con Horizonte', tipo:'empresa', ficha:{},
+          horizonte:{ fecha:'2026-01-01T00:00:00.000Z', observar:'si el cuello de botella se resuelve',
+            pregunta:'¿el area comercial puede sostener el ritmo?', accion:'revisar en 30 dias' } };
+        state.history = [];
+        var ctx = buildSystem();
+        return ctx.indexOf('si el cuello de botella se resuelve') > -1 &&
+          ctx.indexOf('el area comercial puede sostener el ritmo') > -1 &&
+          ctx.indexOf('revisar en 30 dias') > -1 && ctx.indexOf('Horizonte vigente') > -1;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('M11-08 · orden: ORGANISMO ACTIVO < CONTINUIDAD TEMPORAL < INTERPRETACIONES ESPECIALIZADAS < RECUERDOS PREVIOS cuando todos existen', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = {
+          id:'m11_08', nombre:'Orden Once', tipo:'empresa', ficha:{ diagnostico:'d1' }, principios:[],
+          hitos: [{ fecha:'2026-01-01T00:00:00.000Z', etapa:'diagnóstico inicial', comprendimos:'la dependencia del proveedor de maderas' }],
+          horizonte: { fecha:'2026-02-01T00:00:00.000Z', observar:'si la dependencia se sostiene', pregunta:'¿seguimos con el mismo proveedor?' },
+          evaluaciones_negocio_pro: [{ version:1, fecha:'2025-01-01', resumen:'B3 tensionada',
+            datos: { evaluacion: { dimensiones: [{ cod:'B3', estado:'tensionada',
+              nota:'la caja esta tensionada por los plazos de cobro con el proveedor de maderas' }] } } }],
+          recuerdos:[{ id:'rM11', title:'Dependencia crítica del proveedor de maderas', createdAt:'2025-01-01T00:00:00.000Z',
+            source:'core', field:['tensiones'], before:{tensiones:'sin registro previo'},
+            after:{tensiones:'dependencia critica de proveedor de maderas'},
+            summary:'Tensiones activas: dependencia critica de proveedor de maderas' }]
+        };
+        state.history = [{ role:'user', content:'volvimos a tener problemas con el proveedor de maderas y la caja tensionada por los proveedores' }];
+        var ctx = buildSystem();
+        var iOrg = ctx.indexOf('=== ORGANISMO ACTIVO ===');
+        var iCT = ctx.indexOf('=== CONTINUIDAD TEMPORAL CONFIRMADA ===');
+        var iIE = ctx.indexOf('=== INTERPRETACIONES ESPECIALIZADAS PERTINENTES DEL ORGANISMO ===');
+        var iRP = ctx.indexOf('=== RECUERDOS PREVIOS DEL ORGANISMO');
+        return iOrg > -1 && iCT > -1 && iIE > -1 && iRP > -1 && iOrg < iCT && iCT < iIE && iIE < iRP;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('M11-09 · hito histórico contradictorio no sobreescribe la Memoria vigente', (function(){
+      var g = state.organismo;
+      try{
+        state.organismo = {
+          id:'m11_09', nombre:'Contradiccion', tipo:'empresa',
+          ficha:{ diagnostico:'hoy el organismo esta estable' },
+          hitos:[{ fecha:'2025-01-01T00:00:00.000Z', etapa:'cierre viejo', comprendimos:'el organismo estaba en crisis total' }]
+        };
+        var ctx = buildSystem();
+        var iDiagVigente = ctx.indexOf('Diagnóstico vigente: hoy el organismo esta estable');
+        var iHitoTxt = ctx.indexOf('el organismo estaba en crisis total');
+        var noSobreescribe = ctx.indexOf('Diagnóstico vigente: el organismo estaba en crisis total') === -1;
+        var senalEvolucion = ctx.indexOf('evolucionó') > -1;
+        return iDiagVigente > -1 && iHitoTxt > iDiagVigente && noSobreescribe && senalEvolucion;
+      } finally { state.organismo = g; }
+    })());
+    chk('M11-10 · mostrarFicha() usa continuidadTemporalDelOrganismo() y no lanza con hito presente', (function(){
+      var g = state.organismo;
+      try{
+        state.organismo = { id:'m11_10', nombre:'Ficha Hito', tipo:'empresa', ficha:{}, principios:[],
+          hitos:[{ fecha:'2026-01-01T00:00:00.000Z', etapa:'diagnóstico inicial', comprendimos:'x' }] };
+        var srcOk = mostrarFicha.toString().indexOf('continuidadTemporalDelOrganismo') > -1;
+        mostrarFicha();
+        return srcOk;
+      } catch(e){ return false; } finally { state.organismo = g; }
+    })());
+    chk('M11-11 · mostrarFicha() no lanza con horizonte presente (sin hito)', (function(){
+      var g = state.organismo;
+      try{
+        state.organismo = { id:'m11_11', nombre:'Ficha Horizonte', tipo:'empresa', ficha:{}, principios:[],
+          horizonte: { fecha:'2026-01-01T00:00:00.000Z', observar:'y', pregunta:'z' } };
+        mostrarFicha();
+        return true;
+      } catch(e){ return false; } finally { state.organismo = g; }
+    })());
+    chk('M11-12 · hito/horizonte sin ningún campo mostrable -> bloqueContinuidadTemporal() no agrega nada', (function(){
+      var o = { id:'m11_12', hitos:[{ fecha:'2026-01-01T00:00:00.000Z' }], horizonte: { fecha:'2026-01-01T00:00:00.000Z' } };
+      return bloqueContinuidadTemporal(o) === '';
+    })());
+    chk('M11-13 · TIPO_MOMENTO.etapa_completada existe', typeof TIPO_MOMENTO.etapa_completada === 'string' && TIPO_MOMENTO.etapa_completada.length > 0);
+    chk('M11-14 · confirmar un hito genera exactamente un momento tipo "etapa_completada"', (function(){
+      var o = { id:'m11_14', nombre:'M11 Catorce', tipo:'empresa', ficha:{}, principios:[], momentos:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'diagnóstico inicial', comprendimos:'x' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        resolverPropuesta(prop.id, 'confirmar');
+        var mom = (o.momentos || []).filter(function(m){ return m.tipo === 'etapa_completada'; });
+        return mom.length === 1 && mom[0].texto.indexOf('diagnóstico inicial') > -1;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M11-15 · rechazar una propuesta con hito no genera ningún momento "etapa_completada"', (function(){
+      var o = { id:'m11_15', nombre:'M11 Quince', tipo:'empresa', ficha:{}, principios:[], momentos:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'diagnóstico a rechazar', comprendimos:'x' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        resolverPropuesta(prop.id, 'rechazar');
+        var mom = (o.momentos || []).filter(function(m){ return m.tipo === 'etapa_completada'; });
+        return mom.length === 0 && (o.hitos || []).length === 0;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M11-16 · confirmar propuesta con sólo hito y horizonte (sin campos de ficha) no crea Recuerdo', (function(){
+      var o = { id:'m11_16', nombre:'M11 Dieciseis', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'cierre', comprendimos:'y' };
+        var horizonte = { observar:'z', pregunta:'w' };
+        var prop = proponerFicha({}, null, hito, horizonte, []);
+        resolverPropuesta(prop.id, 'confirmar');
+        return recuerdosDe(o).length === 0 && o.hitos.length === 1 && !!o.horizonte;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M11-17 · confirmar hito/horizonte sin campos no altera los campos narrativos de o.ficha', (function(){
+      var o = { id:'m11_17', nombre:'M11 Diecisiete', tipo:'empresa', ficha:{ diagnostico:'d1', funcion:'f1', tensiones:'t1', proximo:'p1' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'cierre', comprendimos:'algo distinto de d1' };
+        var horizonte = { observar:'z' };
+        var prop = proponerFicha({}, null, hito, horizonte, []);
+        resolverPropuesta(prop.id, 'confirmar');
+        return o.ficha.diagnostico === 'd1' && o.ficha.funcion === 'f1' && o.ficha.tensiones === 't1' && o.ficha.proximo === 'p1';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('M11-18 · C1A1_openQuestions() sigue recuperando horizonte.pregunta sin cambios', (function(){
+      var o = { id:'m11_18', horizonte:{ pregunta:'¿seguimos con el mismo proveedor?', fecha:'2026-01-01T00:00:00.000Z' } };
+      var qs = C1A1_openQuestions(o);
+      return Array.isArray(qs) && qs.length === 1 && qs[0].text === '¿seguimos con el mismo proveedor?' && qs[0].source === 'horizonte';
+    })());
+    chk('M11-19 · funciones de gobernanza de Principios (Punto 10) siguen presentes y activas', (function(){
+      return typeof normalizarPrincipioParaComparar === 'function' &&
+        typeof proponerFicha === 'function' && typeof aplicarPropuesta === 'function' &&
+        normalizarPrincipioParaComparar('  Hola   Mundo ') === 'hola mundo';
+    })());
+    chk('M11-20 · funciones de Memoria Viva (M1/M2.x) siguen presentes', (function(){
+      return typeof crearRecuerdo === 'function' && typeof recuerdosDe === 'function' &&
+        typeof obtenerRecuerdos === 'function' && typeof bloqueRecuerdosDeSesion === 'function';
+    })());
+    chk('M11-21 · funciones de los Puntos 6-9 siguen presentes', (function(){
+      return typeof fragmentosEspecializadosDelOrganismo === 'function' &&
+        typeof antecedentesEspecializadosParaMarco === 'function' &&
+        typeof fichaTieneLectura === 'function' &&
+        typeof C1B1_situacionParaEspecialidades === 'function';
+    })());
+
+    /* ============ PUNTO 12 (21/08) -- Vigencia funcional de derivados, M12-01 a M12-19.
+       M12-20 (node --check) no es una aserción de runtime, se reporta aparte (mismo criterio
+       que M10-18/M11-22). "Último" ya no se anuncia como "vigente" en proyectivos/paradigmas;
+       vigenciaParadigma() es el único helper nuevo, puro y sin fechas. */
+    chk('M12-01 · organismo sin proyectivo -> buildSystem() no agrega ningún texto nuevo de derivados', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = { id:'m12_01', nombre:'Sin Proyectivo', tipo:'empresa', ficha:{} };
+        state.history = [];
+        var ctx = buildSystem();
+        return ctx.indexOf('Último proyectivo registrado') === -1 && ctx.indexOf('Proyectivo vigente') === -1 &&
+          ctx.indexOf('Los derivados previos') === -1;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('M12-02 · un proyectivo -> buildSystem() dice "Último proyectivo registrado" y NO "Proyectivo vigente"', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = { id:'m12_02', nombre:'Con Proyectivo', tipo:'empresa', ficha:{},
+          proyectivos:[{ version:1, alcance:'organizacional', texto:'hacia una estructura mas simple' }] };
+        state.history = [];
+        var ctx = buildSystem();
+        return ctx.indexOf('Último proyectivo registrado (v1, alcance organizacional): hacia una estructura mas simple') > -1 &&
+          ctx.indexOf('Proyectivo vigente') === -1 &&
+          ctx.indexOf('Los derivados previos (proyectivo, paradigma) ayudan a comprender trayectoria') > -1;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('M12-03 · construirMarcoCore() tampoco usa "Proyectivo vigente"', (function(){
+      var o = { id:'m12_03', nombre:'Marco', tipo:'empresa', ficha:{}, principios:[],
+        proyectivos:[{ version:1, alcance:'organizacional', texto:'hacia una estructura mas simple' }] };
+      var m = construirMarcoCore(o);
+      var txt = JSON.stringify(m.marco.correspondencias);
+      return txt.indexOf('Último proyectivo registrado') > -1 && txt.indexOf('Proyectivo vigente') === -1;
+    })());
+    chk('M12-04 · Studio (construirInsumosInforme/renderInforme) tampoco presenta el proyectivo/paradigma como "vigente"', (function(){
+      var o = { id:'m12_04', nombre:'Studio', tipo:'empresa', ficha:{ diagnostico:'d' },
+        proyectivos:[{ version:1, alcance:'organizacional', texto:'hacia algo nuevo' }],
+        paradigmas:[{ texto:'priorizar lo esencial', sobre_proyectivo:1 }] };
+      var insumos = construirInsumosInforme(o);
+      var srcOk = renderInforme.toString().indexOf('Último proyectivo registrado') > -1 &&
+        renderInforme.toString().indexOf('Proyectivo vigente') === -1;
+      return insumos.indexOf('Último proyectivo registrado') > -1 && insumos.indexOf('Proyectivo vigente') === -1 &&
+        insumos.indexOf('Último paradigma registrado') > -1 && srcOk;
+    })());
+    chk('M12-05 · Memoria (mostrarFicha) tampoco presenta el proyectivo/paradigma como "vigente"', (function(){
+      var g = state.organismo;
+      try{
+        state.organismo = { id:'m12_05', nombre:'Ficha', tipo:'empresa', ficha:{}, principios:[],
+          proyectivos:[{ version:1, alcance:'organizacional', texto:'x' }],
+          paradigmas:[{ texto:'y', sobre_proyectivo:1 }] };
+        var srcOk = mostrarFicha.toString().indexOf('Proyectivo vigente') === -1 &&
+          mostrarFicha.toString().indexOf('Paradigma vigente') === -1 &&
+          mostrarFicha.toString().indexOf('Último proyectivo') > -1 &&
+          mostrarFicha.toString().indexOf('Último paradigma') > -1;
+        mostrarFicha();
+        return srcOk;
+      } catch(e){ return false; } finally { state.organismo = g; }
+    })());
+    chk('M12-06 · paradigma sobre proyectivo v2 y último proyectivo v2 -> compatible', (function(){
+      var o = { id:'m12_06', proyectivos:[{ version:1, alcance:'x', texto:'p1' }, { version:2, alcance:'x', texto:'p2' }] };
+      var vp = vigenciaParadigma(o, { texto:'par', sobre_proyectivo:2 });
+      return vp.estado === 'compatible';
+    })());
+    chk('M12-07 · paradigma sobre v1 y último proyectivo v2 -> requiere_revision', (function(){
+      var o = { id:'m12_07', proyectivos:[{ version:1, alcance:'x', texto:'p1' }, { version:2, alcance:'x', texto:'p2' }] };
+      var vp = vigenciaParadigma(o, { texto:'par', sobre_proyectivo:1 });
+      return vp.estado === 'requiere_revision';
+    })());
+    chk('M12-08 · paradigma sin sobre_proyectivo -> sin_trazabilidad', (function(){
+      var o = { id:'m12_08', proyectivos:[{ version:1, alcance:'x', texto:'p1' }] };
+      var vp = vigenciaParadigma(o, { texto:'par' });
+      return vp.estado === 'sin_trazabilidad';
+    })());
+    chk('M12-09 · no se borra un paradigma desactualizado', (function(){
+      var o = { id:'m12_09', nombre:'X', tipo:'empresa', ficha:{},
+        proyectivos:[{ version:1, alcance:'x', texto:'p1' }, { version:2, alcance:'x', texto:'p2' }],
+        paradigmas:[{ texto:'paradigma viejo', sobre_proyectivo:1 }] };
+      var antes = JSON.stringify(o.paradigmas);
+      var g = state.organismo, gh = state.history;
+      state.organismo = o; state.history = [];
+      buildSystem();
+      state.organismo = g; state.history = gh;
+      return JSON.stringify(o.paradigmas) === antes && o.paradigmas.length === 1;
+    })());
+    chk('M12-10 · no se borra un proyectivo anterior', (function(){
+      var o = { id:'m12_10', nombre:'X', tipo:'empresa', ficha:{},
+        proyectivos:[{ version:1, alcance:'x', texto:'p1' }, { version:2, alcance:'x', texto:'p2' }] };
+      var antes = JSON.stringify(o.proyectivos);
+      var g = state.organismo, gh = state.history;
+      state.organismo = o; state.history = [];
+      buildSystem();
+      state.organismo = g; state.history = gh;
+      return JSON.stringify(o.proyectivos) === antes && o.proyectivos.length === 2;
+    })());
+    chk('M12-11 · vigenciaParadigma() es READ-only (no muta organismo ni paradigma)', (function(){
+      var o = { id:'m12_11', proyectivos:[{ version:1, alcance:'x', texto:'p1' }] };
+      var par = { texto:'par', sobre_proyectivo:1 };
+      var antesO = JSON.stringify(o), antesP = JSON.stringify(par);
+      vigenciaParadigma(o, par);
+      return JSON.stringify(o) === antesO && JSON.stringify(par) === antesP;
+    })());
+    chk('M12-12 · no se modifica o.ficha', (function(){
+      var o = { id:'m12_12', nombre:'X', tipo:'empresa', ficha:{ diagnostico:'d', funcion:'f', tensiones:'t', proximo:'p' },
+        proyectivos:[{ version:1, alcance:'x', texto:'p1' }], paradigmas:[{ texto:'par', sobre_proyectivo:1 }] };
+      var antes = JSON.stringify(o.ficha);
+      var g = state.organismo, gh = state.history;
+      state.organismo = o; state.history = [];
+      buildSystem(); construirMarcoCore(o); construirInsumosInforme(o);
+      state.organismo = g; state.history = gh;
+      return JSON.stringify(o.ficha) === antes;
+    })());
+    chk('M12-13 · no se modifica o.recuerdos', (function(){
+      var o = { id:'m12_13', nombre:'X', tipo:'empresa', ficha:{},
+        recuerdos:[{ id:'r1', title:'t', createdAt:'2025-01-01T00:00:00.000Z', source:'core', field:['diagnostico'], after:{diagnostico:'d'}, summary:'Diagnóstico vigente: d' }],
+        proyectivos:[{ version:1, alcance:'x', texto:'p1' }], paradigmas:[{ texto:'par', sobre_proyectivo:1 }] };
+      var antes = JSON.stringify(o.recuerdos);
+      var g = state.organismo, gh = state.history;
+      state.organismo = o; state.history = [];
+      buildSystem();
+      state.organismo = g; state.history = gh;
+      return JSON.stringify(o.recuerdos) === antes;
+    })());
+    chk('M12-14 · no se agregan fechas límite (vigenciaParadigma no razona con fechas/umbrales temporales)', (function(){
+      var src = vigenciaParadigma.toString();
+      return src.indexOf('Date(') === -1 && src.indexOf('getTime(') === -1 &&
+        src.indexOf('dias') === -1 && src.indexOf('meses') === -1 && src.indexOf('fecha') === -1;
+    })());
+    chk('M12-15 · no se agrega IA (sin fetch() en las funciones tocadas por Punto 12)', (function(){
+      var fns = [vigenciaParadigma, buildSystem, construirMarcoCore, construirInsumosInforme, renderInforme, mostrarFicha];
+      return fns.every(function(fn){ return fn.toString().indexOf('fetch(') === -1; });
+    })());
+    chk('M12-16 · funciones de M2.4 siguen presentes', (function(){
+      return typeof bloqueRecuerdosParaContexto === 'function' && typeof obtenerRecuerdos === 'function' &&
+        typeof seleccionarRecuerdosCandidatos === 'function';
+    })());
+    chk('M12-17 · funciones de gobernanza de Principios (Punto 10) siguen presentes', (function(){
+      return typeof normalizarPrincipioParaComparar === 'function' && typeof proponerFicha === 'function' &&
+        typeof aplicarPropuesta === 'function';
+    })());
+    chk('M12-18 · funciones de continuidad temporal (Punto 11) siguen presentes', (function(){
+      return typeof continuidadTemporalDelOrganismo === 'function' && typeof bloqueContinuidadTemporal === 'function' &&
+        typeof textoMomentoEtapaCompletada === 'function' && typeof TIPO_MOMENTO.etapa_completada === 'string';
+    })());
+    chk('M12-19 · funciones de los Puntos 6-9 siguen presentes', (function(){
       return typeof fragmentosEspecializadosDelOrganismo === 'function' &&
         typeof antecedentesEspecializadosParaMarco === 'function' &&
         typeof fichaTieneLectura === 'function' &&
