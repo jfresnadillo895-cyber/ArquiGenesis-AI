@@ -10164,6 +10164,15 @@ function cardActivarContext(org){
   setTimeout(function(){ inp.focus(); }, 60);
 }
 
+/* C1-Z2 · DEPRECADO (19/08) -- Contextos Legacy. Sustituido como entrada pública por Contextos
+   Universal (abrirContextosUniversal(), motor C1G1_*): los tres puntos de entrada reales que
+   llamaban a esta función (mostrarFicha(), ofrecerDerivacionInterna(), cardOrientarModo()) ya
+   fueron redirigidos. La única llamada que queda en el código es cardActivarContext(), que a su
+   vez ya estaba huérfana desde antes de este corte (ningún botón real la invoca) -- confirmado
+   por grep, cero referencias activas. state.modoContext, CONTEXT_PROMPT y renderPanelContext()
+   quedan con el mismo estatus: código intacto, sin escritura nueva posible desde el flujo normal.
+   No se borra nada acá a propósito -- es reversible: alcanza con volver a cablear un botón a
+   abrirEnContext() si hiciera falta. */
 function abrirEnContext(org){
   cerrarOverlay();
   if(!credAlcanza('campo')){ cardSinCreditos('campo'); return; }
@@ -10332,7 +10341,10 @@ function ofrecerDerivacionInterna(){
   var esNegocio = (o.derivable && o.derivable.indexOf('negocio') > -1) || orientacionDeTipo(o.tipo) === 'negocio';
   var destinos = [];
   if(!state.modoUrban   && esUrbano)  destinos.push({ label:'Leer en Urbanismo', fn:function(){ abrirEnUrban(o); },   bc:'rgba(79,174,126,.5)', col:'var(--energia)' });
-  if(!state.modoContext)              destinos.push({ label:'Leer en Contextos', fn:function(){ abrirEnContext(o); }, bc:'rgba(155,123,212,.5)', col:'var(--trans)' });
+  // C1-Z2: redirigido a Contextos Universal (abrirContextosUniversal, motor C1G1_*) -- ya no es
+  // un modo exclusivo del chat principal (no toca state.modoContext), así que se ofrece siempre,
+  // sin condicionar a ningún modo activo.
+  destinos.push({ label:'Leer en Contextos', fn:function(){ abrirContextosUniversal(o); }, bc:'rgba(155,123,212,.5)', col:'var(--trans)' });
   if(!state.modoNegocio && esNegocio) destinos.push({ label:'Leer en Negocios', fn:function(){ abrirEnNegocio(o); }, bc:'rgba(91,143,212,.5)', col:'var(--espacio)' });
   if(!destinos.length) return;
   var d = document.createElement('div'); d.className = 'msg motor';
@@ -10386,7 +10398,7 @@ function C1G3_htmlTrabajando(){
    `cont` donde cada llamador escribe su propio contenido. */
 function C1G3_armarTarjeta(org){
   el.cardContent.innerHTML = '';
-  var h = document.createElement('h3'); h.textContent = 'Contextos Universal · ' + org.nombre;
+  var h = document.createElement('h3'); h.textContent = 'Contextos · ' + org.nombre;   // C1-Z2: nombre público
   el.cardContent.appendChild(h);
   var cont = document.createElement('div'); cont.id = 'c1g3Card';
   el.cardContent.appendChild(cont);
@@ -10456,7 +10468,7 @@ async function C1G3_correrApertura(org, miEpoch, cont){
     r = await C1G1_iniciarConversacion(org.id, null, null);
   }catch(e){
     if(miEpoch !== state.c1g3Epoch) return;
-    cont.innerHTML = C1G1_renderVista(C1G1_vistaCierre('No pudimos abrir Contextos Universal por ahora.'));
+    cont.innerHTML = C1G1_renderVista(C1G1_vistaCierre('No pudimos abrir Contextos por ahora.'));
     return;
   }
   if(miEpoch !== state.c1g3Epoch) return;   // el usuario ya se fue de esta tarjeta
@@ -11043,7 +11055,7 @@ function cardOrientarModo(org){
   bCore.onclick = function(){ cerrarOverlay(); abrirOrganismo(org); };
   const bCtx = document.createElement('button'); bCtx.className='btn'; bCtx.textContent='Evaluar su campo (Contextos)';
   bCtx.style.borderColor = 'rgba(155,123,212,.5)'; bCtx.style.color = 'var(--trans)';
-  bCtx.onclick = function(){ abrirEnContext(org); };
+  bCtx.onclick = function(){ abrirContextosUniversal(org); };   // C1-Z2: redirigido a Contextos Universal
   row2.appendChild(bCore); row2.appendChild(bCtx);
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
   el.cardContent.appendChild(row1); el.cardContent.appendChild(row2);
@@ -11255,12 +11267,11 @@ function mostrarFicha(){
     bU.onclick = function(){ abrirEnUrban(o); };
     row.appendChild(bU);
   }
-  const bC = document.createElement('button'); bC.className='btn'; bC.textContent='Abrir en Contextos';
-  bC.style.borderColor = 'rgba(155,123,212,.5)'; bC.style.color = 'var(--trans)';
-  bC.onclick = function(){ abrirEnContext(o); };
-  row.appendChild(bC);
-  // C1-G3: Contextos Universal (motor C1G1_*), acción propia -- no sustituye ni gatea la de arriba.
-  const bCU = document.createElement('button'); bCU.className='btn'; bCU.textContent='Contextos Universal';
+  // C1-Z2: "Abrir en Contextos" (Legacy, abrirEnContext/state.modoContext) deja de tener botón
+  // propio acá -- Contextos Universal (motor C1G1_*, abajo) ya lo sustituye como única entrada
+  // pública de Contextos. abrirEnContext() sigue existiendo en el código, deprecada, ver nota
+  // junto a su definición -- reversible si hiciera falta, no se borró nada.
+  const bCU = document.createElement('button'); bCU.className='btn'; bCU.textContent='Contextos';
   bCU.style.borderColor = 'rgba(155,123,212,.5)'; bCU.style.color = 'var(--trans)';
   bCU.onclick = function(){ abrirContextosUniversal(o); };
   row.appendChild(bCU);
