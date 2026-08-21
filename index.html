@@ -553,16 +553,20 @@ header .spacer{flex:1}
   header{padding:12px 12px;gap:7px}
   #orgchip{min-width:0;flex:1 1 auto;max-width:none;overflow:hidden}
   header .spacer{display:none}
-  #btnGuardar,#btnNueva,#btnAcerca,#btnPromover{display:none!important}
+  #btnNueva,#btnAcerca,#btnPromover{display:none!important}
   #btnMenu{display:inline-block}
-  /* 21/08: "Memoria" (#btnFicha) dejó de forzarse oculto en mobile -- Javier lo reportó: no
-     había NINGÚN otro camino para llegar a la ficha de un organismo desde el celular (el pie
-     móvil unificado está vacío -- ver botones=[] en mostrarFooterMovil, candado.txt -- y el
-     menú "⋯" de "Tu espacio" solo mueve de carpeta / pega evaluación Pro, nunca abre Memoria).
-     No hizo falta JS nuevo: el mismo botón ya tiene su propio show/hide correcto atado a
-     state.organismo (abrirOrganismo/abrirEnContext/nuevaSesion, candado.txt) -- estaba oculto
-     solo por esta regla CSS, ahora sigue esa lógica también en mobile, igual que #btnPrincipios
-     desde el 10/08. "Memoria" (7 letras) es más corto que "Principios" (10), que ya entraba. */
+  /* 21/08: "Memoria" (#btnFicha) y "Guardar sesión" (#btnGuardar) dejaron de forzarse ocultos
+     en mobile -- Javier reportó que no encontraba ninguno de los dos desde el celular. Auditado
+     antes de tocar nada: no había NINGÚN otro camino para ninguno de los dos -- el pie móvil
+     unificado está vacío (botones=[] en mostrarFooterMovil, candado.txt), el menú "⋯" de "Tu
+     espacio" sólo mueve de carpeta / pega evaluación Pro, y el único lugar del código que
+     ofrecía ambos como texto ("Ficha del organismo"/"Guardar sesión", construirMenu()) es un
+     dropdown legacy sin ningún botón que lo abra -- sólo lo sigue referenciando el self-test
+     N21, confirmado por grep, cero usuarios podían llegar ahí. No hizo falta JS nuevo para
+     ninguno de los dos: ambos ya tienen su propio show/hide correcto (`#btnFicha` atado a
+     `state.organismo`, `#btnGuardar` a `state.started`, ver `startChat()`/`nuevaSesion()`) --
+     estaban ocultos solo por esta regla CSS, ahora siguen esa lógica también en mobile, igual
+     que `#btnPrincipios` desde el 10/08. */
   /* 10/08: "Principios" pasa a estar disponible en el header también en mobile -- antes
      #btnPrincipios estaba oculto siempre (línea ~73) porque en desktop el panel fijo ya
      está a la vista sin necesitar botón, y en mobile el pie de página (candado.txt) era el
