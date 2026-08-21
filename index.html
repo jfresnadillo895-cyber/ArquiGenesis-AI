@@ -9318,7 +9318,11 @@ var ACCESO_MODULOS = {
   capacidades:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Integración de capacidades' },
   trayectoria:     { plan_minimo:'estudio', prueba_en_gratis:false, nombre:'Trayectoria' }
 };
-var ORDEN_PLANES = ['gratis','profesional','estudio'];
+// Planes P2 (19/08): 'magister' sumado al final -- antes faltaba, y ORDEN_PLANES.indexOf(-1)
+// hacía que moduloHabilitado() bloqueara a un suscriptor Magister real de Urbanismo/Contextos/
+// Negocios, exactamente lo contrario de lo que debería pasar (Magister incluye todo lo de Pro ·
+// Estudio y más). Ver COMPRENDER_AI_AUDITORIA_CORE_COMPY_PLANES_V1.md, hallazgo 7.
+var ORDEN_PLANES = ['gratis','profesional','estudio','magister'];
 function moduloHabilitado(id){
   var m = ACCESO_MODULOS[id];
   if(!m) return true;
@@ -9333,6 +9337,25 @@ function modulosDisponibles(){
     if(Object.prototype.hasOwnProperty.call(ACCESO_MODULOS, k) && ACCESO_MODULOS[k].archivo) out.push(k);
   }
   return out;
+}
+/* Planes P2 (19/08) -- Entitlements: lectura única y nombrada de lo que la cuenta tiene
+   habilitado, construida ENCIMA de ACCESO_MODULOS/ORDEN_PLANES/moduloHabilitado() ya existentes
+   -- no duplica datos ni arma una arquitectura paralela (pedido explícito de
+   COMPRENDER_AI_ARQUITECTURA_ENTITLEMENTS_PLANES_V1.md: "un mismo usuario + un plan + un
+   conjunto de permisos/capacidades", nunca clases de usuario distintas). Si el plan cambia, este
+   objeto cambia solo -- no migra cuenta, organismo ni memoria. Mismo shape en los 4 archivos
+   (index.html/urbanismo.html/negocios.html/contextos.html), replicado igual que ACCESO_MODULOS
+   ya lo estaba (arquitectura "HTML monolítico, sin build": no hay forma de compartir un módulo
+   JS real entre los 4, así que la fuente única es el CONTRATO -- mismo nombre, misma forma,
+   mismos datos de origen -- no un archivo físico compartido). */
+function entitlementsDeCuenta(){
+  var p = planActual();
+  var e = { plan: p, core: true, studio: {} };
+  var k;
+  for(k in ACCESO_MODULOS){
+    if(Object.prototype.hasOwnProperty.call(ACCESO_MODULOS, k)) e.studio[k] = moduloHabilitado(k);
+  }
+  return e;
 }
 function abrirModulo(id){
   var m = ACCESO_MODULOS[id];

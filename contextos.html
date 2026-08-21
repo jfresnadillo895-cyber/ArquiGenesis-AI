@@ -1715,12 +1715,12 @@ header header .cai-ham{flex-shrink:0}
         correo: ''
       });
       limpiarHash();
-      sincronizarSaldo();
+      sincronizarSaldo().then(verificarAccesoModulo);
       return;
     }
     tokenVigente().then(function(t){
       if(!t) portal('');
-      else sincronizarSaldo();
+      else sincronizarSaldo().then(verificarAccesoModulo);
     });
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar);
@@ -3384,9 +3384,21 @@ function construirTuEspacioConfig(){
   cfg.appendChild(bAvisos);
   const bCuenta = document.createElement('button');
   bCuenta.className = 'cai-item';
-  bCuenta.textContent = 'Cuenta';
+  // Panel P3 (21/08): correo debajo de "Cuenta", mismo patrón visual que negocios.html --
+  // unificación del panel lateral pedida por Javier (PENDIENTES.md, panel Negocios Pro punto 4).
+  const bCuentaTitulo = document.createElement('div');
+  bCuentaTitulo.textContent = 'Cuenta';
+  const bCuentaCorreo = document.createElement('div');
+  bCuentaCorreo.style.cssText = 'font-size:11px;color:var(--tenue);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+  bCuenta.appendChild(bCuentaTitulo);
+  bCuenta.appendChild(bCuentaCorreo);
   bCuenta.addEventListener('click', function(){ cerrarTuEspacio(); if(window.mostrarCuentaComprender) window.mostrarCuentaComprender(); });
   cfg.appendChild(bCuenta);
+  if(window.obtenerCorreoActivoComprender){
+    window.obtenerCorreoActivoComprender().then(function(correo){
+      bCuentaCorreo.textContent = correo || '';
+    });
+  }
   if(window.actualizarContadorBandejaComprender) window.actualizarContadorBandejaComprender();
 }
 
@@ -3528,7 +3540,10 @@ var ACCESO_MODULOS = {
   capacidades:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Integración de capacidades' },
   trayectoria:     { plan_minimo:'estudio', prueba_en_gratis:false, nombre:'Trayectoria' }
 };
-var ORDEN_PLANES = ['gratis','profesional','estudio'];
+// Planes P2 (19/08): 'magister' sumado al final -- antes faltaba, y ORDEN_PLANES.indexOf(-1)
+// hacía que moduloHabilitado() bloqueara a un suscriptor Magister real de este módulo, exactamente
+// lo contrario de lo que debería pasar. Ver COMPRENDER_AI_AUDITORIA_CORE_COMPY_PLANES_V1.md, hallazgo 7.
+var ORDEN_PLANES = ['gratis','profesional','estudio','magister'];
 function moduloHabilitado(id){
   var m = ACCESO_MODULOS[id || MODULE_ID];
   if(!m) return true;                                  // módulo no declarado: no se bloquea
@@ -3537,6 +3552,18 @@ function moduloHabilitado(id){
      quien prueba ve todo una vez, con el tope duro de sus 50 créditos. */
   if(p === 'gratis') return !!m.prueba_en_gratis;
   return ORDEN_PLANES.indexOf(p) >= ORDEN_PLANES.indexOf(m.plan_minimo);
+}
+/* Planes P2 (19/08) -- Entitlements: mismo contrato que index.html/urbanismo.html (ver el
+   comentario completo en index.html). Lectura única sobre ACCESO_MODULOS/moduloHabilitado() ya
+   existentes, sin duplicar datos. */
+function entitlementsDeCuenta(){
+  var p = credPlan();
+  var e = { plan: p, core: true, studio: {} };
+  var k;
+  for(k in ACCESO_MODULOS){
+    if(Object.prototype.hasOwnProperty.call(ACCESO_MODULOS, k)) e.studio[k] = moduloHabilitado(k);
+  }
+  return e;
 }
 function moduloBloqueado(id){
   var m = ACCESO_MODULOS[id || MODULE_ID] || { nombre:'Este módulo', plan_minimo:'estudio' };
@@ -3555,6 +3582,11 @@ function moduloBloqueado(id){
   row.appendChild(b);
   card.appendChild(h); card.appendChild(p1); card.appendChild(p2); card.appendChild(row);
   caiAbrir();
+}
+/* Planes P2 (19/08) -- nivel "Ruta/software": ver comentario completo en urbanismo.html. Misma
+   idea acá -- se llama desde arrancar(), después de sincronizarSaldo(). */
+function verificarAccesoModulo(){
+  if(!moduloHabilitado()) moduloBloqueado();
 }
 /* Portero único: toda operación que gasta API pasa por acá. */
 function permitirOperacion(tipo){
