@@ -3624,6 +3624,21 @@ function normalizarTexto(s){
 function terminosSignificativos(s){
   return normalizarTexto(s).filter(function(t){ return t.length >= 3 && !STOPWORDS_ES_SET[t]; });
 }
+/* Punto 13 (21/08): versión deduplicada de terminosSignificativos(s), preservando el orden de
+   primera aparición. Una señal conceptual presente cuenta una vez -- repetir una palabra en la
+   consulta (p.ej. "proveedor proveedor proveedor caja") no debe multiplicar artificialmente su
+   peso al puntuar candidatos en M2.2/P6. Sin stemming, sin sinónimos, sin embeddings, sin IA:
+   sólo dedup literal sobre la misma lista ya normalizada por terminosSignificativos(). No cambia
+   cómo se indexan/comparan los textos FUENTE (recuerdos/fragmentos) -- sólo se usa para construir
+   los términos de la QUERY, donde corresponde según el brief. */
+function terminosSignificativosUnicos(s){
+  var vistos = {};
+  var out = [];
+  terminosSignificativos(s).forEach(function(t){
+    if(!vistos[t]){ vistos[t] = true; out.push(t); }
+  });
+  return out;
+}
 /* Texto comparable de un recuerdo, separado por origen (para poder atribuir la señal a de dónde
    salió). `after` solo entra si el total es corto -- si es muy largo se descarta, a propósito,
    para no convertir esto en una comparación de documentos completos (regla 4: "si su extensión
@@ -3683,7 +3698,7 @@ function seleccionarRecuerdosCandidatos(args){
   if(a.ventanaReciente){
     textoQuery += ' ' + (Array.isArray(a.ventanaReciente) ? a.ventanaReciente.join(' ') : a.ventanaReciente);
   }
-  var terminosQuery = terminosSignificativos(textoQuery);
+  var terminosQuery = terminosSignificativosUnicos(textoQuery);   /* Punto 13 -- dedup de la query, no de los textos fuente */
   if(!terminosQuery.length) return { candidates: [] };   // nada significativo para comparar -- sin candidatos, no es un error
   var puntuados = recuerdos.map(function(r){
     var c = calcularSenalesRecuerdo(terminosQuery, r);
@@ -3936,9 +3951,9 @@ function p6RecorrerFragmentos(valor, pathBase, meta, fragmentos, profundidad){
       if(fragmentos.length >= P6_MAX_FRAGMENTOS_POR_ENTRADA) return;
       var path = pathBase + '[' + i + ']';
       if(item && typeof item === 'object'){
-        var texto = p6TextoDeNodo(item);
-        if(texto) fragmentos.push({ id: meta.source + '_v' + (meta.version||'0') + '_' + path,
-          source: meta.source, version: meta.version, date: meta.date, path: path, text: texto });
+        // Punto 13 (21/08): antes se emitía acá el fragmento del item Y se recursaba -- la rama
+        // objeto de más abajo (textoPropio) volvía a emitir el MISMO nodo, duplicándolo. Ahora
+        // esta rama sólo recursa; la rama objeto queda como único lugar que emite ese path.
         p6RecorrerFragmentos(item, path, meta, fragmentos, profundidad + 1);
       } else if(p6EsPrimitivoUtil(item)){
         fragmentos.push({ id: meta.source + '_v' + (meta.version||'0') + '_' + path,
@@ -4011,7 +4026,7 @@ function seleccionarFragmentosEspecializados(args){
   if(a.ventanaReciente){
     textoQuery += ' ' + (Array.isArray(a.ventanaReciente) ? a.ventanaReciente.join(' ') : a.ventanaReciente);
   }
-  var terminosQuery = terminosSignificativos(textoQuery);
+  var terminosQuery = terminosSignificativosUnicos(textoQuery);   /* Punto 13 -- dedup de la query, no de los textos fuente */
   if(!terminosQuery.length) return { candidates: [] };   // nada significativo para comparar -- sin candidatos
   var puntuados = fragmentos.map(function(f){
     var terminosFrag = {};
@@ -14379,6 +14394,136 @@ function correrPruebasAuto(){
         typeof antecedentesEspecializadosParaMarco === 'function' &&
         typeof fichaTieneLectura === 'function' &&
         typeof C1B1_situacionParaEspecialidades === 'function';
+    })());
+
+    /* ============ PUNTO 13 (21/08) -- Depuración y economía final de recuperación,
+       M13-01 a M13-20. M13-21 (node --check) no es una aserción de runtime, se reporta aparte
+       (mismo criterio que en los cortes anteriores). Dos bugs corregidos: duplicación de
+       fragmentos array-objeto en p6RecorrerFragmentos(), y multiplicación de peso por repetición
+       de término en la query (terminosSignificativosUnicos()). */
+    chk('M13-01 · array con objeto produce exactamente un fragmento para ese path', (function(){
+      var fragmentos = [];
+      p6RecorrerFragmentos({ items:[{ cod:'A', estado:'x' }] }, 'raíz', { source:'s', version:1, date:'2026-01-01' }, fragmentos, 0);
+      var deEsePath = fragmentos.filter(function(f){ return f.path === 'items[0]'; });
+      return deEsePath.length === 1;
+    })());
+    chk('M13-02 · array con tres objetos produce tres nodos, no seis', (function(){
+      var fragmentos = [];
+      p6RecorrerFragmentos({ items:[{ cod:'A' }, { cod:'B' }, { cod:'C' }] }, 'raíz', { source:'s', version:1, date:'2026-01-01' }, fragmentos, 0);
+      var deItems = fragmentos.filter(function(f){ return f.path.indexOf('items[') === 0; });
+      return deItems.length === 3;
+    })());
+    chk('M13-03 · arrays de primitivas siguen funcionando', (function(){
+      var fragmentos = [];
+      p6RecorrerFragmentos({ tags:['uno','dos','tres'] }, 'raíz', { source:'s', version:1, date:'2026-01-01' }, fragmentos, 0);
+      var deTags = fragmentos.filter(function(f){ return f.path.indexOf('tags[') === 0; });
+      return deTags.length === 3 && deTags[0].text === 'uno';
+    })());
+    chk('M13-04 · objetos anidados fuera de arrays siguen funcionando', (function(){
+      var fragmentos = [];
+      p6RecorrerFragmentos({ evaluacion:{ cod:'X', estado:'y' } }, 'raíz', { source:'s', version:1, date:'2026-01-01' }, fragmentos, 0);
+      var deEval = fragmentos.filter(function(f){ return f.path === 'evaluacion'; });
+      return deEval.length === 1 && deEval[0].text === 'cod: X · estado: y';
+    })());
+    chk('M13-05 · p6RecorrerFragmentos() sigue siendo READ-only (no muta el valor recorrido)', (function(){
+      var valor = { items:[{ cod:'A' }, { cod:'B' }] };
+      var antes = JSON.stringify(valor);
+      var fragmentos = [];
+      p6RecorrerFragmentos(valor, 'raíz', { source:'s', version:1, date:'2026-01-01' }, fragmentos, 0);
+      return JSON.stringify(valor) === antes;
+    })());
+    chk('M13-06 · mismo id/path no aparece duplicado en la salida de fragmentosEspecializadosDelOrganismo()', (function(){
+      var o = { id:'m13_06', diagnosticos_pro:[{ origen:'urban_pro', version:1, fecha:'2026-01-01',
+        resumen:'r', datos:{ dimensiones:[{ cod:'A', estado:'x' }, { cod:'B', estado:'y' }] } }] };
+      var frags = fragmentosEspecializadosDelOrganismo(o);
+      var ids = frags.map(function(f){ return f.id; });
+      var idsUnicos = ids.filter(function(id, i){ return ids.indexOf(id) === i; });
+      return ids.length === idsUnicos.length && ids.length > 0;
+    })());
+    chk('M13-07 · el caso real evaluaciones_negocio_pro[].datos.evaluacion.dimensiones[] no duplica dimensiones', (function(){
+      var o = { id:'m13_07', evaluaciones_negocio_pro:[{ version:1, fecha:'2026-01-01', resumen:'r',
+        datos:{ evaluacion:{ dimensiones:[
+          { cod:'B1', estado:'estable', nota:'a' },
+          { cod:'B2', estado:'tensionada', nota:'b' },
+          { cod:'B3', estado:'estable', nota:'c' }
+        ] } } }] };
+      var frags = fragmentosEspecializadosDelOrganismo(o);
+      var deDimensiones = frags.filter(function(f){ return f.path.indexOf('evaluacion.dimensiones[') === 0; });
+      var ids = deDimensiones.map(function(f){ return f.id; });
+      var idsUnicos = ids.filter(function(id, i){ return ids.indexOf(id) === i; });
+      return deDimensiones.length === 3 && ids.length === idsUnicos.length;
+    })());
+    chk('M13-08 · bloqueEspecialidadesParaContexto() usa tres fragmentos DIFERENTES en vez de gastar lugares en duplicados', (function(){
+      var o = { id:'m13_08', evaluaciones_negocio_pro:[{ version:1, fecha:'2026-01-01', resumen:'r',
+        datos:{ evaluacion:{ dimensiones:[
+          { cod:'B1', estado:'tensionada', nota:'la caja tensionada por proveedores y margen' },
+          { cod:'B2', estado:'tensionada', nota:'el margen tensionado por proveedores y costos' },
+          { cod:'B3', estado:'tensionada', nota:'los proveedores generan tension en el margen y la caja' }
+        ] } } }] };
+      var bloque = bloqueEspecialidadesParaContexto(o, 'proveedores caja margen', '');
+      var pathsDistintos = ['evaluacion.dimensiones[0]','evaluacion.dimensiones[1]','evaluacion.dimensiones[2]']
+        .filter(function(p){ return bloque.indexOf(p) > -1; });
+      return pathsDistintos.length === 3;
+    })());
+    chk('M13-09 · terminosSignificativosUnicos("caja caja margen caja") -> ["caja","margen"]', (function(){
+      var out = terminosSignificativosUnicos('caja caja margen caja');
+      return out.length === 2 && out[0] === 'caja' && out[1] === 'margen';
+    })());
+    chk('M13-10 · mayúsculas/tildes continúan normalizándose igual', (function(){
+      var out = terminosSignificativosUnicos('Proveedor PROVEEDOR Márgen margen');
+      return out.length === 2 && out[0] === 'proveedor' && out[1] === 'margen';
+    })());
+    chk('M13-11 · M2: repetir 10 veces un término no cambia su peso respecto de escribirlo una sola vez', (function(){
+      var r = { id:'r1', title:'Dependencia del proveedor', createdAt:'2025-01-01T00:00:00.000Z', source:'core',
+        field:['tensiones'], after:{ tensiones:'dependencia critica de un proveedor unico' },
+        summary:'Tensiones activas: dependencia critica de un proveedor unico' };
+      var sel1 = seleccionarRecuerdosCandidatos({ situacionActual:'proveedor', recuerdos:[r], limite:3 });
+      var repetido = new Array(10).fill('proveedor').join(' ');
+      var sel10 = seleccionarRecuerdosCandidatos({ situacionActual: repetido, recuerdos:[r], limite:3 });
+      return sel1.candidates.length === 1 && sel10.candidates.length === 1 &&
+        sel1.candidates[0].score === sel10.candidates[0].score;
+    })());
+    chk('M13-12 · M2: dos términos distintos siguen superando una coincidencia de uno solo (mismos demás factores)', (function(){
+      var rA = { id:'rA', title:'x', createdAt:'2025-01-01T00:00:00.000Z', source:'core', field:['tensiones'],
+        after:{ tensiones:'proveedor' }, summary:'Tensiones activas: proveedor' };
+      var rB = { id:'rB', title:'x', createdAt:'2025-01-01T00:00:00.000Z', source:'core', field:['tensiones'],
+        after:{ tensiones:'proveedor y caja' }, summary:'Tensiones activas: proveedor y caja' };
+      var query = 'proveedor proveedor proveedor caja';
+      var sel = seleccionarRecuerdosCandidatos({ situacionActual: query, recuerdos:[rA, rB], limite:3 });
+      return sel.candidates.length === 2 && sel.candidates[0].id === 'rB';
+    })());
+    chk('M13-13 · P6: misma protección frente a repetición de términos en la query', (function(){
+      var frag = { id:'f1', source:'s', version:1, date:'2026-01-01', path:'x', text:'proveedor de maderas' };
+      var sel1 = seleccionarFragmentosEspecializados({ situacionActual:'proveedor', fragmentos:[frag], limite:3 });
+      var repetido = new Array(10).fill('proveedor').join(' ');
+      var sel10 = seleccionarFragmentosEspecializados({ situacionActual: repetido, fragmentos:[frag], limite:3 });
+      return sel1.candidates.length === 1 && sel10.candidates.length === 1 &&
+        sel1.candidates[0].score === sel10.candidates[0].score;
+    })());
+    chk('M13-14 · pertinencia sigue ganando a recencia (P6)', (function(){
+      var fragA = { id:'fA', source:'s', version:1, date:'2026-03-01', path:'a', text:'algo sin relacion' };
+      var fragB = { id:'fB', source:'s', version:1, date:'2025-01-01', path:'b', text:'proveedor de maderas' };
+      var sel = seleccionarFragmentosEspecializados({ situacionActual:'proveedor maderas', fragmentos:[fragA, fragB], limite:3 });
+      return sel.candidates.length === 1 && sel.candidates[0].id === 'fB';
+    })());
+    chk('M13-15 · límites M23 permanecen sin cambios', M23_LIMITE_CANDIDATOS === 3 && M23_MAX_CHARS_RECUERDO === 320);
+    chk('M13-16 · límites P6 permanecen sin cambios', P6_MAX_CANDIDATOS === 3 && P6_MAX_CHARS_FRAGMENTO === 400 && P6_MAX_CHARS_BLOQUE === 1200);
+    chk('M13-17 · P9 sigue verde (C1B1_prepararLlamada conserva su defensa idsVistos)', (function(){
+      return typeof C1B1_prepararLlamada === 'function' && typeof C1B1_situacionParaEspecialidades === 'function' &&
+        C1B1_prepararLlamada.toString().indexOf('idsVistos') > -1;
+    })());
+    chk('M13-18 · funciones de M2.1-M2.4 siguen presentes', (function(){
+      return typeof obtenerRecuerdos === 'function' && typeof seleccionarRecuerdosCandidatos === 'function' &&
+        typeof bloqueRecuerdosParaContexto === 'function' && typeof crearRecuerdo === 'function';
+    })());
+    chk('M13-19 · funciones de Puntos 10-12 siguen presentes', (function(){
+      return typeof normalizarPrincipioParaComparar === 'function' && typeof proponerFicha === 'function' &&
+        typeof continuidadTemporalDelOrganismo === 'function' && typeof bloqueContinuidadTemporal === 'function' &&
+        typeof vigenciaParadigma === 'function';
+    })());
+    chk('M13-20 · cero fetch()/IA nueva en las funciones tocadas por Punto 13', (function(){
+      var fns = [p6RecorrerFragmentos, terminosSignificativosUnicos, seleccionarRecuerdosCandidatos, seleccionarFragmentosEspecializados];
+      return fns.every(function(fn){ return fn.toString().indexOf('fetch(') === -1; });
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
