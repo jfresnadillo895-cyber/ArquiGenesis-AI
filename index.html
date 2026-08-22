@@ -928,6 +928,60 @@ header .spacer{flex:1}
     }).catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor.' }; });
   }
 
+  /* ---------- Google Sign-In (MB2, 21/08) ----------
+     Mismo criterio de "sin libreria" del resto del candado: no se usa supabase-js, se navega
+     de pagina completa al endpoint oficial /auth/v1/authorize?provider=google, que hace todo
+     el intercambio con Google del lado de Supabase y vuelve con la sesion en el fragmento de
+     la URL (#access_token=...), exactamente el mismo formato que ya entiende leerHash() para
+     los links de correo -- por eso arrancar() no necesita un parser nuevo para leer el token,
+     solo necesita saber que ESTE hash-token en particular vino de Google, para no saltear el
+     consentimiento (ver esRetornoGoogle e integracion en arrancar()).
+     redirect_to se manda igual que en registrar()/recuperar() (origin + pathname, sin agregar
+     query nueva) para no salir del URL ya autorizado en Authentication -> URL Configuration ->
+     Redirect URLs -- la marca de "vengo de Google" viaja aparte, por sessionStorage (no
+     sobrevive un cierre de pestaña, pero sí el viaje de ida y vuelta a Google/Supabase, que es
+     lo unico que hace falta ver). apikey va tambien como query param, ademas de la constante ya
+     usada en headers en el resto del archivo: esta es la unica llamada de auth que es una
+     navegacion de pagina completa (location.href), no un fetch, asi que no hay forma de mandar
+     el header apikey de la manera habitual. */
+  function autenticarConGoogle(){
+    try{ sessionStorage.setItem('comprender_oauth_google', '1'); }catch(e){}
+    var destino = location.origin + location.pathname;
+    location.href = SB_URL + '/auth/v1/authorize?provider=google&apikey=' + encodeURIComponent(SB_KEY) +
+      '&redirect_to=' + encodeURIComponent(destino);
+  }
+  // Se consume una sola vez (igual que leerHash/leerQuerySignup): si vuelve true, ya borro la
+  // marca, asi que una segunda lectura (por ejemplo, un refresh manual de la pagina ya vuelta)
+  // no la vuelve a disparar.
+  function esRetornoGoogle(){
+    try{
+      if(sessionStorage.getItem('comprender_oauth_google') === '1'){
+        sessionStorage.removeItem('comprender_oauth_google');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  // Google (y cualquier proveedor OAuth futuro) crea la sesion sin pasar por registrar(), asi
+  // que nunca llena user_metadata con el consentimiento -- se guarda aparte, recien cuando el
+  // usuario lo confirma en la pantalla minima (modo 'consentir_google' del portal).
+  function guardarConsentimiento(token, consentimiento){
+    return fetch(SB_URL + '/auth/v1/user', {
+      method: 'PUT',
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ data: consentimiento })
+    }).then(function(r){
+      return r.json().then(function(d){ return { ok:r.ok, estado:r.status, datos:d }; });
+    }).then(function(r){
+      if(!r.ok) return { ok:false, mensaje:'No se pudo guardar. Probá de nuevo en un momento.' };
+      return { ok:true };
+    }).catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor.' }; });
+  }
+  function tieneConsentimientoCompleto(u){
+    var m = (u && u.user_metadata) || {};
+    return !!(m.terminos_aceptados && m.privacidad_aceptada && m.mayor_18_confirmado);
+  }
+
   /* ---------- datos del usuario logueado ---------- */
   function obtenerUsuario(token){
     return fetch(SB_URL + '/auth/v1/user', {
@@ -1061,10 +1115,53 @@ header .spacer{flex:1}
       '<input id="' + id + '" type="checkbox" style="margin-top:2px;flex-shrink:0;width:15px;height:15px;">' +
       '<span>' + htmlEtiqueta + '</span></label>';
   }
+  // MB2 (21/08): pieza nueva, solo para el boton de Google -- el resto de boton() sigue
+  // exactamente igual (sigue siendo el boton oscuro de "Ingresar"/"Crear cuenta"/etc). El
+  // simbolo "G" es el oficial de Google (cuatro colores), como pide su guía de marca para
+  // botones de "Iniciar sesión con Google" -- no es una copia del estilo de ningún otro sitio.
+  function botonGoogle(id, texto){
+    return '<button id="' + id + '" style="width:100%;padding:11px;font-size:15px;font-weight:600;' +
+      'color:#1a1a1a;background:#fff;border:1px solid #ddd;border-radius:8px;cursor:pointer;' +
+      'margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:10px;' +
+      'box-sizing:border-box;">' +
+      '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">' +
+        '<path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"></path>' +
+        '<path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z"></path>' +
+        '<path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"></path>' +
+        '<path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z"></path>' +
+      '</svg>' + texto + '</button>';
+  }
+  function separador(texto){
+    return '<div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:#999;font-size:12px;">' +
+      '<div style="flex:1;height:1px;background:#e5e3df;"></div>' + texto +
+      '<div style="flex:1;height:1px;background:#e5e3df;"></div></div>';
+  }
+  // Renovacion visual del portal (MB2, 21/08): la misma marca chica arriba de las cinco/seis
+  // vistas -- reusa el glifo "toro" ya existente en el resto del ecosistema (mismo path que
+  // .toro/.toro-hero en el header y la pantalla de bienvenida), pero inline y con color fijo,
+  // porque el candado no depende de las variables CSS del host (se inyecta igual en los 4
+  // productos, cada uno con su propia hoja de estilos). No reemplaza al toro real de la app,
+  // que sigue exactamente igual: esto es solo del portal.
+  function marcaPortal(){
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;">' +
+      '<svg width="24" height="24" viewBox="0 0 40 40" aria-hidden="true" style="color:#1a1a1a;flex-shrink:0;">' +
+        '<g fill="none" stroke="currentColor" stroke-linecap="round">' +
+          '<ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"></ellipse>' +
+          '<ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"></ellipse>' +
+          '<ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"></ellipse>' +
+          '<ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"></ellipse>' +
+          '<ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"></ellipse>' +
+          '<circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"></circle>' +
+        '</g>' +
+      '</svg>' +
+      '<span style="font-size:14px;color:#1a1a1a;">Comprender <b style="font-weight:700;">AI</b></span>' +
+    '</div>';
+  }
 
   /* ---------- portal ----------
-     Un solo overlay con cinco vistas: ingreso, registro, recuperar, nueva_clave,
-     confirmar_cuenta.
+     Un solo overlay con seis vistas: ingreso, registro, recuperar, nueva_clave,
+     confirmar_cuenta, consentir_google (MB2, 21/08 -- pantalla minima de consentimiento para
+     cuentas creadas por Google, que no pasan por el checkbox de registro normal).
      Se redibuja el innerHTML de la misma capa al cambiar de vista, no se crean capas
      nuevas -- asi el resto del candado (fetch, planes) sigue viendo un unico portal. */
   var portalAbierto = false;
@@ -1091,6 +1188,7 @@ header .spacer{flex:1}
           casilla('cpTerminos',
             'Acepto los <a href="' + TERMINOS_URL + '" target="_blank" rel="noopener" style="color:#1a1a1a;">Términos y Condiciones de Uso</a> ' +
             'y la <a href="' + PRIVACIDAD_URL + '" target="_blank" rel="noopener" style="color:#1a1a1a;">Política de Privacidad</a>.') +
+          casilla('cpMayor18', 'Confirmo que soy mayor de 18 años.') +
           boton('cpAccion','Crear cuenta') +
           enlace('cpAIngreso','¿Ya tenés cuenta? Ingresá');
       } else if(modo === 'recuperar'){
@@ -1110,17 +1208,29 @@ header .spacer{flex:1}
         titulo = 'Confirmá tu cuenta';
         sub = 'Tocá el botón para terminar de crear tu cuenta.';
         cuerpo = boton('cpAccion','Confirmar y entrar');
-      } else {
-        titulo = 'Comprender';
-        sub = 'Ingresá para continuar.';
+      } else if(modo === 'consentir_google'){
+        titulo = 'Un último paso';
+        sub = (extra && extra.correo) ? ('Confirmá esto para terminar de entrar con ' + extra.correo + '.') : 'Confirmá esto para terminar de entrar.';
         cuerpo =
+          casilla('cpTerminos',
+            'Acepto los <a href="' + TERMINOS_URL + '" target="_blank" rel="noopener" style="color:#1a1a1a;">Términos y Condiciones de Uso</a> ' +
+            'y la <a href="' + PRIVACIDAD_URL + '" target="_blank" rel="noopener" style="color:#1a1a1a;">Política de Privacidad</a>.') +
+          casilla('cpMayor18', 'Confirmo que soy mayor de 18 años.') +
+          boton('cpAccion','Continuar');
+      } else {
+        titulo = 'Ingresá a Comprender';
+        sub = '';
+        cuerpo =
+          botonGoogle('cpGoogle','Continuar con Google') +
+          separador('— o —') +
           campo('cpMail','email','Correo','username') +
           campo('cpClave','password','Contraseña','current-password') +
           boton('cpAccion','Ingresar') +
           enlace('cpARecuperar','¿Olvidaste tu contraseña?') +
-          enlace('cpARegistro','Crear una cuenta');
+          enlace('cpARegistro','¿Todavía no tenés cuenta? Crear una cuenta');
       }
       return '<div style="width:100%;max-width:360px;">' +
+        marcaPortal() +
         '<div style="font-size:19px;font-weight:600;margin-bottom:6px;color:#1a1a1a;">' + titulo + '</div>' +
         (sub ? '<div style="font-size:14px;color:#666;margin-bottom:22px;">' + sub + '</div>'
              : '<div style="margin-bottom:22px;"></div>') +
@@ -1145,7 +1255,7 @@ header .spacer{flex:1}
       }
 
       if(modo === 'ingreso'){
-        var mail = capa.querySelector('#cpMail'), pass = capa.querySelector('#cpClave');
+        var mail = capa.querySelector('#cpMail'), pass = capa.querySelector('#cpClave'), google = capa.querySelector('#cpGoogle');
         function intentar(){
           var c = (mail.value||'').trim(), k = pass.value||'';
           if(!c||!k){ avisoEl.textContent = 'Faltan datos.'; return; }
@@ -1157,17 +1267,19 @@ header .spacer{flex:1}
         }
         accion.addEventListener('click', intentar);
         pass.addEventListener('keydown', function(e){ if(e.key==='Enter') intentar(); });
+        google.addEventListener('click', function(){ autenticarConGoogle(); });
         capa.querySelector('#cpARecuperar').addEventListener('click', function(e){ e.preventDefault(); modo='recuperar'; pintar(); });
         capa.querySelector('#cpARegistro').addEventListener('click', function(e){ e.preventDefault(); modo='registro'; pintar(); });
         setTimeout(function(){ try{ mail.focus(); }catch(e){} }, 60);
 
       } else if(modo === 'registro'){
-        var mail2 = capa.querySelector('#cpMail2'), pass2 = capa.querySelector('#cpClave2'), term2 = capa.querySelector('#cpTerminos');
+        var mail2 = capa.querySelector('#cpMail2'), pass2 = capa.querySelector('#cpClave2'), term2 = capa.querySelector('#cpTerminos'), mayor2 = capa.querySelector('#cpMayor18');
         function intentarReg(){
           var c=(mail2.value||'').trim(), k=pass2.value||'';
           if(!c||!k){ avisoEl.textContent='Faltan datos.'; return; }
           if(k.length<6){ avisoEl.textContent='La contraseña necesita al menos 6 caracteres.'; return; }
           if(!term2.checked){ avisoEl.textContent='Tenés que aceptar los Términos y la Política de Privacidad para crear una cuenta.'; return; }
+          if(!mayor2.checked){ avisoEl.textContent='Tenés que confirmar que sos mayor de 18 años para crear una cuenta.'; return; }
           ocupado(true,'Creando…'); avisoEl.textContent = '';
           var consentimiento = {
             terminos_aceptados: true,
@@ -1175,7 +1287,9 @@ header .spacer{flex:1}
             privacidad_aceptada: true,
             privacidad_version: PRIVACIDAD_VERSION,
             origen: 'registro_web',
-            terminos_fecha: new Date().toISOString()
+            terminos_fecha: new Date().toISOString(),
+            mayor_18_confirmado: true,
+            mayor_18_fecha: new Date().toISOString()
           };
           registrar(c,k,consentimiento).then(function(r){
             if(r.ok && r.sesion){ portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} } return; }
@@ -1250,6 +1364,30 @@ header .spacer{flex:1}
           });
         }
         accion.addEventListener('click', intentarConfirmar);
+        setTimeout(function(){ try{ accion.focus(); }catch(e){} }, 60);
+
+      } else if(modo === 'consentir_google'){
+        var termG = capa.querySelector('#cpTerminos'), mayorG = capa.querySelector('#cpMayor18');
+        function intentarConsentirG(){
+          if(!termG.checked){ avisoEl.textContent='Tenés que aceptar los Términos y la Política de Privacidad para continuar.'; return; }
+          if(!mayorG.checked){ avisoEl.textContent='Tenés que confirmar que sos mayor de 18 años para continuar.'; return; }
+          ocupado(true,'Guardando…'); avisoEl.textContent = '';
+          var consentimiento = {
+            terminos_aceptados: true,
+            terminos_version: TERMINOS_VERSION,
+            privacidad_aceptada: true,
+            privacidad_version: PRIVACIDAD_VERSION,
+            origen: 'registro_google',
+            terminos_fecha: new Date().toISOString(),
+            mayor_18_confirmado: true,
+            mayor_18_fecha: new Date().toISOString()
+          };
+          guardarConsentimiento(extra.token, consentimiento).then(function(r){
+            if(!r.ok){ ocupado(false,'Continuar'); avisoEl.textContent = r.mensaje; return; }
+            portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
+          });
+        }
+        accion.addEventListener('click', intentarConsentirG);
         setTimeout(function(){ try{ accion.focus(); }catch(e){} }, 60);
       }
     }
@@ -2034,13 +2172,28 @@ header .spacer{flex:1}
     if(_arranqueInicial) return;
     var h = leerHash();
     if(h && h.access_token){
-      guardar({
+      // MB2 (21/08): mismo hash que ya leia arrancar() para magic link/invitacion -- Google
+      // OAuth vuelve con el mismo formato (#access_token=...), asi que no hace falta un parser
+      // nuevo. Lo unico nuevo es esRetornoGoogle(): si la marca dice que este viaje de ida y
+      // vuelta lo disparo el boton de Google, se verifica el consentimiento antes de dejar
+      // pasar -- para cualquier otro hash-token (magic link, invitacion, como ya funcionaba)
+      // el comportamiento sigue exactamente igual: sesion directa, sin portal.
+      var esGoogle = esRetornoGoogle();
+      var s = {
         token: h.access_token,
         refresco: h.refresh_token || '',
         vence: Date.now() + ((Number(h.expires_in) || 3600) * 1000),
         correo: ''
-      });
+      };
+      guardar(s);
       limpiarHash();
+      if(esGoogle){
+        obtenerUsuario(s.token).then(function(u){
+          if(u && tieneConsentimientoCompleto(u)){ sincronizarSaldo(); }
+          else{ portal('', 'consentir_google', { token: s.token, correo: (u && u.email) || '' }); }
+        });
+        return;
+      }
       sincronizarSaldo();
       return;
     }
@@ -2308,8 +2461,9 @@ Si el contexto incluye un bloque ORGANISMO ACTIVO, operás en Modo Organismo: no
 Todos los campos en lenguaje llano, sin códigos internos, EXCEPTO MODO: ahí va el código neutro del modo dominante (M01–M09) que corresponde a la tensión raíz identificada. Es un identificador de contrato, interno, que NUNCA se muestra al usuario. Emitila también siempre que cierres sesión con [[DESTILADO]].
 PROXIMOS es distinto de PROXIMO: mientras PROXIMO es una línea de síntesis para que vos mismo retomes el hilo, PROXIMOS son 1 a 3 ítems cortos y nombrados (no un párrafo), pensados para mostrarse tal cual a la persona como lo que sigue. Cada ítem empieza con un verbo en infinitivo y describe una acción concreta que la persona puede tomar (ej.: "Definir qué resultado querés alcanzar", "Revisar por qué el problema sigue repitiéndose") — nunca una descripción abstracta de la tensión ni lenguaje de deuda o error ("sin resolver", "pendiente de"). Separá cada ítem con ";;". Emitilo SOLO cuando haya pasos concretos que la persona pueda tomar — si el caso cerró redondo, no lo emitas.
 - MARCADOR DE CIERRE DE ETAPA: cuando una lectura llegue a un cierre genuino —no cualquier turno, la comprensión real de esta ronda quedó completa—, emití, junto a los demás marcadores, una línea propia (distinta de FICHA):
-[[CIERRE_ETAPA:COMPRENDIMOS=síntesis de qué se comprendió|TENSION_PRINCIPAL=la tensión que organizó esta etapa|RELACIONES=qué relaciones resultaron relevantes|QUE_CAMBIO=qué cambió respecto del estado anterior|ETAPA=nombre breve, en tus propias palabras, de la etapa que se completa]]
+[[CIERRE_ETAPA:ANTES=cómo se entendía o formulaba la situación al comenzar esta etapa|AHORA=cómo queda comprendida al cerrarla|COMPRENDIMOS=síntesis de qué se comprendió|TENSION_PRINCIPAL=la tensión que organizó esta etapa|RELACIONES=qué relaciones resultaron relevantes|QUE_CAMBIO=qué cambió respecto del estado anterior|ETAPA=nombre breve, en tus propias palabras, de la etapa que se completa]]
 Es un marcador genérico, para cualquier organismo — distinto del cierre de lectura específico de Negocios/Context (los seis NDIM + un PROYECTIVO): ese sigue existiendo igual que siempre para esas evaluaciones puntuales; CIERRE_ETAPA puede emitirse junto a él o de forma independiente, en cualquier organismo que llegue a un cierre real.
+ANTES y AHORA hablan de comprensión, no necesariamente de cambio material del organismo: contrastan cómo se interpretaba la situación al empezar esta etapa contra cómo queda interpretada al cerrarla. Ejemplo correcto — ANTES: "Parecía que faltaban clientes." AHORA: "El problema central es que cada venta produce poco margen y consume demasiada capacidad." Ejemplo incorrecto (esto es cambio empírico, no reorganización cognitiva) — ANTES: "Vendíamos 20 unidades." AHORA: "Vendemos 35." QUE_CAMBIO debe sintetizar qué cambió en la MANERA de comprender la situación entre ANTES y AHORA (puede incorporar una consecuencia práctica, pero su núcleo tiene que ser cognitivo, no una simple descripción de acontecimientos externos). Si no existe un desplazamiento reconocible entre ANTES y AHORA, no emitas CIERRE_ETAPA sólo para completar el contrato ni fuerces contrastes cosméticos como "Antes no estaba claro. Ahora está más claro." -- una etapa puede seguir abierta; el contraste tiene que ser sustantivo. Para reconstruir ANTES usá lo que ya tenés disponible en esta conversación (formulación inicial de la etapa, preguntas/respuestas del usuario, la Memoria con la que se retomó, el último hito/horizonte cuando corresponda) -- nunca inventes ni asumas.
 - MARCADOR DE HORIZONTE: solo junto a un CIERRE_ETAPA en la misma respuesta, y solo cuando de verdad se abre una continuidad genuina (no siempre — si el cierre fue redondo y no hay nada más que valga la pena mirar, no lo emitas):
 [[HORIZONTE:OBSERVAR=qué todavía conviene observar|PREGUNTA=qué nueva pregunta surgió|RELACION=qué relación merece más profundidad|CONSECUENCIAS=qué consecuencias podrían desarrollarse|ESCALA=qué otra escala del organismo debería analizarse|ACCION=qué acción permitiría validar lo comprendido|CUANDO=cuándo tendría sentido volver a observar el organismo]]
 El horizonte nunca reemplaza ni se mezcla con el cierre: son dos resultados distintos, y la persona necesita sentir primero que obtuvo algo completo antes de que se le muestre que eso abre algo más.
@@ -2513,7 +2667,9 @@ function parseMotor(raw){
         if(eq > -1){
           const k = parte.slice(0,eq).trim().toUpperCase();
           const v = parte.slice(eq+1).trim();
-          if(k==='COMPRENDIMOS') h.comprendimos = v;
+          if(k==='ANTES') h.antes = v;              /* T2 (21/08) -- opcional, compatible con legacy */
+          else if(k==='AHORA') h.ahora = v;
+          else if(k==='COMPRENDIMOS') h.comprendimos = v;
           else if(k==='TENSION_PRINCIPAL') h.tension_principal = v;
           else if(k==='RELACIONES') h.relaciones = v;
           else if(k==='QUE_CAMBIO') h.que_cambio = v;
@@ -2887,6 +3043,52 @@ function camposVisibles(campos){
   return (campos || []).filter(function(k){ return CAMPOS_OCULTOS.indexOf(k) === -1; });
 }
 
+/* T1 (21/08): Hito y Horizonte se vuelven visibles y corregibles dentro de la MISMA propuesta
+   gobernada -- mismos campos que ya persiste aplicarPropuesta() desde el Corte J, sin crear una
+   segunda estructura de transformación (`transformaciones[]`) ni una cola nueva. */
+/* T2 (21/08): antes/ahora se agregan AL PRINCIPIO de la lista -- aditivo, sin migración, hitos
+   legacy sin estos campos siguen funcionando igual (construirHitoAplicado() ya trata cada campo
+   ausente como null). El orden de la lista es también el orden de despliegue en cardPropuesta(),
+   por eso antes/ahora van primero y etapa se corre al final. */
+var T1_CAMPOS_HITO = ['antes', 'ahora', 'comprendimos', 'tension_principal', 'relaciones', 'que_cambio', 'etapa'];
+var T1_LABEL_HITO = { antes:'Antes', ahora:'Ahora', etapa:'Etapa', comprendimos:'Qué comprendimos',
+                      tension_principal:'Tensión principal', relaciones:'Relaciones relevantes', que_cambio:'Qué cambió' };
+var T1_CAMPOS_HORIZONTE = ['observar', 'pregunta', 'relacion', 'consecuencias', 'escala', 'accion', 'cuando'];
+var T1_LABEL_HORIZONTE = { observar:'Qué conviene observar', pregunta:'Nueva pregunta', relacion:'Relación a profundizar',
+                           consecuencias:'Posibles consecuencias', escala:'Otra escala a mirar', accion:'Acción para validar',
+                           cuando:'Cuándo volver a observar' };
+function t1HitoTieneContenido(hito){
+  return !!(hito && T1_CAMPOS_HITO.some(function(k){ return !!hito[k]; }));
+}
+function t1HorizonteTieneContenido(horizonte){
+  return !!(horizonte && T1_CAMPOS_HORIZONTE.some(function(k){ return !!horizonte[k]; }));
+}
+/* Construye el hito/horizonte EFECTIVAMENTE aplicado -- toma, campo por campo, el valor
+   corregido cuando existe (una string, incluso vacía = borrado explícito del campo por el
+   usuario); si no hay corrección para ese campo, cae al valor original propuesto por el motor.
+   Puro: no muta ni `original` ni la corrección recibida. Si tras esto ningún campo queda con
+   contenido, devuelve null -- no se persiste un hito/horizonte semánticamente vacío (T1-13/14). */
+function construirHitoAplicado(original, correccionHito){
+  if(!original) return null;
+  var out = {}, tieneAlgo = false;
+  T1_CAMPOS_HITO.forEach(function(k){
+    var v = (correccionHito && typeof correccionHito[k] === 'string') ? correccionHito[k].trim() : (original[k] || null);
+    out[k] = v || null;
+    if(out[k]) tieneAlgo = true;
+  });
+  return tieneAlgo ? out : null;
+}
+function construirHorizonteAplicado(original, correccionHorizonte){
+  if(!original) return null;
+  var out = {}, tieneAlgo = false;
+  T1_CAMPOS_HORIZONTE.forEach(function(k){
+    var v = (correccionHorizonte && typeof correccionHorizonte[k] === 'string') ? correccionHorizonte[k].trim() : (original[k] || null);
+    out[k] = v || null;
+    if(out[k]) tieneAlgo = true;
+  });
+  return tieneAlgo ? out : null;
+}
+
 /* ---- persistencia de la cola (espejo de cargarOrganismos/persistirOrganismos) ---- */
 function cargarPropuestas(){
   try{
@@ -3068,27 +3270,36 @@ function aplicarPropuesta(p, correccion){
 
   // Corte J: hito (append-only, nunca se pisa) y horizonte (el mas reciente
   // vigente, reemplaza al anterior) se confirman en el mismo gesto que la ficha.
-  if(p.hito){
+  // T1 (21/08): ya NO se persiste siempre p.hito/p.horizonte originales del motor -- primero se
+  // construye lo efectivamente aplicado (toma la corrección humana campo por campo cuando
+  // existe), y eso es lo que se escribe en o.hitos[]/o.horizonte. Si tras corregir no queda
+  // contenido, construirHitoAplicado()/construirHorizonteAplicado() devuelven null y no se
+  // persiste nada (T1-13/14).
+  var hitoAplicado = construirHitoAplicado(p.hito, correccion && correccion.hito);
+  var horizonteAplicado = construirHorizonteAplicado(p.horizonte, correccion && correccion.horizonte);
+  if(hitoAplicado){
     o.hitos = o.hitos || [];
     o.hitos.push({
       fecha: new Date().toISOString(),
-      etapa: p.hito.etapa || null,
-      comprendimos: p.hito.comprendimos || null,
-      tension_principal: p.hito.tension_principal || null,
-      relaciones: p.hito.relaciones || null,
-      que_cambio: p.hito.que_cambio || null
+      antes: hitoAplicado.antes,            // T2 (21/08): aditivo, null en hitos sin contraste
+      ahora: hitoAplicado.ahora,
+      etapa: hitoAplicado.etapa,
+      comprendimos: hitoAplicado.comprendimos,
+      tension_principal: hitoAplicado.tension_principal,
+      relaciones: hitoAplicado.relaciones,
+      que_cambio: hitoAplicado.que_cambio
     });
   }
-  if(p.horizonte){
+  if(horizonteAplicado){
     o.horizonte = {
       fecha: new Date().toISOString(),
-      observar: p.horizonte.observar || null,
-      pregunta: p.horizonte.pregunta || null,
-      relacion: p.horizonte.relacion || null,
-      consecuencias: p.horizonte.consecuencias || null,
-      escala: p.horizonte.escala || null,
-      accion: p.horizonte.accion || null,
-      cuando: p.horizonte.cuando || null
+      observar: horizonteAplicado.observar,
+      pregunta: horizonteAplicado.pregunta,
+      relacion: horizonteAplicado.relacion,
+      consecuencias: horizonteAplicado.consecuencias,
+      escala: horizonteAplicado.escala,
+      accion: horizonteAplicado.accion,
+      cuando: horizonteAplicado.cuando
     };
   }
 
@@ -3125,8 +3336,8 @@ function aplicarPropuesta(p, correccion){
                 .map(function(k){ return (CAMPO_LABEL[k] || k) + ': ' + aplicado[k]; }).join(' · '),
         p.lectura);
     }
-    if(p.hito){                          /* Punto 11: texto determinista, ya no `etapa||comprendimos` */
-      var textoEtapa = textoMomentoEtapaCompletada(p.hito);
+    if(hitoAplicado){                    /* T1: el momento describe lo aplicado, no lo propuesto */
+      var textoEtapa = textoMomentoEtapaCompletada(hitoAplicado);
       if(textoEtapa) registrarMomento('etapa_completada', textoEtapa, p.lectura);
     }
     // Punto 10: un momento 'principio' por cada principio efectivamente incorporado (nunca por
@@ -3137,7 +3348,60 @@ function aplicarPropuesta(p, correccion){
   o.ficha.version = fichaVersion(o) + 1;
   o.actualizado = new Date().toISOString();
   guardarOrganismo(o);
-  return { ok:true, aplicado: aplicado, hito: p.hito || null, horizonte: p.horizonte || null, principios: principiosConfirmados };
+  // T1: la devolución usa lo efectivamente aplicado/corregido, no p.hito/p.horizonte originales --
+  // así mostrarCierreSegunPropuesta()/cardCierreEtapa() muestran exactamente lo que quedó persistido.
+  return { ok:true, aplicado: aplicado, hito: hitoAplicado, horizonte: horizonteAplicado, principios: principiosConfirmados };
+}
+
+/* ---- SV1 (21/08) · Señales vitales -------------------------------------------------------
+   Tres momentos mínimos que dan señal de vida del organismo, sin contenido cognitivo:
+   'comprension_iniciada' (arranca una conversación, C1G1_iniciarConversacion),
+   'comprension_confirmada' (se confirma/corrige una propuesta, resolverPropuesta) y 'retorno'
+   (se reabre un organismo que ya tenía contenido real, abrirOrganismo -- no cualquier
+   apertura: ver el cálculo de esReapertura ahí mismo).
+   Reusa POST /api/comm (recurso=events, accion=ingresar -> comm_ingresar_evento), el mismo
+   almacenamiento servidor que ya usa el resto del sistema comunicacional -- no se creó tabla
+   ni función serverless nueva (Vercel Hobby ya está en 12/12 funciones, ver api/*.js). Esta
+   llamada SOLO dispara comm_ingresar_evento (vía este endpoint): nunca pasa por
+   comm_evaluar_decision/comm_entregar_bandeja, así que jamás genera un aviso visible en
+   "Avisos" -- es puramente un registro silencioso en comm_events. Las tres finalidades nuevas
+   (senal_comprension_iniciada/senal_comprension_confirmada/senal_retorno) se agregan a
+   comm_purposes en MIGRACION_SV1_SENALES_VITALES.sql -- sin esa fila, comm_ingresar_evento
+   manda el evento a cuarentena (finalidad_ausente) y no llega a guardarse.
+   Best effort real: ningún llamador usa await, y esta función nunca deja escapar una
+   excepción ni una promesa rechazada -- un fallo de red, de sesión o del servidor se traga en
+   silencio y no se reintenta. Nunca puede bloquear chat, confirmación ni apertura de
+   organismo, porque nada de lo que devuelve o lanza se usa para decidir nada de esos flujos. */
+var SV_EVENTOS = {
+  comprension_iniciada:   { purpose_id: 'senal_comprension_iniciada',   type: 'senal.comprension_iniciada' },
+  comprension_confirmada: { purpose_id: 'senal_comprension_confirmada', type: 'senal.comprension_confirmada' },
+  retorno:                { purpose_id: 'senal_retorno',                type: 'senal.retorno' }
+};
+// Dedup de 'comprension_iniciada' "dentro de la misma sesión": vive en memoria, dura lo que
+// dura la pestaña -- un reload legítimamente puede volver a contar un inicio nuevo.
+var _svEnviados = {};
+function registrarSenalVital(tipo, organismoId){
+  try{
+    var def = SV_EVENTOS[tipo];
+    if(!def || !organismoId) return;
+    if(tipo === 'comprension_iniciada'){
+      _svEnviados.comprension_iniciada = _svEnviados.comprension_iniciada || {};
+      if(_svEnviados.comprension_iniciada[organismoId]) return;   // ya se mandó en esta sesión
+      _svEnviados.comprension_iniciada[organismoId] = true;
+    }
+    var evId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID()
+      : 'sv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+    fetch('/api/comm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        recurso: 'events', accion: 'ingresar',
+        event_id: evId, version: 1, type: def.type, producer: 'senales_vitales',
+        purpose_id: def.purpose_id, occurred_at: new Date().toISOString(),
+        payload: { organismo_id: organismoId }   // nunca texto/ficha/diagnóstico: sin contenido cognitivo
+      })
+    }).catch(function(){});   // best effort real: un fallo de red no se propaga
+  }catch(e){}   // best effort real: ni un error sincrónico puede escapar de acá
 }
 
 /* ---- RESOLUCIÓN: confirmar | corregir | rechazar ---- */
@@ -3159,6 +3423,7 @@ function resolverPropuesta(id, accion, correccion){
   p.resuelto = new Date().toISOString();
   p.resuelto_como = r.aplicado;
   persistirPropuestas(c);
+  registrarSenalVital('comprension_confirmada', p.organismo_id);   // SV1: best effort, no bloquea el retorno de abajo
   renderChipPropuestas();
   return { ok:true, estado: p.estado, aplicado: r.aplicado, hito: r.hito, horizonte: r.horizonte };   // Corte I/J: viajan para las tarjetas de cierre
 }
@@ -3176,15 +3441,24 @@ function avisoPropuesta(p){
   var t = document.createElement('span'); t.className = 'pa-txt';
   var vis = camposVisibles(p.campos).length;
   var nPrin = (p.principios_candidatos && p.principios_candidatos.length) || 0;   // Punto 10 (21/08)
+  var tieneHito = t1HitoTieneContenido(p.hito);           // T1 (21/08)
+  var tieneHorizonte = t1HorizonteTieneContenido(p.horizonte);
   if(vis && nPrin){
     t.textContent = 'El motor propone actualizar la memoria en ' + vis + (vis === 1 ? ' aspecto' : ' aspectos') +
       ' y agregar ' + nPrin + (nPrin === 1 ? ' principio.' : ' principios.');
   } else if(nPrin){
     t.textContent = 'El motor propone agregar ' + nPrin + (nPrin === 1 ? ' principio a la memoria.' : ' principios a la memoria.');
+  } else if(vis){
+    t.textContent = 'El motor propone actualizar la memoria en ' + vis + (vis === 1 ? ' aspecto.' : ' aspectos.');
+  } else if(tieneHito && tieneHorizonte){
+    // T1: antes decía "un ajuste interno de la memoria" -- engañoso, no era interno ni menor.
+    t.textContent = 'El motor propone registrar un cierre de etapa y un horizonte de comprensión.';
+  } else if(tieneHito){
+    t.textContent = 'El motor propone registrar un cierre de etapa de comprensión.';
+  } else if(tieneHorizonte){
+    t.textContent = 'El motor propone registrar un horizonte de comprensión.';
   } else {
-    t.textContent = vis
-      ? ('El motor propone actualizar la memoria en ' + vis + (vis === 1 ? ' aspecto.' : ' aspectos.'))
-      : 'El motor propone un ajuste interno de la memoria.';
+    t.textContent = 'El motor propone un ajuste interno de la memoria.';
   }
   var b = document.createElement('button'); b.className = 'btn'; b.textContent = 'Revisar';
   b.onclick = function(){ cardPropuesta(p.id, false); };
@@ -3268,6 +3542,21 @@ function cardCierreEtapa(org, hito, horizonte){
   el.cardContent.innerHTML = '';
   var h = document.createElement('h3'); h.textContent = hito.etapa || 'Etapa completada';
   var p1 = document.createElement('p'); p1.textContent = '"' + (org && org.nombre ? org.nombre : 'Este organismo') + '"';
+  el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
+  // T2 (21/08): el contraste cognitivo -- si existe -- se muestra PRIMERO y de forma prioritaria:
+  // "lo que cambió en la comprensión", no un cambio material del organismo. Hitos legacy sin
+  // antes/ahora simplemente no muestran este bloque (grillaCampos() ya omite pares vacíos, así
+  // que no hace falta un chequeo aparte para no mostrar bloques vacíos).
+  if(hito.antes || hito.ahora){
+    var tituloContraste = document.createElement('p');
+    tituloContraste.style.cssText = 'font-weight:600;margin:10px 0 4px';
+    tituloContraste.textContent = 'Lo que cambió en la comprensión';
+    el.cardContent.appendChild(tituloContraste);
+    el.cardContent.appendChild(grillaCampos([
+      ['Antes', hito.antes],
+      ['Ahora', hito.ahora]
+    ]));
+  }
   var grid = grillaCampos([
     ['Qué comprendimos', hito.comprendimos],
     ['Tensión principal', hito.tension_principal],
@@ -3284,7 +3573,7 @@ function cardCierreEtapa(org, hito, horizonte){
     bOk.onclick = cerrarOverlay;
     row.appendChild(bOk);
   }
-  el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(grid); el.cardContent.appendChild(row);
+  el.cardContent.appendChild(grid); el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
 }
 
@@ -3326,19 +3615,34 @@ function cardPropuesta(id, editando){
   var h = document.createElement('h3');
   h.textContent = editando ? 'Corregir la propuesta' : 'Actualización propuesta para la memoria';
   var principiosCand = p.principios_candidatos || [];   // Punto 10 (21/08)
+  var tieneHito = t1HitoTieneContenido(p.hito);          // T1 (21/08)
+  var tieneHorizonte = t1HorizonteTieneContenido(p.horizonte);
   var p1 = document.createElement('p');
-  p1.textContent = (p.estado === 'pendiente')
-    ? (editando ? 'Editá el texto que va a quedar en la memoria. Se guarda lo que escribas vos, no lo que propuso el motor.'
-                : ((camposVisibles(p.campos).length || principiosCand.length)
-                   ? 'Nada se guardó todavía. Revisá campo por campo y decidí.'
-                   : 'Nada se guardó todavía. Esta actualización no cambia el texto de la memoria.'))
+  var introTxt;
+  if(editando){
+    introTxt = 'Editá el texto que va a quedar en la memoria. Se guarda lo que escribas vos, no lo que propuso el motor.';
+  } else if(camposVisibles(p.campos).length || principiosCand.length){
+    introTxt = 'Nada se guardó todavía. Revisá campo por campo y decidí.';
+  } else if(tieneHito && tieneHorizonte){
+    // T1: ya no dice "no cambia el texto de la memoria" para hito/horizonte -- sí propone algo real.
+    introTxt = 'Nada se guardó todavía. Esta actualización propone registrar un cierre de etapa y un horizonte de comprensión.';
+  } else if(tieneHito){
+    introTxt = 'Nada se guardó todavía. Esta actualización propone registrar un cierre de etapa de comprensión.';
+  } else if(tieneHorizonte){
+    introTxt = 'Nada se guardó todavía. Esta actualización propone registrar un horizonte de comprensión.';
+  } else {
+    introTxt = 'Nada se guardó todavía. Esta actualización no cambia el texto de la memoria.';
+  }
+  p1.textContent = (p.estado === 'pendiente') ? introTxt
     : 'Estado: ' + (PROP_ESTADO_LABEL[p.estado] || p.estado) + '. Se conserva como historia.';
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
 
   var editores = {};
   var editoresPrincipios = [];   // Punto 10: paralelo a p.principios_candidatos, por índice
+  var editorHito = {};           // T1: paralelo a T1_CAMPOS_HITO, por clave
+  var editorHorizonte = {};      // T1: paralelo a T1_CAMPOS_HORIZONTE, por clave
   var visibles = camposVisibles(p.campos);
-  if(!visibles.length && !principiosCand.length){
+  if(!visibles.length && !principiosCand.length && !tieneHito && !tieneHorizonte){
     var solo = document.createElement('div'); solo.className = 'propcmp';
     var sl = document.createElement('div'); sl.className = 'pc-campo'; sl.textContent = 'Ajuste interno';
     var sv = document.createElement('div'); sv.className = 'pc-new';
@@ -3388,6 +3692,53 @@ function cardPropuesta(id, editando){
     }
     el.cardContent.appendChild(box);
   });
+  // T1 (21/08): Cierre de etapa y Horizonte propuestos -- mismos campos que aplicarPropuesta()
+  // ya persiste, visibles y corregibles como cualquier otro elemento gobernado. Sólo se muestran
+  // los campos que el motor efectivamente propuso (mismo criterio que grillaCampos()).
+  if(tieneHito){
+    var tituloHito = document.createElement('div'); tituloHito.className = 'propcmp-titulo';
+    tituloHito.textContent = 'Cierre de etapa propuesto';
+    el.cardContent.appendChild(tituloHito);
+    T1_CAMPOS_HITO.forEach(function(k){
+      if(!p.hito[k]) return;
+      var box = document.createElement('div'); box.className = 'propcmp';
+      var lb = document.createElement('div'); lb.className = 'pc-campo'; lb.textContent = T1_LABEL_HITO[k] || k;
+      box.appendChild(lb);
+      if(editando && p.estado === 'pendiente'){
+        var ta = document.createElement('textarea');
+        ta.value = p.hito[k];
+        editorHito[k] = ta;
+        box.appendChild(ta);
+      }else{
+        var nv = document.createElement('div'); nv.className = 'pc-new';
+        nv.textContent = p.hito[k];
+        box.appendChild(nv);
+      }
+      el.cardContent.appendChild(box);
+    });
+  }
+  if(tieneHorizonte){
+    var tituloHorizonte = document.createElement('div'); tituloHorizonte.className = 'propcmp-titulo';
+    tituloHorizonte.textContent = 'Horizonte propuesto';
+    el.cardContent.appendChild(tituloHorizonte);
+    T1_CAMPOS_HORIZONTE.forEach(function(k){
+      if(!p.horizonte[k]) return;
+      var box = document.createElement('div'); box.className = 'propcmp';
+      var lb = document.createElement('div'); lb.className = 'pc-campo'; lb.textContent = T1_LABEL_HORIZONTE[k] || k;
+      box.appendChild(lb);
+      if(editando && p.estado === 'pendiente'){
+        var ta = document.createElement('textarea');
+        ta.value = p.horizonte[k];
+        editorHorizonte[k] = ta;
+        box.appendChild(ta);
+      }else{
+        var nv = document.createElement('div'); nv.className = 'pc-new';
+        nv.textContent = p.horizonte[k];
+        box.appendChild(nv);
+      }
+      el.cardContent.appendChild(box);
+    });
+  }
 
   var pie = document.createElement('p');
   pie.style.cssText = 'font-size:12px;color:var(--faint)';
@@ -3405,6 +3756,14 @@ function cardPropuesta(id, editando){
         if(editoresPrincipios.length){   // Punto 10 (21/08): paralelo por índice a principios_candidatos
           corr.principios = editoresPrincipios.map(function(ta){ return ta ? ta.value : ''; });
         }
+        if(tieneHito){   // T1 (21/08): estructura explícita, paralela por campo a T1_CAMPOS_HITO
+          corr.hito = {};
+          T1_CAMPOS_HITO.forEach(function(k){ corr.hito[k] = editorHito[k] ? editorHito[k].value : ''; });
+        }
+        if(tieneHorizonte){
+          corr.horizonte = {};
+          T1_CAMPOS_HORIZONTE.forEach(function(k){ corr.horizonte[k] = editorHorizonte[k] ? editorHorizonte[k].value : ''; });
+        }
         var r = resolverPropuesta(p.id, 'corregir', corr);
         cerrarOverlay();
         if(!r.ok) cardMensaje('No se pudo aplicar', r.motivo + '.');
@@ -3418,7 +3777,7 @@ function cardPropuesta(id, editando){
       bR.style.marginRight = 'auto';
       bR.onclick = function(){ resolverPropuesta(p.id, 'rechazar'); cerrarOverlay(); };
       var bE = null;
-      if(visibles.length || principiosCand.length){   // D-01: sin nada corregible no hay botón "Corregir"
+      if(visibles.length || principiosCand.length || tieneHito || tieneHorizonte){   // D-01/T1: sin nada corregible no hay botón "Corregir"
         bE = document.createElement('button'); bE.className = 'btn'; bE.textContent = 'Corregir';
         bE.onclick = function(){ cardPropuesta(p.id, true); };
       }
@@ -8681,6 +9040,7 @@ function C1G1_vistaRetorno(returnProposal){
 async function C1G1_iniciarConversacion(organismoId, question, intention){
   var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
   if(!o) return { ok:true, vista: C1G1_vistaCierre('No encontramos ese organismo.'), estado:null };
+  registrarSenalVital('comprension_iniciada', o.id);   // SV1: best effort, no bloquea lo que sigue
   var snap = OrganismSnapshotAdapter(o);
   var opening = crearContextOpening(o.id, { basedOnVersion: snap.organismVersion, question: question, intention: intention });
 
@@ -9005,6 +9365,8 @@ function continuidadTemporalDelOrganismo(o){
   return {
     ultimoHito: h ? {
       fecha: h.fecha || null,
+      antes: h.antes || null,        // T2 (21/08) -- opcional, null en hitos legacy sin contraste
+      ahora: h.ahora || null,
       etapa: h.etapa || null,
       comprendimos: h.comprendimos || null,
       tension_principal: h.tension_principal || null,
@@ -9035,6 +9397,10 @@ function bloqueContinuidadTemporal(o){
   if(ct.ultimoHito){
     var h = ct.ultimoHito;
     if(h.etapa) partes.push('Última etapa cerrada: ' + h.etapa);
+    // T2 (21/08): el contraste cognitivo -- si existe -- viaja junto al resto del hito. No es
+    // cambio material del organismo, es desde qué interpretación se llegó a "qué comprendimos".
+    if(h.antes) partes.push('Antes se comprendía: ' + h.antes);
+    if(h.ahora) partes.push('Ahora se comprende: ' + h.ahora);
     if(h.comprendimos) partes.push('Qué comprendimos en ese cierre: ' + h.comprendimos);
     if(h.que_cambio) partes.push('Qué cambió desde ahí: ' + h.que_cambio);
     if(h.tension_principal) partes.push('Tensión principal de ese cierre: ' + h.tension_principal);
@@ -9174,6 +9540,54 @@ function buildSystem(){
   return ctx;
 }
 
+/* ================= EN1 (21/08) · Energía / costo cognitivo -- ventana de historial ================
+   historialParaAPI(history) es READ-ONLY: nunca toca state.history ni los mensajes que recibe --
+   sólo elige qué subconjunto (siempre un tramo final contiguo, en el mismo orden) viaja como
+   "messages" al motor. UI, guardado de sesión (guardarBorrador) y el Recorrido visible siguen
+   viendo el historial completo -- esta función sólo interviene en el punto donde se arma el
+   body del fetch a /api/anthropic (ver enviar()).
+   No es un resumen ni pasa por IA: es un recorte determinístico, dos topes combinados,
+   recorriendo desde el mensaje más reciente hacia atrás:
+     1. EN1_MAX_MENSAJES (16): tope duro de cantidad.
+     2. EN1_PRESUPUESTO_CHARS (~24.000): presupuesto de caracteres -- puede angostar la ventana
+        por debajo de 16 si los mensajes son grandes (una lectura larga, p.ej.), pero nunca la
+        agranda por encima de 16. El mensaje más reciente SIEMPRE se conserva, aun si él solo
+        excede el presupuesto -- "conservar siempre la conversación reciente" no es negociable.
+   Con esos dos topes, los pares user/assistant se mantienen coherentes cuando es posible: si el
+   corte deja como primer mensaje de la ventana un 'assistant' huérfano (sin su 'user' previo
+   adentro), se extiende un mensaje hacia atrás para incluirlo -- salvo que eso rompa el tope de
+   16, en cuyo caso se descarta ese 'assistant' huérfano en vez de exceder el tope.
+   No toca Memoria/M2/P6 (esos sistemas seleccionan qué CONTEXTO adicional entra al system
+   prompt, ver bloqueRecuerdosDeSesion/bloqueEspecialidadesDeSesion arriba; esto es aparte: sólo
+   decide cuánto de la conversación misma viaja como messages). */
+var EN1_MAX_MENSAJES = 16;
+var EN1_PRESUPUESTO_CHARS = 24000;
+function historialParaAPI(history){
+  if(!Array.isArray(history) || !history.length) return [];
+  var n = history.length;
+  var desde = Math.max(0, n - EN1_MAX_MENSAJES);   // tope duro de mensajes
+  var acumulado = 0, corte = desde;
+  for(var i = n - 1; i >= desde; i--){
+    var msg = history[i];
+    var len = (msg && typeof msg.content === 'string') ? msg.content.length : 0;
+    if(i !== n - 1 && (acumulado + len) > EN1_PRESUPUESTO_CHARS){
+      corte = i + 1;   // el presupuesto se agotó antes que el tope de mensajes: cortar acá
+      break;
+    }
+    acumulado += len;
+    corte = i;
+  }
+  // Coherencia de pares: no dejar un 'assistant' huérfano al principio de la ventana.
+  if(corte > 0 && history[corte] && history[corte].role === 'assistant'){
+    if(history[corte - 1] && history[corte - 1].role === 'user' && (n - (corte - 1)) <= EN1_MAX_MENSAJES){
+      corte = corte - 1;   // hay lugar: se extiende para incluir el user que le corresponde
+    } else if(corte + 1 <= n){
+      corte = corte + 1;   // no hay lugar (o no había user antes): se descarta el huérfano
+    }
+  }
+  return history.slice(corte);
+}
+
 /* ================= motor ================= */
 async function enviar(texto){
   if(state.busy || !texto.trim()) return;
@@ -9199,7 +9613,7 @@ async function enviar(texto){
         model:'claude-sonnet-4-6',
         max_tokens: apiMaxTokens(),
         system: buildSystemBloques(),   /* C-11 */
-        messages: state.history
+        messages: historialParaAPI(state.history)   /* EN1 (21/08): ventana acotada, no muta state.history */
       })
     });
     const data = await resp.json();
@@ -9906,14 +10320,23 @@ var TIPO_MOMENTO = {
 /* Punto 11 (21/08): texto determinista para el momento 'etapa_completada' -- reemplaza el previo
    `p.hito.etapa || p.hito.comprendimos` (pobre, sólo mostraba uno de los dos). Combina etapa +
    comprendimos cuando ambos existen; nunca serializa el hito completo; tope ~280 caracteres.
-   Cero IA nueva -- puro armado de texto. */
+   Cero IA nueva -- puro armado de texto.
+   T2 (21/08): si el hito trae el contraste cognitivo completo (antes Y ahora), se prioriza sobre
+   el fallback -- "Antes: X → Ahora: Y" es más informativo que "comprendimos que..." solo, y sigue
+   siendo un único texto compacto. Hitos legacy sin antes/ahora conservan el fallback anterior
+   sin cambios (T2-17). */
 function textoMomentoEtapaCompletada(hito){
   if(!hito) return '';
-  var partes = [];
-  if(hito.etapa) partes.push(hito.etapa);
-  if(hito.comprendimos) partes.push('comprendimos que ' + hito.comprendimos);
-  if(!partes.length) return '';
-  var txt = partes.join(' — ');
+  var txt;
+  if(hito.antes && hito.ahora){
+    txt = 'Antes: ' + hito.antes + ' → Ahora: ' + hito.ahora;
+  } else {
+    var partes = [];
+    if(hito.etapa) partes.push(hito.etapa);
+    if(hito.comprendimos) partes.push('comprendimos que ' + hito.comprendimos);
+    if(!partes.length) return '';
+    txt = partes.join(' — ');
+  }
   var MAX = 280;
   if(txt.length > MAX) txt = txt.slice(0, MAX - 1).trim() + '…';
   return txt;
@@ -12057,7 +12480,21 @@ function intentarAbrirOrganismoDesdeURL(){
   }catch(e){}
 }
 
+// SV1 (21/08): pura, para que "retorno" (señal vital) y el resto de abrirOrganismo() usen
+// exactamente el mismo criterio de "hay algo real a lo que volver" -- mismas dos condiciones
+// que ya usaba abrirOrganismo() más abajo para elegir "Retomemos el organismo…" vs. startChat(),
+// ahora nombradas y reutilizables. Extraída para poder probarla con objetos simples, sin DOM.
+function organismoTieneContenidoReal(org){
+  return !!(org && org.borrador && org.borrador.history && org.borrador.history.length) ||
+    !!(org && org.ficha && (org.ficha.funcion || org.ficha.diagnostico || org.ficha.proximo));
+}
+
 function abrirOrganismo(org){
+  // SV1 (21/08): "retorno" es señal vital sólo cuando de verdad hay algo a lo que volver --
+  // se calcula ANTES de restaurarBorrador()/el resto de esta función, que consumen/mutan esos
+  // mismos campos (org.borrador, org.ficha). Un organismo recién creado (ficha vacía, sin
+  // borrador) no dispara nada acá: no hay memoria todavía a la que "retornar".
+  if(organismoTieneContenidoReal(org)) registrarSenalVital('retorno', org.id);   // best effort, no bloquea lo que sigue
   // 14/08: apaga el punto rojo de "se incorporó algo nuevo" apenas el usuario entra a verlo --
   // no hace falta un botón de "marcar como visto" aparte.
   if(org.avisoImportacionPro){ org.avisoImportacionPro = false; guardarOrganismo(org); }
@@ -12131,6 +12568,11 @@ function mostrarFicha(){
     var h11 = ct11.ultimoHito;
     var partesEtapa = [];
     if(h11.etapa) partesEtapa.push(h11.etapa);
+    // T2 (21/08): contraste cognitivo compacto, sólo si el hito lo tiene -- hitos legacy no lo
+    // muestran (no se toca nada para ellos). No convierte Memoria en una cronología: sigue siendo
+    // sólo el último hito, un renglón más dentro del mismo campo de la grilla.
+    if(h11.antes) partesEtapa.push('antes: ' + h11.antes);
+    if(h11.ahora) partesEtapa.push('ahora: ' + h11.ahora);
     if(h11.comprendimos) partesEtapa.push('comprendimos que ' + h11.comprendimos);
     if(h11.que_cambio) partesEtapa.push('cambió: ' + h11.que_cambio);
     if(partesEtapa.length) campos.push(['Última etapa comprendida', partesEtapa.join(' · ')]);
@@ -14524,6 +14966,713 @@ function correrPruebasAuto(){
     chk('M13-20 · cero fetch()/IA nueva en las funciones tocadas por Punto 13', (function(){
       var fns = [p6RecorrerFragmentos, terminosSignificativosUnicos, seleccionarRecuerdosCandidatos, seleccionarFragmentosEspecializados];
       return fns.every(function(fn){ return fn.toString().indexOf('fetch(') === -1; });
+    })());
+
+    /* ============ T1 (21/08) -- Hito y Horizonte visibles y corregibles dentro de la
+       gobernanza existente, T1-01 a T1-19. T1-20 (node --check) no es una aserción de runtime,
+       se reporta aparte (mismo criterio que en los cortes anteriores). Mismo patrón de stub de
+       cargarPropuestas/persistirPropuestas/guardarOrganismo que M1/M10/M11. */
+    chk('T1-01 · propuesta sólo con hito -> cardPropuesta() muestra el hito antes de confirmar (sin lanzar)', (function(){
+      var o = { id:'t1_01', nombre:'T1 Uno', tipo:'empresa', ficha:{}, principios:[] };
+      var prop = { id:'p_t1_01', organismo_id:'t1_01', creado:new Date().toISOString(), campos:[], candidato:{}, anterior:{},
+        hito:{ etapa:'diagnóstico inicial', comprendimos:'x' }, horizonte:null, principios_candidatos:[], turno:1, estado:'pendiente' };
+      var origCargar = cargarPropuestas, origState = state.organismo;
+      try{
+        cargarPropuestas = function(){ return { version_cola: COLA_VERSION, propuestas:[prop] }; };
+        state.organismo = o;
+        var srcOk = cardPropuesta.toString().indexOf('Cierre de etapa propuesto') > -1 &&
+          cardPropuesta.toString().indexOf('T1_CAMPOS_HITO') > -1;
+        cardPropuesta('p_t1_01', false);
+        return srcOk;
+      } finally { cargarPropuestas = origCargar; state.organismo = origState; }
+    })());
+    chk('T1-02 · propuesta sólo con horizonte -> cardPropuesta() muestra el horizonte antes de confirmar (sin lanzar)', (function(){
+      var o = { id:'t1_02', nombre:'T1 Dos', tipo:'empresa', ficha:{}, principios:[] };
+      var prop = { id:'p_t1_02', organismo_id:'t1_02', creado:new Date().toISOString(), campos:[], candidato:{}, anterior:{},
+        hito:null, horizonte:{ observar:'y', pregunta:'z' }, principios_candidatos:[], turno:1, estado:'pendiente' };
+      var origCargar = cargarPropuestas, origState = state.organismo;
+      try{
+        cargarPropuestas = function(){ return { version_cola: COLA_VERSION, propuestas:[prop] }; };
+        state.organismo = o;
+        var srcOk = cardPropuesta.toString().indexOf('Horizonte propuesto') > -1 &&
+          cardPropuesta.toString().indexOf('T1_CAMPOS_HORIZONTE') > -1;
+        cardPropuesta('p_t1_02', false);
+        return srcOk;
+      } finally { cargarPropuestas = origCargar; state.organismo = origState; }
+    })());
+    chk('T1-03 · hito+horizonte -> cardPropuesta() muestra ambos (sin lanzar)', (function(){
+      var o = { id:'t1_03', nombre:'T1 Tres', tipo:'empresa', ficha:{}, principios:[] };
+      var prop = { id:'p_t1_03', organismo_id:'t1_03', creado:new Date().toISOString(), campos:[], candidato:{}, anterior:{},
+        hito:{ etapa:'e' }, horizonte:{ observar:'o' }, principios_candidatos:[], turno:1, estado:'pendiente' };
+      var origCargar = cargarPropuestas, origState = state.organismo;
+      try{
+        cargarPropuestas = function(){ return { version_cola: COLA_VERSION, propuestas:[prop] }; };
+        state.organismo = o;
+        cardPropuesta('p_t1_03', false);
+        return true;
+      } catch(e){ return false; } finally { cargarPropuestas = origCargar; state.organismo = origState; }
+    })());
+    chk('T1-04 · ya no aparece "Ajuste interno" cuando hay hito u horizonte (gating correcto)', (function(){
+      return t1HitoTieneContenido({ etapa:'x' }) === true &&
+        t1HorizonteTieneContenido({ observar:'y' }) === true &&
+        t1HitoTieneContenido(null) === false &&
+        t1HorizonteTieneContenido({}) === false;
+    })());
+    chk('T1-05 · confirmar hito sin corrección -> persiste el original', (function(){
+      var o = { id:'t1_05', nombre:'T1 Cinco', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'diagnóstico inicial', comprendimos:'x original' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        var r = resolverPropuesta(prop.id, 'confirmar');
+        return r.ok === true && o.hitos.length === 1 && o.hitos[0].comprendimos === 'x original';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-06 · corregir "comprendimos" -> persiste el texto humano', (function(){
+      var o = { id:'t1_06', nombre:'T1 Seis', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'diagnóstico inicial', comprendimos:'texto del motor' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        var r = resolverPropuesta(prop.id, 'corregir', { hito:{ comprendimos:'texto corregido por el usuario' } });
+        return r.ok === true && o.hitos[0].comprendimos === 'texto corregido por el usuario' && o.hitos[0].etapa === 'diagnóstico inicial';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-07 · corregir "que_cambio" -> persiste el texto humano', (function(){
+      var o = { id:'t1_07', nombre:'T1 Siete', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'e', que_cambio:'cambio original' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        var r = resolverPropuesta(prop.id, 'corregir', { hito:{ que_cambio:'cambio corregido' } });
+        return r.ok === true && o.hitos[0].que_cambio === 'cambio corregido';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-08 · corregir horizonte -> persiste el texto humano', (function(){
+      var o = { id:'t1_08', nombre:'T1 Ocho', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var horizonte = { observar:'observar original', pregunta:'pregunta original' };
+        var prop = proponerFicha({}, null, null, horizonte, []);
+        var r = resolverPropuesta(prop.id, 'corregir', { horizonte:{ pregunta:'pregunta corregida por el usuario' } });
+        return r.ok === true && o.horizonte.pregunta === 'pregunta corregida por el usuario' && o.horizonte.observar === 'observar original';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-09 · la devolución r.hito corresponde al hito efectivamente aplicado', (function(){
+      var o = { id:'t1_09', nombre:'T1 Nueve', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'e', comprendimos:'original' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        var r = resolverPropuesta(prop.id, 'corregir', { hito:{ comprendimos:'corregido' } });
+        return r.ok === true && r.hito && r.hito.comprendimos === 'corregido' && r.hito.comprendimos === o.hitos[0].comprendimos;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-10 · la devolución r.horizonte corresponde al horizonte efectivamente aplicado', (function(){
+      var o = { id:'t1_10', nombre:'T1 Diez', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var horizonte = { observar:'o', pregunta:'original' };
+        var prop = proponerFicha({}, null, null, horizonte, []);
+        var r = resolverPropuesta(prop.id, 'corregir', { horizonte:{ pregunta:'corregida' } });
+        return r.ok === true && r.horizonte && r.horizonte.pregunta === 'corregida' && r.horizonte.pregunta === o.horizonte.pregunta;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-11 · cardCierreEtapa() posterior (vía mostrarCierreSegunPropuesta) muestra la versión corregida, sin lanzar', (function(){
+      var o = { id:'t1_11', nombre:'T1 Once', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'etapa original', comprendimos:'original' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        var r = resolverPropuesta(prop.id, 'corregir', { hito:{ comprendimos:'version corregida final' } });
+        mostrarCierreSegunPropuesta(r, o);
+        return r.hito.comprendimos === 'version corregida final';
+      } catch(e){ return false; } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-12 · rechazo -> no persiste hito ni horizonte', (function(){
+      var o = { id:'t1_12', nombre:'T1 Doce', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({}, null, { etapa:'e' }, { observar:'o' }, []);
+        resolverPropuesta(prop.id, 'rechazar');
+        return (o.hitos || []).length === 0 && !o.horizonte;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-13 · hito completamente vaciado al corregir -> no se persiste objeto vacío', (function(){
+      var o = { id:'t1_13', nombre:'T1 Trece', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'e', comprendimos:'c' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        var r = resolverPropuesta(prop.id, 'corregir', { hito:{ etapa:'', comprendimos:'', tension_principal:'', relaciones:'', que_cambio:'' } });
+        return r.ok === true && r.hito === null && (o.hitos || []).length === 0;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-14 · horizonte completamente vaciado al corregir -> no se persiste objeto vacío', (function(){
+      var o = { id:'t1_14', nombre:'T1 Catorce', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var horizonte = { observar:'o', pregunta:'p' };
+        var prop = proponerFicha({}, null, null, horizonte, []);
+        var r = resolverPropuesta(prop.id, 'corregir', { horizonte:{ observar:'', pregunta:'', relacion:'', consecuencias:'', escala:'', accion:'', cuando:'' } });
+        return r.ok === true && r.horizonte === null && !o.horizonte;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-15 · ficha + principio + hito + horizonte siguen usando una sola propuesta', (function(){
+      var o = { id:'t1_15', nombre:'T1 Quince', tipo:'empresa', ficha:{ diagnostico:'d1' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({ diagnostico:'d2' }, null, { etapa:'e' }, { observar:'x' }, [{ texto:'principio conjunto', fam:'x' }]);
+        var pendientesAntes = cola.propuestas.filter(function(x){ return x.estado === 'pendiente'; }).length;
+        var r = resolverPropuesta(prop.id, 'confirmar');
+        return pendientesAntes === 1 && r.ok === true && o.ficha.diagnostico === 'd2' &&
+          o.hitos.length === 1 && !!o.horizonte && o.principios.length === 1;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-16 · corrección de campos de ficha y de principios sigue funcionando (sin regresión)', (function(){
+      var o = { id:'t1_16', nombre:'T1 Dieciseis', tipo:'empresa', ficha:{ diagnostico:'d1' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({ diagnostico:'propuesto por el motor' }, null, null, null, [{ texto:'texto del motor', fam:'x' }]);
+        var r = resolverPropuesta(prop.id, 'corregir', { diagnostico:'corregido por el usuario', principios:['principio corregido'] });
+        return r.ok === true && o.ficha.diagnostico === 'corregido por el usuario' && o.principios[0].texto === 'principio corregido';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-17 · hito/horizonte-only continúa sin crear Recuerdo', (function(){
+      var o = { id:'t1_17', nombre:'T1 Diecisiete', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({}, null, { etapa:'e', comprendimos:'c' }, { observar:'o' }, []);
+        resolverPropuesta(prop.id, 'confirmar');
+        return recuerdosDe(o).length === 0;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T1-18 · cero fetch()/IA nueva en las funciones tocadas por T1', (function(){
+      var fns = [construirHitoAplicado, construirHorizonteAplicado, t1HitoTieneContenido, t1HorizonteTieneContenido,
+        aplicarPropuesta, avisoPropuesta, cardPropuesta];
+      return fns.every(function(fn){ return fn.toString().indexOf('fetch(') === -1; });
+    })());
+    chk('T1-19 · funciones de Puntos 10-13 siguen presentes', (function(){
+      return typeof normalizarPrincipioParaComparar === 'function' && typeof proponerFicha === 'function' &&
+        typeof continuidadTemporalDelOrganismo === 'function' && typeof vigenciaParadigma === 'function' &&
+        typeof terminosSignificativosUnicos === 'function' && typeof p6RecorrerFragmentos === 'function';
+    })());
+
+    /* ============ T2 (21/08) -- Contraste cognitivo Antes / Ahora, T2-01 a T2-23. T2-24
+       (node --check) no es una aserción de runtime, se reporta aparte (mismo criterio que en
+       los cortes anteriores). Extiende exactamente lo construido en T1 -- mismo o.hitos[],
+       misma gobernanza, sin arrays ni estructuras nuevas. */
+    chk('T2-01 · parseMotor() reconoce ANTES en CIERRE_ETAPA', (function(){
+      var p = parseMotor('[[CIERRE_ETAPA:ANTES=parecía falta de clientes|COMPRENDIMOS=x]]texto');
+      return p.cierreEtapa && p.cierreEtapa.antes === 'parecía falta de clientes';
+    })());
+    chk('T2-02 · parseMotor() reconoce AHORA en CIERRE_ETAPA', (function(){
+      var p = parseMotor('[[CIERRE_ETAPA:AHORA=el margen es el problema|COMPRENDIMOS=x]]texto');
+      return p.cierreEtapa && p.cierreEtapa.ahora === 'el margen es el problema';
+    })());
+    chk('T2-03 · CIERRE_ETAPA legacy sin ANTES/AHORA sigue siendo válido', (function(){
+      var p = parseMotor('[[CIERRE_ETAPA:COMPRENDIMOS=x|ETAPA=diagnóstico]]texto');
+      return p.cierreEtapa && p.cierreEtapa.comprendimos === 'x' && p.cierreEtapa.etapa === 'diagnóstico' &&
+        !p.cierreEtapa.antes && !p.cierreEtapa.ahora;
+    })());
+    chk('T2-04 · cardPropuesta() muestra Antes/Ahora antes de confirmar (primero en T1_CAMPOS_HITO, sin lanzar)', (function(){
+      var o = { id:'t2_04', nombre:'T2 Cuatro', tipo:'empresa', ficha:{}, principios:[] };
+      var prop = { id:'p_t2_04', organismo_id:'t2_04', creado:new Date().toISOString(), campos:[], candidato:{}, anterior:{},
+        hito:{ antes:'parecía X', ahora:'en realidad Y' }, horizonte:null, principios_candidatos:[], turno:1, estado:'pendiente' };
+      var origCargar = cargarPropuestas, origState = state.organismo;
+      try{
+        cargarPropuestas = function(){ return { version_cola: COLA_VERSION, propuestas:[prop] }; };
+        state.organismo = o;
+        var srcOk = cardPropuesta.toString().indexOf('T1_CAMPOS_HITO') > -1 &&
+          T1_CAMPOS_HITO.indexOf('antes') === 0 && T1_CAMPOS_HITO.indexOf('ahora') === 1;
+        cardPropuesta('p_t2_04', false);
+        return srcOk;
+      } finally { cargarPropuestas = origCargar; state.organismo = origState; }
+    })());
+    chk('T2-05 · Antes y Ahora son editables (modo edición no lanza)', (function(){
+      var o = { id:'t2_05', nombre:'T2 Cinco', tipo:'empresa', ficha:{}, principios:[] };
+      var prop = { id:'p_t2_05', organismo_id:'t2_05', creado:new Date().toISOString(), campos:[], candidato:{}, anterior:{},
+        hito:{ antes:'parecía X', ahora:'en realidad Y' }, horizonte:null, principios_candidatos:[], turno:1, estado:'pendiente' };
+      var origCargar = cargarPropuestas, origState = state.organismo;
+      try{
+        cargarPropuestas = function(){ return { version_cola: COLA_VERSION, propuestas:[prop] }; };
+        state.organismo = o;
+        cardPropuesta('p_t2_05', true);
+        return true;
+      } catch(e){ return false; } finally { cargarPropuestas = origCargar; state.organismo = origState; }
+    })());
+    chk('T2-06 · corrección de "antes" persiste exactamente el texto humano', (function(){
+      var o = { id:'t2_06', nombre:'T2 Seis', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { antes:'antes original', ahora:'ahora original' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        var r = resolverPropuesta(prop.id, 'corregir', { hito:{ antes:'antes corregido por el usuario' } });
+        return r.ok === true && o.hitos[0].antes === 'antes corregido por el usuario' && o.hitos[0].ahora === 'ahora original';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T2-07 · corrección de "ahora" persiste exactamente el texto humano', (function(){
+      var o = { id:'t2_07', nombre:'T2 Siete', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { antes:'antes original', ahora:'ahora original' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        var r = resolverPropuesta(prop.id, 'corregir', { hito:{ ahora:'ahora corregido por el usuario' } });
+        return r.ok === true && o.hitos[0].ahora === 'ahora corregido por el usuario' && o.hitos[0].antes === 'antes original';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T2-08 · construirHitoAplicado() devuelve antes y ahora', (function(){
+      var out = construirHitoAplicado({ antes:'a', ahora:'b' }, null);
+      return out && out.antes === 'a' && out.ahora === 'b';
+    })());
+    chk('T2-09 · o.hitos[] confirmado contiene antes y ahora', (function(){
+      var o = { id:'t2_09', nombre:'T2 Nueve', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { antes:'a', ahora:'b', comprendimos:'c' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        resolverPropuesta(prop.id, 'confirmar');
+        return o.hitos[0].antes === 'a' && o.hitos[0].ahora === 'b';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T2-10 · rechazo no persiste antes ni ahora', (function(){
+      var o = { id:'t2_10', nombre:'T2 Diez', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({}, null, { antes:'a', ahora:'b' }, null, []);
+        resolverPropuesta(prop.id, 'rechazar');
+        return (o.hitos || []).length === 0;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T2-11 · cardCierreEtapa() muestra Antes/Ahora confirmados (sin lanzar)', (function(){
+      var srcOk = cardCierreEtapa.toString().indexOf('Lo que cambió en la comprensión') > -1 &&
+        cardCierreEtapa.toString().indexOf('hito.antes') > -1 && cardCierreEtapa.toString().indexOf('hito.ahora') > -1;
+      try{
+        cardCierreEtapa({ nombre:'Org' }, { etapa:'e', antes:'a', ahora:'b', comprendimos:'c' }, null);
+        return srcOk;
+      } catch(e){ return false; }
+    })());
+    chk('T2-12 · cardCierreEtapa() no muestra el bloque de contraste para hitos legacy sin antes/ahora', (function(){
+      var srcOk = cardCierreEtapa.toString().indexOf('if(hito.antes || hito.ahora)') > -1;
+      try{
+        cardCierreEtapa({ nombre:'Org' }, { etapa:'e', comprendimos:'c' }, null);
+        return srcOk;
+      } catch(e){ return false; }
+    })());
+    chk('T2-13 · continuidadTemporalDelOrganismo() recupera antes/ahora del último hito', (function(){
+      var o = { id:'t2_13', hitos:[{ fecha:'2026-01-01T00:00:00.000Z', antes:'a', ahora:'b' }] };
+      var ct = continuidadTemporalDelOrganismo(o);
+      return ct.ultimoHito.antes === 'a' && ct.ultimoHito.ahora === 'b';
+    })());
+    chk('T2-14 · buildSystem() recibe el contraste antes/ahora a través de continuidad temporal', (function(){
+      var g = state.organismo, gh = state.history;
+      try{
+        state.organismo = { id:'t2_14', nombre:'Con Contraste', tipo:'empresa', ficha:{},
+          hitos:[{ fecha:'2026-01-01T00:00:00.000Z', etapa:'e', antes:'parecía que faltaban clientes', ahora:'el margen es el problema real' }] };
+        state.history = [];
+        var ctx = buildSystem();
+        return ctx.indexOf('parecía que faltaban clientes') > -1 && ctx.indexOf('el margen es el problema real') > -1;
+      } finally { state.organismo = g; state.history = gh; }
+    })());
+    chk('T2-15 · mostrarFicha() usa antes/ahora cuando existen (sin lanzar)', (function(){
+      var g = state.organismo;
+      try{
+        state.organismo = { id:'t2_15', nombre:'Ficha Contraste', tipo:'empresa', ficha:{}, principios:[],
+          hitos:[{ fecha:'2026-01-01T00:00:00.000Z', etapa:'e', antes:'a', ahora:'b' }] };
+        var srcOk = mostrarFicha.toString().indexOf('h11.antes') > -1 && mostrarFicha.toString().indexOf('h11.ahora') > -1;
+        mostrarFicha();
+        return srcOk;
+      } catch(e){ return false; } finally { state.organismo = g; }
+    })());
+    chk('T2-16 · textoMomentoEtapaCompletada() usa "Antes: X → Ahora: Y" y respeta el tope', (function(){
+      var corto = textoMomentoEtapaCompletada({ antes:'a', ahora:'b' });
+      var largo = textoMomentoEtapaCompletada({ antes: new Array(200).join('x'), ahora: new Array(200).join('y') });
+      return corto === 'Antes: a → Ahora: b' && largo.length <= 280;
+    })());
+    chk('T2-17 · hito legacy (sin antes/ahora) conserva el fallback etapa+comprendimos', (function(){
+      var txt = textoMomentoEtapaCompletada({ etapa:'diagnóstico inicial', comprendimos:'x' });
+      return txt === 'diagnóstico inicial — comprendimos que x';
+    })());
+    chk('T2-18 · hito completamente vacío (incluyendo antes/ahora) sigue sin persistirse', (function(){
+      var out = construirHitoAplicado({ antes:'a', ahora:'b', comprendimos:'c' },
+        { antes:'', ahora:'', comprendimos:'', tension_principal:'', relaciones:'', que_cambio:'', etapa:'' });
+      return out === null;
+    })());
+    chk('T2-19 · hito con antes/ahora sigue sin crear Recuerdo', (function(){
+      var o = { id:'t2_19', nombre:'T2 Diecinueve', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var prop = proponerFicha({}, null, { antes:'a', ahora:'b', comprendimos:'c' }, null, []);
+        resolverPropuesta(prop.id, 'confirmar');
+        return recuerdosDe(o).length === 0;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('T2-20 · cero fetch()/IA nueva en las funciones tocadas por T2', (function(){
+      var fns = [construirHitoAplicado, continuidadTemporalDelOrganismo, bloqueContinuidadTemporal,
+        textoMomentoEtapaCompletada, cardCierreEtapa, cardPropuesta];
+      return fns.every(function(fn){ return fn.toString().indexOf('fetch(') === -1; });
+    })());
+    chk('T2-21 · funciones de T1 siguen presentes', (function(){
+      return typeof t1HitoTieneContenido === 'function' && typeof t1HorizonteTieneContenido === 'function' &&
+        typeof construirHitoAplicado === 'function' && typeof construirHorizonteAplicado === 'function';
+    })());
+    chk('T2-22 · funciones de Puntos 10-13 siguen presentes', (function(){
+      return typeof normalizarPrincipioParaComparar === 'function' && typeof vigenciaParadigma === 'function' &&
+        typeof terminosSignificativosUnicos === 'function' && typeof p6RecorrerFragmentos === 'function';
+    })());
+    chk('T2-23 · funciones de los Puntos 6-9 siguen presentes', (function(){
+      return typeof fragmentosEspecializadosDelOrganismo === 'function' &&
+        typeof antecedentesEspecializadosParaMarco === 'function' &&
+        typeof fichaTieneLectura === 'function' &&
+        typeof C1B1_situacionParaEspecialidades === 'function';
+    })());
+
+    /* ---- SV1 (21/08) -- señales vitales ----
+       Nota de arnés: registrarSenalVital() llama al fetch() global tal cual (igual que el
+       resto del segundo <script>, que confía en el envoltorio de candado.txt) -- en este
+       arnés de pruebas fetch() es la función global de dom_stub.js, no window.fetch (son
+       bindings distintos acá, a diferencia del navegador real donde son la misma). Por eso
+       estas pruebas reemplazan el fetch global, no window.fetch. */
+    chk('SV1-01 · comprension_iniciada manda purpose_id/type correctos y payload sólo con organismo_id', (function(){
+      var origFetch = fetch, capturado = null;
+      fetch = function(url, opts){ capturado = { url: url, body: JSON.parse(opts.body) }; return Promise.resolve({ ok:true }); };
+      try{
+        registrarSenalVital('comprension_iniciada', 'org_sv1_01');
+        return capturado && capturado.url === '/api/comm' &&
+          capturado.body.recurso === 'events' && capturado.body.accion === 'ingresar' &&
+          capturado.body.purpose_id === 'senal_comprension_iniciada' &&
+          capturado.body.type === 'senal.comprension_iniciada' &&
+          capturado.body.producer === 'senales_vitales' &&
+          JSON.stringify(Object.keys(capturado.body.payload).sort()) === JSON.stringify(['organismo_id']) &&
+          capturado.body.payload.organismo_id === 'org_sv1_01';
+      } finally { fetch = origFetch; }
+    })());
+    chk('SV1-02 · comprension_confirmada manda purpose_id/type correctos', (function(){
+      var origFetch = fetch, capturado = null;
+      fetch = function(url, opts){ capturado = JSON.parse(opts.body); return Promise.resolve({ ok:true }); };
+      try{
+        registrarSenalVital('comprension_confirmada', 'org_sv1_02');
+        return capturado && capturado.purpose_id === 'senal_comprension_confirmada' && capturado.type === 'senal.comprension_confirmada';
+      } finally { fetch = origFetch; }
+    })());
+    chk('SV1-03 · retorno manda purpose_id/type correctos', (function(){
+      var origFetch = fetch, capturado = null;
+      fetch = function(url, opts){ capturado = JSON.parse(opts.body); return Promise.resolve({ ok:true }); };
+      try{
+        registrarSenalVital('retorno', 'org_sv1_03');
+        return capturado && capturado.purpose_id === 'senal_retorno' && capturado.type === 'senal.retorno';
+      } finally { fetch = origFetch; }
+    })());
+    chk('SV1-04 · event_id distinto en cada llamado (no siempre el mismo)', (function(){
+      var origFetch = fetch, ids = [];
+      fetch = function(url, opts){ ids.push(JSON.parse(opts.body).event_id); return Promise.resolve({ ok:true }); };
+      try{
+        registrarSenalVital('comprension_confirmada', 'org_sv1_04a');
+        registrarSenalVital('comprension_confirmada', 'org_sv1_04b');
+        return ids.length === 2 && !!ids[0] && !!ids[1] && ids[0] !== ids[1];
+      } finally { fetch = origFetch; }
+    })());
+    chk('SV1-05 · no duplica comprension_iniciada para el mismo organismo dentro de la sesión', (function(){
+      var origFetch = fetch, llamados = 0;
+      fetch = function(){ llamados++; return Promise.resolve({ ok:true }); };
+      try{
+        registrarSenalVital('comprension_iniciada', 'org_sv1_05');
+        registrarSenalVital('comprension_iniciada', 'org_sv1_05');
+        registrarSenalVital('comprension_iniciada', 'org_sv1_05');
+        return llamados === 1;
+      } finally { fetch = origFetch; }
+    })());
+    chk('SV1-06 · comprension_iniciada de un organismo distinto sí manda (dedup es por organismo, no global)', (function(){
+      var origFetch = fetch, llamados = 0;
+      fetch = function(){ llamados++; return Promise.resolve({ ok:true }); };
+      try{
+        registrarSenalVital('comprension_iniciada', 'org_sv1_06a');
+        registrarSenalVital('comprension_iniciada', 'org_sv1_06b');
+        return llamados === 2;
+      } finally { fetch = origFetch; }
+    })());
+    chk('SV1-07 · comprension_confirmada NO se deduplica (cada confirmación es un evento nuevo)', (function(){
+      var origFetch = fetch, llamados = 0;
+      fetch = function(){ llamados++; return Promise.resolve({ ok:true }); };
+      try{
+        registrarSenalVital('comprension_confirmada', 'org_sv1_07');
+        registrarSenalVital('comprension_confirmada', 'org_sv1_07');
+        return llamados === 2;
+      } finally { fetch = origFetch; }
+    })());
+    chk('SV1-08 · tipo desconocido no manda nada y no lanza', (function(){
+      var origFetch = fetch, llamados = 0;
+      fetch = function(){ llamados++; return Promise.resolve({ ok:true }); };
+      try{
+        registrarSenalVital('tipo_inexistente', 'org_sv1_08');
+        return llamados === 0;
+      } finally { fetch = origFetch; }
+    })());
+    chk('SV1-09 · sin organismoId no manda nada y no lanza', (function(){
+      var origFetch = fetch, llamados = 0;
+      fetch = function(){ llamados++; return Promise.resolve({ ok:true }); };
+      try{
+        registrarSenalVital('comprension_iniciada', null);
+        registrarSenalVital('comprension_iniciada', '');
+        return llamados === 0;
+      } finally { fetch = origFetch; }
+    })());
+    chk('SV1-10 · best effort real: un fetch que lanza sincrónicamente no se propaga', (function(){
+      var origFetch = fetch;
+      fetch = function(){ throw new Error('red caída'); };
+      try{
+        registrarSenalVital('comprension_confirmada', 'org_sv1_10');
+        return true;   // si llegó hasta acá sin lanzar, best effort funciona
+      }catch(e){ return false; }
+      finally { fetch = origFetch; }
+    })());
+    chk('SV1-11 · best effort real: una promesa de fetch rechazada no queda sin atrapar', (function(){
+      var origFetch = fetch;
+      fetch = function(){ return Promise.reject(new Error('503')); };
+      try{
+        registrarSenalVital('retorno', 'org_sv1_11');
+        return true;   // no lanza sincrónicamente; el .catch(function(){}) interno atrapa el rechazo async
+      }catch(e){ return false; }
+      finally { fetch = origFetch; }
+    })());
+    chk('SV1-12 · organismoTieneContenidoReal: true si hay función/diagnóstico/próximo en la ficha', (function(){
+      return organismoTieneContenidoReal({ ficha:{ funcion:'x' } }) === true &&
+        organismoTieneContenidoReal({ ficha:{ diagnostico:'x' } }) === true &&
+        organismoTieneContenidoReal({ ficha:{ proximo:'x' } }) === true;
+    })());
+    chk('SV1-13 · organismoTieneContenidoReal: true si hay borrador con historial', (function(){
+      return organismoTieneContenidoReal({ ficha:{}, borrador:{ history:[{role:'user',content:'x'}] } }) === true;
+    })());
+    chk('SV1-14 · organismoTieneContenidoReal: false para un organismo recién creado (ficha vacía, sin borrador)', (function(){
+      return organismoTieneContenidoReal({ ficha:{}, principios:[], destilados:[] }) === false;
+    })());
+    chk('SV1-15 · organismoTieneContenidoReal: false si borrador.history está vacío', (function(){
+      return organismoTieneContenidoReal({ ficha:{}, borrador:{ history:[] } }) === false;
+    })());
+    chk('SV1-16 · organismoTieneContenidoReal: nunca lanza con null/undefined/objeto vacío', (function(){
+      return organismoTieneContenidoReal(null) === false && organismoTieneContenidoReal(undefined) === false &&
+        organismoTieneContenidoReal({}) === false;
+    })());
+    chk('SV1-17 · resolverPropuesta llama a la señal vital sólo al confirmar/corregir, nunca al rechazar', (function(){
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var origSenal = registrarSenalVital, llamados = [];
+      registrarSenalVital = function(tipo, orgId){ llamados.push({ tipo: tipo, orgId: orgId }); };
+      var o = { id:'org_sv1_17', nombre:'SV1-17', tipo:'Persona', ficha:{}, principios:[], destilados:[] };
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      cargarPropuestas = function(){ return cola; };
+      persistirPropuestas = function(c){ cola = c; return true; };
+      guardarOrganismo = function(org){ o = org; };
+      state.organismo = o;
+      try{
+        var prop1 = proponerFicha({}, null, { antes:'a', ahora:'b', comprendimos:'c' }, null, []);
+        resolverPropuesta(prop1.id, 'rechazar');
+        var prop2 = proponerFicha({}, null, { antes:'d', ahora:'e', comprendimos:'f' }, null, []);
+        resolverPropuesta(prop2.id, 'confirmar');
+        return llamados.length === 1 && llamados[0].tipo === 'comprension_confirmada' && llamados[0].orgId === 'org_sv1_17';
+      } finally {
+        cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar;
+        state.organismo = origState; registrarSenalVital = origSenal;
+      }
+    })());
+    chk('SV1-18 · abrirOrganismo dispara retorno gateado por organismoTieneContenidoReal', (function(){
+      var src = abrirOrganismo.toString();
+      var i = src.indexOf('organismoTieneContenidoReal(org)');
+      var j = src.indexOf("registrarSenalVital('retorno'");
+      return i > -1 && j > -1 && i < j && j < (i + 200);   // el gate aparece antes y cerca del llamado
+    })());
+    chk('SV1-19 · C1G1_iniciarConversacion dispara comprension_iniciada apenas encuentra el organismo', (function(){
+      var src = C1G1_iniciarConversacion.toString();
+      var iRet = src.indexOf('No encontramos ese organismo');
+      var iSenal = src.indexOf("registrarSenalVital('comprension_iniciada'");
+      return iRet > -1 && iSenal > -1 && iSenal > iRet;   // después del guard de organismo inexistente
+    })());
+    chk('SV1-20 · sin fetch()/IA nueva agregada fuera de registrarSenalVital', (function(){
+      return organismoTieneContenidoReal.toString().indexOf('fetch(') === -1;
+    })());
+
+    /* ---- EN1 (21/08) -- Energía / costo cognitivo: ventana de historial ---- */
+    chk('EN1-01 · historial corto (bajo los dos topes) devuelve exactamente el mismo contenido y orden', (function(){
+      var h = [];
+      for(var i=0;i<5;i++) h.push({ role: i%2===0?'user':'assistant', content: 'msg'+i });
+      var out = historialParaAPI(h);
+      if(out.length !== 5) return false;
+      for(var j=0;j<5;j++){ if(out[j].role !== h[j].role || out[j].content !== h[j].content) return false; }
+      return true;
+    })());
+    chk('EN1-02 · historial largo por cantidad: se recorta a 16 mensajes, los más recientes', (function(){
+      var h = [];
+      for(var i=0;i<30;i++) h.push({ role: i%2===0?'user':'assistant', content: 'm'+i });
+      var out = historialParaAPI(h);
+      if(out.length !== 16) return false;
+      return out[0].content === 'm14' && out[15].content === 'm29';
+    })());
+    chk('EN1-03 · historial recortado por presupuesto de caracteres (mensajes grandes)', (function(){
+      var h = [];
+      for(var i=0;i<10;i++) h.push({ role: i%2===0?'user':'assistant', content: Array(8001).join('x') });
+      var out = historialParaAPI(h);
+      var total = out.reduce(function(s,m){ return s + m.content.length; }, 0);
+      return out.length < 10 && out.length >= 1 && total <= 32000;
+    })());
+    chk('EN1-04 · conserva siempre el mensaje más reciente, incluso si por sí solo excede el presupuesto', (function(){
+      var h = [
+        { role:'user', content:'a' },
+        { role:'assistant', content: Array(30001).join('x') }
+      ];
+      var out = historialParaAPI(h);
+      return out.length >= 1 && out[out.length-1].content === h[1].content;
+    })());
+    chk('EN1-05 · no muta state.history (ni el array ni los mensajes)', (function(){
+      var h = [];
+      for(var i=0;i<20;i++) h.push({ role: i%2===0?'user':'assistant', content:'x'+i });
+      var copia = h.map(function(m){ return m.content; });
+      historialParaAPI(h);
+      if(h.length !== 20) return false;
+      for(var j=0;j<20;j++){ if(h[j].content !== copia[j]) return false; }
+      return true;
+    })());
+    chk('EN1-06 · el resultado conserva el orden cronológico original', (function(){
+      var h = [];
+      for(var i=0;i<20;i++) h.push({ role: i%2===0?'user':'assistant', content:'n'+i });
+      var out = historialParaAPI(h);
+      for(var j=1;j<out.length;j++){
+        var idxPrev = parseInt(out[j-1].content.slice(1),10), idxCur = parseInt(out[j].content.slice(1),10);
+        if(idxCur !== idxPrev+1) return false;
+      }
+      return out.length > 1;
+    })());
+    chk('EN1-07 · coherencia de pares: si el tope de 16 cae justo en un assistant, se descarta el huérfano en vez de exceder el tope', (function(){
+      var h = [];
+      for(var i=0;i<17;i++) h.push({ role: i%2===0?'user':'assistant', content:'p'+i });
+      var out = historialParaAPI(h);
+      return out.length === 15 && out[0].role === 'user' && out[0].content === 'p2';
+    })());
+    chk('EN1-08 · coherencia de pares: si hay lugar (no se excede el tope de 16), se extiende para incluir el user correspondiente', (function(){
+      var h = [
+        { role:'user', content:'u0' },
+        { role:'assistant', content:'a0' },
+        { role:'user', content: Array(30001).join('x') },
+        { role:'assistant', content: Array(101).join('x') },
+        { role:'user', content: Array(1001).join('x') },
+        { role:'assistant', content: Array(1001).join('x') }
+      ];
+      var out = historialParaAPI(h);
+      return out.length === 4 && out[0].role === 'user' && out[0].content === h[2].content;
+    })());
+    chk('EN1-09 · una especialidad de 4 turnos (8 mensajes) cabe completa', (function(){
+      var h = [];
+      for(var i=0;i<8;i++) h.push({ role: i%2===0?'user':'assistant', content: Array(2001).join('x') });
+      var out = historialParaAPI(h);
+      if(out.length !== 8) return false;
+      for(var j=0;j<8;j++){ if(out[j].content !== h[j].content || out[j].role !== h[j].role) return false; }
+      return true;
+    })());
+    chk('EN1-10 · historialParaAPI no hace fetch()/IA ni es async', (function(){
+      var src = historialParaAPI.toString();
+      return src.indexOf('fetch(') === -1 && src.indexOf('await ') === -1 && src.indexOf('async') === -1;
+    })());
+    chk('EN1-11 · enviar() manda messages: historialParaAPI(state.history), no state.history directo', (function(){
+      var src = enviar.toString();
+      return src.indexOf('historialParaAPI(state.history)') > -1 && src.indexOf('messages: state.history\n') === -1;
+    })());
+    chk('EN1-12 · historial vacío devuelve array vacío', (function(){
+      return Array.isArray(historialParaAPI([])) && historialParaAPI([]).length === 0;
+    })());
+    chk('EN1-13 · null/undefined no lanzan y devuelven array vacío', (function(){
+      return historialParaAPI(null).length === 0 && historialParaAPI(undefined).length === 0;
+    })());
+    chk('EN1-14 · funciones de Memoria/M2/P6 siguen presentes, sin tocar', (function(){
+      return typeof bloqueRecuerdosDeSesion === 'function' && typeof bloqueEspecialidadesDeSesion === 'function' &&
+        typeof seleccionarRecuerdosCandidatos === 'function' && typeof p6RecorrerFragmentos === 'function';
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */

@@ -207,6 +207,60 @@
     }).catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor.' }; });
   }
 
+  /* ---------- Google Sign-In (MB2, 21/08) ----------
+     Mismo criterio de "sin libreria" del resto del candado: no se usa supabase-js, se navega
+     de pagina completa al endpoint oficial /auth/v1/authorize?provider=google, que hace todo
+     el intercambio con Google del lado de Supabase y vuelve con la sesion en el fragmento de
+     la URL (#access_token=...), exactamente el mismo formato que ya entiende leerHash() para
+     los links de correo -- por eso arrancar() no necesita un parser nuevo para leer el token,
+     solo necesita saber que ESTE hash-token en particular vino de Google, para no saltear el
+     consentimiento (ver esRetornoGoogle e integracion en arrancar()).
+     redirect_to se manda igual que en registrar()/recuperar() (origin + pathname, sin agregar
+     query nueva) para no salir del URL ya autorizado en Authentication -> URL Configuration ->
+     Redirect URLs -- la marca de "vengo de Google" viaja aparte, por sessionStorage (no
+     sobrevive un cierre de pestaña, pero sí el viaje de ida y vuelta a Google/Supabase, que es
+     lo unico que hace falta ver). apikey va tambien como query param, ademas de la constante ya
+     usada en headers en el resto del archivo: esta es la unica llamada de auth que es una
+     navegacion de pagina completa (location.href), no un fetch, asi que no hay forma de mandar
+     el header apikey de la manera habitual. */
+  function autenticarConGoogle(){
+    try{ sessionStorage.setItem('comprender_oauth_google', '1'); }catch(e){}
+    var destino = location.origin + location.pathname;
+    location.href = SB_URL + '/auth/v1/authorize?provider=google&apikey=' + encodeURIComponent(SB_KEY) +
+      '&redirect_to=' + encodeURIComponent(destino);
+  }
+  // Se consume una sola vez (igual que leerHash/leerQuerySignup): si vuelve true, ya borro la
+  // marca, asi que una segunda lectura (por ejemplo, un refresh manual de la pagina ya vuelta)
+  // no la vuelve a disparar.
+  function esRetornoGoogle(){
+    try{
+      if(sessionStorage.getItem('comprender_oauth_google') === '1'){
+        sessionStorage.removeItem('comprender_oauth_google');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  // Google (y cualquier proveedor OAuth futuro) crea la sesion sin pasar por registrar(), asi
+  // que nunca llena user_metadata con el consentimiento -- se guarda aparte, recien cuando el
+  // usuario lo confirma en la pantalla minima (modo 'consentir_google' del portal).
+  function guardarConsentimiento(token, consentimiento){
+    return fetch(SB_URL + '/auth/v1/user', {
+      method: 'PUT',
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ data: consentimiento })
+    }).then(function(r){
+      return r.json().then(function(d){ return { ok:r.ok, estado:r.status, datos:d }; });
+    }).then(function(r){
+      if(!r.ok) return { ok:false, mensaje:'No se pudo guardar. Probá de nuevo en un momento.' };
+      return { ok:true };
+    }).catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor.' }; });
+  }
+  function tieneConsentimientoCompleto(u){
+    var m = (u && u.user_metadata) || {};
+    return !!(m.terminos_aceptados && m.privacidad_aceptada && m.mayor_18_confirmado);
+  }
+
   /* ---------- datos del usuario logueado ---------- */
   function obtenerUsuario(token){
     return fetch(SB_URL + '/auth/v1/user', {
@@ -340,10 +394,53 @@
       '<input id="' + id + '" type="checkbox" style="margin-top:2px;flex-shrink:0;width:15px;height:15px;">' +
       '<span>' + htmlEtiqueta + '</span></label>';
   }
+  // MB2 (21/08): pieza nueva, solo para el boton de Google -- el resto de boton() sigue
+  // exactamente igual (sigue siendo el boton oscuro de "Ingresar"/"Crear cuenta"/etc). El
+  // simbolo "G" es el oficial de Google (cuatro colores), como pide su guía de marca para
+  // botones de "Iniciar sesión con Google" -- no es una copia del estilo de ningún otro sitio.
+  function botonGoogle(id, texto){
+    return '<button id="' + id + '" style="width:100%;padding:11px;font-size:15px;font-weight:600;' +
+      'color:#1a1a1a;background:#fff;border:1px solid #ddd;border-radius:8px;cursor:pointer;' +
+      'margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:10px;' +
+      'box-sizing:border-box;">' +
+      '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">' +
+        '<path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"></path>' +
+        '<path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z"></path>' +
+        '<path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"></path>' +
+        '<path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z"></path>' +
+      '</svg>' + texto + '</button>';
+  }
+  function separador(texto){
+    return '<div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:#999;font-size:12px;">' +
+      '<div style="flex:1;height:1px;background:#e5e3df;"></div>' + texto +
+      '<div style="flex:1;height:1px;background:#e5e3df;"></div></div>';
+  }
+  // Renovacion visual del portal (MB2, 21/08): la misma marca chica arriba de las cinco/seis
+  // vistas -- reusa el glifo "toro" ya existente en el resto del ecosistema (mismo path que
+  // .toro/.toro-hero en el header y la pantalla de bienvenida), pero inline y con color fijo,
+  // porque el candado no depende de las variables CSS del host (se inyecta igual en los 4
+  // productos, cada uno con su propia hoja de estilos). No reemplaza al toro real de la app,
+  // que sigue exactamente igual: esto es solo del portal.
+  function marcaPortal(){
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;">' +
+      '<svg width="24" height="24" viewBox="0 0 40 40" aria-hidden="true" style="color:#1a1a1a;flex-shrink:0;">' +
+        '<g fill="none" stroke="currentColor" stroke-linecap="round">' +
+          '<ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"></ellipse>' +
+          '<ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"></ellipse>' +
+          '<ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"></ellipse>' +
+          '<ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"></ellipse>' +
+          '<ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"></ellipse>' +
+          '<circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"></circle>' +
+        '</g>' +
+      '</svg>' +
+      '<span style="font-size:14px;color:#1a1a1a;">Comprender <b style="font-weight:700;">AI</b></span>' +
+    '</div>';
+  }
 
   /* ---------- portal ----------
-     Un solo overlay con cinco vistas: ingreso, registro, recuperar, nueva_clave,
-     confirmar_cuenta.
+     Un solo overlay con seis vistas: ingreso, registro, recuperar, nueva_clave,
+     confirmar_cuenta, consentir_google (MB2, 21/08 -- pantalla minima de consentimiento para
+     cuentas creadas por Google, que no pasan por el checkbox de registro normal).
      Se redibuja el innerHTML de la misma capa al cambiar de vista, no se crean capas
      nuevas -- asi el resto del candado (fetch, planes) sigue viendo un unico portal. */
   var portalAbierto = false;
@@ -370,6 +467,7 @@
           casilla('cpTerminos',
             'Acepto los <a href="' + TERMINOS_URL + '" target="_blank" rel="noopener" style="color:#1a1a1a;">Términos y Condiciones de Uso</a> ' +
             'y la <a href="' + PRIVACIDAD_URL + '" target="_blank" rel="noopener" style="color:#1a1a1a;">Política de Privacidad</a>.') +
+          casilla('cpMayor18', 'Confirmo que soy mayor de 18 años.') +
           boton('cpAccion','Crear cuenta') +
           enlace('cpAIngreso','¿Ya tenés cuenta? Ingresá');
       } else if(modo === 'recuperar'){
@@ -389,17 +487,29 @@
         titulo = 'Confirmá tu cuenta';
         sub = 'Tocá el botón para terminar de crear tu cuenta.';
         cuerpo = boton('cpAccion','Confirmar y entrar');
-      } else {
-        titulo = 'Comprender';
-        sub = 'Ingresá para continuar.';
+      } else if(modo === 'consentir_google'){
+        titulo = 'Un último paso';
+        sub = (extra && extra.correo) ? ('Confirmá esto para terminar de entrar con ' + extra.correo + '.') : 'Confirmá esto para terminar de entrar.';
         cuerpo =
+          casilla('cpTerminos',
+            'Acepto los <a href="' + TERMINOS_URL + '" target="_blank" rel="noopener" style="color:#1a1a1a;">Términos y Condiciones de Uso</a> ' +
+            'y la <a href="' + PRIVACIDAD_URL + '" target="_blank" rel="noopener" style="color:#1a1a1a;">Política de Privacidad</a>.') +
+          casilla('cpMayor18', 'Confirmo que soy mayor de 18 años.') +
+          boton('cpAccion','Continuar');
+      } else {
+        titulo = 'Ingresá a Comprender';
+        sub = '';
+        cuerpo =
+          botonGoogle('cpGoogle','Continuar con Google') +
+          separador('— o —') +
           campo('cpMail','email','Correo','username') +
           campo('cpClave','password','Contraseña','current-password') +
           boton('cpAccion','Ingresar') +
           enlace('cpARecuperar','¿Olvidaste tu contraseña?') +
-          enlace('cpARegistro','Crear una cuenta');
+          enlace('cpARegistro','¿Todavía no tenés cuenta? Crear una cuenta');
       }
       return '<div style="width:100%;max-width:360px;">' +
+        marcaPortal() +
         '<div style="font-size:19px;font-weight:600;margin-bottom:6px;color:#1a1a1a;">' + titulo + '</div>' +
         (sub ? '<div style="font-size:14px;color:#666;margin-bottom:22px;">' + sub + '</div>'
              : '<div style="margin-bottom:22px;"></div>') +
@@ -424,7 +534,7 @@
       }
 
       if(modo === 'ingreso'){
-        var mail = capa.querySelector('#cpMail'), pass = capa.querySelector('#cpClave');
+        var mail = capa.querySelector('#cpMail'), pass = capa.querySelector('#cpClave'), google = capa.querySelector('#cpGoogle');
         function intentar(){
           var c = (mail.value||'').trim(), k = pass.value||'';
           if(!c||!k){ avisoEl.textContent = 'Faltan datos.'; return; }
@@ -436,17 +546,19 @@
         }
         accion.addEventListener('click', intentar);
         pass.addEventListener('keydown', function(e){ if(e.key==='Enter') intentar(); });
+        google.addEventListener('click', function(){ autenticarConGoogle(); });
         capa.querySelector('#cpARecuperar').addEventListener('click', function(e){ e.preventDefault(); modo='recuperar'; pintar(); });
         capa.querySelector('#cpARegistro').addEventListener('click', function(e){ e.preventDefault(); modo='registro'; pintar(); });
         setTimeout(function(){ try{ mail.focus(); }catch(e){} }, 60);
 
       } else if(modo === 'registro'){
-        var mail2 = capa.querySelector('#cpMail2'), pass2 = capa.querySelector('#cpClave2'), term2 = capa.querySelector('#cpTerminos');
+        var mail2 = capa.querySelector('#cpMail2'), pass2 = capa.querySelector('#cpClave2'), term2 = capa.querySelector('#cpTerminos'), mayor2 = capa.querySelector('#cpMayor18');
         function intentarReg(){
           var c=(mail2.value||'').trim(), k=pass2.value||'';
           if(!c||!k){ avisoEl.textContent='Faltan datos.'; return; }
           if(k.length<6){ avisoEl.textContent='La contraseña necesita al menos 6 caracteres.'; return; }
           if(!term2.checked){ avisoEl.textContent='Tenés que aceptar los Términos y la Política de Privacidad para crear una cuenta.'; return; }
+          if(!mayor2.checked){ avisoEl.textContent='Tenés que confirmar que sos mayor de 18 años para crear una cuenta.'; return; }
           ocupado(true,'Creando…'); avisoEl.textContent = '';
           var consentimiento = {
             terminos_aceptados: true,
@@ -454,7 +566,9 @@
             privacidad_aceptada: true,
             privacidad_version: PRIVACIDAD_VERSION,
             origen: 'registro_web',
-            terminos_fecha: new Date().toISOString()
+            terminos_fecha: new Date().toISOString(),
+            mayor_18_confirmado: true,
+            mayor_18_fecha: new Date().toISOString()
           };
           registrar(c,k,consentimiento).then(function(r){
             if(r.ok && r.sesion){ portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} } return; }
@@ -529,6 +643,30 @@
           });
         }
         accion.addEventListener('click', intentarConfirmar);
+        setTimeout(function(){ try{ accion.focus(); }catch(e){} }, 60);
+
+      } else if(modo === 'consentir_google'){
+        var termG = capa.querySelector('#cpTerminos'), mayorG = capa.querySelector('#cpMayor18');
+        function intentarConsentirG(){
+          if(!termG.checked){ avisoEl.textContent='Tenés que aceptar los Términos y la Política de Privacidad para continuar.'; return; }
+          if(!mayorG.checked){ avisoEl.textContent='Tenés que confirmar que sos mayor de 18 años para continuar.'; return; }
+          ocupado(true,'Guardando…'); avisoEl.textContent = '';
+          var consentimiento = {
+            terminos_aceptados: true,
+            terminos_version: TERMINOS_VERSION,
+            privacidad_aceptada: true,
+            privacidad_version: PRIVACIDAD_VERSION,
+            origen: 'registro_google',
+            terminos_fecha: new Date().toISOString(),
+            mayor_18_confirmado: true,
+            mayor_18_fecha: new Date().toISOString()
+          };
+          guardarConsentimiento(extra.token, consentimiento).then(function(r){
+            if(!r.ok){ ocupado(false,'Continuar'); avisoEl.textContent = r.mensaje; return; }
+            portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
+          });
+        }
+        accion.addEventListener('click', intentarConsentirG);
         setTimeout(function(){ try{ accion.focus(); }catch(e){} }, 60);
       }
     }
@@ -1310,13 +1448,28 @@
     if(_arranqueInicial) return;
     var h = leerHash();
     if(h && h.access_token){
-      guardar({
+      // MB2 (21/08): mismo hash que ya leia arrancar() para magic link/invitacion -- Google
+      // OAuth vuelve con el mismo formato (#access_token=...), asi que no hace falta un parser
+      // nuevo. Lo unico nuevo es esRetornoGoogle(): si la marca dice que este viaje de ida y
+      // vuelta lo disparo el boton de Google, se verifica el consentimiento antes de dejar
+      // pasar -- para cualquier otro hash-token (magic link, invitacion, como ya funcionaba)
+      // el comportamiento sigue exactamente igual: sesion directa, sin portal.
+      var esGoogle = esRetornoGoogle();
+      var s = {
         token: h.access_token,
         refresco: h.refresh_token || '',
         vence: Date.now() + ((Number(h.expires_in) || 3600) * 1000),
         correo: ''
-      });
+      };
+      guardar(s);
       limpiarHash();
+      if(esGoogle){
+        obtenerUsuario(s.token).then(function(u){
+          if(u && tieneConsentimientoCompleto(u)){ sincronizarSaldo().then(verificarAccesoModulo); }
+          else{ portal('', 'consentir_google', { token: s.token, correo: (u && u.email) || '' }); }
+        });
+        return;
+      }
       sincronizarSaldo().then(verificarAccesoModulo);
       return;
     }
