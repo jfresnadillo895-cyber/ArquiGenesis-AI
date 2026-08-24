@@ -12630,6 +12630,14 @@ function listaCheckpoints(org){
 
 var MODULO_NOMBRE_CHECKPOINT = { core:'Chat', urban:'Urbanismo', negocio:'Negocios', context:'Contextos' };
 
+// OMV-F5.1 (24/08): el más reciente de TODOS los checkpoints del organismo, sin importar
+// módulo -- reutiliza listaCheckpoints() tal cual (ya devuelve todo ordenado desc por fecha),
+// sólo toma el primero. null si no hay ninguno.
+function checkpointMasReciente(org){
+  var lista = listaCheckpoints(org);
+  return lista.length ? lista[0] : null;
+}
+
 function restaurarCheckpoint(org, modulo, indice){
   var lista = org && org.checkpoints && org.checkpoints[modulo];
   var chk = lista && lista[indice];
@@ -12780,6 +12788,21 @@ function abrirOrganismo(org){
   // que el modelo vuelva a emitir DERIVAR. No-op si el organismo no tiene 'urban' en derivable.
   ofrecerContinuidadUrban(org);
   if(restaurarBorrador(org)) return;   // hay hilo en curso sin consolidar: se retoma tal cual
+  // OMV-F5.1 (24/08): si no hay un hilo en curso (arriba) pero SÍ hay un checkpoint manual --
+  // típicamente porque la última lectura especializada cerró y limpió o.borrador (ver el punto
+  // donde "Guardar sesión" corre) -- no se dispara todavía el "Retomemos el organismo…"
+  // automático (eso ya es una llamada a la IA). Se ofrece la tarjeta y se corta acá; el resto
+  // del camino de siempre queda en abrirOrganismoContinuar(), que la tarjeta llama desde
+  // "Seguir desde acá".
+  var chkReciente = checkpointMasReciente(org);
+  if(chkReciente){ ofrecerRecuerdoGuardado(org, chkReciente); return; }
+  abrirOrganismoContinuar(org);
+}
+
+// OMV-F5.1 (24/08): camino normal de apertura, sin cambios de comportamiento respecto de lo que
+// hacía abrirOrganismo() antes de este corte -- sólo se separó para poder llamarlo también desde
+// "Seguir desde acá" en ofrecerRecuerdoGuardado().
+function abrirOrganismoContinuar(org){
   const tieneFicha = org.ficha && (org.ficha.funcion || org.ficha.diagnostico || org.ficha.proximo);
   if(tieneFicha){
     // prueba de continuidad (Principio 16): retomar debe demostrar memoria
@@ -12789,6 +12812,46 @@ function abrirOrganismo(org){
     el.input.placeholder = 'Contale al motor qué es «' + org.nombre + '» y qué querés comprender de este organismo…';
     el.input.focus();
   }
+}
+
+// OMV-F5.1 (24/08): tarjeta "Recuerdo guardado" -- ofrece retomar el checkpoint manual más
+// reciente del organismo sin obligar a pasar por Memoria -> Sesiones anteriores, y sin disparar
+// la llamada automática a la IA ("Retomemos el organismo…") mientras el usuario no decidió qué
+// hacer. Nunca restaura nada por sí sola -- el brief pide explícitamente no restaurar checkpoints
+// manuales en silencio; la decisión siempre queda en manos del usuario. El nombre del lente sale
+// de MODULO_NOMBRE_CHECKPOINT (mismo diccionario que ya usan restaurarCheckpoint()/
+// cardSesionesAnteriores() desde OMV-F5, no uno nuevo) indexado por chk.modulo real -- nunca
+// hardcodeado a una especialidad puntual, por eso funciona igual para Urbanismo, Negocios,
+// Contextos o Chat (Comprensión general).
+function ofrecerRecuerdoGuardado(org, chk){
+  startChat();
+  var nombreLente = MODULO_NOMBRE_CHECKPOINT[chk.modulo] || chk.modulo;
+  var d = document.createElement('div'); d.className = 'msg motor';
+  var n = document.createElement('div'); n.className = 'derivacion';
+  // Un solo textContent, sin mezclar <b>+createTextNode -- appendChild no agrega texto real al
+  // padre en el harness de pruebas (dom_stub.js: appendChild es no-op fijo, y createTextNode()
+  // no pasa por document.createElement), así que un texto partido entre nodos hijos queda
+  // invisible para cualquier prueba que lea n.textContent. Un solo nodo con el mensaje entero
+  // es además más simple y sigue siendo "breve" tal como pide el brief.
+  n.textContent = 'Recuerdo guardado. Tenés un recuerdo guardado mientras estábamos en ' + nombreLente + '. ¿Querés retomarlo?';
+  d.appendChild(n);
+  var fe = document.createElement('div');
+  fe.style.cssText = 'font-size:11px;color:var(--faint);margin-top:2px';
+  fe.textContent = new Date(chk.fecha).toLocaleString();
+  d.appendChild(fe);
+  var row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '8px';
+  var bR = document.createElement('button'); bR.className = 'btn primary'; bR.textContent = 'Retomar en ' + nombreLente;
+  // restaurarCheckpoint ya está auditado (OMV-F5): sin llamada IA, sin crédito, no toca
+  // Memoria/hitos/principios/horizonte/resultados confirmados -- se reutiliza tal cual.
+  bR.onclick = function(){ restaurarCheckpoint(org, chk.modulo, chk.indice); };
+  var bS = document.createElement('button'); bS.className = 'btn'; bS.textContent = 'Seguir desde acá';
+  // No borra nada: el checkpoint sigue existiendo en org.checkpoints y disponible desde
+  // Sesiones anteriores. Sólo retira la tarjeta y sigue el camino normal de apertura.
+  bS.onclick = function(){ d.remove(); abrirOrganismoContinuar(org); };
+  row.appendChild(bR); row.appendChild(bS);
+  d.appendChild(row);
+  el.stream.appendChild(d);
+  scrollBottom();
 }
 
 /* ============ OMV-F6 (22/08) · Lecturas especializadas persistentes en Memoria ============
@@ -16459,6 +16522,141 @@ function correrPruebasAuto(){
                JSON.stringify(org.hitos) === hitosAntes && JSON.stringify(org.horizonte) === horizonteAntes &&
                JSON.stringify(org.lecturas_urban) === lecturasAntes;
       } finally { state.organismo = gOrg; }
+    })());
+
+    /* ---- OMV-F5.1 (24/08) · Recuerdo guardado por lente ----
+       Mismo método que OMV-F3/OMV-F5: interceptar document.createElement (objeto plano, no
+       Proxy) para capturar los nodos reales, en vez de leer de vuelta con querySelectorAll
+       sobre el.stream (no-op fijo del harness, ver dom_stub.js). ficha:{} y sin o.borrador en
+       todos los organismos de prueba a propósito: así organismoTieneContenidoReal() da false,
+       abrirOrganismoContinuar() cae en la rama startChat() (nunca enviar()), y ninguna prueba
+       de esta sección necesita mockear fetch salvo para VERIFICAR que no se llamó. */
+    chk('OMV-F51-01 · reabrir un organismo con checkpoint reciente en Urbanismo ofrece la tarjeta con "Urbanismo"', (function(){
+      var _origCE = document.createElement;
+      var _origFetch = fetch;
+      var fetchLlamado = 0;
+      fetch = function(){ fetchLlamado++; return Promise.resolve({ ok:true, json:function(){ return Promise.resolve({}); } }); };
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo, gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gp = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      var org = { id:'__f51_01', nombre:'Barrio F51-01', tipo:'ciudad', ficha:{}, principios:[],
+        checkpoints:{ urban:[{ fecha:'2026-08-20T10:00:00.000Z', modulo:'urban', organismo_id:'__f51_01',
+          history:[{role:'user',content:'a'},{role:'assistant',content:'[[UDIM:D1|estable|x]]listo'}], panel:null }] } };
+      try{
+        abrirOrganismo(org);
+        var texto = creados.some(function(e){ return /Recuerdo guardado/.test(e.textContent||'') && /Urbanismo/.test(e.textContent||''); });
+        var btnRetomar = creados.some(function(e){ return e.className && e.className.indexOf('btn') > -1 && /Retomar en Urbanismo/.test(e.textContent||''); });
+        var btnSeguir  = creados.some(function(e){ return e.className && e.className.indexOf('btn') > -1 && e.textContent === 'Seguir desde acá'; });
+        return texto && btnRetomar && btnSeguir && fetchLlamado === 0;
+      } finally {
+        document.createElement = _origCE; fetch = _origFetch;
+        state.organismo = gOrg; state.history = gh; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gp; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('OMV-F51-02 · "Retomar en Urbanismo" restaura exactamente el checkpoint, sin llamar a la API', (function(){
+      var _origCE = document.createElement;
+      var _origFetch = fetch;
+      var fetchLlamado = 0;
+      fetch = function(){ fetchLlamado++; return Promise.resolve({ ok:true, json:function(){ return Promise.resolve({}); } }); };
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo, gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gp = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      var histGuardado = [{role:'user',content:'contame del barrio'},{role:'assistant',content:'[[UDIM:D1|estable|x]]listo'}];
+      var org = { id:'__f51_02', nombre:'Barrio F51-02', tipo:'ciudad', ficha:{}, principios:[],
+        checkpoints:{ urban:[{ fecha:'2026-08-20T10:00:00.000Z', modulo:'urban', organismo_id:'__f51_02',
+          history: histGuardado, panel:null }] } };
+      try{
+        abrirOrganismo(org);
+        var btn = creados.filter(function(e){ return e.className && e.className.indexOf('btn') > -1 && /Retomar en Urbanismo/.test(e.textContent||''); })[0];
+        btn.onclick();
+        return state.history.length === 2 && state.history[0].content === 'contame del barrio' &&
+               state.modoUrban === true && fetchLlamado === 0;
+      } finally {
+        document.createElement = _origCE; global.fetch = _origFetch;
+        state.organismo = gOrg; state.history = gh; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gp; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('OMV-F51-03 · el mismo mecanismo, con un checkpoint de Negocios, ofrece "Negocios" (nombre no hardcodeado)', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo, gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gp = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      var org = { id:'__f51_03', nombre:'Negocio F51-03', tipo:'empresa', ficha:{}, principios:[],
+        checkpoints:{ negocio:[{ fecha:'2026-08-21T09:00:00.000Z', modulo:'negocio', organismo_id:'__f51_03',
+          history:[{role:'user',content:'b'},{role:'assistant',content:'[[NDIM:B1|estable|x]]listo'}], panel:null }] } };
+      try{
+        abrirOrganismo(org);
+        var texto = creados.some(function(e){ return /Recuerdo guardado/.test(e.textContent||'') && /Negocios/.test(e.textContent||''); });
+        var btnRetomar = creados.some(function(e){ return e.className && e.className.indexOf('btn') > -1 && /Retomar en Negocios/.test(e.textContent||''); });
+        return texto && btnRetomar;
+      } finally {
+        document.createElement = _origCE;
+        state.organismo = gOrg; state.history = gh; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gp; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('OMV-F51-04 · "Seguir desde acá" no borra el recuerdo guardado y sigue el camino normal', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo, gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gp = state.panelEspecializado, gst = state.started, gph = el.input.placeholder, snap = el.stream.innerHTML;
+      var org = { id:'__f51_04', nombre:'Barrio F51-04', tipo:'ciudad', ficha:{}, principios:[],
+        checkpoints:{ urban:[{ fecha:'2026-08-20T10:00:00.000Z', modulo:'urban', organismo_id:'__f51_04',
+          history:[{role:'user',content:'a'}], panel:null }] } };
+      try{
+        abrirOrganismo(org);
+        var btnSeguir = creados.filter(function(e){ return e.className && e.className.indexOf('btn') > -1 && e.textContent === 'Seguir desde acá'; })[0];
+        btnSeguir.onclick();
+        return org.checkpoints.urban.length === 1 &&
+               /qué es «Barrio F51-04»/.test(el.input.placeholder || '');
+      } finally {
+        document.createElement = _origCE; el.input.placeholder = gph;
+        state.organismo = gOrg; state.history = gh; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gp; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('OMV-F51-05 · si hay un borrador (hilo en curso sin consolidar), ese sigue ganando -- la tarjeta nueva no aparece', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo, gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gp = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      var org = { id:'__f51_05', nombre:'Barrio F51-05', tipo:'ciudad', ficha:{}, principios:[],
+        borrador:{ history:[{role:'user',content:'sigo acá'}], modo:'urban', ts:'2026-08-22T00:00:00.000Z' },
+        checkpoints:{ urban:[{ fecha:'2026-08-20T10:00:00.000Z', modulo:'urban', organismo_id:'__f51_05',
+          history:[{role:'user',content:'viejo'}], panel:null }] } };
+      try{
+        abrirOrganismo(org);
+        var apareceTarjeta = creados.some(function(e){ return /Recuerdo guardado/.test(e.textContent||''); });
+        return apareceTarjeta === false && state.history.length === 1 && state.history[0].content === 'sigo acá';
+      } finally {
+        document.createElement = _origCE;
+        state.organismo = gOrg; state.history = gh; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gp; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('OMV-F51-06 · "Sesiones anteriores" sigue funcionando igual después de este corte', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo;
+      var org = { id:'__f51_06', nombre:'Barrio F51-06', tipo:'ciudad', ficha:{}, principios:[],
+        checkpoints:{ urban:[
+          { fecha:'2026-08-19T10:00:00.000Z', modulo:'urban', organismo_id:'__f51_06', history:[{role:'user',content:'v1'}], panel:null },
+          { fecha:'2026-08-20T10:00:00.000Z', modulo:'urban', organismo_id:'__f51_06', history:[{role:'user',content:'v2'}], panel:null }
+        ] } };
+      try{
+        state.organismo = org;
+        cardSesionesAnteriores(org);
+        var filas = creados.filter(function(e){ return /Urbanismo ·/.test(e.textContent||''); });
+        return filas.length === 2;
+      } finally { document.createElement = _origCE; state.organismo = gOrg; }
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
