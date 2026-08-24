@@ -12579,7 +12579,22 @@ function restaurarBorrador(o){
 var CHECKPOINT_MAX_VERSIONES = 5;
 
 function moduloDeSesionActual(){
-  return state.modoNegocio ? 'negocio' : state.modoUrban ? 'urban' : state.modoContext ? 'context' : 'core';
+  // OMV-F5.3 (24/08): un modo EN VIVO (el usuario está conversando ahí ahora mismo) siempre
+  // gana -- eso no cambió. Lo que sí cambia es el caso en que ningún modo está activo: antes
+  // eso caía directo a 'core', aunque el motivo de que ningún modo esté activo sea que una
+  // lectura especializada se acaba de cerrar (cerrarLecturaUrban/cerrarLecturaNegocio/
+  // cerrarEvaluacionContext apagan state.modoX ANTES de que "Guardar sesión" corra). En ese
+  // caso, state.panelEspecializado -- el mismo dato que restaurarCheckpoint() ya usa para saber
+  // qué panel repintar -- sigue diciendo de qué lente es el estado que se está guardando; se
+  // reutiliza esa evidencia estructural en vez de agregar una bandera nueva. Sólo se descarta
+  // (cae a 'core') cuando panelEspecializado también está vacío -- sesión realmente general, o
+  // el usuario ya se movió a una lectura/sesión nueva (los 5 puntos que ponen
+  // panelEspecializado=null lo vacían junto con ultimaLectura, ver comentario del campo).
+  if(state.modoNegocio) return 'negocio';
+  if(state.modoUrban) return 'urban';
+  if(state.modoContext) return 'context';
+  if(state.panelEspecializado && state.panelEspecializado.tipo) return state.panelEspecializado.tipo;
+  return 'core';
 }
 
 function crearCheckpointSesion(org){
@@ -16736,6 +16751,116 @@ function correrPruebasAuto(){
       var noExistente = { id:'__f52_02_no_existe', nombre:'Fantasma' };
       var fallback = organismoActualizado(noExistente);
       return resuelto.nombre === 'Original' && fallback === noExistente;
+    })());
+
+    /* ---- OMV-F5.3 (24/08) · Etiqueta correcta del lente al guardar ----
+       Los tres tests reproducen el flujo REAL completo (cerrar la lectura con la función real,
+       no un checkpoint armado a mano) para probar moduloDeSesionActual() tal como lo ejecuta
+       crearCheckpointSesion() desde dentro de guardarSesion(). */
+    chk('OMV-F53-01 · cerrar Urbanismo (modoUrban pasa a false) + Guardar sesión -> checkpoint.modulo === "urban" y la tarjeta dice Urbanismo', (function(){
+      var _origCE = document.createElement;
+      var _origGuardarSesion = guardarOrganismo;
+      guardarOrganismo = function(){};   // sin red/persistencia real -- sólo se prueba el etiquetado y la tarjeta
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo, gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gp = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      try{
+        var org = { id:'__f53_01', nombre:'Barrio F53-01', tipo:'ciudad', ficha:{}, principios:[] };
+        state.organismo = org;
+        state.modoUrban = true;
+        state.history = [{role:'user',content:'contame del barrio'},{role:'assistant',content:'[[UDIM:D1|estable|x]]listo'}];
+        var udims = ['D1','D2','D3','D4','D5','D6'].map(function(c){ return {cod:c, estado:'estable', nota:'x'}; });
+        cerrarLecturaUrban(udims, 'hacia algo');   // acá modoUrban ya queda en false
+        var modoTrasCerrar = state.modoUrban;
+        guardarSesion('destilado de prueba');      // crea el checkpoint (crearCheckpointSesion adentro)
+        var chkGuardado = org.checkpoints && org.checkpoints.urban && org.checkpoints.urban[0];
+        // reabrir (con checkpoint ya creado y sin borrador, exactamente el escenario de F5.1/F5.2)
+        state.history = []; state.panelEspecializado = null;
+        creados.length = 0;
+        var origFetch = fetch, fetchIA = 0;
+        fetch = function(url){ if(String(url||'').indexOf('/api/anthropic') > -1) fetchIA++; return Promise.resolve({ ok:true, json:function(){ return Promise.resolve({}); } }); };
+        try{ abrirOrganismo(org); } finally { fetch = origFetch; }
+        var tarjetaDiceUrbanismo = creados.some(function(e){ return /Recuerdo guardado/.test(e.textContent||'') && /Urbanismo/.test(e.textContent||''); });
+        return modoTrasCerrar === false && !!chkGuardado && chkGuardado.modulo === 'urban' &&
+               tarjetaDiceUrbanismo && fetchIA === 0;
+      } finally {
+        document.createElement = _origCE; guardarOrganismo = _origGuardarSesion;
+        state.organismo = gOrg; state.history = gh; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gp; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('OMV-F53-02 · cerrar Negocios (modoNegocio pasa a false) + Guardar sesión -> checkpoint.modulo === "negocio" y la tarjeta dice Negocios', (function(){
+      var _origCE = document.createElement;
+      var _origGuardarSesion = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo, gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gp = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      try{
+        var org = { id:'__f53_02', nombre:'Negocio F53-02', tipo:'empresa', ficha:{}, principios:[] };
+        state.organismo = org;
+        state.modoNegocio = true;
+        state.history = [{role:'user',content:'contame del negocio'},{role:'assistant',content:'[[NDIM:B1|estable|x]]listo'}];
+        var ndims = ['B1','B2','B3','B4','B5','B6'].map(function(c){ return {cod:c, estado:'estable', nota:'x'}; });
+        cerrarLecturaNegocio(ndims, 'hacia algo');
+        var modoTrasCerrar = state.modoNegocio;
+        guardarSesion('destilado de prueba');
+        var chkGuardado = org.checkpoints && org.checkpoints.negocio && org.checkpoints.negocio[0];
+        state.history = []; state.panelEspecializado = null;
+        creados.length = 0;
+        var origFetch = fetch, fetchIA = 0;
+        fetch = function(url){ if(String(url||'').indexOf('/api/anthropic') > -1) fetchIA++; return Promise.resolve({ ok:true, json:function(){ return Promise.resolve({}); } }); };
+        try{ abrirOrganismo(org); } finally { fetch = origFetch; }
+        var tarjetaDiceNegocios = creados.some(function(e){ return /Recuerdo guardado/.test(e.textContent||'') && /Negocios/.test(e.textContent||''); });
+        return modoTrasCerrar === false && !!chkGuardado && chkGuardado.modulo === 'negocio' &&
+               tarjetaDiceNegocios && fetchIA === 0;
+      } finally {
+        document.createElement = _origCE; guardarOrganismo = _origGuardarSesion;
+        state.organismo = gOrg; state.history = gh; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gp; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('OMV-F53-03 · sesión realmente general (sin lente especializado ni panel) + Guardar sesión -> checkpoint.modulo === "core"', (function(){
+      var _origGuardarSesion = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gOrg = state.organismo, gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gp = state.panelEspecializado;
+      try{
+        var org = { id:'__f53_03', nombre:'Chat general F53-03', tipo:'empresa', ficha:{}, principios:[] };
+        state.organismo = org;
+        state.modoUrban = false; state.modoNegocio = false; state.modoContext = false;
+        state.panelEspecializado = null;
+        state.history = [{role:'user',content:'una charla cualquiera'},{role:'assistant',content:'ok, seguimos'}];
+        guardarSesion('destilado de prueba');
+        var chkGuardado = org.checkpoints && org.checkpoints.core && org.checkpoints.core[0];
+        return !!chkGuardado && chkGuardado.modulo === 'core';
+      } finally {
+        guardarOrganismo = _origGuardarSesion;
+        state.organismo = gOrg; state.history = gh; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gp;
+      }
+    })());
+    chk('OMV-F53-04 · no usa el nombre del organismo para decidir el lente (nombre "Urbanismo Total S.A." pero sesión general -> core)', (function(){
+      var _origGuardarSesion = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gOrg = state.organismo, gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gp = state.panelEspecializado;
+      try{
+        var org = { id:'__f53_04', nombre:'Urbanismo Total S.A.', tipo:'empresa', ficha:{}, principios:[] };
+        state.organismo = org;
+        state.modoUrban = false; state.modoNegocio = false; state.modoContext = false;
+        state.panelEspecializado = null;
+        state.history = [{role:'user',content:'hola'},{role:'assistant',content:'ok'}];
+        guardarSesion('destilado de prueba');
+        var chkGuardado = org.checkpoints && org.checkpoints.core && org.checkpoints.core[0];
+        return !!chkGuardado && chkGuardado.modulo === 'core';
+      } finally {
+        guardarOrganismo = _origGuardarSesion;
+        state.organismo = gOrg; state.history = gh; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gp;
+      }
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
