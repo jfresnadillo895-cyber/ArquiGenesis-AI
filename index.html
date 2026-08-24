@@ -5141,7 +5141,19 @@ function C1B1_PROMPT_OPEN_FIELD(ventana){
        'estado proporcional como "hipotesis" en vez de "evidencia_existente" o "memoria_gobernada", ' +
        'salvo que además exista Memoria vigente o evidencia independiente que la sostenga. Si usás ' +
        'una para sostener una candidata, citá su ref tal cual aparece entre corchetes, en ' +
-       'supportRefs o provenanceRefs):\n' +
+       'supportRefs o provenanceRefs.\n' +
+       'CAMBIO DE ESCALA (importante): esto es un ESTADO DE PARTIDA ya comprendido por la ' +
+       'especialidad de origen, no un interrogatorio que tengas que continuar. Las incógnitas que ' +
+       'esa lectura haya dejado abiertas siguen abiertas, pero son asunto de esa especialidad, no ' +
+       'tuyo acá -- no las bloquean ni te corresponde resolverlas. Tu trabajo es otro: subir de ' +
+       'escala y buscar qué hay más allá de la delimitación del Organismo que esa lectura, por ' +
+       'estar mirando hacia adentro, no pudo ver. No propongas como candidata una relación que en el ' +
+       'fondo es la misma pregunta interna que la especialidad ya venía explorando (si la lectura ' +
+       'dejó abierta, por ejemplo, si dos sectores de un mismo organismo comparten dinámicas ' +
+       'internas, esa sigue siendo una pregunta interna, no una relación de Campo) -- salvo que una ' +
+       'relación externa genuina haga imprescindible volver a ella para comprenderla desde afuera. ' +
+       'Esto no depende de qué especialidad la produjo: vale igual si el antecedente viene de una ' +
+       'lectura territorial, empresarial o de cualquier otra especialidad futura.\n' +
        ventana.interpretacionesEspecializadasPertinentes.map(function(f){
          return '[' + f.refId + '] Fuente: ' + (f.source || '—') + (f.version != null ? (' · v' + f.version) : '') +
            (f.date ? (' · ' + f.date) : '') + '\n' + f.text;
@@ -5191,7 +5203,11 @@ function C1B1_PROMPT_OPEN_FIELD(ventana){
     'claramente mayor. La intención orienta la búsqueda, no limita qué puede existir.\n' +
     '10. Prohibido en este paso: crear una Tensión nueva, identificar Operadores, interpretar una ' +
     'Función nueva, crear una Configuración, producir Foco o Retorno, evaluar suficiencia global, ' +
-    'modificar la Memoria o crear Recuerdos. Ninguno de esos pasos te corresponde acá.\n\n' +
+    'modificar la Memoria o crear Recuerdos. Ninguno de esos pasos te corresponde acá.\n' +
+    '11. Si hay interpretaciones especializadas pertinentes (ver bloque arriba), tu primera ' +
+    'operación real es el cambio de escala: mirá hacia afuera del Organismo, no hacia adentro de lo ' +
+    'que esa especialidad ya estaba leyendo. Cero candidatas es preferible a una candidata que sólo ' +
+    'reformula, con otras palabras, una pregunta interna que esa lectura dejó pendiente.\n\n' +
     'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador (sin texto antes ni ' +
     'después -- esta llamada no tiene texto visible para ningún usuario). Sé breve en cada campo ' +
     'de texto (1-2 oraciones cortas, nunca un párrafo largo) -- es más importante que el marcador ' +
