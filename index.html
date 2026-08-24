@@ -5917,7 +5917,9 @@ function C1C1_normalizar(s){
 /* Ventana cognitiva compacta (regla 12: una sola llamada, no una por ruta): todas las relaciones y
    rutas del grafo -- son pocas por diseño de C1-B2 (máx. 12 relaciones, 2-4 rutas) -- más lo que
    B2 ya descartó, para que el modelo no lo reproponga sin una razón nueva. */
-function C1C1_ventanaFrentes(graphState, opening){
+// (24/08) frentesCerradosPorFaltaDeEvidencia: opcional -- ver comentario en selectContextFronts().
+// Se manda como lista mínima (formulación + qué faltó), nunca los objetos Frente completos.
+function C1C1_ventanaFrentes(graphState, opening, frentesCerradosPorFaltaDeEvidencia){
   var porId = {};
   graphState.nodes.forEach(function(n){ porId[n.id] = n; });
   var relaciones = graphState.relations.map(function(r){
@@ -5936,7 +5938,10 @@ function C1C1_ventanaFrentes(graphState, opening){
     aperturaTexto: 'Pregunta declarada: ' + (opening.question || '(ninguna)') +
       '\nIntención declarada: ' + (opening.intention || '(ninguna)'),
     relaciones: relaciones, rutas: rutas,
-    yaDescartadoEnB2: graphState.discardedExpansions || []
+    yaDescartadoEnB2: graphState.discardedExpansions || [],
+    yaCerradosPorFaltaDeEvidencia: (frentesCerradosPorFaltaDeEvidencia || []).map(function(f){
+      return { formulation: f.formulation, triggerRefs: f.triggerRefs || [] };
+    })
   };
 }
 
@@ -5947,6 +5952,18 @@ function C1C1_PROMPT_SELECT_FRONTS(ventana){
     originAnchor: ventana.originAnchor, relaciones: ventana.relaciones, rutas: ventana.rutas,
     yaDescartadoEnB2: ventana.yaDescartadoEnB2
   }, null, 2);
+  // (24/08) bloque aparte, sólo cuando hay algo que avisar -- Frentes que YA se cerraron en esta
+  // misma conversación porque necesitaban un paso que no está disponible ahora (por ejemplo,
+  // investigar un hecho externo sin herramienta para hacerlo). No es "ya descartado" de B2 (eso
+  // es sobre expansión del grafo, esto es sobre Frentes que sí se activaron y no se pudieron
+  // resolver) -- por eso va en su propio bloque, con su propia instrucción.
+  var cerradosTxt = (ventana.yaCerradosPorFaltaDeEvidencia && ventana.yaCerradosPorFaltaDeEvidencia.length)
+    ? ('\n\nFRENTES YA CERRADOS EN ESTA CONVERSACIÓN POR FALTA DE UNA VÍA DE AVANCE DISPONIBLE ' +
+       '(no se descartaron por ser irrelevantes -- necesitaban un paso que hoy no está disponible; ' +
+       'no los vuelvas a proponer como candidatos salvo que el grafo sostenga una vía de avance ' +
+       'genuinamente distinta de la que ya se intentó):\n' +
+       JSON.stringify(ventana.yaCerradosPorFaltaDeEvidencia, null, 2))
+    : '';
   return 'Sos el motor de selección de Frentes Contextuales (C1-C1) de Contextos Universal -- ' +
     'continuación de OPEN/B2, motor propio, sin dimensiones ni sistemas de Contextos Legacy.\n\n' +
     'QUÉ ES UN FRENTE: nunca un tema ("Frente económico", "Frente tecnológico" -- eso está ' +
@@ -5954,7 +5971,7 @@ function C1C1_PROMPT_SELECT_FRONTS(ventana){
     'resolución podría modificar significativamente cómo entendemos al Organismo -- una pregunta ' +
     'concreta y proporcional a lo que el grafo realmente sostiene, nunca grandilocuente.\n\n' +
     ventana.aperturaTexto + '\n\nGRAFO DISPONIBLE (ventana ya seleccionada, no es el Organismo ' +
-    'completo):\n' + ventanaTxt + '\n\n' +
+    'completo):\n' + ventanaTxt + cerradosTxt + '\n\n' +
     'REGLAS:\n' +
     '1. Cada candidato necesita, para existir, las cuatro cosas siguientes: un trigger concreto ' +
     '(al menos una relación o ruta real del grafo -- nunca inventada), una incidencia potencial ' +
@@ -6097,7 +6114,11 @@ function C1C1_aplicarPoliticaFrentes(fronts, activeFrontIdModelo){
 }
 
 /* ---- selectContextFronts: punto de entrada único de C1-C1 ---- */
-async function selectContextFronts(graphState, opening){
+// (24/08) frentesCerradosPorFaltaDeEvidencia: opcional -- Frentes que YA se cerraron en este
+// mismo ciclo de conversación porque necesitaban una acción no disponible ahora (típicamente
+// RESEARCH sin herramienta de investigación externa). Se le pasa a C1-C1 para que no vuelva a
+// proponer lo mismo como candidato -- ver C1C1_ventanaFrentes/C1C1_PROMPT_SELECT_FRONTS.
+async function selectContextFronts(graphState, opening, frentesCerradosPorFaltaDeEvidencia){
   if(!graphState || !opening){
     return { ok:false, motivo:'graphState u opening ausente' };
   }
@@ -6112,7 +6133,7 @@ async function selectContextFronts(graphState, opening){
         candidatosPropuestos: 0, candidatosFusionados: 0, candidatosDescartados: 0, duracionMs: 0 } };
   }
 
-  var ventana = C1C1_ventanaFrentes(graphState, opening);
+  var ventana = C1C1_ventanaFrentes(graphState, opening, frentesCerradosPorFaltaDeEvidencia);
   var prompt = C1C1_PROMPT_SELECT_FRONTS(ventana);
   var res;
   try{
@@ -8990,8 +9011,17 @@ var C1G1_TOKENS_ACCION = [
   ['TRACE', 'la revisión'],
   ['OPEN', 'la apertura'],
   ['READ', 'la lectura'],
-  ['ASK', 'la pregunta']
+  ['ASK', 'la pregunta'],
+  ['RESEARCH', 'una investigación externa'],
+  ['DEEPEN', 'profundizar'],
+  ['EXPAND', 'ampliar'],
+  ['CONTRAST', 'contrastar']
 ];
+// Defensa en profundidad: cualquier código interno con forma "C1-XX" / "C1XxN" que sobreviva a la
+// traducción de arriba (nombres de función, pasos del ciclo, etc.) nunca debe llegar al usuario.
+// No se intenta traducir cada código uno por uno -- se detecta el patrón y, si aparece, se descarta
+// todo el texto en favor de un mensaje genérico honesto (nunca un error técnico, nunca jerga parcial).
+var C1G1_PATRON_JERGA = /\bC1[\-\s]?[A-Z][0-9A-Z]*\b|\b(grafo|nodo|ciclo cognitivo|epistemicState|route[A-Z]\w*)\b/;
 function C1G1_lenguajeNatural(texto){
   var s = String(texto == null ? '' : texto);
   if(!s) return s;
@@ -9041,7 +9071,11 @@ function C1G1_vistaTrabajando(){
    presentan igual de tranquilos -- nunca como error técnico, nunca fabricando un resultado. */
 function C1G1_vistaCierre(motivoTexto){
   var base = (motivoTexto && String(motivoTexto).trim()) || 'Por ahora no hay más para agregar acá.';
-  return { phase:'cierre', texto: C1G1_lenguajeNatural(base) };
+  var texto = C1G1_lenguajeNatural(base);
+  if(C1G1_PATRON_JERGA.test(texto)){
+    texto = 'Por ahora no hay más para agregar acá.';
+  }
+  return { phase:'cierre', texto: texto };
 }
 
 function C1G1_vistaComprension(focusResult, sufficiencyResult){
@@ -9102,6 +9136,46 @@ async function C1G1_iniciarConversacion(organismoId, question, intention){
 async function C1G1_continuarCiclo(estado, accionInicial){
   var snapshot = estado.snapshot, opening = estado.opening, graphState = estado.graphState, front = estado.front;
   var accionPendiente = accionInicial || null;
+  // Punto ciego real de un Frente -- NONE_AVAILABLE declarado por C1-C2 (el caso real y ya alcanzable
+  // hoy: RESEARCH necesario pero no habilitado en C1X3_ACCIONES_DISPONIBLES_PROFESIONAL, el prompt ya
+  // instruye a responder NONE_AVAILABLE en ese caso), un límite explícito de executeCognitiveAction, o
+  // cualquier acción del alfabeto sin ejecutor todavía (action_not_implemented_yet -- DEEPEN/EXPAND/
+  // CONTRAST comparten el mismo hueco si una resolución futura los habilitara sin implementarlos):
+  // en los tres casos el Frente se cierra semánticamente por falta de evidencia, Contextos NUNCA
+  // termina acá. Se acumulan los Frentes cerrados por esta vía en este ciclo para que C1-C1 (vía el
+  // 3er parámetro ya wireado en selectContextFronts/C1C1_ventanaFrentes) sepa no volver a proponerlos
+  // sin una vía nueva, y para poder resumir con honestidad si no aparece otro Frente pertinente.
+  var frentesCerradosPorFaltaDeEvidencia = [];
+
+  async function cerrarFrentePorFaltaDeEvidenciaYBuscarOtro(motivoTexto, expectedGain, estimatedCost){
+    var accionCierre = {
+      action: 'CLOSE_FRONT',
+      justificationSummary: C1G1_lenguajeNatural((motivoTexto && String(motivoTexto).trim()) ||
+        'No encontramos, con lo disponible ahora, cómo seguir con este tema.'),
+      expectedGain: expectedGain || null, estimatedCost: estimatedCost || null
+    };
+    var cierreForzado = executeCloseFront(front, accionCierre);
+    if(!cierreForzado.ok){
+      return { continuar:false, vista: C1G1_vistaCierre('No pudimos avanzar con este Contexto por ahora.') };
+    }
+    frentesCerradosPorFaltaDeEvidencia.push(C1C3A_aplicarResultadoAlFrente(front, cierreForzado.result));
+
+    var reseleccion = await selectContextFronts(graphState, opening, frentesCerradosPorFaltaDeEvidencia);
+    var nuevoFrente = (reseleccion.ok && reseleccion.result.activeFrontId)
+      ? reseleccion.result.fronts.filter(function(f){ return f.id === reseleccion.result.activeFrontId; })[0]
+      : null;
+    if(nuevoFrente) return { continuar:true, front: nuevoFrente };
+
+    // No hay otro Frente pertinente: se cierra Contextos, pero sin ocultar lo que quedó sin resolver
+    // por falta de evidencia (nunca se fabrica una respuesta ni se calla la duda).
+    var motivosPendientes = frentesCerradosPorFaltaDeEvidencia.map(function(f){
+      return (f.operationalState && f.operationalState.closeReason) || f.formulation || '';
+    }).filter(function(t){ return t; });
+    var resumenPendiente = motivosPendientes.length
+      ? ('Quedó pendiente por falta de información disponible: ' + motivosPendientes.join('; ') + '.')
+      : 'Por ahora no encontramos otra relación pertinente para seguir.';
+    return { continuar:false, vista: C1G1_vistaCierre(resumenPendiente) };
+  }
 
   for(var ciclo = 0; ciclo < C1G1_MAX_CICLOS; ciclo++){
     var seleccion;
@@ -9116,13 +9190,26 @@ async function C1G1_continuarCiclo(estado, accionInicial){
     var accion = seleccion.result;
 
     if(accion.action === C1X3_NINGUNA_DISPONIBLE){
-      return { vista: C1G1_vistaCierre(accion.justificationSummary), estado:null };
+      var salidaNinguna = await cerrarFrentePorFaltaDeEvidenciaYBuscarOtro(accion.justificationSummary, accion.expectedGain, accion.estimatedCost);
+      if(salidaNinguna.continuar){ front = salidaNinguna.front; accionPendiente = null; continue; }
+      return { vista: salidaNinguna.vista, estado:null };
     }
 
     var ejecucion = await executeCognitiveAction(snapshot, opening, graphState, front, accion);
     if(!ejecucion.ok){
+      if(ejecucion.action_not_implemented_yet){
+        // Punto ciego real (p.ej. RESEARCH sin herramienta disponible, si una resolución futura
+        // llegara a habilitarla sin implementarla): mismo tratamiento que NONE_AVAILABLE arriba.
+        var motivoNoImpl = (accion.justificationSummary && String(accion.justificationSummary).trim())
+          || ('Esto requeriría ' + C1G1_lenguajeNatural(accion.action) + ', que no está disponible ahora.');
+        var salidaNoImpl = await cerrarFrentePorFaltaDeEvidenciaYBuscarOtro(motivoNoImpl, accion.expectedGain, accion.estimatedCost);
+        if(salidaNoImpl.continuar){ front = salidaNoImpl.front; accionPendiente = null; continue; }
+        return { vista: salidaNoImpl.vista, estado:null };
+      }
       if(ejecucion.limiteExplicito){
-        return { vista: C1G1_vistaCierre(ejecucion.motivo), estado:null };
+        var salidaLimite = await cerrarFrentePorFaltaDeEvidenciaYBuscarOtro(ejecucion.motivo, null, null);
+        if(salidaLimite.continuar){ front = salidaLimite.front; accionPendiente = null; continue; }
+        return { vista: salidaLimite.vista, estado:null };
       }
       return { vista: C1G1_vistaCierre('No pudimos avanzar con este Contexto por ahora.'), estado:null };
     }
@@ -16862,6 +16949,95 @@ function correrPruebasAuto(){
         state.modoContext = gmc; state.panelEspecializado = gp;
       }
     })());
+
+    /* ---- RESEARCH sin evidencia (24/08) · CLOSE_FRONT semántico sin cerrar Contextos Universal ----
+       C1G1_continuarCiclo() es async y orquesta llamadas reales -- mismo límite documentado en
+       C1-08/C1-18/C2-21: la orquestación completa (frente A sin evidencia -> se cierra -> frente B se
+       abre -> ASK sin jerga) se verificó EN VIVO con un script de diagnóstico (fetch mockeado con
+       marcadores NEXT_ACTION/CONTEXT_FRONTS reales, sin gastar ninguna llamada), ver PENDIENTES.md
+       para el resultado real de esa corrida. Acá se prueba, determinista y síncrono, cada pieza de la
+       que depende ese comportamiento: la función compartida existe y se usa en los dos puntos ciegos
+       posibles, la traducción a lenguaje natural, la red de seguridad contra jerga residual, el nuevo
+       parámetro de C1-C1 para no re-proponer lo ya cerrado, y que ninguna pieza quedó hardcodeada. */
+    chk('RES-01 · la función que cierra un Frente y busca otro está definida una sola vez y se usa en los dos puntos ciegos (NONE_AVAILABLE y action_not_implemented_yet)', (function(){
+      var src = C1G1_continuarCiclo.toString();
+      var definiciones = (src.match(/function cerrarFrentePorFaltaDeEvidenciaYBuscarOtro/g) || []).length;
+      var usos = (src.match(/cerrarFrentePorFaltaDeEvidenciaYBuscarOtro\(/g) || []).length;   // incluye la definición
+      return definiciones === 1 && usos >= 3;   // 1 definición + al menos 2 puntos de uso (NONE_AVAILABLE, action_not_implemented_yet)
+    })());
+    chk('RES-02 · NONE_AVAILABLE ya no termina Contextos de inmediato: primero intenta cerrar el Frente y buscar otro', (function(){
+      var src = C1G1_continuarCiclo.toString();
+      var idxNinguna = src.indexOf('C1X3_NINGUNA_DISPONIBLE');
+      var idxCierre = src.indexOf('cerrarFrentePorFaltaDeEvidenciaYBuscarOtro(accion.justificationSummary');
+      var idxContinue = src.indexOf('salidaNinguna.continuar', idxCierre);
+      return idxNinguna > -1 && idxCierre > idxNinguna && idxContinue > idxCierre;
+    })());
+    chk('RES-03 · action_not_implemented_yet (RESEARCH/DEEPEN/EXPAND/CONTRAST si una resolución futura los habilitara) recibe el mismo tratamiento, nunca un fallback silencioso a otra acción', (function(){
+      var src = C1G1_continuarCiclo.toString();
+      var idxRama = src.indexOf('ejecucion.action_not_implemented_yet');
+      var idxCierre = src.indexOf('cerrarFrentePorFaltaDeEvidenciaYBuscarOtro(motivoNoImpl', idxRama);
+      return idxRama > -1 && idxCierre > idxRama;
+    })());
+    chk('RES-04 · C1C3A_ACCIONES_IMPLEMENTADAS no cambió: la solución es a nivel de orquestador, no fingir un ejecutor para RESEARCH', (function(){
+      return C1C3A_ACCIONES_IMPLEMENTADAS.length === 5 &&
+        C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('RESEARCH') === -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('DEEPEN') === -1 &&
+        C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('EXPAND') === -1 && C1C3A_ACCIONES_IMPLEMENTADAS.indexOf('CONTRAST') === -1;
+    })());
+    chk('RES-05 · lenguaje natural: RESEARCH/DEEPEN/EXPAND/CONTRAST ya no aparecen tal cual en un texto traducido', (function(){
+      var t = C1G1_lenguajeNatural('Esto requeriría RESEARCH, o quizás DEEPEN, EXPAND o CONTRAST sobre la relación.');
+      return t.indexOf('RESEARCH') === -1 && t.indexOf('DEEPEN') === -1 && t.indexOf('EXPAND') === -1 && t.indexOf('CONTRAST') === -1;
+    })());
+    chk('RES-06 · red de seguridad contra jerga: un motivo de cierre con un código interno tipo "C1-XX" nunca llega al usuario tal cual', (function(){
+      var vista = C1G1_vistaCierre('No pudimos avanzar: C1-C2 declaró un límite y el nodo del grafo quedó pendiente.');
+      return vista.texto.indexOf('C1-C2') === -1 && vista.texto.indexOf('nodo') === -1;
+    })());
+    chk('RES-07 · la red de seguridad no se dispara con texto llano normal (no hay falsos positivos sobre motivos honestos sin jerga)', (function(){
+      var vista = C1G1_vistaCierre('Quedó pendiente por falta de información disponible: no se pudo comprobar si la relación sigue vigente.');
+      return vista.texto.indexOf('Quedó pendiente') > -1;
+    })());
+    chk('RES-08 · C1C1_ventanaFrentes: sin el 3er parámetro, sigue devolviendo lista vacía (compatible con C1-01..17, sin romper nada)', (function(){
+      var g = { openingId:'op', originAnchor:'X', nodes:[{id:'n0',label:'X',depth:0,kind:'organismo'}], relations:[], routes:[], discardedExpansions:[], status:'expanded', justificationSummary:'x' };
+      var ventana = C1C1_ventanaFrentes(g, { openingId:'op', question:null, intention:null });
+      return Array.isArray(ventana.yaCerradosPorFaltaDeEvidencia) && ventana.yaCerradosPorFaltaDeEvidencia.length === 0;
+    })());
+    chk('RES-09 · C1C1_ventanaFrentes: con Frentes ya cerrados por falta de evidencia, los expone recortados (solo formulation + triggerRefs)', (function(){
+      var g = { openingId:'op', originAnchor:'X', nodes:[{id:'n0',label:'X',depth:0,kind:'organismo'}], relations:[], routes:[], discardedExpansions:[], status:'expanded', justificationSummary:'x' };
+      var cerrados = [{ id:'fa', formulation:'¿sigue vigente la relación A?', triggerRefs:['relA'], estimatedCognitiveCost:'medium', priority:'high' }];
+      var ventana = C1C1_ventanaFrentes(g, { openingId:'op', question:null, intention:null }, cerrados);
+      var item = ventana.yaCerradosPorFaltaDeEvidencia[0];
+      return ventana.yaCerradosPorFaltaDeEvidencia.length === 1 && item.formulation === '¿sigue vigente la relación A?' &&
+        item.triggerRefs.length === 1 && !('estimatedCognitiveCost' in item) && !('priority' in item);
+    })());
+    chk('RES-10 · C1C1_PROMPT_SELECT_FRONTS instruye no re-proponer Frentes ya cerrados por falta de evidencia, solo cuando hay alguno', (function(){
+      var g = { openingId:'op', originAnchor:'X', nodes:[{id:'n0',label:'X',depth:0,kind:'organismo'}],
+        relations:[{id:'rel1',sourceNodeId:'n0',targetNodeId:'n0',manifestation:'m',possibleIncidence:'i',epistemicState:'hipotesis',uncertainty:['u'],evidenceNeed:null,returnRationale:'r',status:'candidate'}],
+        routes:[{id:'route1',nodeIds:['n0'],depth:0,status:'open_limit_reached',closureReason:null}], discardedExpansions:[], status:'expanded', justificationSummary:'x' };
+      var opening = { openingId:'op', question:null, intention:null };
+      var sinCerrados = C1C1_PROMPT_SELECT_FRONTS(C1C1_ventanaFrentes(g, opening));
+      var conCerrados = C1C1_PROMPT_SELECT_FRONTS(C1C1_ventanaFrentes(g, opening, [{ id:'fa', formulation:'¿otra pregunta?', triggerRefs:['rel1'] }]));
+      return sinCerrados.indexOf('ya cerr') === -1 && conCerrados.indexOf('¿otra pregunta?') > -1;
+    })());
+    chk('RES-11 · el cierre de un Frente por falta de evidencia no cierra Contextos Universal: front.status (capa C1-C1) queda intacto, solo cambia operationalState', (function(){
+      var front = { id:'fa', formulation:'f', status:'active', operationalState:null };
+      var accionCierre = { action:'CLOSE_FRONT', justificationSummary:'no se pudo avanzar', expectedGain:'medium', estimatedCost:'medium' };
+      var cierre = executeCloseFront(front, accionCierre);
+      var frenteCerrado = C1C3A_aplicarResultadoAlFrente(front, cierre.result);
+      return cierre.ok && frenteCerrado.status === 'active' && frenteCerrado.operationalState.status === 'closed' &&
+        frenteCerrado.operationalState.readiness === 'closed' && front.status === 'active';
+    })());
+    chk('RES-12 · no hardcodea ningún dominio/especialidad: ni el mecanismo de cierre-y-búsqueda ni la ventana de C1-C1 mencionan Urbanismo/normativa/subdivisión ni ninguna especialidad por nombre', (function(){
+      var src = C1G1_continuarCiclo.toString() + C1C1_ventanaFrentes.toString() + C1C1_PROMPT_SELECT_FRONTS.toString();
+      var patron = /urban|normativa|subdivisi[oó]n|negocio[s]?\b|Urbanismo/i;
+      return !patron.test(src);
+    })());
+    // RES-13 · Caso crítico del brief: frente A requiere RESEARCH (evidencia externa no disponible,
+    // vía NONE_AVAILABLE que el propio prompt C1-C2 instruye a usar en ese caso) -> frente A queda
+    // pendiente y se cierra semánticamente -> Contextos vuelve a C1-C1 y ofrece/abre el Frente B ->
+    // el ciclo NO termina (estado.front pasa a ser B, vista final es una pregunta sobre B) y ningún
+    // texto expuesto contiene "RESEARCH"/"NONE_AVAILABLE"/códigos "C1-XX". No es un chk() individual
+    // (C1G1_continuarCiclo es async, mismo límite que C1-08/C1-18/C2-21) -- verificado en vivo con
+    // diag_research.js (fetch mockeado con 3 marcadores reales), ver PENDIENTES.md para el resultado
+    // real de esa corrida y el caso complementario (sin otro Frente pertinente -> cierre honesto).
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
     chk('M2.1-01 · organismo sin recuerdos devuelve colección vacía válida', (function(){
