@@ -2525,6 +2525,7 @@ CONDUCCIÓN: presentá la lectura brevemente y recorré las triadas en orden, pr
 CIERRE DE LECTURA: cuando las seis dimensiones estén comprendidas (o declaradas sin datos), cerrá la lectura. Al INICIO de esa respuesta final, además de los marcadores habituales, emití EXACTAMENTE seis marcadores de dimensión y un proyectivo:
 [[UDIM:D1|estado|nota de una línea]] (uno por dimensión, estado ∈ critica, tensionada, estable, potencia, desconocida)
 [[PROYECTIVO:2 a 4 líneas: hacia dónde puede evolucionar este organismo según sus dinámicas internas, con la deriva más probable y la más deseable]]
+Si esta lectura final además cumple las condiciones generales de cierre cognitivo -- hubo reorganización sustantiva, puede formularse ANTES → AHORA, existe criterio utilizable y ya no falta información para sostener la comprensión -- emití también [[CIERRE_ETAPA]] en la misma respuesta: UDIM y PROYECTIVO describen la lectura territorial, CIERRE_ETAPA registra la transformación lograda. No se sustituyen entre sí.
 Después, el texto visible: síntesis territorial clara — qué estructura el estado actual, qué tensión raíz ordena el territorio, criterio y próximo paso. Aclarale al usuario que este proyectivo es de alcance interno: lee al organismo desde adentro, y se profundizará cuando la lectura del campo externo (Context) esté disponible.`;
 
 /* ===== CORTE F: extensión Negocios (se anexa al system solo en modo Negocio) =====
@@ -2548,6 +2549,7 @@ CONDUCCIÓN: presentá la lectura brevemente y recorré las triadas en orden, pr
 CIERRE DE LECTURA: cuando las seis dimensiones estén comprendidas (o declaradas sin datos), cerrá la lectura. Al INICIO de esa respuesta final, además de los marcadores habituales, emití EXACTAMENTE seis marcadores de dimensión y un proyectivo:
 [[NDIM:B1|estado|nota de una línea]] (uno por dimensión, estado ∈ critica, tensionada, estable, potencia, desconocida)
 [[PROYECTIVO:2 a 4 líneas: hacia dónde puede evolucionar este negocio según sus dinámicas internas — qué forma actual se agota, qué capacidad emergente puede organizar la etapa siguiente, la deriva más probable y la más deseable]]
+Si esta lectura final además cumple las condiciones generales de cierre cognitivo -- hubo reorganización sustantiva, puede formularse ANTES → AHORA, existe criterio utilizable y ya no falta información para sostener la comprensión -- emití también [[CIERRE_ETAPA]] en la misma respuesta. Los marcadores NDIM y PROYECTIVO describen la lectura especializada; CIERRE_ETAPA registra la transformación lograda. No se sustituyen entre sí.
 Para proponer la actualización de la ficha usá el marcador de contrato COMPLETO del canon, con su envoltura y la palabra FICHA al frente: [[FICHA:FUNCION=...|MODO=...|TENSIONES=...|DIAGNOSTICO=...|PROXIMO=...|PROXIMOS=...]]. Nunca emitas esos campos sueltos ni sin FICHA: adelante.
 Después, el texto visible: síntesis clara — qué tensión raíz organiza hoy el negocio, qué función debe restaurarse o fortalecerse, qué capacidades lo sostienen y qué fragilidades o dependencias lo exponen, y un próximo paso verificable. Distinguí dato declarado, cálculo, inferencia e hipótesis. Aclarale al usuario que esta lectura es de alcance interno y se potencia al cruzarla con una evaluación del campo externo (Context).`;
 
@@ -9670,12 +9672,8 @@ async function enviar(texto){
     if(data.stop_reason === 'max_tokens') mostrarContinuar();
     if(parsed.derivar === 'urban' && !state.derivarAvisado){
       state.derivarAvisado = true;
-      mostrarDerivacion();
-      if(state.organismo){
-        state.organismo.derivable = state.organismo.derivable || [];
-        if(state.organismo.derivable.indexOf('urban') === -1) state.organismo.derivable.push('urban');
-        guardarOrganismo(state.organismo);
-      }
+      mostrarDerivacion(state.organismo);
+      if(state.organismo) marcarOrganismoDerivable(state.organismo, 'urban');
     }
     if(parsed.destilado && parsed.destiladoTexto) ofrecerGuardado(parsed.destiladoTexto);
     // Borrador de sesión: mientras no consolide, se guarda el hilo en curso;
@@ -10495,13 +10493,13 @@ function cardRecorrido(){
    Misma tabla declarativa que urbanismo.html y contextos.html. Sumar una
    especialidad es agregar una fila, acá y allá. El module_id es el contrato. */
 var ACCESO_MODULOS = {
-  urbanismo:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Urbanismo',  archivo:'urbanismo.html',
+  urbanismo:       { plan_minimo:'profesional', prueba_en_gratis:true,  nombre:'Urbanismo',  archivo:'urbanismo.html',
                      desc:'Lectura hexaédrica del territorio: 36 indicadores, diagnóstico y proyectivo.' },
   contextos:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Contextos',  archivo:'contextos.html',
                      desc:'Campo de fuerzas externas: 6 sistemas, 54 cualidades y deriva del campo.' },
   tecnologias:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Tecnologías' },
   sustentabilidad: { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Sustentabilidad' },
-  negocios:        { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Negocios', archivo:'negocios.html',
+  negocios:        { plan_minimo:'profesional', prueba_en_gratis:true,  nombre:'Negocios', archivo:'negocios.html',
                      desc:'Evaluación estructurada del negocio como organismo: dimensiones, estados y síntesis.' },
   capacidades:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Integración de capacidades' },
   trayectoria:     { plan_minimo:'estudio', prueba_en_gratis:false, nombre:'Trayectoria' }
@@ -10545,17 +10543,24 @@ function entitlementsDeCuenta(){
   }
   return e;
 }
-function abrirModulo(id){
+// OMV-F3 (22/08): orgId opcional -- cuando lo manda un llamador con organismo capturado por
+// clausura (mostrarDerivacion/ofrecerContinuidadUrban), el marco se construye buscando ESE
+// organismo por id en cargarOrganismos(), nunca leyendo state.organismo (que puede haber
+// cambiado entre que se mostró el botón y que se hizo clic). Sin orgId, el comportamiento es
+// exactamente el de siempre: usa state.organismo -- así el menú y los accesos manuales quedan
+// sin cambios.
+function abrirModulo(id, orgId){
   var m = ACCESO_MODULOS[id];
   if(!m || !m.archivo) return;
   if(!moduloHabilitado(id)){ cardModuloBloqueado(id); return; }
-  /* Si hay organismo activo, se deja el marco a mano para no copiar y pegar. */
+  var org = orgId ? (cargarOrganismos().find(function(x){ return x.id === orgId; }) || null) : state.organismo;
+  /* Si hay organismo (activo o capturado), se deja el marco a mano para no copiar y pegar. */
   try{
-    if(state.organismo){
+    if(org){
       localStorage.setItem('ag_marco_pendiente', JSON.stringify({
         generado: new Date().toISOString(),
-        organismo: state.organismo.nombre,
-        marco: construirMarcoCore(state.organismo)
+        organismo: org.nombre,
+        marco: construirMarcoCore(org)
       }));
     }
   }catch(e){}
@@ -11557,7 +11562,26 @@ function mostrarContinuar(){
   scrollBottom();
 }
 
-function mostrarDerivacion(){
+// OMV-F3 (22/08): extraída del handler de enviar() (antes eran 3 líneas inline) para que quede
+// testable como unidad -- conocimiento persistente del organismo (org.derivable), nada que ver
+// con state.derivarAvisado (dedupe de sesión, ver comentario en abrirOrganismo()).
+function marcarOrganismoDerivable(org, tipo){
+  if(!org) return;
+  org.derivable = org.derivable || [];
+  if(org.derivable.indexOf(tipo) === -1) org.derivable.push(tipo);
+  guardarOrganismo(org);
+}
+
+// OMV-F3 (22/08): recibe/captura el organismo que originó la derivación -- nunca lee
+// state.organismo en el momento del clic. Si para entonces el usuario ya cambió de organismo
+// activo (u.g. abrió otro desde Memoria), el handoff a Urbanismo tiene que seguir siendo ESTE
+// organismo, no el que esté activo cuando se apriete el botón. orgOrigen puede venir como objeto
+// (caso en vivo, se captura state.organismo tal cual está al emitirse DERIVAR) o como id (caso
+// de continuidad al reabrir, ver ofrecerContinuidadUrban) -- default a state.organismo sólo para
+// no romper compatibilidad si algún llamador viejo la invoca sin argumento.
+function mostrarDerivacion(orgOrigen){
+  var org = orgOrigen || state.organismo;
+  var orgId = (org && typeof org === 'object') ? org.id : org;
   const d = document.createElement('div');
   d.className = 'msg motor';
   const n = document.createElement('div');
@@ -11572,11 +11596,40 @@ function mostrarDerivacion(){
   const row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '8px';
   const bt = document.createElement('button'); bt.className = 'btn primary'; bt.textContent = 'Abrir en Urbanismo →';
   // abrirModulo ya gatea por plan: si no está habilitado, muestra la tarjeta de compra.
-  bt.onclick = function(){ abrirModulo('urbanismo'); };
+  // orgId queda capturado por clausura -- ver comentario de arriba.
+  bt.onclick = function(){ abrirModulo('urbanismo', orgId); };
   row.appendChild(bt);
   d.appendChild(row);
   el.stream.appendChild(d);
   scrollBottom();
+}
+
+// OMV-F3 (22/08): tarjeta compacta de continuidad especializada. A diferencia de
+// mostrarDerivacion() (que reacciona a un [[DERIVAR:urban]] recién emitido por el modelo), esta
+// se dispara desde la interfaz misma al reabrir un organismo que YA tiene 'urban' en
+// org.derivable -- conocimiento persistente del organismo, no un aviso de sesión. No depende de
+// que el modelo vuelva a emitir DERIVAR (que además el propio SYSTEM_PROMPT le pide no repetir
+// en la misma sesión): la puerta a Urbanismo tiene que seguir estando ahí igual.
+function ofrecerContinuidadUrban(org){
+  if(!org || !org.derivable || org.derivable.indexOf('urban') === -1) return;
+  const d = document.createElement('div');
+  d.className = 'msg motor';
+  const n = document.createElement('div');
+  n.className = 'derivacion';
+  const b1 = document.createElement('b'); b1.textContent = 'Continuidad especializada. ';
+  n.appendChild(b1);
+  n.appendChild(document.createTextNode('Este organismo ya tiene una lectura territorial pertinente en '));
+  const b2 = document.createElement('b'); b2.textContent = 'Comprender · Urbanismo';
+  n.appendChild(b2);
+  n.appendChild(document.createTextNode('.'));
+  d.appendChild(n);
+  const row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '8px';
+  const bt = document.createElement('button'); bt.className = 'btn'; bt.textContent = 'Abrir en Urbanismo →';
+  var orgId = org.id;
+  bt.onclick = function(){ abrirModulo('urbanismo', orgId); };
+  row.appendChild(bt);
+  d.appendChild(row);
+  el.stream.appendChild(d);
 }
 
 /* N3 · DERIV·2 — tarjeta en el chat para seguir el MISMO organismo en otro modo
@@ -12509,7 +12562,13 @@ function abrirOrganismo(org){
   state.principios = [];
   state.ultimaLectura = null;
   state.started = false;
-  state.derivarAvisado = !!(org.derivable && org.derivable.length); // si ya está marcada, no repetir el aviso
+  // OMV-F3 (22/08): derivarAvisado es sólo un dedupe de sesión ("no repetir el mismo aviso
+  // dentro de esta sesión") -- ya NO se siembra desde org.derivable (eso es conocimiento
+  // persistente del organismo, otra cosa). Cada sesión nueva arranca en false; si el modelo
+  // vuelve a emitir [[DERIVAR:urban]] en esta sesión, se vuelve a mostrar el aviso en vivo. El
+  // acceso persistente para un organismo que YA tiene 'urban' en derivable no depende de esto:
+  // lo cubre ofrecerContinuidadUrban() más abajo, sin esperar a que el modelo redescubra nada.
+  state.derivarAvisado = false;
   el.stream.innerHTML = '';
   resetHilo(org);
   state.organismo = org;
@@ -12524,6 +12583,10 @@ function abrirOrganismo(org){
   el.btnFicha.style.display = 'inline-block';
   renderChipPropuestas();
   document.getElementById('btnPromover').style.display = 'none';
+  // OMV-F3 (22/08): tarjeta compacta de continuidad especializada, ANTES de restaurar borrador
+  // o pedirle al modelo que retome -- la interfaz conserva el acceso por sí misma, no depende de
+  // que el modelo vuelva a emitir DERIVAR. No-op si el organismo no tiene 'urban' en derivable.
+  ofrecerContinuidadUrban(org);
   if(restaurarBorrador(org)) return;   // hay hilo en curso sin consolidar: se retoma tal cual
   const tieneFicha = org.ficha && (org.ficha.funcion || org.ficha.diagnostico || org.ficha.proximo);
   if(tieneFicha){
@@ -13636,7 +13699,7 @@ function correrPruebasAuto(){
        Urbanismo/Contextos), se verifican en vivo en el navegador, no acá. */
     chk('NPRO·1 · el slot de Negocios Pro está activo con su archivo', (function(){
       var m = ACCESO_MODULOS.negocios;
-      return !!m && m.archivo === 'negocios.html' && m.plan_minimo === 'estudio';
+      return !!m && m.archivo === 'negocios.html' && m.plan_minimo === 'profesional';
     })());
     chk('NPRO·2 · el marco que arma el Core trae lo que negocios.html necesita leer', (function(){
       var o = { id:'org_x', nombre:'Empresa X', tipo:'empresa', ficha:{ diagnostico:'d', funcion:'orientar' }, principios:[] };
@@ -15673,6 +15736,196 @@ function correrPruebasAuto(){
     chk('EN1-14 · funciones de Memoria/M2/P6 siguen presentes, sin tocar', (function(){
       return typeof bloqueRecuerdosDeSesion === 'function' && typeof bloqueEspecialidadesDeSesion === 'function' &&
         typeof seleccionarRecuerdosCandidatos === 'function' && typeof p6RecorrerFragmentos === 'function';
+    })());
+
+    /* ---- PLAN-C1 (22/08) · Continuidad especializada en Profesional ---- */
+    chk('PLANC1-01 · ACCESO_MODULOS: Urbanismo y Negocios ahora requieren Profesional, Contextos sigue en Estudio', (function(){
+      return ACCESO_MODULOS.urbanismo.plan_minimo === 'profesional' &&
+             ACCESO_MODULOS.negocios.plan_minimo === 'profesional' &&
+             ACCESO_MODULOS.contextos.plan_minimo === 'estudio';
+    })());
+    chk('PLANC1-02 · Profesional: abrirModulo(urbanismo) no dispara el card de bloqueo', (function(){
+      var _pl = localStorage.getItem('ag_core_plan');
+      var _orig = cardModuloBloqueado;
+      var llamado = false;
+      cardModuloBloqueado = function(){ llamado = true; };
+      try{
+        localStorage.setItem('ag_core_plan','profesional');
+        abrirModulo('urbanismo');
+      }finally{
+        cardModuloBloqueado = _orig;
+        if(_pl === null) localStorage.removeItem('ag_core_plan'); else localStorage.setItem('ag_core_plan', _pl);
+      }
+      return llamado === false;
+    })());
+    chk('PLANC1-03 · Profesional: abrirModulo(negocios) no dispara el card de bloqueo', (function(){
+      var _pl = localStorage.getItem('ag_core_plan');
+      var _orig = cardModuloBloqueado;
+      var llamado = false;
+      cardModuloBloqueado = function(){ llamado = true; };
+      try{
+        localStorage.setItem('ag_core_plan','profesional');
+        abrirModulo('negocios');
+      }finally{
+        cardModuloBloqueado = _orig;
+        if(_pl === null) localStorage.removeItem('ag_core_plan'); else localStorage.setItem('ag_core_plan', _pl);
+      }
+      return llamado === false;
+    })());
+    chk('PLANC1-04 · Gratis conserva el comportamiento actual (Urbanismo y Negocios de prueba, Trayectoria no)', (function(){
+      var _pl = localStorage.getItem('ag_core_plan');
+      try{
+        localStorage.setItem('ag_core_plan','gratis');
+        return moduloHabilitado('urbanismo') === true && moduloHabilitado('negocios') === true &&
+               moduloHabilitado('trayectoria') === false;
+      }finally{
+        if(_pl === null) localStorage.removeItem('ag_core_plan'); else localStorage.setItem('ag_core_plan', _pl);
+      }
+    })());
+    chk('PLANC1-05 · Estudio legacy sigue funcionando (Urbanismo/Negocios/Contextos habilitados)', (function(){
+      var _pl = localStorage.getItem('ag_core_plan');
+      try{
+        localStorage.setItem('ag_core_plan','estudio');
+        return moduloHabilitado('urbanismo') === true && moduloHabilitado('negocios') === true &&
+               moduloHabilitado('contextos') === true;
+      }finally{
+        if(_pl === null) localStorage.removeItem('ag_core_plan'); else localStorage.setItem('ag_core_plan', _pl);
+      }
+    })());
+    chk('PLANC1-06 · Magister sigue funcionando (Urbanismo/Negocios/Contextos habilitados)', (function(){
+      var _pl = localStorage.getItem('ag_core_plan');
+      try{
+        localStorage.setItem('ag_core_plan','magister');
+        return moduloHabilitado('urbanismo') === true && moduloHabilitado('negocios') === true &&
+               moduloHabilitado('contextos') === true;
+      }finally{
+        if(_pl === null) localStorage.removeItem('ag_core_plan'); else localStorage.setItem('ag_core_plan', _pl);
+      }
+    })());
+    chk('PLANC1-07 · entitlementsDeCuenta() refleja Urbanismo/Negocios en true para Profesional (Contextos sigue en false)', (function(){
+      var _pl = localStorage.getItem('ag_core_plan');
+      try{
+        localStorage.setItem('ag_core_plan','profesional');
+        var e = entitlementsDeCuenta();
+        return e.plan === 'profesional' && e.studio.urbanismo === true && e.studio.negocios === true &&
+               e.studio.contextos === false;
+      }finally{
+        if(_pl === null) localStorage.removeItem('ag_core_plan'); else localStorage.setItem('ag_core_plan', _pl);
+      }
+    })());
+
+    /* ---- OMV-F3 (22/08) · Derivación persistente con identidad estable ----
+       Nota de método: el.stream/el.* son Proxies del harness cuyo appendChild/querySelectorAll
+       son no-ops fijos (ver dom_stub.js) -- por eso DERIV·1/NEG·10 ya fallan de forma histórica
+       al intentar leer de vuelta con querySelectorAll. Estas pruebas nuevas evitan esa trampa
+       interceptando document.createElement (objeto plano, no Proxy) para capturar los nodos
+       reales a medida que se crean, y leer .className/.textContent/.onclick directo del nodo. */
+    chk('OMV-F3-01 · Barrio detectado como urbano: mostrarDerivacion(org) ofrece el botón', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var org = { id:'__f3_barrio1', nombre:'Barrio Norte', tipo:'ciudad', derivable:[], ficha:{}, principios:[] };
+      try{ mostrarDerivacion(org); } finally { document.createElement = _origCE; }
+      var btn = creados.filter(function(e){
+        return e.className && e.className.indexOf('btn') > -1 && /Urbanismo/i.test(e.textContent || '');
+      })[0];
+      return !!btn && typeof btn.onclick === 'function';
+    })());
+    chk('OMV-F3-02 · marcarOrganismoDerivable guarda derivable:["urban"] sin duplicar', (function(){
+      var _origGuardar = guardarOrganismo;
+      var guardadas = 0;
+      guardarOrganismo = function(){ guardadas++; };
+      var org = { id:'__f3_barrio2', nombre:'Barrio Sur', tipo:'ciudad', ficha:{}, principios:[] };
+      try{
+        marcarOrganismoDerivable(org, 'urban');
+        marcarOrganismoDerivable(org, 'urban');   // segunda vez: no debe duplicar
+      } finally { guardarOrganismo = _origGuardar; }
+      return Array.isArray(org.derivable) && org.derivable.length === 1 &&
+             org.derivable[0] === 'urban' && guardadas === 2;
+    })());
+    chk('OMV-F3-03 · salir y reabrir Barrio: la puerta a Urbanismo sigue disponible (aunque ya estuviera avisada)', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var g = state.organismo, gDA = state.derivarAvisado, gh = (state.history||[]).slice(),
+          gs = state.started, gmn = state.modoNegocio, gmu = state.modoUrban, gmc = state.modoContext,
+          snap = el.stream.innerHTML;
+      var org = { id:'__f3_barrio3', nombre:'Barrio Oeste', tipo:'ciudad', derivable:['urban'], ficha:{}, principios:[] };
+      try{
+        state.derivarAvisado = true;   // simula: en una sesión anterior ya se había avisado
+        abrirOrganismo(org);
+      } finally {
+        document.createElement = _origCE;
+        state.organismo = g; state.derivarAvisado = gDA; state.history = gh; state.started = gs;
+        state.modoNegocio = gmn; state.modoUrban = gmu; state.modoContext = gmc; el.stream.innerHTML = snap;
+      }
+      var btn = creados.filter(function(e){
+        return e.className && e.className.indexOf('btn') > -1 && /Urbanismo/i.test(e.textContent || '');
+      })[0];
+      return !!btn;
+    })());
+    chk('OMV-F3-04 · el botón conserva identidad estable: cambia state.organismo antes del clic y el handoff sigue siendo Barrio', (function(){
+      var _origCE = document.createElement;
+      var _origAbrirModulo = abrirModulo;
+      var creados = [];
+      var llamadoCon = null;
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      abrirModulo = function(id, orgId){ llamadoCon = { id: id, orgId: orgId }; };
+      var gOrg = state.organismo;
+      var orgBarrio  = { id:'__f3_barrio4', nombre:'Barrio Este', tipo:'ciudad', derivable:[], ficha:{}, principios:[] };
+      var orgNegocio = { id:'__f3_negocio4', nombre:'Negocio Q', tipo:'empresa', derivable:[], ficha:{}, principios:[] };
+      try{
+        state.organismo = orgBarrio;
+        mostrarDerivacion(state.organismo);   // Barrio genera el botón, igual que en enviar()
+        var btn = creados.filter(function(e){
+          return e.className && e.className.indexOf('btn') > -1 && /Urbanismo/i.test(e.textContent || '');
+        })[0];
+        state.organismo = orgNegocio;   // el usuario cambia de organismo activo ANTES del clic
+        btn.onclick();
+      } finally {
+        document.createElement = _origCE;
+        abrirModulo = _origAbrirModulo;
+        state.organismo = gOrg;
+      }
+      return !!llamadoCon && llamadoCon.id === 'urbanismo' && llamadoCon.orgId === '__f3_barrio4';
+    })());
+    chk('OMV-F3-05 · ag_marco_pendiente se arma con el organismo capturado, no con state.organismo', (function(){
+      var _pl = localStorage.getItem('ag_core_plan');
+      var _orgs = localStorage.getItem('ag_core_organismos');
+      var _pend = localStorage.getItem('ag_marco_pendiente');
+      var gOrg = state.organismo;
+      var orgBarrio  = { id:'__f3_barrio5', nombre:'Barrio Sur Grande', tipo:'ciudad', ficha:{ funcion:'orientar' }, principios:[] };
+      var orgNegocio = { id:'__f3_negocio5', nombre:'Negocio R', tipo:'empresa', ficha:{}, principios:[] };
+      try{
+        localStorage.setItem('ag_core_plan','profesional');
+        localStorage.setItem('ag_core_organismos', JSON.stringify([orgBarrio, orgNegocio]));
+        state.organismo = orgNegocio;   // el organismo ACTIVO al momento del clic es otro
+        abrirModulo('urbanismo', orgBarrio.id);
+        var p = JSON.parse(localStorage.getItem('ag_marco_pendiente') || 'null');
+        return !!p && p.organismo === 'Barrio Sur Grande' && p.marco && p.marco.organismo_id === '__f3_barrio5';
+      } finally {
+        state.organismo = gOrg;
+        if(_pl === null) localStorage.removeItem('ag_core_plan'); else localStorage.setItem('ag_core_plan', _pl);
+        if(_orgs === null) localStorage.removeItem('ag_core_organismos'); else localStorage.setItem('ag_core_organismos', _orgs);
+        if(_pend === null) localStorage.removeItem('ag_marco_pendiente'); else localStorage.setItem('ag_marco_pendiente', _pend);
+      }
+    })());
+    chk('OMV-F3-06 · abrirModulo sin orgId conserva el comportamiento normal (usa state.organismo, menú/accesos manuales)', (function(){
+      var _pl = localStorage.getItem('ag_core_plan');
+      var _pend = localStorage.getItem('ag_marco_pendiente');
+      var gOrg = state.organismo;
+      var org = { id:'__f3_manual6', nombre:'Acceso Manual', tipo:'ciudad', ficha:{ funcion:'orientar' }, principios:[] };
+      try{
+        localStorage.setItem('ag_core_plan','profesional');
+        state.organismo = org;
+        abrirModulo('urbanismo');   // sin segundo argumento -- comportamiento de siempre
+        var p = JSON.parse(localStorage.getItem('ag_marco_pendiente') || 'null');
+        return !!p && p.organismo === 'Acceso Manual';
+      } finally {
+        state.organismo = gOrg;
+        if(_pl === null) localStorage.removeItem('ag_core_plan'); else localStorage.setItem('ag_core_plan', _pl);
+        if(_pend === null) localStorage.removeItem('ag_marco_pendiente'); else localStorage.setItem('ag_marco_pendiente', _pend);
+      }
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
@@ -18436,8 +18689,9 @@ function correrPruebasAuto(){
       chk('C08 · con Estudio los módulos están habilitados',
             moduloHabilitado('urbanismo') === true && moduloHabilitado('contextos') === true);
         localStorage.setItem('ag_core_plan','profesional');
-        chk('C09 · con Profesional los módulos están bloqueados',
-            moduloHabilitado('urbanismo') === false && moduloHabilitado('contextos') === false);
+        chk('C09 · con Profesional, Urbanismo y Negocios están habilitados (PLAN-C1) pero Contextos sigue bloqueado',
+            moduloHabilitado('urbanismo') === true && moduloHabilitado('negocios') === true &&
+            moduloHabilitado('contextos') === false);
         localStorage.setItem('ag_core_plan','gratis');
         chk('C10 · con Gratis se habilitan como prueba, salvo Trayectoria',
             moduloHabilitado('urbanismo') === true && moduloHabilitado('trayectoria') === false);
