@@ -12741,7 +12741,28 @@ function organismoTieneContenidoReal(org){
     !!(org && org.ficha && (org.ficha.funcion || org.ficha.diagnostico || org.ficha.proximo));
 }
 
-function abrirOrganismo(org){
+// OMV-F5.2 (24/08): causa raíz real del bug reportado -- cargarOrganismos() hace JSON.parse()
+// en cada llamada (index.html no mantiene una identidad de objeto compartida para los
+// organismos), así que CUALQUIER referencia capturada antes de que algo mute y persista el
+// organismo (por ejemplo, el botón de un listado ya renderizado antes de que "Guardar sesión"
+// creara el checkpoint) queda desactualizada para siempre: sigue apuntando a un objeto sin
+// `.checkpoints`, aunque localStorage ya lo tenga. checkpointMasReciente(org) es correcto -- el
+// problema es que a veces se lo llamaba con un `org` que ya no reflejaba lo persistido. Se
+// verificó en vivo (no sólo en teoría): reabrir con la referencia capturada ANTES del checkpoint
+// disparaba igual el "Retomemos el organismo…" (llamada IA), mientras que la misma reapertura
+// con una referencia fresca mostraba la tarjeta correctamente.
+function organismoActualizado(org){
+  if(!org || !org.id) return org;
+  var fresco = cargarOrganismos().find(function(x){ return x.id === org.id; });
+  return fresco || org;   // si por algún motivo no está persistido todavía, se sigue usando el que llegó
+}
+
+function abrirOrganismo(orgParam){
+  // OMV-F5.2 (24/08): primero de todo -- re-resolver contra lo realmente persistido, sin
+  // importar qué tan vieja sea la referencia con la que se llamó. Esto cubre TODAS las rutas de
+  // entrada de una sola vez (listado de bienvenida, "Tu espacio", ficha, URL diferida, etc.) sin
+  // tener que auditar y parchear cada cierre por separado -- ninguna de ellas cambió.
+  var org = organismoActualizado(orgParam);
   // SV1 (21/08): "retorno" es señal vital sólo cuando de verdad hay algo a lo que volver --
   // se calcula ANTES de restaurarBorrador()/el resto de esta función, que consumen/mutan esos
   // mismos campos (org.borrador, org.ficha). Un organismo recién creado (ficha vacía, sin
@@ -16657,6 +16678,64 @@ function correrPruebasAuto(){
         var filas = creados.filter(function(e){ return /Urbanismo ·/.test(e.textContent||''); });
         return filas.length === 2;
       } finally { document.createElement = _origCE; state.organismo = gOrg; }
+    })());
+
+    /* ---- OMV-F5.2 (24/08) · El recuerdo guardado debe interceptar todas las reaperturas ----
+       Reproduce la causa raíz real confirmada en vivo (no sólo en teoría): cargarOrganismos()
+       hace JSON.parse() en cada llamada -- no hay identidad de objeto compartida -- así que
+       cualquier referencia a un organismo capturada ANTES de que "Guardar sesión" cree el
+       checkpoint (por ejemplo, un botón de listado ya renderizado) queda apuntando para siempre
+       a una copia sin `.checkpoints`, aunque localStorage ya lo tenga. abrirOrganismo() ahora
+       re-resuelve por id contra lo persistido (organismoActualizado()) ANTES de decidir nada. */
+    chk('OMV-F52-01 · reproduce el caso exacto del brief: checkpoint Urbanismo ya existente + referencia capturada antes de "Guardar sesión" + reapertura -> tarjeta, 0 llamadas IA', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo, gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gp = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      try{
+        // 1) El organismo existe, CON ficha (para que -- si el gate fallara -- caiga en la rama
+        //    que sí llama a la IA, "Retomemos el organismo…", y no en el startChat() silencioso).
+        var orgV0 = { id:'__f52_01', nombre:'Barrio F52-01', tipo:'ciudad',
+          ficha:{ funcion:'orientar', diagnostico:'d', proximo:'p' }, principios:[] };
+        guardarOrganismo(orgV0);   // persiste la versión SIN checkpoint todavía
+        // 2) "volver al organismo desde Core/listado": una referencia capturada AHORA, antes de
+        //    que exista el checkpoint -- exactamente como el botón de un listado ya renderizado.
+        var orgCapturadoEnListado = cargarOrganismos().find(function(x){ return x.id === '__f52_01'; });
+        // 3) "Urbanismo cerrado → Guardar sesión": el checkpoint se crea DESPUÉS, sobre otra
+        //    referencia (la que usa la sesión de chat en curso) -- "sin borrador" porque
+        //    checkpoint Urbanismo existente no lleva o.borrador seteado.
+        var orgSesion = cargarOrganismos().find(function(x){ return x.id === '__f52_01'; });
+        orgSesion.checkpoints = { urban:[{ fecha:'2026-08-24T12:00:00.000Z', modulo:'urban', organismo_id:'__f52_01',
+          history:[{role:'user',content:'contame del barrio'},{role:'assistant',content:'[[UDIM:D1|estable|x]]listo'}], panel:null }] };
+        guardarOrganismo(orgSesion);
+        // 4) Reapertura real: se clickea la entrada VIEJA del listado (orgCapturadoEnListado),
+        //    no la de la sesión -- el caso que rompía antes de este corte.
+        //    Se cuentan las llamadas a /api/anthropic (la IA de chat) por separado de cualquier
+        //    otra -- registrarSenalVital('retorno', ...) SÍ hace un fetch legítimo a /api/comm
+        //    (señal vital, no consume crédito ni es "Retomemos…") cuando el organismo tiene ficha;
+        //    eso no es lo que este test tiene que impedir.
+        var origFetch = fetch, fetchIA = 0;
+        fetch = function(url){ if(String(url||'').indexOf('/api/anthropic') > -1) fetchIA++; return Promise.resolve({ ok:true, json:function(){ return Promise.resolve({}); } }); };
+        try{ abrirOrganismo(orgCapturadoEnListado); } finally { fetch = origFetch; }
+        var apareceTarjeta = creados.some(function(e){ return /Recuerdo guardado/.test(e.textContent||'') && /Urbanismo/.test(e.textContent||''); });
+        // state.history debe seguir vacío -- si hubiera disparado enviar('Retomemos…'), ya tendría
+        // el mensaje de usuario empujado antes del "await fetch" (ver enviar()).
+        return apareceTarjeta === true && fetchIA === 0 && state.history.length === 0;
+      } finally {
+        document.createElement = _origCE;
+        state.organismo = gOrg; state.history = gh; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gp; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('OMV-F52-02 · organismoActualizado() re-resuelve por id contra lo persistido, sin romper si el organismo no existe todavía', (function(){
+      var orgPersistido = { id:'__f52_02', nombre:'Original', tipo:'ciudad', ficha:{}, principios:[] };
+      guardarOrganismo(orgPersistido);
+      var refVieja = { id:'__f52_02', nombre:'Copia vieja sin checkpoints' };
+      var resuelto = organismoActualizado(refVieja);
+      var noExistente = { id:'__f52_02_no_existe', nombre:'Fantasma' };
+      var fallback = organismoActualizado(noExistente);
+      return resuelto.nombre === 'Original' && fallback === noExistente;
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
