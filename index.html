@@ -2572,13 +2572,22 @@ const state = {
   c1g3Epoch: 0,       // C1-G3: token propio de la tarjeta "Contextos Universal", independiente del
                        // epoch del chat principal -- invalida respuestas en vuelo de esa tarjeta si
                        // el usuario navega afuera (Volver a Memoria / cerrar overlay / otro organismo)
-  c1g3Sesiones: {}     // C1-Z1.1-B: { [organismId]: {openingId, estado, vista} } -- Apertura de
+  c1g3Sesiones: {},    // C1-Z1.1-B: { [organismId]: {openingId, estado, vista} } -- Apertura de
                        // Contextos Universal sin resolver, en memoria de la sesión actual (nunca
                        // persistida). Sirve sólo para ofrecer "Continuar actual / Empezar nueva" si
                        // se vuelve a pulsar el botón sobre el mismo organismo antes de resolver la
                        // gobernanza. Se borra la entrada de un organismo cuando su gobernanza se
                        // resuelve (Incorporar/Mantener abierto/No incorporar) o cuando el usuario
                        // elige explícitamente "Empezar nueva".
+  panelEspecializado: null   // OMV-F5 (22/08): { tipo:'urban'|'negocio'|'context', version, dimensiones,
+                              // proyectivo, campo } -- último panel de lectura cerrada mostrado en ESTA
+                              // sesión (lo arman cerrarLecturaUrban/cerrarLecturaNegocio/
+                              // cerrarEvaluacionContext, que ya tenían estos mismos datos a mano). Sólo
+                              // sirve para que un checkpoint manual ("Guardar sesión") pueda llevarse una
+                              // copia y reconstruir el panel + "Leer en Contextos/Urbanismo/Negocios" al
+                              // restaurarlo -- no es Memoria ni resultado confirmado (eso ya vive,
+                              // aparte y sin tocar, en o.lecturas_urban/o.lecturas_negocio/
+                              // o.evaluaciones_context/o.proyectivos).
 };
 
 const TIPOS_ORG = ['Ciudad / territorio urbano','Barrio / sector urbano','Empresa / institución','Proyecto / obra','Especie / ser vivo','Ecosistema','Investigación','Otro'];
@@ -11441,6 +11450,7 @@ function abrirEnContext(org){
   state.history = [];
   state.principios = [];
   state.ultimaLectura = null;
+  state.panelEspecializado = null;   // OMV-F5 (22/08): nueva sesión, ningún panel especializado propio todavía
   state.started = false;
   state.derivarAvisado = true; // en Context la derivación es el contexto, no un aviso
   el.stream.innerHTML = '';
@@ -11473,6 +11483,8 @@ function cerrarEvaluacionContext(cfuers, campo, proyectivo){
   }
   o.actualizado = new Date().toISOString();
   guardarOrganismo(o);
+  // OMV-F5 (22/08): copia liviana para que un checkpoint manual pueda reconstruir este panel.
+  state.panelEspecializado = { tipo:'context', version:version, dimensiones:fuerzas, proyectivo:proyectivo, campo:campo };
   renderPanelContext(version, fuerzas, campo, proyectivo);
   state.modoContext = false;
   el.orgchip.classList.remove('context');
@@ -11967,6 +11979,7 @@ function abrirEnUrban(org){
   state.history = [];
   state.principios = [];
   state.ultimaLectura = null;
+  state.panelEspecializado = null;   // OMV-F5 (22/08): nueva sesión, ningún panel especializado propio todavía
   state.started = false;
   state.derivarAvisado = true; // en Urban la derivación es el contexto, no un aviso
   el.stream.innerHTML = '';
@@ -11997,6 +12010,7 @@ function abrirEnNegocio(org){
   state.history = [];
   state.principios = [];
   state.ultimaLectura = null;
+  state.panelEspecializado = null;   // OMV-F5 (22/08): nueva sesión, ningún panel especializado propio todavía
   state.started = false;
   state.derivarAvisado = true; // en Negocio la derivación es el contexto, no un aviso
   el.stream.innerHTML = '';
@@ -12025,12 +12039,19 @@ function cerrarLecturaNegocio(ndims, proyectivo){
   const dimensiones = ndims.map(function(u){
     return { cod: u.cod, nombre: DIMENSIONES_NEGOCIO_MODO[u.cod] || u.cod, estado: u.estado, nota: u.nota };
   });
-  o.lecturas_negocio.push({ version: version, fecha: new Date().toISOString(), dimensiones: dimensiones });
+  // OMV-F6 (22/08): proyectivo guardado también acá -- mismo dato que ya se tenía a mano en
+  // esta llamada, así la tarjeta de Memoria puede reconstruir esta versión sin correlacionar
+  // por fecha contra o.proyectivos (compartido entre Urban/Negocio/Context, con su propio
+  // contador de version -- no alcanza para emparejar 1:1). o.proyectivos abajo sigue igual,
+  // sin tocar -- lo sigue usando "Último proyectivo" de Memoria y el resto del código.
+  o.lecturas_negocio.push({ version: version, fecha: new Date().toISOString(), dimensiones: dimensiones, proyectivo: proyectivo });
   o.proyectivos.push({ version: o.proyectivos.length + 1, alcance: 'interno', texto: proyectivo, fecha: new Date().toISOString() });
   o.actualizado = new Date().toISOString();
   guardarOrganismo(o);
   state.modoNegocio = false;
   el.orgchip.classList.remove('negocio');
+  // OMV-F5 (22/08): copia liviana para que un checkpoint manual pueda reconstruir este panel.
+  state.panelEspecializado = { tipo:'negocio', version:version, dimensiones:dimensiones, proyectivo:proyectivo };
   renderPanelNegocio(version, dimensiones, proyectivo);
 }
 
@@ -12042,10 +12063,13 @@ function cerrarLecturaUrban(udims, proyectivo){
   const dimensiones = udims.map(function(u){
     return { cod: u.cod, nombre: DIMENSIONES_URBAN[u.cod] || u.cod, estado: u.estado, nota: u.nota };
   });
-  o.lecturas_urban.push({ version: version, fecha: new Date().toISOString(), dimensiones: dimensiones });
+  // OMV-F6 (22/08): mismo criterio que cerrarLecturaNegocio -- ver comentario ahí.
+  o.lecturas_urban.push({ version: version, fecha: new Date().toISOString(), dimensiones: dimensiones, proyectivo: proyectivo });
   o.proyectivos.push({ version: o.proyectivos.length + 1, alcance: 'interno', texto: proyectivo, fecha: new Date().toISOString() });
   o.actualizado = new Date().toISOString();
   guardarOrganismo(o);
+  // OMV-F5 (22/08): copia liviana para que un checkpoint manual pueda reconstruir este panel.
+  state.panelEspecializado = { tipo:'urban', version:version, dimensiones:dimensiones, proyectivo:proyectivo };
   renderPanelUrban(version, dimensiones, proyectivo);
   state.modoUrban = false;
   el.orgchip.classList.remove('urban');
@@ -12227,6 +12251,12 @@ function guardarSesion(destilado){
     registrarMomento('destilado', destilado, state.ultimaLectura);   /* N2 */
     o.actualizado = new Date().toISOString();
     guardarOrganismo(o);
+    // OMV-F5 (22/08): "Guardar sesión" -- y sólo esta acción manual -- además crea un
+    // checkpoint restaurable (historial + panel especializado si había uno), versionado y
+    // acotado a 5 por organismo/módulo. o.destilados (arriba) sigue siendo el resumen de
+    // texto de siempre, sin cambios; esto es un mecanismo aparte, para volver al estado de
+    // trabajo, no sólo leer qué se cristalizó.
+    crearCheckpointSesion(o);
     return;
   }
   try{
@@ -12251,6 +12281,7 @@ function nuevaSesion(){
   state.history = [];
   state.principios = [];
   state.ultimaLectura = null;
+  state.panelEspecializado = null;   // OMV-F5 (22/08): nueva sesión, ningún panel especializado propio todavía
   state.organismo = null;
   state.modoUrban = false;
   state.modoContext = false;
@@ -12516,6 +12547,145 @@ function restaurarBorrador(o){
   return true;
 }
 
+/* ============ OMV-F5 (22/08) · Puntos de recuperación de sesión ============
+   Historial versionado y acotado de checkpoints manuales, por organismo y por módulo --
+   distinto de o.borrador (autosave de UN solo hilo en curso, se sigue pisando solo, ver
+   guardarBorrador/restaurarBorrador arriba, SIN CAMBIOS) y de o.destilados (resumen de
+   texto, append-only, ver guardarSesion). Un checkpoint sí alcanza para reconstruir la
+   pantalla (historial acotado + panel especializado si había uno abierto en ese momento),
+   pero nunca toca Memoria/ficha/hitos/principios/lecturas_urban/lecturas_negocio/
+   evaluaciones_context/proyectivos: ese es el criterio del brief ("no modificar Memoria,
+   hitos, principios ni resultados confirmados") -- este mecanismo sólo LEE esos campos
+   (para copiar el panel al snapshot) y nunca los escribe. Sólo "Guardar sesión" crea un
+   checkpoint -- los autosaves normales (guardarBorrador, tras cada respuesta) no generan
+   versión nueva, tal cual lo pide el brief. */
+var CHECKPOINT_MAX_VERSIONES = 5;
+
+function moduloDeSesionActual(){
+  return state.modoNegocio ? 'negocio' : state.modoUrban ? 'urban' : state.modoContext ? 'context' : 'core';
+}
+
+function crearCheckpointSesion(org){
+  if(!org || !state.history || !state.history.length) return null;
+  var modulo = moduloDeSesionActual();
+  var h = state.history.length > BORRADOR_MAX_MSGS
+        ? state.history.slice(state.history.length - BORRADOR_MAX_MSGS)
+        : state.history.slice();
+  var chk = {
+    fecha: new Date().toISOString(),
+    modulo: modulo,
+    organismo_id: org.id,
+    history: h,
+    // copia liviana (unas pocas dimensiones + un texto corto), no una referencia -- el
+    // checkpoint tiene que seguir siendo fiel a ESTE momento aunque el organismo acumule
+    // lecturas nuevas después.
+    panel: state.panelEspecializado ? JSON.parse(JSON.stringify(state.panelEspecializado)) : null
+  };
+  org.checkpoints = org.checkpoints || {};
+  org.checkpoints[modulo] = org.checkpoints[modulo] || [];
+  org.checkpoints[modulo].push(chk);
+  while(org.checkpoints[modulo].length > CHECKPOINT_MAX_VERSIONES) org.checkpoints[modulo].shift();
+  guardarOrganismo(org);
+  return chk;
+}
+
+function totalCheckpoints(org){
+  if(!org || !org.checkpoints) return 0;
+  var total = 0, k;
+  for(k in org.checkpoints){
+    if(Object.prototype.hasOwnProperty.call(org.checkpoints, k)) total += org.checkpoints[k].length;
+  }
+  return total;
+}
+
+/* Lista plana, más reciente primero -- cada ítem lleva su propio modulo+índice (posición
+   dentro de org.checkpoints[modulo]) para poder restaurarlo puntualmente. */
+function listaCheckpoints(org){
+  if(!org || !org.checkpoints) return [];
+  var out = [], k;
+  for(k in org.checkpoints){
+    if(!Object.prototype.hasOwnProperty.call(org.checkpoints, k)) continue;
+    org.checkpoints[k].forEach(function(c, i){ out.push({ modulo: k, indice: i, fecha: c.fecha }); });
+  }
+  out.sort(function(a, b){ return new Date(b.fecha) - new Date(a.fecha); });
+  return out;
+}
+
+var MODULO_NOMBRE_CHECKPOINT = { core:'Chat', urban:'Urbanismo', negocio:'Negocios', context:'Contextos' };
+
+function restaurarCheckpoint(org, modulo, indice){
+  var lista = org && org.checkpoints && org.checkpoints[modulo];
+  var chk = lista && lista[indice];
+  if(!chk) return false;
+  state.epoch++;   // invalidar cualquier respuesta en vuelo antes de reescribir el hilo
+  state.busy = false;
+  el.send.disabled = false;
+  el.dot.classList.remove('busy');
+  cerrarOverlay();
+  startChat();
+  el.stream.innerHTML = '';
+  state.organismo = org;
+  state.history = chk.history.slice();
+  state.started = true;
+  state.ultimaLectura = null;
+  state.panelEspecializado = chk.panel ? JSON.parse(JSON.stringify(chk.panel)) : null;
+  for(var i=0; i<state.history.length; i++){
+    var m = state.history[i];
+    if(m.role === 'user') addUserMsg(m.content);
+    else addMotorMsg(parseMotor(m.content), true);   // replay: no re-registra momentos
+  }
+  state.modoNegocio = chk.modulo === 'negocio';
+  state.modoUrban   = chk.modulo === 'urban';
+  state.modoContext = chk.modulo === 'context';
+  el.orgchip.classList.remove('urban');
+  el.orgchip.classList.remove('context');
+  el.orgchip.classList.remove('negocio');
+  if(chk.modulo !== 'core') el.orgchip.classList.add(chk.modulo);
+  // Si el checkpoint se tomó con un panel de lectura cerrada en pantalla (UDIM/NDIM/CFUER +
+  // PROYECTIVO), lo vuelve a pintar -- incluida la tarjeta "Leer en Contextos/Urbanismo/
+  // Negocios" que renderPanelUrban/Negocio ya ofrecen vía ofrecerDerivacionInterna(). Lee
+  // del propio checkpoint (copia liviana ya guardada); nunca vuelve a escribir en
+  // o.lecturas_urban/o.lecturas_negocio/o.evaluaciones_context/o.proyectivos.
+  if(chk.panel){
+    if(chk.panel.tipo === 'urban') renderPanelUrban(chk.panel.version, chk.panel.dimensiones, chk.panel.proyectivo);
+    else if(chk.panel.tipo === 'negocio') renderPanelNegocio(chk.panel.version, chk.panel.dimensiones, chk.panel.proyectivo);
+    else if(chk.panel.tipo === 'context') renderPanelContext(chk.panel.version, chk.panel.dimensiones, chk.panel.campo, chk.panel.proyectivo);
+  }
+  var av = document.createElement('div');
+  av.style.cssText = 'font-size:11px;color:var(--faint);text-align:center;padding:8px 0;letter-spacing:.04em';
+  av.textContent = 'Restauraste una sesión anterior (' + (MODULO_NOMBRE_CHECKPOINT[chk.modulo] || chk.modulo) + ' · ' + new Date(chk.fecha).toLocaleString() + ').';
+  el.stream.appendChild(av);
+  scrollBottom();
+  return true;
+}
+
+/* Vía discreta pedida por el brief: sólo tiene sentido si hay más de un checkpoint --
+   con uno solo, "el último" ya es el acceso directo habitual (Memoria/reapertura normal),
+   no hace falta una tarjeta aparte para eso. Se llama desde mostrarFicha(). */
+function cardSesionesAnteriores(org){
+  el.cardContent.innerHTML = '';
+  var h = document.createElement('h3'); h.textContent = 'Sesiones anteriores · ' + org.nombre;
+  var p1 = document.createElement('p');
+  p1.textContent = 'Volvés al estado conversacional de ese momento. No se toca la Memoria, los principios ni las lecturas ya confirmadas de este organismo.';
+  el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
+  var lista = listaCheckpoints(org);
+  lista.forEach(function(item){
+    var row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '8px';
+    var lbl = document.createElement('span');
+    lbl.textContent = (MODULO_NOMBRE_CHECKPOINT[item.modulo] || item.modulo) + ' · ' + new Date(item.fecha).toLocaleString();
+    lbl.style.marginRight = 'auto';
+    var bR = document.createElement('button'); bR.className = 'btn'; bR.textContent = 'Restaurar';
+    bR.onclick = function(){ restaurarCheckpoint(org, item.modulo, item.indice); };
+    row.appendChild(lbl); row.appendChild(bR);
+    el.cardContent.appendChild(row);
+  });
+  var rowC = document.createElement('div'); rowC.className = 'cardrow'; rowC.style.marginTop = '8px';
+  var bC = document.createElement('button'); bC.className = 'btn primary'; bC.textContent = 'Cerrar'; bC.onclick = cerrarOverlay;
+  rowC.appendChild(bC);
+  el.cardContent.appendChild(rowC);
+  el.overlay.classList.add('open');
+}
+
 /* ---- Corte I: abrir directo desde el link del correo diferido (?organismo=<id>) ----
    Se llama dos veces a proposito: al iniciar (cubre el caso comun, el mismo navegador
    donde ya hay sesion y el organismo esta en localStorage) y de nuevo al terminar
@@ -12565,6 +12735,7 @@ function abrirOrganismo(org){
   state.history = [];
   state.principios = [];
   state.ultimaLectura = null;
+  state.panelEspecializado = null;   // OMV-F5 (22/08): nueva sesión, ningún panel especializado propio todavía
   state.started = false;
   // OMV-F3 (22/08): derivarAvisado es sólo un dedupe de sesión ("no repetir el mismo aviso
   // dentro de esta sesión") -- ya NO se siembra desde org.derivable (eso es conocimiento
@@ -12601,6 +12772,66 @@ function abrirOrganismo(org){
     el.input.placeholder = 'Contale al motor qué es «' + org.nombre + '» y qué querés comprender de este organismo…';
     el.input.focus();
   }
+}
+
+/* ============ OMV-F6 (22/08) · Lecturas especializadas persistentes en Memoria ============
+   Arquitectura del brief: Memoria = comprensión vigente (o.ficha) · Lecturas especializadas =
+   estados estructurados producidos por cada lente (o.lecturas_urban/o.lecturas_negocio,
+   YA existentes -- Punto 6/8) · Sesiones = recorrido recuperable (OMV-F5, checkpoints). Este
+   corte NO toca o.ficha ni la vuelve Memoria canónica -- sólo LEE lecturas_urban/lecturas_negocio
+   (ya append-only, ya versionadas, ya sobreviven a la sesión) y las renderiza en la ventana
+   Memoria. Ni esto ni nada de lo que sigue llama guardarOrganismo(): ver/restaurar una lectura
+   es de sólo lectura, no puede tocar ficha/principios/hitos/horizonte/Recuerdos. */
+var LECTURAS_CAMPO_POR_TIPO = { urban:'lecturas_urban', negocio:'lecturas_negocio' };
+var LECTURA_TITULO_POR_TIPO = { urban:'Lectura territorial', negocio:'Lectura de negocio' };
+
+/* Misma calidad visual que el destilado actual (renderPanelUrban/renderPanelNegocio): título +
+   grilla de dimensiones con su estado + proyectivo -- nada de metadatos técnicos nuevos. Único
+   nodo, sin appendear solo -- el llamador decide dónde va. */
+function construirTarjetaLecturaEspecializada(tipo, entry){
+  var wrap = document.createElement('div'); wrap.className = 'upanel';
+  var t = document.createElement('div'); t.className = 'utitulo';
+  t.textContent = (LECTURA_TITULO_POR_TIPO[tipo] || tipo) + ' · v' + entry.version;
+  wrap.appendChild(t);
+  var grid = document.createElement('div'); grid.className = 'ugrid';
+  (entry.dimensiones || []).forEach(function(dim){
+    var it = document.createElement('div'); it.className = 'udim';
+    it.style.borderLeftColor = ESTADO_COLOR[dim.estado] || ESTADO_COLOR.desconocida;
+    var nm = document.createElement('span'); nm.className = 'unombre'; nm.textContent = dim.nombre;
+    var es = document.createElement('span'); es.className = 'uestado';
+    es.textContent = dim.estado; es.style.color = ESTADO_COLOR[dim.estado] || ESTADO_COLOR.desconocida;
+    it.appendChild(nm); it.appendChild(es);
+    if(dim.nota){ var no = document.createElement('span'); no.className = 'unota'; no.textContent = dim.nota; it.appendChild(no); }
+    grid.appendChild(it);
+  });
+  wrap.appendChild(grid);
+  if(entry.proyectivo){
+    var pr = document.createElement('div'); pr.className = 'uproyectivo';
+    pr.textContent = entry.proyectivo;
+    wrap.appendChild(pr);
+  }
+  var fe = document.createElement('div');
+  fe.style.cssText = 'font-size:11px;color:var(--faint);margin-top:6px';
+  fe.textContent = entry.fecha ? new Date(entry.fecha).toLocaleString() : '';
+  wrap.appendChild(fe);
+  return wrap;
+}
+
+/* Vía discreta para versiones anteriores -- sólo se ofrece un botón hacia acá cuando hay más
+   de una (ver mostrarFicha()). Muestra TODAS, más reciente primero; nunca escribe nada. */
+function cardVersionesLecturaEspecializada(org, tipo){
+  el.cardContent.innerHTML = '';
+  var h = document.createElement('h3');
+  h.textContent = (LECTURA_TITULO_POR_TIPO[tipo] || tipo) + ' · versiones anteriores · ' + org.nombre;
+  el.cardContent.appendChild(h);
+  var lista = (org[LECTURAS_CAMPO_POR_TIPO[tipo]] || []).slice().reverse();
+  lista.forEach(function(entry){ el.cardContent.appendChild(construirTarjetaLecturaEspecializada(tipo, entry)); });
+  var row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '10px';
+  var b = document.createElement('button'); b.className = 'btn primary'; b.textContent = 'Volver a Memoria';
+  b.onclick = function(){ mostrarFicha(); };
+  row.appendChild(b);
+  el.cardContent.appendChild(row);
+  el.overlay.classList.add('open');
 }
 
 function mostrarFicha(){
@@ -12716,8 +12947,38 @@ function mostrarFicha(){
   bI.style.borderColor = 'rgba(91,143,212,.5)'; bI.style.color = 'var(--espacio)';
   bI.onclick = function(){ generarInforme(o); };
   row.appendChild(bI);
+  // OMV-F5 (22/08): vía discreta -- sólo aparece si hay más de un checkpoint (con uno solo,
+  // "el último" ya es el acceso directo habitual, no hace falta un botón aparte).
+  if(totalCheckpoints(o) > 1){
+    const bS = document.createElement('button'); bS.className='btn'; bS.textContent='Sesiones anteriores';
+    bS.onclick = function(){ cardSesionesAnteriores(o); };
+    row.appendChild(bS);
+  }
   row.appendChild(b);
-  el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(grid); el.cardContent.appendChild(row);
+  el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(grid);
+  // OMV-F6 (22/08): sección discreta -- sólo aparece si existe al menos una lectura
+  // especializada. Muestra la ÚLTIMA versión de cada tipo; las anteriores quedan a un clic
+  // (cardVersionesLecturaEspecializada), nunca todas amontonadas acá.
+  var tieneLecturaEsp = (o.lecturas_urban && o.lecturas_urban.length) || (o.lecturas_negocio && o.lecturas_negocio.length);
+  if(tieneLecturaEsp){
+    var secLE = document.createElement('div'); secLE.style.marginTop = '14px';
+    var tLE = document.createElement('div'); tLE.style.cssText = 'font-size:12px;opacity:.65;letter-spacing:.04em;margin-bottom:6px';
+    tLE.textContent = 'Lecturas especializadas';
+    secLE.appendChild(tLE);
+    ['urban','negocio'].forEach(function(tipo){
+      var lista = o[LECTURAS_CAMPO_POR_TIPO[tipo]];
+      if(!lista || !lista.length) return;
+      secLE.appendChild(construirTarjetaLecturaEspecializada(tipo, lista[lista.length - 1]));
+      if(lista.length > 1){
+        var bAnt = document.createElement('button'); bAnt.className = 'btn'; bAnt.style.marginTop = '4px';
+        bAnt.textContent = 'Ver versiones anteriores (' + (lista.length - 1) + ')';
+        bAnt.onclick = function(){ cardVersionesLecturaEspecializada(o, tipo); };
+        secLE.appendChild(bAnt);
+      }
+    });
+    el.cardContent.appendChild(secLE);
+  }
+  el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
 }
 
@@ -15930,6 +16191,257 @@ function correrPruebasAuto(){
         if(_pl === null) localStorage.removeItem('ag_core_plan'); else localStorage.setItem('ag_core_plan', _pl);
         if(_pend === null) localStorage.removeItem('ag_marco_pendiente'); else localStorage.setItem('ag_marco_pendiente', _pend);
       }
+    })());
+
+    /* ---- OMV-F5 (22/08) · Puntos de recuperación de sesión ---- */
+    chk('OMV-F5-01 · crearCheckpointSesion arma un checkpoint bien formado y no toca destilados/ficha', (function(){
+      var _origGuardar = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gh = state.history, gp = state.panelEspecializado, gmu = state.modoUrban, gmn = state.modoNegocio, gmc = state.modoContext;
+      var org = { id:'__f5_01', nombre:'Org F5-01', tipo:'ciudad', ficha:{}, principios:[] };
+      try{
+        state.modoUrban = false; state.modoNegocio = false; state.modoContext = false;
+        state.panelEspecializado = null;
+        state.history = [{role:'user',content:'hola'},{role:'assistant',content:'ok'}];
+        var chkE = crearCheckpointSesion(org);
+        return !!chkE && chkE.modulo === 'core' && chkE.organismo_id === '__f5_01' &&
+               chkE.history.length === 2 && chkE.panel === null &&
+               org.checkpoints.core.length === 1 &&
+               org.destilados === undefined &&
+               Object.keys(org.ficha).length === 0;
+      } finally {
+        guardarOrganismo = _origGuardar;
+        state.history = gh; state.panelEspecializado = gp;
+        state.modoUrban = gmu; state.modoNegocio = gmn; state.modoContext = gmc;
+      }
+    })());
+    chk('OMV-F5-02 · tope de 5 checkpoints por organismo/módulo (se descarta el más viejo)', (function(){
+      var _origGuardar = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio, gmc = state.modoContext;
+      var org = { id:'__f5_02', nombre:'Org F5-02', tipo:'ciudad', ficha:{}, principios:[] };
+      try{
+        state.modoUrban = false; state.modoNegocio = false; state.modoContext = false;
+        for(var i=0; i<7; i++){
+          state.history = [{role:'user',content:'m'+i},{role:'assistant',content:'r'+i}];
+          crearCheckpointSesion(org);
+        }
+        var lista = org.checkpoints.core;
+        return lista.length === 5 && lista[0].history[0].content === 'm2' && lista[4].history[0].content === 'm6';
+      } finally {
+        guardarOrganismo = _origGuardar;
+        state.history = gh; state.modoUrban = gmu; state.modoNegocio = gmn; state.modoContext = gmc;
+      }
+    })());
+    chk('OMV-F5-03 · guardarBorrador (autosave) NO crea checkpoint, sólo actualiza o.borrador', (function(){
+      var _origGuardar = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gOrg = state.organismo, gh = state.history;
+      var org = { id:'__f5_03', nombre:'Org F5-03', tipo:'ciudad', ficha:{}, principios:[] };
+      try{
+        state.organismo = org;
+        state.history = [{role:'user',content:'x'},{role:'assistant',content:'y'}];
+        guardarBorrador();
+        return !!org.borrador && org.borrador.history.length === 2 && org.checkpoints === undefined;
+      } finally {
+        guardarOrganismo = _origGuardar;
+        state.organismo = gOrg; state.history = gh;
+      }
+    })());
+    chk('OMV-F5-04 · guardarSesion(destilado) crea destilado Y checkpoint juntos', (function(){
+      var _origGuardar = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gOrg = state.organismo, gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio, gmc = state.modoContext;
+      var org = { id:'__f5_04', nombre:'Org F5-04', tipo:'ciudad', ficha:{}, principios:[] };
+      try{
+        state.organismo = org;
+        state.modoUrban = false; state.modoNegocio = false; state.modoContext = false;
+        state.history = [{role:'user',content:'a'},{role:'assistant',content:'b'}];
+        guardarSesion('texto destilado de prueba');
+        return org.destilados && org.destilados.length === 1 &&
+               org.checkpoints && org.checkpoints.core && org.checkpoints.core.length === 1;
+      } finally {
+        guardarOrganismo = _origGuardar;
+        state.organismo = gOrg; state.history = gh;
+        state.modoUrban = gmu; state.modoNegocio = gmn; state.modoContext = gmc;
+      }
+    })());
+    chk('OMV-F5-05 · restaurarCheckpoint reconstruye historial + panel (con "Leer en Contextos"), sin tocar lecturas/ficha/principios confirmados', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo, gh = state.history, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gp = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      var org = {
+        id:'__f5_05', nombre:'Barrio F5-05', tipo:'ciudad', ficha:{ funcion:'orientar' },
+        principios:[{ texto:'p1', fam:'espacio' }],
+        lecturas_urban:[{ version:1, fecha:'2026-01-01T00:00:00.000Z',
+          dimensiones:[{ cod:'D1', nombre:'Soporte e infraestructura', estado:'estable', nota:'x' }] }],
+        checkpoints:{ urban:[{
+          fecha:'2026-01-02T00:00:00.000Z', modulo:'urban', organismo_id:'__f5_05',
+          history:[{role:'user',content:'contame del barrio'},{role:'assistant',content:'[[UDIM:D1|estable|x]]listo'}],
+          panel:{ tipo:'urban', version:1,
+            dimensiones:[{ cod:'D1', nombre:'Soporte e infraestructura', estado:'estable', nota:'x' }],
+            proyectivo:'hacia una consolidación gradual' }
+        }] }
+      };
+      try{
+        var okRestore = restaurarCheckpoint(org, 'urban', 0);
+        var tituloPanel = creados.some(function(e){ return /Lectura territorial · v1/.test(e.textContent || ''); });
+        var btnContextos = creados.some(function(e){
+          return e.className && e.className.indexOf('btn') > -1 && /Leer en Contextos/.test(e.textContent || '');
+        });
+        return okRestore === true && state.history.length === 2 && state.modoUrban === true &&
+               tituloPanel && btnContextos &&
+               org.lecturas_urban.length === 1 && org.principios.length === 1 &&
+               org.ficha.funcion === 'orientar';
+      } finally {
+        document.createElement = _origCE;
+        state.organismo = gOrg; state.history = gh; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gp; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('OMV-F5-06 · "Sesiones anteriores" en Memoria sólo aparece con más de un checkpoint', (function(){
+      var _origCE = document.createElement;
+      var gOrg = state.organismo;
+      var tieneBotonConN = function(n){
+        var creados = [];
+        document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+        var org = { id:'__f5_06_'+n, nombre:'Org F5-06', tipo:'ciudad', ficha:{}, principios:[] };
+        if(n > 0){
+          org.checkpoints = { core: [] };
+          for(var i=0; i<n; i++){
+            org.checkpoints.core.push({ fecha:new Date().toISOString(), modulo:'core', organismo_id:org.id,
+              history:[{role:'user',content:'x'}], panel:null });
+          }
+        }
+        try{
+          state.organismo = org;
+          mostrarFicha();
+        } finally { document.createElement = _origCE; }
+        return creados.some(function(e){
+          return e.className && e.className.indexOf('btn') > -1 && /Sesiones anteriores/.test(e.textContent || '');
+        });
+      };
+      try{
+        return tieneBotonConN(0) === false && tieneBotonConN(1) === false && tieneBotonConN(2) === true;
+      } finally { state.organismo = gOrg; }
+    })());
+
+    /* ---- OMV-F6 (22/08) · Lectura especializada persistente ---- */
+    chk('OMV-F6-01 · cerrar lectura Urbanismo persiste 6 dimensiones + proyectivo, visible en Memoria', (function(){
+      var _origGuardar = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo, gmu = state.modoUrban;
+      var org = { id:'__f6_01', nombre:'Barrio F6-01', tipo:'ciudad', ficha:{}, principios:[] };
+      var udims = ['D1','D2','D3','D4','D5','D6'].map(function(c){ return { cod:c, estado:'estable', nota:'nota '+c }; });
+      try{
+        state.organismo = org;
+        cerrarLecturaUrban(udims, 'hacia una consolidación gradual');
+        // "salir y volver a abrir Memoria" -- se captura de nuevo, limpio, como si fuera otra sesión
+        document.createElement = _origCE; creados = [];
+        document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+        mostrarFicha();
+        var titulo = creados.some(function(e){ return /Lectura territorial · v1/.test(e.textContent || ''); });
+        return titulo && org.lecturas_urban.length === 1 &&
+               org.lecturas_urban[0].dimensiones.length === 6 &&
+               org.lecturas_urban[0].proyectivo === 'hacia una consolidación gradual';
+      } finally {
+        document.createElement = _origCE;
+        guardarOrganismo = _origGuardar;
+        state.organismo = gOrg; state.modoUrban = gmu;
+      }
+    })());
+    chk('OMV-F6-02 · nueva lectura Urbanismo genera v2 sin perder v1 (ambas con sus 6 dimensiones y proyectivo)', (function(){
+      var _origGuardar = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gOrg = state.organismo, gmu = state.modoUrban;
+      var org = { id:'__f6_02', nombre:'Barrio F6-02', tipo:'ciudad', ficha:{}, principios:[] };
+      var udims1 = ['D1','D2','D3','D4','D5','D6'].map(function(c){ return { cod:c, estado:'estable', nota:'v1 '+c }; });
+      var udims2 = ['D1','D2','D3','D4','D5','D6'].map(function(c){ return { cod:c, estado:'tensionada', nota:'v2 '+c }; });
+      try{
+        state.organismo = org;
+        cerrarLecturaUrban(udims1, 'proyectivo v1');
+        cerrarLecturaUrban(udims2, 'proyectivo v2');
+        return org.lecturas_urban.length === 2 &&
+               org.lecturas_urban[0].version === 1 && org.lecturas_urban[0].proyectivo === 'proyectivo v1' &&
+               org.lecturas_urban[0].dimensiones.length === 6 &&
+               org.lecturas_urban[1].version === 2 && org.lecturas_urban[1].proyectivo === 'proyectivo v2' &&
+               org.lecturas_urban[1].dimensiones.length === 6;
+      } finally {
+        guardarOrganismo = _origGuardar;
+        state.organismo = gOrg; state.modoUrban = gmu;
+      }
+    })());
+    chk('OMV-F6-03 · Negocios: mismo criterio -- 6 dimensiones + proyectivo persistidos, v2 no pisa v1', (function(){
+      var _origGuardar = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gOrg = state.organismo, gmn = state.modoNegocio;
+      var org = { id:'__f6_03', nombre:'Negocio F6-03', tipo:'empresa', ficha:{}, principios:[] };
+      var ndims1 = ['B1','B2','B3','B4','B5','B6'].map(function(c){ return { cod:c, estado:'estable', nota:'v1 '+c }; });
+      var ndims2 = ['B1','B2','B3','B4','B5','B6'].map(function(c){ return { cod:c, estado:'potencia', nota:'v2 '+c }; });
+      try{
+        state.organismo = org;
+        cerrarLecturaNegocio(ndims1, 'proyectivo negocio v1');
+        cerrarLecturaNegocio(ndims2, 'proyectivo negocio v2');
+        return org.lecturas_negocio.length === 2 &&
+               org.lecturas_negocio[0].dimensiones.length === 6 && org.lecturas_negocio[0].proyectivo === 'proyectivo negocio v1' &&
+               org.lecturas_negocio[1].dimensiones.length === 6 && org.lecturas_negocio[1].proyectivo === 'proyectivo negocio v2';
+      } finally {
+        guardarOrganismo = _origGuardar;
+        state.organismo = gOrg; state.modoNegocio = gmn;
+      }
+    })());
+    chk('OMV-F6-04 · "Lecturas especializadas" y "Sesiones anteriores" (OMV-F5) conviven de forma independiente en Memoria', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo;
+      var org = { id:'__f6_04', nombre:'Org F6-04', tipo:'ciudad', ficha:{}, principios:[],
+        lecturas_urban:[{ version:1, fecha:'2026-01-01T00:00:00.000Z',
+          dimensiones:[{ cod:'D1', nombre:'Soporte e infraestructura', estado:'estable', nota:'x' }], proyectivo:'p' }],
+        checkpoints:{ core:[
+          { fecha:'2026-01-01T00:00:00.000Z', modulo:'core', organismo_id:'__f6_04', history:[{role:'user',content:'a'}], panel:null },
+          { fecha:'2026-01-02T00:00:00.000Z', modulo:'core', organismo_id:'__f6_04', history:[{role:'user',content:'b'}], panel:null }
+        ] }
+      };
+      try{
+        state.organismo = org;
+        mostrarFicha();
+        var tieneLecturas = creados.some(function(e){ return /Lecturas especializadas/.test(e.textContent || ''); });
+        var tieneSesiones = creados.some(function(e){
+          return e.className && e.className.indexOf('btn') > -1 && /Sesiones anteriores/.test(e.textContent || '');
+        });
+        return tieneLecturas && tieneSesiones;
+      } finally {
+        document.createElement = _origCE;
+        state.organismo = gOrg;
+      }
+    })());
+    chk('OMV-F6-05 · abrir una lectura histórica no modifica ficha/principios/hitos/horizonte ni lecturas_urban', (function(){
+      var gOrg = state.organismo;
+      var org = { id:'__f6_05', nombre:'Org F6-05', tipo:'ciudad',
+        ficha:{ funcion:'orientar' }, principios:[{ texto:'p1' }],
+        hitos:[{ fecha:'2026-01-01T00:00:00.000Z', etapa:'e1' }],
+        horizonte:{ fecha:'2026-01-01T00:00:00.000Z', observar:'o1' },
+        lecturas_urban:[
+          { version:1, fecha:'2026-01-01T00:00:00.000Z', dimensiones:[{ cod:'D1', nombre:'Soporte', estado:'estable', nota:'x' }], proyectivo:'p1' },
+          { version:2, fecha:'2026-01-02T00:00:00.000Z', dimensiones:[{ cod:'D1', nombre:'Soporte', estado:'tensionada', nota:'y' }], proyectivo:'p2' }
+        ]
+      };
+      var fichaAntes = JSON.stringify(org.ficha), principiosAntes = JSON.stringify(org.principios),
+          hitosAntes = JSON.stringify(org.hitos), horizonteAntes = JSON.stringify(org.horizonte),
+          lecturasAntes = JSON.stringify(org.lecturas_urban);
+      try{
+        state.organismo = org;
+        cardVersionesLecturaEspecializada(org, 'urban');
+        return JSON.stringify(org.ficha) === fichaAntes && JSON.stringify(org.principios) === principiosAntes &&
+               JSON.stringify(org.hitos) === hitosAntes && JSON.stringify(org.horizonte) === horizonteAntes &&
+               JSON.stringify(org.lecturas_urban) === lecturasAntes;
+      } finally { state.organismo = gOrg; }
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
