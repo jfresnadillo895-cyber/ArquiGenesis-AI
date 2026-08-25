@@ -13817,13 +13817,22 @@ function mostrarFicha(){
     el.cardContent.appendChild(gridSec);
   }
 
+  // UX-P2B (25/08): la fila de botones se reduce a lo que es "contenido de Memoria" o cambio de
+  // lente in-Core -- Eliminar organismo, Marco para Pro, Exportar y Sesiones anteriores son
+  // operaciones sobre el ORGANISMO (administración), no sobre su Memoria, y se mudaron al menú
+  // "⋯" de la barra lateral (ver renderOrgItem() en construirTuEspacioOrganismos()), donde ya
+  // viven las otras operaciones administrativas del organismo (mover a carpeta, pegar evaluación
+  // Pro). Las funciones (cardConfirmarEliminar/cardMarcoPro/cardExportarOrganismo/
+  // cardSesionesAnteriores) NO se tocaron -- siguen siendo las mismas, sólo cambia desde dónde se
+  // llaman. "Contextos" se audita y se mantiene acá a propósito: abre Contextos Universal
+  // (abrirContextosUniversal(), motor C1G3), que es una de sólo tres entradas reales a esa función
+  // en toda la app -- el selector de lentes del header (el ícono de 4 cuadrados, #btnModulos) abre
+  // un producto distinto (el Pro standalone "Comprender Contextos", contextos.html, vía
+  // abrirModulo()), no Contextos Universal. No son la misma puerta -- ver devolución en
+  // PENDIENTES.md para el detalle completo de esta auditoría.
   const row = document.createElement('div'); row.className='cardrow';
-  const bDel = document.createElement('button'); bDel.className='btn danger'; bDel.textContent='Eliminar organismo';
-  bDel.style.marginRight = 'auto';
-  bDel.onclick = function(){ cardConfirmarEliminar(o); };
   const esUrbano = (o.derivable && o.derivable.indexOf('urban') > -1) || orientacionDeTipo(o.tipo) === 'urban';
   const b = document.createElement('button'); b.className='btn primary'; b.textContent='Cerrar'; b.onclick = cerrarOverlay;
-  row.appendChild(bDel);
   if(esUrbano){
     const bU = document.createElement('button'); bU.className='btn'; bU.textContent='Abrir en Urbanismo';
     bU.style.borderColor = 'rgba(79,174,126,.5)'; bU.style.color = 'var(--energia)';
@@ -13845,26 +13854,13 @@ function mostrarFicha(){
     bN.onclick = function(){ abrirEnNegocio(o); };
     row.appendChild(bN);
   }
-  const bM = document.createElement('button'); bM.className='btn'; bM.textContent='Marco para Pro';
-  bM.onclick = function(){ cardMarcoPro(o); };
-  row.appendChild(bM);
   const bRec = document.createElement('button'); bRec.className='btn'; bRec.textContent='Recuerdos';
   bRec.onclick = function(){ cardRecuerdos(o); };
   row.appendChild(bRec);
-  const bX = document.createElement('button'); bX.className='btn'; bX.textContent='Exportar';
-  bX.onclick = function(){ cardExportarOrganismo(o); };
-  row.appendChild(bX);
   const bI = document.createElement('button'); bI.className='btn'; bI.textContent='Informe';
   bI.style.borderColor = 'rgba(91,143,212,.5)'; bI.style.color = 'var(--espacio)';
   bI.onclick = function(){ generarInforme(o); };
   row.appendChild(bI);
-  // OMV-F5 (22/08): vía discreta -- sólo aparece si hay más de un checkpoint (con uno solo,
-  // "el último" ya es el acceso directo habitual, no hace falta un botón aparte).
-  if(totalCheckpoints(o) > 1){
-    const bS = document.createElement('button'); bS.className='btn'; bS.textContent='Sesiones anteriores';
-    bS.onclick = function(){ cardSesionesAnteriores(o); };
-    row.appendChild(bS);
-  }
   row.appendChild(b);
   // UX-P1C (25/08): sección discreta -- sólo aparece si hay al menos un principio incorporado a
   // la Memoria (o.principios[] sólo contiene confirmados: los emergentes viven en el chat/la
@@ -14445,6 +14441,52 @@ function construirTuEspacioOrganismos(){
         panel.appendChild(row);
         setTimeout(function(){ inp.focus(); }, 0);
       }
+      // UX-P2B (25/08): operaciones sobre el ORGANISMO, migradas acá desde la fila de botones de
+      // Memoria (mostrarFicha()) -- "Son operaciones sobre el organismo, no contenido de su
+      // Memoria" (criterio del brief). Las funciones destino no se tocan, sólo el llamador.
+      // "Sesiones anteriores" conserva su regla de aparición discreta de OMV-F5 (sólo si hay más
+      // de un checkpoint). cardSesionesAnteriores()/cardExportarOrganismo() ya abren el overlay
+      // por sí mismas -- no hace falta hacerlo acá.
+      if(totalCheckpoints(org) > 1){
+        const bSes = document.createElement('button');
+        bSes.className = 'orgMenuItem';
+        bSes.textContent = 'Sesiones anteriores';
+        bSes.addEventListener('click', function(e){ e.stopPropagation(); cerrarTuEspacio(); cardSesionesAnteriores(org); });
+        panel.appendChild(bSes);
+      }
+      // Marco para Pro: auditado en este mismo corte -- sigue siendo un respaldo manual real
+      // (Urbanismo Pro todavía acepta pegar este texto a mano, para cuando el handoff automático
+      // por localStorage no está disponible: otro dispositivo/navegador, o un handoff ya
+      // consumido). No es legacy muerto -- se mantiene accesible, sólo se lo baja de rango visual
+      // como operación secundaria del organismo.
+      const bMarco = document.createElement('button');
+      bMarco.className = 'orgMenuItem';
+      bMarco.textContent = 'Marco para Pro';
+      bMarco.addEventListener('click', function(e){ e.stopPropagation(); cerrarTuEspacio(); cardMarcoPro(org); });
+      panel.appendChild(bMarco);
+      const bExp = document.createElement('button');
+      bExp.className = 'orgMenuItem';
+      bExp.textContent = 'Exportar';
+      bExp.addEventListener('click', function(e){ e.stopPropagation(); cerrarTuEspacio(); cardExportarOrganismo(org); });
+      panel.appendChild(bExp);
+      // "Eliminar organismo" queda al final de TODO el menú y visualmente separado (borde
+      // superior + color de peligro, mismo tono que .btn.danger) -- pedido explícito del brief:
+      // "seguir siendo claramente destructivo". cardConfirmarEliminar() no abre el overlay por sí
+      // misma (antes vivía dentro de una Memoria ya abierta) -- acá sí hace falta abrirlo a mano.
+      const bDelSep = document.createElement('div');
+      bDelSep.style.cssText = 'border-top:1px solid var(--line);margin-top:4px;padding-top:4px';
+      const bDel = document.createElement('button');
+      bDel.className = 'orgMenuItem';
+      bDel.style.cssText = 'color:#D4756B';
+      bDel.textContent = 'Eliminar organismo';
+      bDel.addEventListener('click', function(e){
+        e.stopPropagation();
+        cerrarTuEspacio();
+        el.overlay.classList.add('open');
+        cardConfirmarEliminar(org);
+      });
+      bDelSep.appendChild(bDel);
+      panel.appendChild(bDelSep);
       wrap.appendChild(panel);
     }
     return wrap;
@@ -17272,10 +17314,11 @@ function correrPruebasAuto(){
         state.modoContext = gmc; state.panelEspecializado = gp; state.started = gst; el.stream.innerHTML = snap;
       }
     })());
-    chk('OMV-F5-06 · "Sesiones anteriores" en Memoria sólo aparece con más de un checkpoint', (function(){
+    chk('OMV-F5-06 · "Sesiones anteriores" ya no vive en Memoria -- ahora en el menú "⋯", sólo con más de un checkpoint (UX-P2B, 25/08)', (function(){
       var _origCE = document.createElement;
+      var _origCargar = cargarOrganismos;
       var gOrg = state.organismo;
-      var tieneBotonConN = function(n){
+      var tieneBotonEnMemoriaConN = function(n){
         var creados = [];
         document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
         var org = { id:'__f5_06_'+n, nombre:'Org F5-06', tipo:'ciudad', ficha:{}, principios:[] };
@@ -17294,8 +17337,30 @@ function correrPruebasAuto(){
           return e.className && e.className.indexOf('btn') > -1 && /Sesiones anteriores/.test(e.textContent || '');
         });
       };
+      var tieneBotonEnMenuConN = function(n){
+        var creados = [];
+        document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+        var org = { id:'__f5_06m_'+n, nombre:'Org F5-06 menú', tipo:'ciudad', ficha:{}, principios:[] };
+        if(n > 0){
+          org.checkpoints = { core: [] };
+          for(var i=0; i<n; i++){
+            org.checkpoints.core.push({ fecha:new Date().toISOString(), modulo:'core', organismo_id:org.id,
+              history:[{role:'user',content:'x'}], panel:null });
+          }
+        }
+        cargarOrganismos = function(){ return [org]; };
+        teCarpetaMenuAbierto = org.id;
+        try{
+          state.organismo = null;
+          construirTuEspacioOrganismos();
+        } finally { document.createElement = _origCE; cargarOrganismos = _origCargar; teCarpetaMenuAbierto = null; }
+        return creados.some(function(e){
+          return e.className === 'orgMenuItem' && e.textContent === 'Sesiones anteriores';
+        });
+      };
       try{
-        return tieneBotonConN(0) === false && tieneBotonConN(1) === false && tieneBotonConN(2) === true;
+        return tieneBotonEnMemoriaConN(0) === false && tieneBotonEnMemoriaConN(2) === false &&
+               tieneBotonEnMenuConN(0) === false && tieneBotonEnMenuConN(1) === false && tieneBotonEnMenuConN(2) === true;
       } finally { state.organismo = gOrg; }
     })());
 
@@ -17366,10 +17431,9 @@ function correrPruebasAuto(){
         state.organismo = gOrg; state.modoNegocio = gmn;
       }
     })());
-    chk('OMV-F6-04 · "Lecturas especializadas" y "Sesiones anteriores" (OMV-F5) conviven de forma independiente en Memoria', (function(){
+    chk('OMV-F6-04 · "Lecturas especializadas" (Memoria) y "Sesiones anteriores" (menú "⋯", UX-P2B) conviven de forma independiente', (function(){
       var _origCE = document.createElement;
-      var creados = [];
-      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var _origCargar = cargarOrganismos;
       var gOrg = state.organismo;
       var org = { id:'__f6_04', nombre:'Org F6-04', tipo:'ciudad', ficha:{}, principios:[],
         lecturas_urban:[{ version:1, fecha:'2026-01-01T00:00:00.000Z',
@@ -17379,18 +17443,25 @@ function correrPruebasAuto(){
           { fecha:'2026-01-02T00:00:00.000Z', modulo:'core', organismo_id:'__f6_04', history:[{role:'user',content:'b'}], panel:null }
         ] }
       };
+      var creadosFicha = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creadosFicha.push(e); return e; };
       try{
         state.organismo = org;
         mostrarFicha();
-        var tieneLecturas = creados.some(function(e){ return /Lecturas especializadas/.test(e.textContent || ''); });
-        var tieneSesiones = creados.some(function(e){
-          return e.className && e.className.indexOf('btn') > -1 && /Sesiones anteriores/.test(e.textContent || '');
-        });
-        return tieneLecturas && tieneSesiones;
+      } finally { document.createElement = _origCE; }
+      var tieneLecturas = creadosFicha.some(function(e){ return /Lecturas especializadas/.test(e.textContent || ''); });
+      var creadosMenu = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creadosMenu.push(e); return e; };
+      cargarOrganismos = function(){ return [org]; };
+      teCarpetaMenuAbierto = org.id;
+      try{
+        state.organismo = null;
+        construirTuEspacioOrganismos();
       } finally {
-        document.createElement = _origCE;
-        state.organismo = gOrg;
+        document.createElement = _origCE; cargarOrganismos = _origCargar; teCarpetaMenuAbierto = null; state.organismo = gOrg;
       }
+      var tieneSesiones = creadosMenu.some(function(e){ return e.className === 'orgMenuItem' && e.textContent === 'Sesiones anteriores'; });
+      return tieneLecturas && tieneSesiones;
     })());
     chk('OMV-F6-05 · abrir una lectura histórica no modifica ficha/principios/hitos/horizonte ni lecturas_urban', (function(){
       var gOrg = state.organismo;
@@ -19215,7 +19286,7 @@ function correrPruebasAuto(){
       return !!idxTituloHistoria && !!idxLabelHist && !!idxLabelRec && !!idxProximo &&
              idxProximo.i < idxTituloHistoria.i && idxTituloHistoria.i < idxLabelHist.i && idxLabelHist.i < idxLabelRec.i;
     })());
-    chk('UXP2A-10 · la fila de botones inferiores (cardrow) no fue tocada -- mismos botones en el mismo lugar', (function(){
+    chk('UXP2A-10 · la fila de botones inferiores (cardrow) conserva lente/contenido; administración se mudó al "⋯" (actualizado por UX-P2B, 25/08)', (function(){
       var gOrg = state.organismo;
       var org = { id:'__p2a_10', nombre:'Botones', tipo:'ciudad', ficha:{}, principios:[], derivable:['urban','negocio'] };
       var _origCE = document.createElement;
@@ -19223,10 +19294,178 @@ function correrPruebasAuto(){
       document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
       try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
       var textosBtn = creados.filter(function(e){ return e.className && e.className.indexOf('btn') > -1; }).map(function(e){ return e.textContent; });
-      return textosBtn.indexOf('Eliminar organismo') > -1 && textosBtn.indexOf('Abrir en Urbanismo') > -1 &&
-             textosBtn.indexOf('Contextos') > -1 && textosBtn.indexOf('Abrir en Negocios') > -1 &&
-             textosBtn.indexOf('Marco para Pro') > -1 && textosBtn.indexOf('Recuerdos') > -1 &&
-             textosBtn.indexOf('Exportar') > -1 && textosBtn.indexOf('Informe') > -1 && textosBtn.indexOf('Cerrar') > -1;
+      return textosBtn.indexOf('Abrir en Urbanismo') > -1 && textosBtn.indexOf('Contextos') > -1 &&
+             textosBtn.indexOf('Abrir en Negocios') > -1 && textosBtn.indexOf('Recuerdos') > -1 &&
+             textosBtn.indexOf('Informe') > -1 && textosBtn.indexOf('Cerrar') > -1 &&
+             textosBtn.indexOf('Eliminar organismo') === -1 && textosBtn.indexOf('Marco para Pro') === -1 &&
+             textosBtn.indexOf('Exportar') === -1;
+    })());
+
+    /* ---- UX-P2B (25/08) -- Memoria = comprender · "⋯" = administrar · selector de lentes =
+       observar. Eliminar organismo/Marco para Pro/Exportar/Sesiones anteriores se mudan del
+       cardrow de Memoria al menú "⋯" de la barra lateral (renderOrgItem() dentro de
+       construirTuEspacioOrganismos()). Ninguna de las funciones destino
+       (cardConfirmarEliminar/cardMarcoPro/cardExportarOrganismo/cardSesionesAnteriores) se tocó --
+       sólo cambia el llamador. "Contextos" se audita y se mantiene en Memoria (ver comentario en
+       mostrarFicha() y devolución en PENDIENTES.md): no es redundante con el selector de lentes
+       del header (#btnModulos), que abre un producto standalone distinto. */
+    chk('UXP2B-01 · el menú "⋯" ofrece Marco para Pro y Exportar para cualquier organismo, activo o no', (function(){
+      var _origCE = document.createElement;
+      var _origCargar = cargarOrganismos;
+      var gOrg = state.organismo;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var org = { id:'__p2b_01', nombre:'Org P2B-01', tipo:'empresa', ficha:{}, principios:[] };
+      cargarOrganismos = function(){ return [org]; };
+      teCarpetaMenuAbierto = org.id;
+      try{
+        state.organismo = null;   // ni siquiera es el organismo activo
+        construirTuEspacioOrganismos();
+      } finally {
+        document.createElement = _origCE; cargarOrganismos = _origCargar; teCarpetaMenuAbierto = null; state.organismo = gOrg;
+      }
+      var items = creados.filter(function(e){ return e.className === 'orgMenuItem'; }).map(function(e){ return e.textContent; });
+      return items.indexOf('Marco para Pro') > -1 && items.indexOf('Exportar') > -1;
+    })());
+    chk('UXP2B-02 · "Marco para Pro" (mismo cardMarcoPro() de siempre, sin tocar) identifica al organismo correcto', (function(){
+      // El stub de DOM no permite disparar addEventListener por nombre (no guarda el handler
+      // accesible desde afuera) -- UXP2B-01 ya confirmó que el botón existe en el menú "⋯" y que
+      // su handler llama exactamente a cardMarcoPro(org) (código fuente, no reimplementado). Acá
+      // se verifica el comportamiento real de esa función con el organismo correcto.
+      var org = { id:'__p2b_02', nombre:'Org P2B-02', tipo:'empresa', ficha:{}, principios:[] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{ cardMarcoPro(org); } finally { document.createElement = _origCE; }
+      var h3 = creados.filter(function(e){ return e.textContent === 'Marco para los productos Pro'; });
+      var srcMenu = construirTuEspacioOrganismos.toString();
+      return h3.length === 1 && srcMenu.indexOf('cardMarcoPro(org)') > -1;
+    })());
+    chk('UXP2B-03 · "Exportar" desde el menú "⋯" abre cardExportarOrganismo() con ESE organismo', (function(){
+      var org = { id:'__p2b_03', nombre:'Org P2B-03', tipo:'empresa', ficha:{}, principios:[] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{ cardExportarOrganismo(org); } finally { document.createElement = _origCE; }
+      var h3 = creados.filter(function(e){ return e.textContent === 'Exportar «Org P2B-03»'; });
+      return h3.length === 1;
+    })());
+    chk('UXP2B-04 · "Eliminar organismo" queda al final del menú "⋯", visualmente separado, y sigue exigiendo confirmación', (function(){
+      var _origCE = document.createElement;
+      var _origCargar = cargarOrganismos;
+      var gOrg = state.organismo;
+      var org = { id:'__p2b_04', nombre:'Org P2B-04', tipo:'empresa', ficha:{}, principios:[] };
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push({ tag:tag, el:e }); return e; };
+      cargarOrganismos = function(){ return [org]; };
+      teCarpetaMenuAbierto = org.id;
+      try{
+        state.organismo = null;
+        construirTuEspacioOrganismos();
+      } finally { document.createElement = _origCE; cargarOrganismos = _origCargar; teCarpetaMenuAbierto = null; state.organismo = gOrg; }
+      var itemsMenu = creados.filter(function(c){ return c.tag === 'button' && c.el.className === 'orgMenuItem'; });
+      var idxEliminar = itemsMenu.map(function(c){ return c.el.textContent; }).indexOf('Eliminar organismo');
+      var esUltimo = idxEliminar > -1 && idxEliminar === itemsMenu.length - 1;
+      var hayDivSeparador = creados.some(function(c){ return c.tag === 'div' && /border-top/.test(c.el.style.cssText || ''); });
+      // La confirmación en sí (cardConfirmarEliminar) no se tocó -- se verifica que sigue pidiendo
+      // "¿Eliminar «...»?" y no borra directo.
+      var creados2 = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados2.push(e); return e; };
+      try{ cardConfirmarEliminar(org); } finally { document.createElement = _origCE; }
+      var pideConfirmacion = creados2.some(function(e){ return e.textContent === '¿Eliminar «Org P2B-04»?'; });
+      var tieneBotonDefinitivo = creados2.some(function(e){ return e.className === 'btn danger' && e.textContent === 'Eliminar definitivamente'; });
+      return esUltimo && hayDivSeparador && pideConfirmacion && tieneBotonDefinitivo;
+    })());
+    chk('UXP2B-05 · "Sesiones anteriores" ya no depende de que el organismo esté activo -- funciona igual desde el menú "⋯"', (function(){
+      var org = { id:'__p2b_05', nombre:'Org P2B-05', tipo:'ciudad', ficha:{}, principios:[],
+        checkpoints:{ core:[
+          { fecha:'2026-01-01T00:00:00.000Z', modulo:'core', organismo_id:'__p2b_05', history:[{role:'user',content:'a'}], panel:null },
+          { fecha:'2026-01-02T00:00:00.000Z', modulo:'core', organismo_id:'__p2b_05', history:[{role:'user',content:'b'}], panel:null }
+        ] } };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{ cardSesionesAnteriores(org); } finally { document.createElement = _origCE; }
+      var h3 = creados.filter(function(e){ return e.textContent === 'Sesiones anteriores · Org P2B-05'; });
+      return h3.length === 1 && totalCheckpoints(org) === 2;
+    })());
+    chk('UXP2B-06 · "Contextos" sigue en la fila de Memoria -- auditoría confirmó que NO es redundante con el selector de lentes del header', (function(){
+      var org = { id:'__p2b_06', nombre:'Org P2B-06', tipo:'ciudad', ficha:{}, principios:[] };
+      var gOrg = state.organismo;
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var btnContextos = creados.filter(function(e){ return e.className && e.className.indexOf('btn') > -1 && e.textContent === 'Contextos'; })[0];
+      // El selector de lentes (#btnModulos/construirModulosMenu) abre abrirModulo('contextos'),
+      // que apunta a contextos.html (producto Pro standalone) -- no a abrirContextosUniversal()
+      // (Contextos Universal, motor C1G3, in-Core). Se verifica que el botón de Memoria sigue
+      // apuntando a la función correcta y que la lista del selector de lentes efectivamente no la
+      // incluye (mismo id 'contextos' de ACCESO_MODULOS, ninguna referencia a
+      // abrirContextosUniversal en su código).
+      var srcModulos = construirModulosMenu.toString();
+      return !!btnContextos && srcModulos.indexOf('abrirContextosUniversal') === -1 && srcModulos.indexOf('abrirModulo') > -1;
+    })());
+    /* ---- UX-P2B · regresión de la señal de organismo enriquecido (avisoImportacionPro) --
+       INVARIANTE del brief: no se tocó nada de esta lógica en este corte, pero no había pruebas
+       dirigidas específicas todavía (confirmado por auditoría) -- se agregan acá. ---- */
+    chk('UXP2B-07 · un organismo con avisoImportacionPro:true muestra el punto en la barra lateral', (function(){
+      var _origCE = document.createElement;
+      var _origCargar = cargarOrganismos;
+      var gOrg = state.organismo;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var org = { id:'__p2b_07', nombre:'Org con aviso', tipo:'empresa', ficha:{}, principios:[], avisoImportacionPro:true };
+      cargarOrganismos = function(){ return [org]; };
+      try{ state.organismo = null; construirTuEspacioOrganismos(); }
+      finally { document.createElement = _origCE; cargarOrganismos = _origCargar; state.organismo = gOrg; }
+      return creados.some(function(e){ return e.className === 'oaviso-punto'; });
+    })());
+    chk('UXP2B-08 · un organismo sin avisoImportacionPro no muestra ningún punto', (function(){
+      var _origCE = document.createElement;
+      var _origCargar = cargarOrganismos;
+      var gOrg = state.organismo;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var org = { id:'__p2b_08', nombre:'Org sin aviso', tipo:'empresa', ficha:{}, principios:[] };
+      cargarOrganismos = function(){ return [org]; };
+      try{ state.organismo = null; construirTuEspacioOrganismos(); }
+      finally { document.createElement = _origCE; cargarOrganismos = _origCargar; state.organismo = gOrg; }
+      return !creados.some(function(e){ return e.className === 'oaviso-punto'; });
+    })());
+    chk('UXP2B-09 · abrirOrganismo() apaga avisoImportacionPro y persiste el cambio (se limpia solo, sin botón aparte)', (function(){
+      var _origGuardar = guardarOrganismo, guardadas = [];
+      guardarOrganismo = function(o){ guardadas.push(o.id); };
+      var _origSenal = registrarSenalVital;
+      registrarSenalVital = function(){};
+      var _origFetch = fetch, fetchLlamado = 0;
+      fetch = function(){ fetchLlamado++; return Promise.resolve({ ok:true, json:function(){ return Promise.resolve({}); } }); };
+      var gOrg = state.organismo, gh = state.history, snap = el.stream.innerHTML, gst = state.started;
+      var org = { id:'__p2b_09', nombre:'Org a abrir', tipo:'empresa', ficha:{}, principios:[], avisoImportacionPro:true };
+      try{
+        abrirOrganismo(org);
+        return org.avisoImportacionPro === false && guardadas.indexOf('__p2b_09') > -1;
+      } finally {
+        guardarOrganismo = _origGuardar; registrarSenalVital = _origSenal; fetch = _origFetch;
+        state.organismo = gOrg; state.history = gh; el.stream.innerHTML = snap; state.started = gst;
+      }
+    })());
+    chk('UXP2B-10 · abrirOrganismo() NO toca avisoImportacionPro si ya era false (no guarda de más)', (function(){
+      var _origGuardar = guardarOrganismo, guardadas = 0;
+      guardarOrganismo = function(){ guardadas++; };
+      var _origSenal = registrarSenalVital;
+      registrarSenalVital = function(){};
+      var _origFetch = fetch;
+      fetch = function(){ return Promise.resolve({ ok:true, json:function(){ return Promise.resolve({}); } }); };
+      var gOrg = state.organismo, gh = state.history, snap = el.stream.innerHTML, gst = state.started;
+      var org = { id:'__p2b_10', nombre:'Org sin aviso previo', tipo:'empresa', ficha:{}, principios:[] };
+      try{
+        abrirOrganismo(org);
+        return org.avisoImportacionPro !== true && guardadas === 0;
+      } finally {
+        guardarOrganismo = _origGuardar; registrarSenalVital = _origSenal; fetch = _origFetch;
+        state.organismo = gOrg; state.history = gh; el.stream.innerHTML = snap; state.started = gst;
+      }
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
