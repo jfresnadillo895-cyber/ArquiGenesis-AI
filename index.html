@@ -13920,7 +13920,44 @@ function mostrarFicha(){
   tHist.textContent = 'Historia';
   secHist.appendChild(tHist);
   var gridHist = document.createElement('div'); gridHist.className = 'fichagrid';
-  gridHist.appendChild(construirFilaFicha('Historial de memoria', textoHistorialFicha(o)));
+  // UX-P2C (25/08): "Historial de memoria" deja de mostrar directamente el texto técnico de
+  // textoHistorialFicha() (que concatenaba "v5→v6 ... (corregido)" etc. -- lenguaje de control de
+  // versiones) -- ahora se ve un resumen humano ("5 cambios guardados") y el detalle técnico
+  // completo queda a un clic ("Ver historial"), con <details> nativo (mismo patrón ya usado en
+  // Lecturas especializadas/Recuerdos, sin CSS ni modal nuevo). textoHistorialFicha() en sí NO SE
+  // TOCÓ -- se sigue usando tal cual para el caso vacío (mismo texto de siempre); para el caso con
+  // datos, esta es una capa de presentación pura sobre o.ficha_historial[] (mismos campos:
+  // version/campos/resuelto_como que ya leía textoHistorialFicha, sin resumir con IA ni inventar
+  // datos), y a diferencia del texto colapsado anterior (que sólo mostraba los últimos 3 cambios,
+  // hs.slice(-3)) el despliegue muestra TODOS los cambios -- no se pierde ningún dato.
+  var itHist = document.createElement('div'); itHist.className = 'fitem';
+  var lbHist = document.createElement('span'); lbHist.className = 'flabel'; lbHist.textContent = 'Historial de memoria';
+  itHist.appendChild(lbHist);
+  var hsHist = (o && o.ficha_historial) || [];
+  if(!hsHist.length){
+    var vlHist = document.createElement('span'); vlHist.className = 'fval';
+    vlHist.textContent = textoHistorialFicha(o);   // mismo fallback de siempre, sin cambios
+    itHist.appendChild(vlHist);
+  } else {
+    var resumenHist = document.createElement('div'); resumenHist.className = 'fval';
+    resumenHist.textContent = hsHist.length + (hsHist.length === 1 ? ' cambio guardado' : ' cambios guardados');
+    itHist.appendChild(resumenHist);
+    var detHist = document.createElement('details'); detHist.style.marginTop = '6px';
+    var sumHist = document.createElement('summary'); sumHist.style.cssText = 'cursor:pointer;font-size:12.5px;color:var(--dim)';
+    sumHist.textContent = 'Ver historial';
+    detHist.appendChild(sumHist);
+    var listaHist = document.createElement('div'); listaHist.style.cssText = 'margin-top:6px;display:flex;flex-direction:column;gap:6px';
+    hsHist.slice().reverse().forEach(function(x){
+      var linea = document.createElement('div'); linea.style.cssText = 'font-size:12.5px;color:var(--dim)';
+      linea.textContent = 'v' + x.version + '→v' + (x.version+1) + ' · ' +
+        x.campos.map(function(k){ return CAMPO_LABEL[k] || k; }).join(', ') +
+        ' (' + (x.resuelto_como === 'corregida' ? 'corregido' : 'confirmado') + ')';
+      listaHist.appendChild(linea);
+    });
+    detHist.appendChild(listaHist);
+    itHist.appendChild(detHist);
+  }
+  gridHist.appendChild(itHist);
   var nRec = obtenerRecuerdos(o).length;
   gridHist.appendChild(construirFilaFicha('Recuerdos', nRec ? (nRec + (nRec === 1 ? ' recuerdo guardado' : ' recuerdos guardados')) : 'ninguno todavía'));
   secHist.appendChild(gridHist);
@@ -19466,6 +19503,107 @@ function correrPruebasAuto(){
         guardarOrganismo = _origGuardar; registrarSenalVital = _origSenal; fetch = _origFetch;
         state.organismo = gOrg; state.history = gh; el.stream.innerHTML = snap; state.started = gst;
       }
+    })());
+
+    /* ---- UX-P2C (25/08) -- Historia de Memoria: presentación humana y secundaria sobre
+       o.ficha_historial[], sin resumir con IA ni perder datos. textoHistorialFicha() NO se tocó
+       -- sigue usándose tal cual para el caso vacío; para el caso con datos, mostrarFicha() ahora
+       arma un resumen compacto ("N cambios guardados") + <details>/<summary>"Ver historial"
+       nativo (mismo patrón ya usado en Lecturas especializadas/Recuerdos) con TODOS los cambios,
+       no sólo los últimos 3 que mostraba el texto colapsado anterior. ---- */
+    chk('UXP2C-01 · organismo sin historial muestra el mismo texto de siempre, sin "Ver historial"', (function(){
+      var gOrg = state.organismo;
+      var org = { id:'__p2c_01', nombre:'Sin historial', tipo:'proyecto', ficha:{}, principios:[] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push({ tag:tag, el:e }); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var vals = creados.filter(function(c){ return c.el.className === 'fval' && typeof c.el.textContent === 'string'; }).map(function(c){ return c.el.textContent; });
+      var tieneTextoDeSiempre = vals.indexOf(textoHistorialFicha(org)) > -1;
+      var tieneVerHistorial = creados.some(function(c){ return c.tag === 'summary' && c.el.textContent === 'Ver historial'; });
+      return tieneTextoDeSiempre && !tieneVerHistorial;
+    })());
+    chk('UXP2C-02 · 1 cambio -> resumen en singular ("1 cambio guardado") y "Ver historial" con esa única línea', (function(){
+      var gOrg = state.organismo;
+      var org = { id:'__p2c_02', nombre:'Un cambio', tipo:'proyecto', ficha:{ diagnostico:'d' }, principios:[],
+        ficha_historial:[{ version:0, fecha:'2026-01-01T00:00:00.000Z', campos:['diagnostico'], anterior:{diagnostico:null}, resuelto_como:'confirmada' }] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push({ tag:tag, el:e }); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var resumen = creados.filter(function(c){ return c.tag === 'div' && c.el.className === 'fval'; }).map(function(c){ return c.el.textContent; });
+      var tieneResumenSingular = resumen.indexOf('1 cambio guardado') > -1;
+      var lineas = creados.filter(function(c){ return c.tag === 'div' && /v0→v1/.test(c.el.textContent||''); });
+      return tieneResumenSingular && lineas.length === 1 && /confirmado/.test(lineas[0].el.textContent);
+    })());
+    chk('UXP2C-03 · múltiples versiones -> "Ver historial" trae TODAS (no sólo las últimas 3 como el texto colapsado anterior)', (function(){
+      var gOrg = state.organismo;
+      var hist = [];
+      for(var i=0;i<5;i++){
+        hist.push({ version:i, fecha:'2026-01-0'+(i+1)+'T00:00:00.000Z', campos:['diagnostico'], anterior:{diagnostico:'v'+i}, resuelto_como:'confirmada' });
+      }
+      var org = { id:'__p2c_03', nombre:'Cinco cambios', tipo:'proyecto', ficha:{ diagnostico:'d' }, principios:[], ficha_historial:hist };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push({ tag:tag, el:e }); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var resumen = creados.filter(function(c){ return c.tag === 'div' && c.el.className === 'fval'; }).map(function(c){ return c.el.textContent; });
+      var tieneResumenPlural = resumen.indexOf('5 cambios guardados') > -1;
+      var lineasVersion = creados.filter(function(c){ return c.tag === 'div' && /^v\d+→v\d+/.test(c.el.textContent||''); });
+      return tieneResumenPlural && lineasVersion.length === 5;
+    })());
+    chk('UXP2C-04 · "Ver historial" es un <details> nativo, plegado por defecto (sin atributo open)', (function(){
+      var gOrg = state.organismo;
+      var org = { id:'__p2c_04', nombre:'Plegable', tipo:'proyecto', ficha:{ diagnostico:'d' }, principios:[],
+        ficha_historial:[{ version:0, fecha:'2026-01-01T00:00:00.000Z', campos:['diagnostico'], anterior:{diagnostico:null}, resuelto_como:'confirmada' }] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push({ tag:tag, el:e }); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var det = creados.filter(function(c){ return c.tag === 'details'; }).map(function(c){ return c.el; });
+      return det.length === 1 && !det[0].open;
+    })());
+    chk('UXP2C-05 · historial corregido sigue diciendo "(corregido)" en el detalle expandido (no se pierde ese dato)', (function(){
+      var gOrg = state.organismo;
+      var org = { id:'__p2c_05', nombre:'Corregido', tipo:'proyecto', ficha:{ diagnostico:'d' }, principios:[],
+        ficha_historial:[{ version:0, fecha:'2026-01-01T00:00:00.000Z', campos:['diagnostico'], anterior:{diagnostico:null}, resuelto_como:'corregida' }] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push({ tag:tag, el:e }); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      return creados.some(function(c){ return c.tag === 'div' && /\(corregido\)/.test(c.el.textContent||''); });
+    })());
+    chk('UXP2C-06 · el resumen compacto no muestra jerga técnica (v0→v1, "confirmado"/"corregido", conteo repetido)', (function(){
+      var gOrg = state.organismo;
+      var org = { id:'__p2c_06', nombre:'Resumen limpio', tipo:'proyecto', ficha:{ diagnostico:'d' }, principios:[],
+        ficha_historial:[
+          { version:0, fecha:'2026-01-01T00:00:00.000Z', campos:['diagnostico'], anterior:{diagnostico:null}, resuelto_como:'confirmada' },
+          { version:1, fecha:'2026-01-02T00:00:00.000Z', campos:['proximo'], anterior:{proximo:null}, resuelto_como:'corregida' }
+        ] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push({ tag:tag, el:e }); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var resumen = creados.filter(function(c){ return c.tag === 'div' && c.el.className === 'fval'; }).map(function(c){ return c.el.textContent; })[0];
+      var sumario = creados.filter(function(c){ return c.tag === 'summary'; }).map(function(c){ return c.el.textContent; })[0];
+      return resumen === '2 cambios guardados' && sumario === 'Ver historial' &&
+             !/v\d+→v\d+/.test(resumen) && !/confirmado|corregido/.test(resumen);
+    })());
+    chk('UXP2C-07 · leer Memoria con historial no persiste nada (sólo lectura, igual que Lecturas especializadas)', (function(){
+      var gOrg = state.organismo;
+      var _origGuardar = guardarOrganismo, guardadas = 0;
+      guardarOrganismo = function(){ guardadas++; };
+      var org = { id:'__p2c_07', nombre:'Sólo lectura', tipo:'proyecto', ficha:{ diagnostico:'d' }, principios:[],
+        ficha_historial:[{ version:0, fecha:'2026-01-01T00:00:00.000Z', campos:['diagnostico'], anterior:{diagnostico:null}, resuelto_como:'confirmada' }] };
+      var antes = JSON.stringify(org.ficha_historial);
+      try{ state.organismo = org; mostrarFicha(); } finally { guardarOrganismo = _origGuardar; state.organismo = gOrg; }
+      return guardadas === 0 && JSON.stringify(org.ficha_historial) === antes;
+    })());
+    chk('UXP2C-08 · textoHistorialFicha() en sí no se tocó (misma firma, mismo texto de fallback)', (function(){
+      var o1 = { id:'__p2c_08a', ficha_historial:[] };
+      var o2 = { id:'__p2c_08b' };   // sin ficha_historial en absoluto
+      return textoHistorialFicha(o1) === 'sin cambios registrados (ficha v' + fichaVersion(o1) + ')' &&
+             textoHistorialFicha(o2) === 'sin cambios registrados (ficha v' + fichaVersion(o2) + ')';
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
