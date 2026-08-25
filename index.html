@@ -5079,7 +5079,7 @@ var C1B1_EPISTEMIC_STATES = ['relacion_declarada','memoria_gobernada','recuerdo_
    relevantOpenQuestionRefs/relevantMemoryEventRefs/criticalUnknowns) -- si el Origen no marcó
    ningún campo de memoria como pertinente, cae a un mínimo razonable (función/tensiones/
    diagnóstico) para no dejar al motor completamente a ciegas. */
-function C1B1_ventanaCognitiva(snapshot, opening, assessment, recuerdosPertinentes, interpretacionesEspecializadasPertinentes){
+function C1B1_ventanaCognitiva(snapshot, opening, assessment, recuerdosPertinentes, interpretacionesEspecializadasPertinentes, camposExcluidos){
   var CAMPOS_MEMORIA = ['function','tensions','diagnosis','next','nextPending','principles'];
   var refs = (Array.isArray(assessment.relevantMemoryRefs) && assessment.relevantMemoryRefs.length)
     ? assessment.relevantMemoryRefs : ['function','tensions','diagnosis'];
@@ -5107,7 +5107,14 @@ function C1B1_ventanaCognitiva(snapshot, opening, assessment, recuerdosPertinent
     // sin mezclarlas en ningún punto de acá en adelante.
     recuerdosPertinentes: recuerdosPertinentes || [],
     interpretacionesEspecializadasPertinentes: interpretacionesEspecializadasPertinentes || [],
-    criticalUnknowns: assessment.criticalUnknowns || []
+    criticalUnknowns: assessment.criticalUnknowns || [],
+    // OMV-F8.1 (24/08): Campos externos ya agotados en esta misma conversación (ninguna candidata
+    // de ellos dejó un Frente útil) -- recortado a lo mínimo que el modelo necesita para no
+    // reformular la misma relación externa con otras palabras (mismo criterio que
+    // yaCerradosPorFaltaDeEvidencia de C1-C1: nunca se manda el estado operacional interno).
+    camposExcluidos: (camposExcluidos || []).map(function(c){
+      return { target: (c && c.target) || null, manifestation: (c && c.manifestation) || null };
+    })
   };
 }
 
@@ -5159,6 +5166,16 @@ function C1B1_PROMPT_OPEN_FIELD(ventana){
            (f.date ? (' · ' + f.date) : '') + '\n' + f.text;
        }).join('\n---\n'))
     : '';
+  // OMV-F8.1 (24/08): mismo patrón que "ya cerrados" de C1-C1 -- Campos externos que ya se
+  // exploraron en esta misma conversación y no dejaron ningún Frente útil. No se prohíbe volver a
+  // esa zona del Organismo entera, sólo repetir la MISMA relación con otra formulación.
+  var camposExcluidosTxt = (ventana.camposExcluidos && ventana.camposExcluidos.length)
+    ? ('\n\nCAMPOS EXTERNOS YA EXPLORADOS EN ESTA CONVERSACIÓN (se agotaron -- ninguna candidata de ' +
+       'estos dejó un Frente que valiera la pena seguir): ' +
+       ventana.camposExcluidos.map(function(c){ return (c.target || '?') + (c.manifestation ? (' -- ' + c.manifestation) : ''); }).join('; ') +
+       '. No repitas ninguna de estas relaciones con otra formulación -- si proponés algo relacionado, ' +
+       'tiene que ser una relación genuinamente distinta, o preferí cero candidatas.')
+    : '';
   return 'Sos el motor de apertura de Campo (OPEN) de Contextos Universal -- un motor NUEVO y ' +
     'propio, distinto de cualquier Contextos anterior. NO uses las seis fuerzas del Contextos ' +
     'Legacy (natural/territorial/social/económico/político/tecnológico) ni ninguna otra lista de ' +
@@ -5170,7 +5187,7 @@ function C1B1_PROMPT_OPEN_FIELD(ventana){
     'dimensiones. Esto vale igual para una organización humana, un sistema biológico o un sistema ' +
     'abstracto (una metodología, una tecnología, un concepto) -- no ajustes el criterio por tipo.\n\n' +
     'VENTANA COGNITIVA (ya seleccionada, no es todo el Organismo):\n' + ventanaTxt + '\n' +
-    ventana.aperturaTexto + antecedentesTxt + especialidadesTxt + '\n\n' +
+    ventana.aperturaTexto + antecedentesTxt + especialidadesTxt + camposExcluidosTxt + '\n\n' +
     'REGLAS:\n' +
     '1. Una relación candidata vincula algo perteneciente o funcionalmente asociado al Organismo ' +
     'con algo situado más allá de su delimitación actual (ej.: "estudio <-> red de ejecutores ' +
@@ -5247,7 +5264,7 @@ function C1B1_situacionParaEspecialidades(opening, assessment){
   return partes.join(' ').trim();
 }
 
-function C1B1_prepararLlamada(snapshot, opening, assessment){
+function C1B1_prepararLlamada(snapshot, opening, assessment, camposExcluidos){
   if(!snapshot || !opening || !assessment) return null;
   var o = cargarOrganismos().find(function(x){ return x.id === snapshot.organismId; });   // solo lectura
   var candIds = Array.isArray(assessment.relevantMemoryEventRefs) ? assessment.relevantMemoryEventRefs : [];
@@ -5301,7 +5318,7 @@ function C1B1_prepararLlamada(snapshot, opening, assessment){
       }
     }
   }
-  var ventana = C1B1_ventanaCognitiva(snapshot, opening, assessment, recuerdosPertinentes, interpretacionesEspecializadasPertinentes);
+  var ventana = C1B1_ventanaCognitiva(snapshot, opening, assessment, recuerdosPertinentes, interpretacionesEspecializadasPertinentes, camposExcluidos);
   return {
     systemPrompt: C1B1_PROMPT_OPEN_FIELD(ventana),
     mensajes: [{ role:'user', content:'(descubrí relaciones candidatas que atraviesan la delimitación de este Organismo, si las hay)' }],
@@ -5403,11 +5420,11 @@ function C1B1_parseBoundaryOpeningResult(texto, candIdsOfrecidos, interpEspRefsO
 }
 
 /* ---- openField: punto de entrada único de C1-B1 ---- */
-async function openField(snapshot, opening, assessment){
+async function openField(snapshot, opening, assessment, camposExcluidos){
   if(!assessment || assessment.status !== 'continue'){
     return { ok:false, motivo:'openField() requiere un OriginAssessment con status "continue"' };
   }
-  var prep = C1B1_prepararLlamada(snapshot, opening, assessment);
+  var prep = C1B1_prepararLlamada(snapshot, opening, assessment, camposExcluidos);
   if(!prep) return { ok:false, motivo:'snapshot, opening o assessment ausente' };
   var res;
   try{
@@ -8980,6 +8997,10 @@ window.debugC1F2GobernarRetorno = function(returnProposal, snapshot, front, deci
 
 var C1G1_MAX_CICLOS = 6;   // tope defensivo de pasos silenciosos (READ/TRACE) antes de declarar
                            // límite explícito -- nunca fabrica una comprensión para evitar el tope.
+// OMV-F8.1 (24/08): tope defensivo de Campos externos ALTERNATIVOS que se intentan (además del
+// primero que ya abre C1G1_iniciarConversacion) antes de rendirse -- mismo espíritu que
+// C1G1_MAX_CICLOS, nunca deja el ciclo abierto indefinidamente ni gasta llamadas sin límite.
+var C1G1_MAX_CAMPOS_ALTERNATIVOS = 3;
 // C1-Z1.1-A: 'editar' queda deliberadamente FUERA de este mapa -- todavía no existe una UI real de
 // corrección de campos, y antes (con correccionUsuario siempre vacío) "Editar" terminaba aplicando
 // el mismo candidato que "Incorporar" sin que el usuario corrigiera nada. Con 'editar' ausente acá,
@@ -9103,6 +9124,41 @@ function C1G1_vistaRetorno(returnProposal){
    pasar en la próxima llamada (responder la pregunta / decidir gobernanza), o null si la
    conversación llegó a un punto terminal (cierre) y no hay nada que retomar. ---- */
 
+/* OMV-F8.1 (24/08): nivel de Campo (C1-B1 abre -> C1-B2 propaga -> C1-C1 selecciona un Frente),
+   reutilizado tanto para la apertura inicial de Contextos como para cuando un Campo se agota en
+   pleno ciclo (ver C1G1_continuarCiclo más abajo -- misma función, un solo lugar que sabe cómo
+   abrir un Campo). Si el primer intento no deja ningún Frente útil, prueba Campos alternativos
+   (hasta C1G1_MAX_CAMPOS_ALTERNATIVOS más) excluyendo los que ya se agotaron -- nunca repite la
+   misma relación externa con otra formulación (regla 5 del brief). "camposExcluidos" entra y sale
+   siempre acumulado (nunca se descarta lo ya explorado, sólo se le sigue agregando) para que quien
+   llama pueda seguir excluyendo en la próxima escalada si hiciera falta. No hardcodea ningún
+   dominio/especialidad -- opera sobre snapshot/opening/assessment genéricos, igual que C1-B1/B2/C1
+   en sí mismos. */
+async function C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidosIniciales){
+  var camposExcluidos = (camposExcluidosIniciales || []).slice();
+  for(var intento = 0; intento <= C1G1_MAX_CAMPOS_ALTERNATIVOS; intento++){
+    var r2 = await openField(snapshot, opening, assessment, camposExcluidos);
+    if(!r2.ok || r2.result.status !== 'candidates_found' || !r2.result.candidateRelations.length){
+      return { ok:false, camposExcluidos: camposExcluidos };
+    }
+    var r3 = await propagateField(snapshot, opening, assessment, r2.result);
+    if(!r3.ok){
+      return { ok:false, camposExcluidos: camposExcluidos };
+    }
+    var r4 = await selectContextFronts(r3.result, opening);
+    if(r4.ok && r4.result.activeFrontId){
+      var front = r4.result.fronts.filter(function(f){ return f.id === r4.result.activeFrontId; })[0];
+      return { ok:true, graphState: r3.result, front: front, camposExcluidos: camposExcluidos };
+    }
+    // Este Campo no dejó ningún Frente útil -- se marca agotado (paso 3 del brief) y se prueba
+    // otro (pasos 4-6), sin fabricar nada ni descartar lo que sí se llegó a proponer acá.
+    camposExcluidos = camposExcluidos.concat((r2.result.candidateRelations || []).map(function(c){
+      return { target: c.target && c.target.label, manifestation: c.manifestation };
+    }));
+  }
+  return { ok:false, camposExcluidos: camposExcluidos };
+}
+
 async function C1G1_iniciarConversacion(organismoId, question, intention){
   var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
   if(!o) return { ok:true, vista: C1G1_vistaCierre('No encontramos ese organismo.'), estado:null };
@@ -9114,18 +9170,15 @@ async function C1G1_iniciarConversacion(organismoId, question, intention){
   if(!r1.ok || r1.assessment.status !== 'continue'){
     return { ok:true, vista: C1G1_vistaCierre('Todavía no hay suficiente para abrir un Contexto acá.'), estado:null };
   }
-  var r2 = await openField(snap, r1.opening, r1.assessment);
-  if(!r2.ok) return { ok:true, vista: C1G1_vistaCierre('No pudimos abrir el campo de este organismo por ahora.'), estado:null };
-  var r3 = await propagateField(snap, r1.opening, r1.assessment, r2.result);
-  if(!r3.ok) return { ok:true, vista: C1G1_vistaCierre('No pudimos construir el mapa de relaciones por ahora.'), estado:null };
-  var r4 = await selectContextFronts(r3.result, r1.opening);
-  if(!r4.ok || !r4.result.activeFrontId){
+  var apertura = await C1G1_abrirCampoYSeleccionarFrente(snap, r1.opening, r1.assessment, []);
+  if(!apertura.ok){
     return { ok:true, vista: C1G1_vistaCierre('No encontramos, por ahora, algo activo para trabajar acá.'), estado:null };
   }
-  var front = r4.result.fronts.filter(function(f){ return f.id === r4.result.activeFrontId; })[0];
+  var front = apertura.front;
 
   var vistaApertura = C1G1_vistaApertura(o.nombre, r1.opening, front);
-  var estadoBase = { snapshot: snap, opening: r1.opening, graphState: r3.result, front: front };
+  var estadoBase = { snapshot: snap, opening: r1.opening, assessment: r1.assessment, graphState: apertura.graphState,
+    front: front, camposExcluidos: apertura.camposExcluidos };
   var siguiente = await C1G1_continuarCiclo(estadoBase, null);
   return { ok:true, vista: { apertura: vistaApertura, siguiente: siguiente.vista }, estado: siguiente.estado };
 }
@@ -9135,6 +9188,8 @@ async function C1G1_iniciarConversacion(organismoId, question, intention){
    NONE_AVAILABLE/INTERPRET->Comprensión) o al tope defensivo C1G1_MAX_CICLOS. */
 async function C1G1_continuarCiclo(estado, accionInicial){
   var snapshot = estado.snapshot, opening = estado.opening, graphState = estado.graphState, front = estado.front;
+  var assessment = estado.assessment || null;   // OMV-F8.1: sólo hace falta para escalar a otro Campo
+  var camposExcluidos = estado.camposExcluidos || [];
   var accionPendiente = accionInicial || null;
   // Punto ciego real de un Frente -- NONE_AVAILABLE declarado por C1-C2 (el caso real y ya alcanzable
   // hoy: RESEARCH necesario pero no habilitado en C1X3_ACCIONES_DISPONIBLES_PROFESIONAL, el prompt ya
@@ -9166,8 +9221,22 @@ async function C1G1_continuarCiclo(estado, accionInicial){
       : null;
     if(nuevoFrente) return { continuar:true, front: nuevoFrente };
 
-    // No hay otro Frente pertinente: se cierra Contextos, pero sin ocultar lo que quedó sin resolver
-    // por falta de evidencia (nunca se fabrica una respuesta ni se calla la duda).
+    // OMV-F8.1 (24/08): este Campo se agotó -- ningún Frente más dentro de él (paso 3 del brief).
+    // Antes de cerrar Contextos entero, se vuelve al nivel de apertura de Campo con el mismo
+    // organismo + lectura micro original (mismo snapshot/opening/assessment), excluyendo los
+    // Campos ya agotados (pasos 4-6). Sin "assessment" (estados viejos o llamadores que no lo
+    // pasaron) no hay forma de reabrir Campo -- se conserva el comportamiento anterior tal cual.
+    if(assessment){
+      var otroCampo = await C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidos);
+      camposExcluidos = otroCampo.camposExcluidos || camposExcluidos;
+      if(otroCampo.ok){
+        graphState = otroCampo.graphState;
+        return { continuar:true, front: otroCampo.front };
+      }
+    }
+
+    // No hay otro Frente ni otro Campo pertinente (paso 7): se cierra Contextos, pero sin ocultar lo
+    // que quedó sin resolver por falta de evidencia (nunca se fabrica una respuesta ni se calla la duda).
     var motivosPendientes = frentesCerradosPorFaltaDeEvidencia.map(function(f){
       return (f.operationalState && f.operationalState.closeReason) || f.formulation || '';
     }).filter(function(t){ return t; });
@@ -9215,8 +9284,8 @@ async function C1G1_continuarCiclo(estado, accionInicial){
     }
 
     if(ejecucion.action === 'ASK'){
-      var estadoPausado = { snapshot: snapshot, opening: opening, graphState: graphState, front: ejecucion.front,
-        previousAction: accion, previousResult: ejecucion.result };
+      var estadoPausado = { snapshot: snapshot, opening: opening, assessment: assessment, camposExcluidos: camposExcluidos,
+        graphState: graphState, front: ejecucion.front, previousAction: accion, previousResult: ejecucion.result };
       return { vista: C1G1_vistaPregunta(ejecucion.result), estado: estadoPausado };
     }
 
@@ -9313,7 +9382,8 @@ async function C1G1_responderPregunta(estadoPausado, respuestaTexto){
     frontContinuar = JSON.parse(JSON.stringify(frontContinuar));
     frontContinuar.uncertainty = reeval.result.updatedUncertainty;
   }
-  var estadoContinuar = { snapshot: estadoPausado.snapshot, opening: aplicado.opening, graphState: estadoPausado.graphState, front: frontContinuar };
+  var estadoContinuar = { snapshot: estadoPausado.snapshot, opening: aplicado.opening, assessment: estadoPausado.assessment,
+    camposExcluidos: estadoPausado.camposExcluidos, graphState: estadoPausado.graphState, front: frontContinuar };
   return await C1G1_continuarCiclo(estadoContinuar, reeval.result.nextAction);
 }
 
@@ -17038,6 +17108,87 @@ function correrPruebasAuto(){
     // (C1G1_continuarCiclo es async, mismo límite que C1-08/C1-18/C2-21) -- verificado en vivo con
     // diag_research.js (fetch mockeado con 3 marcadores reales), ver PENDIENTES.md para el resultado
     // real de esa corrida y el caso complementario (sin otro Frente pertinente -> cierre honesto).
+
+    /* ---- OMV-F8.1 (24/08) · Agotamiento de Campo != agotamiento de Contextos ----
+       Mismo límite que el corte anterior: la orquestación completa (C1G1_iniciarConversacion/
+       C1G1_continuarCiclo/C1G1_abrirCampoYSeleccionarFrente son async y encadenan llamadas reales)
+       no se ejecuta dentro de correrPruebasAuto() -- se prueba acá, determinista y sincrónico, cada
+       pieza de la que depende, y el caso crítico completo se verificó EN VIVO (ver PENDIENTES.md). */
+    chk('F81-01 · openField() sigue funcionando sin el 4to parámetro (compatibilidad con todos los llamadores previos a este corte)', (function(){
+      return openField.length === 4;   // parámetro agregado, pero opcional -- ver F81-08/uso real más abajo
+    })());
+    chk('F81-02 · C1B1_ventanaCognitiva sin camposExcluidos devuelve lista vacía (compatible con B1-01..17)', (function(){
+      var snap = { organismId:'x', identity:{name:'X'}, currentMemory:{}, openQuestions:[], knownRelations:[] };
+      var assessment = { originAnchor:'x', relevantMemoryRefs:[], relevantTensionRefs:[], relevantOpenQuestionRefs:[], criticalUnknowns:[] };
+      var ventana = C1B1_ventanaCognitiva(snap, { question:null, intention:null }, assessment, [], []);
+      return Array.isArray(ventana.camposExcluidos) && ventana.camposExcluidos.length === 0;
+    })());
+    chk('F81-03 · C1B1_ventanaCognitiva con Campos excluidos los recorta a target+manifestation (nunca expone estado interno del grafo)', (function(){
+      var snap = { organismId:'x', identity:{name:'X'}, currentMemory:{}, openQuestions:[], knownRelations:[] };
+      var assessment = { originAnchor:'x', relevantMemoryRefs:[], relevantTensionRefs:[], relevantOpenQuestionRefs:[], criticalUnknowns:[] };
+      var excluidos = [{ target:'red regulatoria externa', manifestation:'depende de normativa', otroCampo:'no debería sobrevivir' }];
+      var ventana = C1B1_ventanaCognitiva(snap, { question:null, intention:null }, assessment, [], [], excluidos);
+      var item = ventana.camposExcluidos[0];
+      return ventana.camposExcluidos.length === 1 && item.target === 'red regulatoria externa' &&
+        item.manifestation === 'depende de normativa' && !('otroCampo' in item);
+    })());
+    chk('F81-04 · C1B1_PROMPT_OPEN_FIELD sólo agrega el bloque de Campos ya explorados cuando hay alguno (B1-01..17 sin regresión)', (function(){
+      var snap = { organismId:'x', identity:{name:'X'}, currentMemory:{}, openQuestions:[], knownRelations:[] };
+      var assessment = { originAnchor:'x', relevantMemoryRefs:[], relevantTensionRefs:[], relevantOpenQuestionRefs:[], criticalUnknowns:[] };
+      var sinExcluidos = C1B1_PROMPT_OPEN_FIELD(C1B1_ventanaCognitiva(snap, { question:null, intention:null }, assessment, [], []));
+      var conExcluidos = C1B1_PROMPT_OPEN_FIELD(C1B1_ventanaCognitiva(snap, { question:null, intention:null }, assessment, [], [],
+        [{ target:'red regulatoria externa', manifestation:'depende de normativa' }]));
+      return sinExcluidos.indexOf('CAMPOS EXTERNOS YA EXPLORADOS') === -1 &&
+        conExcluidos.indexOf('CAMPOS EXTERNOS YA EXPLORADOS') > -1 && conExcluidos.indexOf('red regulatoria externa') > -1;
+    })());
+    chk('F81-05 · C1G1_abrirCampoYSeleccionarFrente está definida una sola vez y es la única usada tanto en la apertura inicial como en la escalada dentro del ciclo', (function(){
+      var srcApertura = C1G1_iniciarConversacion.toString();
+      var srcCiclo = C1G1_continuarCiclo.toString();
+      var defs = (typeof C1G1_abrirCampoYSeleccionarFrente === 'function') ? 1 : 0;
+      return defs === 1 && srcApertura.indexOf('C1G1_abrirCampoYSeleccionarFrente(') > -1 &&
+        srcCiclo.indexOf('C1G1_abrirCampoYSeleccionarFrente(') > -1;
+    })());
+    chk('F81-06 · la escalada de Campos respeta un tope defensivo (C1G1_MAX_CAMPOS_ALTERNATIVOS), nunca reintenta sin límite', (function(){
+      var src = C1G1_abrirCampoYSeleccionarFrente.toString();
+      return typeof C1G1_MAX_CAMPOS_ALTERNATIVOS === 'number' && C1G1_MAX_CAMPOS_ALTERNATIVOS > 0 &&
+        src.indexOf('C1G1_MAX_CAMPOS_ALTERNATIVOS') > -1;
+    })());
+    chk('F81-07 · nada de lo nuevo (abrir Campo alternativo, exclusión) hardcodea un dominio/especialidad por nombre', (function(){
+      var src = C1G1_abrirCampoYSeleccionarFrente.toString() + C1G1_continuarCiclo.toString() +
+        C1B1_ventanaCognitiva.toString() + C1B1_PROMPT_OPEN_FIELD.toString();
+      var patron = /urban|regulaci[oó]n|normativa|subdivisi[oó]n|negocio[s]?\b|Urbanismo/i;
+      return !patron.test(src);
+    })());
+    chk('F81-08 · escalar a otro Campo sólo ocurre si el estado trae "assessment" -- estados de antes de este corte (sin assessment) conservan el comportamiento anterior sin romperse', (function(){
+      var src = C1G1_continuarCiclo.toString();
+      var idxIf = src.indexOf('if(assessment){');
+      var idxLlamada = src.indexOf('C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidos)');
+      return idxIf > -1 && idxLlamada > idxIf;
+    })());
+    chk('F81-09 · camposExcluidos se acumula (concat), nunca se descarta lo ya explorado al pasar a un Campo nuevo', (function(){
+      var src = C1G1_abrirCampoYSeleccionarFrente.toString();
+      return src.indexOf('camposExcluidos.concat(') > -1;
+    })());
+    chk('F81-10 · el estado de pausa (ASK) y el de reanudación conservan assessment/camposExcluidos -- una pregunta pendiente no pierde la posibilidad de escalar de Campo al responderla', (function(){
+      var srcCiclo = C1G1_continuarCiclo.toString();
+      var srcResponder = C1G1_responderPregunta.toString();
+      var pausaOk = /estadoPausado = \{[^}]*assessment: assessment[^}]*camposExcluidos: camposExcluidos/.test(srcCiclo);
+      var reanudaOk = srcResponder.indexOf('assessment: estadoPausado.assessment') > -1 &&
+        srcResponder.indexOf('camposExcluidos: estadoPausado.camposExcluidos') > -1;
+      return pausaOk && reanudaOk;
+    })());
+    // F81-11 · Casos críticos del brief, verificados EN VIVO (mismo límite que C1-08/C1-18/C2-21/
+    // RES-13: C1G1_iniciarConversacion es async y orquesta llamadas reales, no cabe en
+    // correrPruebasAuto()). Caso 1 (diag_campo1.js): Campo A (relación externa "red regulatoria
+    // externa") sin evidencia -> se cierra su único Frente -> C1-C1 no encuentra más Frentes en ese
+    // Campo -> Contextos escala a C1-B1 excluyendo Campo A -> abre Campo B ("red de proveedores
+    // externos", relación genuinamente distinta) -> encuentra un Frente ahí -> el ciclo sigue
+    // (estado !== null) y termina en una pregunta sobre el Frente de Campo B, sin ninguna aparición
+    // de "RESEARCH"/"NONE_AVAILABLE"/"BOUNDARY_OPENING"/códigos internos. Caso 2 (diag_campo2.js):
+    // Campo A agotado -> Campo B agotado -> al escalar a un tercer intento, C1-B1 responde
+    // "no_supported_candidates" (no hay Campo C pertinente) -> recién ahí Contextos cierra
+    // (estado === null), con un texto honesto y sin jerga. Ambos casos confirmaron además que cada
+    // apertura de Campo alternativo efectivamente excluye los Campos ya agotados en el prompt.
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
     chk('M2.1-01 · organismo sin recuerdos devuelve colección vacía válida', (function(){
