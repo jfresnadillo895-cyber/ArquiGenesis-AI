@@ -2435,7 +2435,7 @@ Al INICIO de cada respuesta, ANTES de cualquier texto visible, en bloque y cada 
 [[TENSION:Txx]] — código de la tensión raíz.
 [[FUNCION:verbo]] — función universal derivada (minúscula).
 REGLA DE ELICITACIÓN: DIAG, TENSION y FUNCION se emiten SOLO cuando hay diagnóstico real. Si tu respuesta es principalmente un pedido de datos para completar la lectura, NO los emitas: un diagnóstico prematuro es peor que ninguno. La lectura llega cuando la comprensión está.
-[[PRINCIPIO:texto]] — cuando se vuelve reconocible una relación organizadora del caso, no una descripción del caso. No necesita constituir una ley universal de ARQUIGÉNESIS ni valer más allá de este organismo: alcanza con que (1) haya surgido de lo conversado; (2) explique por qué varias observaciones aparentemente separadas se comportan como lo hacen; (3) pueda expresarse en una línea, de forma sintética; (4) sea suficientemente generalizable como para orientar la comprensión siguiente de este caso; (5) represente un desplazamiento respecto de lo que ya se sabía. Emitilo en el momento en que esa relación se vuelve reconocible, durante el recorrido — no hace falta esperar a un cierre de etapa ni al final de la conversación. No emitas: un simple resumen de lo dicho; un consejo o recomendación; una frase motivacional; una reformulación del principio anterior sin desplazamiento real; ni una asociación todavía puramente hipotética, sin sustento directo en lo conversado. No hay número ni frecuencia fija: emitilo tantas veces como aparezca una relación organizadora nueva, ni más ni menos.
+[[PRINCIPIO:texto]] — cuando se vuelve reconocible una relación organizadora del caso, no una descripción del caso. No necesita constituir una ley universal de ARQUIGÉNESIS ni valer más allá de este organismo: alcanza con que (1) haya surgido de lo conversado; (2) explique por qué varias observaciones aparentemente separadas se comportan como lo hacen; (3) pueda expresarse en una línea, de forma sintética; (4) sea suficientemente generalizable como para orientar la comprensión siguiente de este caso; (5) represente un desplazamiento respecto de lo que ya se sabía. No necesita ser independiente de los principios ya emitidos en la sesión: puede emerger como profundización de uno anterior sobre el MISMO fenómeno — no lo descartes solo porque comparta el fenómeno con uno ya dicho. Lo que decide si se emite es otra cosa: si sólo dice lo mismo que el anterior con otras palabras (reformulación, no se emite) o si agrega una relación organizadora distinta que cambia la comprensión — una consecuencia explicativa nueva entre los mismos elementos, no antes vista — (eso sí es un principio nuevo). Ejemplo: si ya emitiste "una idea intacta parece más potente que una desarrollada porque conserva sus posibilidades" y en el recorrido aparece que "la indefinición conserva posibilidades, pero impide que el proyecto adquiera forma", esto último profundiza al primero pero agrega una relación distinta (indefinición/posibilidad/forma) — se emite igual, no es la misma idea repetida. Emitilo en el momento en que esa relación se vuelve reconocible, durante el recorrido — no hace falta esperar a un cierre de etapa ni al final de la conversación. No emitas: un simple resumen de lo dicho; un consejo o recomendación; una frase motivacional; una reformulación del principio anterior que dice la misma relación con otras palabras, sin agregar ninguna; ni una asociación todavía puramente hipotética, sin sustento directo en lo conversado. No hay número ni frecuencia fija: emitilo tantas veces como aparezca una relación organizadora nueva, ni más ni menos.
 [[CRISTALIZA:texto]] — SOLO cuando algo importante tomó forma pero no fue dicho explícitamente.
 [[DERIVAR:urban]] — SOLO la primera vez en la sesión que se vuelve evidente que el caso pertenece al dominio urbano-territorial (ciudad, barrio, territorio, movilidad, expansión, centralidades, suelo, infraestructura urbana) y se beneficiaría de un diagnóstico territorial completo. No lo repitas en la misma sesión.
 [[DERIVAR:profesional]] — SOLO la primera vez en la sesión que aparece un límite de seguridad o de incumbencia matriculada (ver LÍMITES Y DERIVACIÓN PROFESIONAL). Marcador interno de trazabilidad. No lo repitas en la misma sesión.
@@ -18073,6 +18073,18 @@ function correrPruebasAuto(){
     chk('PRA2.1-04 · la regla PRINCIPIO no fija número ni frecuencia', (function(){
       var m = SYSTEM_PROMPT.match(/\[\[PRINCIPIO:texto\]\][^\n]*/);
       return !!m && /no hay n[uú]mero ni frecuencia fija/i.test(m[0]);
+    })());
+    /* ---- PR-A2.2 (25/08) · Calibrar novedad entre principios -- sólo prompt, sin tocar
+       addPrincipio()/marcarPrincipiosConfirmadosEnSesion()/proponerFicha()/o.principios[] (las
+       pruebas de código de PR-A2, PRA2-01..09, siguen en verde sin cambios). */
+    chk('PRA2.2-01 · la regla PRINCIPIO distingue explícitamente profundización (se emite) de reformulación (no se emite) del mismo fenómeno', (function(){
+      var m = SYSTEM_PROMPT.match(/\[\[PRINCIPIO:texto\]\][^\n]*/);
+      if(!m) return false;
+      var l = m[0];
+      return /no necesita ser independiente de los principios ya emitidos/i.test(l) &&
+        /profundizaci[oó]n de uno anterior/i.test(l) &&
+        /relaci[oó]n organizadora distinta que cambia la comprensi[oó]n/i.test(l) &&
+        /indefinici[oó]n\/posibilidad\/forma/i.test(l);
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
