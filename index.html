@@ -5169,12 +5169,21 @@ function C1B1_PROMPT_OPEN_FIELD(ventana){
   // OMV-F8.1 (24/08): mismo patrón que "ya cerrados" de C1-C1 -- Campos externos que ya se
   // exploraron en esta misma conversación y no dejaron ningún Frente útil. No se prohíbe volver a
   // esa zona del Organismo entera, sólo repetir la MISMA relación con otra formulación.
+  // OMV-F8.2 (24/08): la instrucción original ("no repitas... con otra formulación") ya apuntaba a
+  // esto, pero el brief pidió reforzarla explícitamente contra el caso real -- el modelo reformulando
+  // la MISMA relación con palabras distintas y colándola como "genuinamente distinta". Se agrega el
+  // criterio explícito de comparación (mismo referente real, no mismas palabras) y una instrucción
+  // de duda-a-favor-de-cero-candidatas.
   var camposExcluidosTxt = (ventana.camposExcluidos && ventana.camposExcluidos.length)
     ? ('\n\nCAMPOS EXTERNOS YA EXPLORADOS EN ESTA CONVERSACIÓN (se agotaron -- ninguna candidata de ' +
        'estos dejó un Frente que valiera la pena seguir): ' +
        ventana.camposExcluidos.map(function(c){ return (c.target || '?') + (c.manifestation ? (' -- ' + c.manifestation) : ''); }).join('; ') +
-       '. No repitas ninguna de estas relaciones con otra formulación -- si proponés algo relacionado, ' +
-       'tiene que ser una relación genuinamente distinta, o preferí cero candidatas.')
+       '. Un Campo ya explorado NO se evita cambiando las palabras: se evita no proponiendo la MISMA ' +
+       'relación real (el mismo par organismo<->elemento externo y el mismo tipo de vínculo) aunque la ' +
+       'redactes con sinónimos, otro nivel de abstracción o un ángulo distinto -- comparalos por lo que ' +
+       'señalan en el mundo, no por el texto literal. Si dudás si una candidata nueva es en el fondo la ' +
+       'misma relación ya explorada, no la propongas -- cero candidatas nuevas es un resultado válido y ' +
+       'preferible a repetirla disfrazada.')
     : '';
   return 'Sos el motor de apertura de Campo (OPEN) de Contextos Universal -- un motor NUEVO y ' +
     'propio, distinto de cualquier Contextos anterior. NO uses las seis fuerzas del Contextos ' +
@@ -9038,11 +9047,22 @@ var C1G1_TOKENS_ACCION = [
   ['EXPAND', 'ampliar'],
   ['CONTRAST', 'contrastar']
 ];
-// Defensa en profundidad: cualquier código interno con forma "C1-XX" / "C1XxN" que sobreviva a la
-// traducción de arriba (nombres de función, pasos del ciclo, etc.) nunca debe llegar al usuario.
-// No se intenta traducir cada código uno por uno -- se detecta el patrón y, si aparece, se descarta
-// todo el texto en favor de un mensaje genérico honesto (nunca un error técnico, nunca jerga parcial).
-var C1G1_PATRON_JERGA = /\bC1[\-\s]?[A-Z][0-9A-Z]*\b|\b(grafo|nodo|ciclo cognitivo|epistemicState|route[A-Z]\w*)\b/;
+// Defensa en profundidad -- OMV-F8.2 (24/08): en vez de perseguir cada nombre técnico nuevo palabra
+// por palabra (route1, rel2, open_limit_reached, NONE_AVAILABLE, la próxima acción/estado que se
+// agregue mañana...), se detectan las FORMAS que un identificador interno tiene y el lenguaje llano
+// nunca tiene -- esto es lo robusto que pedía el brief: la vista final se genera desde significado
+// humano, y cualquier resto con forma de identificador se descarta entero, nunca se muestra a medias:
+//   1) códigos "C1-XX"/"C1XxN" (pasos del ciclo, nombres de función);
+//   2) "ciclo cognitivo"/"grafo"/"nodo"/"epistemicState" -- vocabulario propio del motor, nunca prosa;
+//   3) cualquier token con guion bajo (snake_case: open_limit_reached, action_not_implemented_yet,
+//      requiere_evidencia_inexistente, baja_incidencia, etc.) -- el español corriente no usa "_";
+//   4) cualquier token de letras seguidas inmediatamente de dígitos sin espacio (route1, rel2, n0,
+//      f1) -- así se nombran los ids acá, y el español corriente no pega números a las palabras así;
+//   5) cualquier palabra de 3+ letras TODAS mayúsculas (NONE_AVAILABLE, RESEARCH, CLOSE_FRONT, y
+//      cualquier acción/estado nuevo que se agregue después sin que alguien actualice esta lista).
+// Falso positivo ocasional (una sigla real de 3+ letras en mayúsculas) es un costo aceptado: el
+// resultado es un cierre genérico igual de tranquilo, nunca un error ni una fuga de jerga real.
+var C1G1_PATRON_JERGA = /\bC1[\-\s]?[A-Z][0-9A-Z]*\b|\bciclo cognitivo\b|\b(grafo|nodo|epistemicState)\b|[a-zA-Z]+_[a-zA-Z0-9_]*|\b[a-zA-Z]+\d+\b|\b[A-Z]{3,}\b/;
 function C1G1_lenguajeNatural(texto){
   var s = String(texto == null ? '' : texto);
   if(!s) return s;
@@ -9172,7 +9192,13 @@ async function C1G1_iniciarConversacion(organismoId, question, intention){
   }
   var apertura = await C1G1_abrirCampoYSeleccionarFrente(snap, r1.opening, r1.assessment, []);
   if(!apertura.ok){
-    return { ok:true, vista: C1G1_vistaCierre('No encontramos, por ahora, algo activo para trabajar acá.'), estado:null };
+    // OMV-F8.2 (24/08): mismo caso que el cierre por agotamiento dentro de C1G1_continuarCiclo --
+    // si ya se probaron Campos alternativos (apertura.camposExcluidos) antes de rendirse, el cierre
+    // los nombra en lenguaje humano en vez del genérico "no encontramos algo activo"; si nunca hubo
+    // ningún Campo que proponer ni para excluir, cae al genérico de siempre.
+    var motivoSinCampo = C1G1_resumenCampoAgotado(apertura.camposExcluidos) ||
+      'No encontramos, por ahora, algo activo para trabajar acá.';
+    return { ok:true, vista: C1G1_vistaCierre(motivoSinCampo), estado:null };
   }
   var front = apertura.front;
 
@@ -9181,6 +9207,37 @@ async function C1G1_iniciarConversacion(organismoId, question, intention){
     front: front, camposExcluidos: apertura.camposExcluidos };
   var siguiente = await C1G1_continuarCiclo(estadoBase, null);
   return { ok:true, vista: { apertura: vistaApertura, siguiente: siguiente.vista }, estado: siguiente.estado };
+}
+
+/* OMV-F8.2 (24/08): cierre humano cuando la escalada de Campo se agota de verdad (ningún Campo
+   externo alternativo tuvo un Frente útil). Se arma desde significado humano -- los "target" que el
+   propio C1-B1 ya redactó en lenguaje llano para cada Campo explorado (nunca closeReason/ids/enums
+   internos) -- siguiendo el ejemplo del brief ("Por ahora no encontramos otra relación externa...
+   queda abierta por falta de evidencia y podemos retomarla cuando haya nuevos datos"). Si no hay
+   ningún target legible (camposExcluidos vacío -- p.ej. porque nunca se llegó a escalar de Campo),
+   devuelve null y el llamador cae a C1G1_resumenFrentesPendientes(), más genérico. Pura y síncrona
+   a propósito: nada de esto depende de IA, se puede probar sin mockear fetch. */
+function C1G1_resumenCampoAgotado(camposExcluidos){
+  var temas = (camposExcluidos || []).map(function(c){ return c && c.target; })
+    .filter(function(t){ return typeof t === 'string' && t.trim(); });
+  if(!temas.length) return null;
+  var base = 'Por ahora no encontramos otra relación externa suficientemente fundada para seguir avanzando.';
+  if(temas.length === 1){
+    return base + ' Queda pendiente por falta de evidencia: ' + temas[0] + '. Podemos retomarlo cuando haya nuevos datos.';
+  }
+  return base + ' Quedan pendientes por falta de evidencia: ' + temas.join('; ') + '. Podemos retomarlos cuando haya nuevos datos.';
+}
+
+/* Respaldo de C1G1_resumenCampoAgotado() para cuando no hubo escalada de Campo (p.ej. estados de
+   antes de OMV-F8.1, sin "assessment") -- mismo criterio de siempre: motivo humano de cada Frente
+   cerrado, o un genérico honesto si no hay ninguno. */
+function C1G1_resumenFrentesPendientes(frentesCerradosPorFaltaDeEvidencia){
+  var motivos = (frentesCerradosPorFaltaDeEvidencia || []).map(function(f){
+    return (f.operationalState && f.operationalState.closeReason) || f.formulation || '';
+  }).filter(function(t){ return t; });
+  return motivos.length
+    ? ('Quedó pendiente por falta de información disponible: ' + motivos.join('; ') + '.')
+    : 'Por ahora no encontramos otra relación pertinente para seguir.';
 }
 
 /* Bucle silencioso: READ/TRACE nunca se muestran -- se ejecutan y se reevalúa (C1-C3B, reutilizado
@@ -9227,8 +9284,20 @@ async function C1G1_continuarCiclo(estado, accionInicial){
     // Campos ya agotados (pasos 4-6). Sin "assessment" (estados viejos o llamadores que no lo
     // pasaron) no hay forma de reabrir Campo -- se conserva el comportamiento anterior tal cual.
     if(assessment){
-      var otroCampo = await C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidos);
-      camposExcluidos = otroCampo.camposExcluidos || camposExcluidos;
+      // OMV-F8.2 (24/08) -- hallazgo del audit pedido por el brief: cuando el Campo actual SÍ tenía
+      // un Frente activo (no llegó agotado desde la apertura -- ver C1G1_abrirCampoYSeleccionarFrente,
+      // que sólo agrega a camposExcluidos los Campos que NUNCA tuvieron Frente) y ese Frente se cerró
+      // recién ACÁ, a mitad de ciclo, el propio Campo nunca quedaba registrado como explorado -- la
+      // escalada llamaba a C1-B1 sin avisarle que "red regulatoria externa" (este caso real) ya se
+      // agotó, y el modelo podía volver a proponerla en el Campo siguiente. Se corrige agregando, acá,
+      // los Frentes recién cerrados de ESTE Campo (ya en lenguaje humano -- formulation/possibleIncidence,
+      // igual que el resto de camposExcluidos) antes de escalar, así la exclusión describe lo ya
+      // explorado por relación real, no sólo por Campo que nunca llegó a abrir un Frente.
+      var camposExcluidosConEsteCampo = camposExcluidos.concat(frentesCerradosPorFaltaDeEvidencia.map(function(f){
+        return { target: f.formulation || null, manifestation: f.possibleIncidence || null };
+      }));
+      var otroCampo = await C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidosConEsteCampo);
+      camposExcluidos = otroCampo.camposExcluidos || camposExcluidosConEsteCampo;
       if(otroCampo.ok){
         graphState = otroCampo.graphState;
         return { continuar:true, front: otroCampo.front };
@@ -9236,13 +9305,11 @@ async function C1G1_continuarCiclo(estado, accionInicial){
     }
 
     // No hay otro Frente ni otro Campo pertinente (paso 7): se cierra Contextos, pero sin ocultar lo
-    // que quedó sin resolver por falta de evidencia (nunca se fabrica una respuesta ni se calla la duda).
-    var motivosPendientes = frentesCerradosPorFaltaDeEvidencia.map(function(f){
-      return (f.operationalState && f.operationalState.closeReason) || f.formulation || '';
-    }).filter(function(t){ return t; });
-    var resumenPendiente = motivosPendientes.length
-      ? ('Quedó pendiente por falta de información disponible: ' + motivosPendientes.join('; ') + '.')
-      : 'Por ahora no encontramos otra relación pertinente para seguir.';
+    // que quedó sin resolver por falta de evidencia (nunca se fabrica una respuesta ni se calla la
+    // duda) -- OMV-F8.2: preferí el resumen humano por Campo (target ya redactado en lenguaje llano
+    // por C1-B1) sobre el closeReason interno de cada Frente, que es más propenso a jerga residual.
+    var resumenPendiente = C1G1_resumenCampoAgotado(camposExcluidos) ||
+      C1G1_resumenFrentesPendientes(frentesCerradosPorFaltaDeEvidencia);
     return { continuar:false, vista: C1G1_vistaCierre(resumenPendiente) };
   }
 
@@ -17162,7 +17229,7 @@ function correrPruebasAuto(){
     chk('F81-08 · escalar a otro Campo sólo ocurre si el estado trae "assessment" -- estados de antes de este corte (sin assessment) conservan el comportamiento anterior sin romperse', (function(){
       var src = C1G1_continuarCiclo.toString();
       var idxIf = src.indexOf('if(assessment){');
-      var idxLlamada = src.indexOf('C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidos)');
+      var idxLlamada = src.indexOf('C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment,', idxIf);
       return idxIf > -1 && idxLlamada > idxIf;
     })());
     chk('F81-09 · camposExcluidos se acumula (concat), nunca se descarta lo ya explorado al pasar a un Campo nuevo', (function(){
@@ -17189,6 +17256,80 @@ function correrPruebasAuto(){
     // "no_supported_candidates" (no hay Campo C pertinente) -> recién ahí Contextos cierra
     // (estado === null), con un texto honesto y sin jerga. Ambos casos confirmaron además que cada
     // apertura de Campo alternativo efectivamente excluye los Campos ya agotados en el prompt.
+
+    /* ---- OMV-F8.2 (24/08) · Escalada agotada y cierre humano ----
+       El audit pedido por el brief encontró el hallazgo real: cuando un Campo SÍ tenía Frente
+       (llegó a abrirse y a intentarse) y ese Frente se cerraba recién a mitad de ciclo (NONE_AVAILABLE/
+       action_not_implemented_yet), el propio Campo nunca se agregaba a camposExcluidos -- sólo
+       C1G1_abrirCampoYSeleccionarFrente() registraba Campos que NUNCA llegaron a tener Frente. La
+       escalada podía entonces volver a proponer la misma relación real ("red regulatoria externa")
+       sin que el modelo supiera que ya se había agotado. Fix + cierre humano verificados en vivo
+       más abajo (F82-11); acá, cada pieza determinista. */
+    chk('F82-01 · C1G1_resumenCampoAgotado: sin temas devuelve null (el llamador cae al resumen de Frentes)', (function(){
+      return C1G1_resumenCampoAgotado([]) === null && C1G1_resumenCampoAgotado(null) === null &&
+        C1G1_resumenCampoAgotado([{ target:null }, { manifestation:'x' }]) === null;
+    })());
+    chk('F82-02 · C1G1_resumenCampoAgotado: un solo tema -- texto humano, nombra el tema, sin jerga', (function(){
+      var t = C1G1_resumenCampoAgotado([{ target:'red regulatoria externa', manifestation:'depende de normativa' }]);
+      return t.indexOf('red regulatoria externa') > -1 && t.indexOf('Podemos retomarlo') > -1 &&
+        t.indexOf('suficientemente fundada') > -1 && !C1G1_PATRON_JERGA.test(t);
+    })());
+    chk('F82-03 · C1G1_resumenCampoAgotado: varios temas -- los lista todos, plural, sin jerga', (function(){
+      var t = C1G1_resumenCampoAgotado([{ target:'red regulatoria externa' }, { target:'red de proveedores externos' }]);
+      return t.indexOf('red regulatoria externa') > -1 && t.indexOf('red de proveedores externos') > -1 &&
+        t.indexOf('Podemos retomarlos') > -1 && !C1G1_PATRON_JERGA.test(t);
+    })());
+    chk('F82-04 · C1G1_resumenFrentesPendientes: mismo criterio de siempre (motivo humano por Frente, o genérico si no hay ninguno)', (function(){
+      var vacio = C1G1_resumenFrentesPendientes([]);
+      var conFrentes = C1G1_resumenFrentesPendientes([{ formulation:'¿sigue vigente?', operationalState:{ closeReason:'no hay evidencia' } }]);
+      return vacio === 'Por ahora no encontramos otra relación pertinente para seguir.' &&
+        conFrentes.indexOf('no hay evidencia') > -1;
+    })());
+    chk('F82-05 · red de jerga ampliada: snake_case interno (open_limit_reached, action_not_implemented_yet) se detecta sin listarlo palabra por palabra', (function(){
+      return C1G1_PATRON_JERGA.test('la ruta quedó open_limit_reached') &&
+        C1G1_PATRON_JERGA.test('la acción action_not_implemented_yet no se ejecutó');
+    })());
+    chk('F82-06 · red de jerga ampliada: ids alfanuméricos tipo route1/rel2/n0 se detectan por forma, no por lista', (function(){
+      return C1G1_PATRON_JERGA.test('la ruta route1 quedó pendiente') && C1G1_PATRON_JERGA.test('la relación rel2 no se usó') &&
+        C1G1_PATRON_JERGA.test('el nodo n0 es el origen');
+    })());
+    chk('F82-07 · red de jerga ampliada: cualquier palabra de 3+ mayúsculas (no sólo las ya traducidas) se detecta como jerga potencial', (function(){
+      return C1G1_PATRON_JERGA.test('el motor eligió EXPIRE para este caso') && C1G1_PATRON_JERGA.test('resultado NONE_AVAILABLE sin traducir');
+    })());
+    chk('F82-08 · la red de jerga ampliada NO tiene falsos positivos contra el ejemplo de cierre humano del propio brief, ni contra vocabulario corriente', (function(){
+      var textoBrief = 'Por ahora no encontramos otra relación externa suficientemente fundada para seguir ' +
+        'avanzando. La regulación queda abierta por falta de evidencia y podemos retomarla cuando haya nuevos datos.';
+      var vocabularioCorriente = 'El organismo depende de una relación externa, el año pasado y la comprensión general.';
+      return !C1G1_PATRON_JERGA.test(textoBrief) && !C1G1_PATRON_JERGA.test(vocabularioCorriente);
+    })());
+    chk('F82-09 · C1G1_iniciarConversacion usa el cierre humano por Campo cuando la apertura inicial ya agota alternativas', (function(){
+      var src = C1G1_iniciarConversacion.toString();
+      var idxIf = src.indexOf('if(!apertura.ok){');
+      var idxResumen = src.indexOf('C1G1_resumenCampoAgotado(apertura.camposExcluidos)', idxIf);
+      return idxIf > -1 && idxResumen > idxIf;
+    })());
+    chk('F82-10 · la escalada a mitad de ciclo agrega los Frentes recién cerrados de ESTE Campo a la exclusión antes de abrir otro (el hallazgo real del brief)', (function(){
+      var src = C1G1_continuarCiclo.toString();
+      var idxConcat = src.indexOf('camposExcluidos.concat(frentesCerradosPorFaltaDeEvidencia.map(');
+      var idxLlamada = src.indexOf('C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidosConEsteCampo)');
+      return idxConcat > -1 && idxLlamada > idxConcat;
+    })());
+    chk('F82-11 · nada de lo nuevo (resúmenes humanos, red de jerga ampliada) hardcodea un dominio/especialidad por nombre', (function(){
+      var src = C1G1_resumenCampoAgotado.toString() + C1G1_resumenFrentesPendientes.toString() + C1G1_continuarCiclo.toString();
+      var patron = /urban|regulaci[oó]n|normativa|subdivisi[oó]n|negocio[s]?\b|Urbanismo/i;
+      return !patron.test(src);
+    })());
+    // F82-12 · Casos críticos del brief, verificados EN VIVO (mismo límite que C1-08/C1-18/C2-21/
+    // RES-13/F81-11: la orquestación completa no cabe en correrPruebasAuto()). Cuatro escenarios con
+    // diag_campo{1,2,3,4}.js (fetch mockeado con marcadores reales, sin gastar ninguna llamada):
+    // (1) Campo A agotado ya desde la apertura (nunca tuvo Frente) -> Campo B distinto -> sigue.
+    // (2) Campo A y B agotados desde la apertura, sin Campo C -> cierre humano nombrando ambos temas.
+    // (3) CASO REAL DEL BRIEF -- Campo A SÍ tenía un Frente activo, se cierra por NONE_AVAILABLE a
+    // mitad de ciclo, no quedan más Frentes en A -> escalada a Campo B EXCLUYENDO A correctamente
+    // (antes de este corte, A no se excluía) -> Campo B tiene Frente -> Contextos sigue. (4) Mismo
+    // inicio que (3), pero Campo B también se agota a mitad de escalada y no aparece Campo C ->
+    // cierre humano nombrando el Frente de A y el Campo B, sin ninguna aparición de "RESEARCH"/
+    // "NONE_AVAILABLE"/"open_limit_reached"/ids route*/rel*/códigos internos en ningún caso.
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
     chk('M2.1-01 · organismo sin recuerdos devuelve colección vacía válida', (function(){
