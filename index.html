@@ -13118,7 +13118,15 @@ function crearCheckpointSesion(org){
     // copia liviana (unas pocas dimensiones + un texto corto), no una referencia -- el
     // checkpoint tiene que seguir siendo fiel a ESTE momento aunque el organismo acumule
     // lecturas nuevas después.
-    panel: state.panelEspecializado ? JSON.parse(JSON.stringify(state.panelEspecializado)) : null
+    panel: state.panelEspecializado ? JSON.parse(JSON.stringify(state.panelEspecializado)) : null,
+    // PR-A2.3 (25/08): copia de los principios de ESTA sesión tal como estaban en el momento de
+    // guardar -- incluye tanto los todavía emergentes (por confirmar) como los ya confirmados en
+    // esta misma sesión. Nunca es una referencia a o.principios[] ni a state.principios: es una
+    // copia de texto plano, así que restaurar este checkpoint más adelante no puede alterar la
+    // Memoria persistida aunque el organismo cambie entre medio.
+    principios: (state.principios || []).map(function(p){
+      return { texto: p.texto, fam: p.fam || null, estado: p.estado || 'emergente' };
+    })
   };
   org.checkpoints = org.checkpoints || {};
   org.checkpoints[modulo] = org.checkpoints[modulo] || [];
@@ -13160,6 +13168,35 @@ function checkpointMasReciente(org){
   return lista.length ? lista[0] : null;
 }
 
+/* PR-A2.3 (25/08): reconstruye state.principios + el Hilo a partir de la copia guardada en un
+   checkpoint (chk.principios) -- SOLO aparición en sesión, igual que addPrincipio() en vivo:
+   nunca toca o.principios[] ni dispara ninguna propuesta. Reutiliza addPrincipio() tal cual para
+   la parte común (empuja a state.principios, pinta el nodo con data-pridx alineado, clase
+   .emergente + tag "por confirmar") y sólo corrige el estado a 'confirmado' cuando el checkpoint
+   guardó ese principio como ya confirmado en esa sesión -- mismo ajuste de clase/tag que ya hace
+   marcarPrincipiosConfirmadosEnSesion(), sin duplicar esa función porque acá no hace falta
+   buscar/matchear nada (el índice recién insertado ya es el correcto). Un checkpoint viejo sin
+   `principios` (guardado antes de este corte) simplemente no reconstruye nada -- ni error, ni
+   heredado falso: la sesión restaurada queda igual que quedaba antes de este corte. */
+function restaurarPrincipiosDeSesion(guardados){
+  if(!guardados || !guardados.length) return;
+  guardados.forEach(function(p){
+    if(!p || typeof p.texto !== 'string' || !p.texto.trim()) return;
+    addPrincipio(p.texto, p.fam || null);
+    if(p.estado === 'confirmado'){
+      var idx = state.principios.length - 1;
+      state.principios[idx].estado = 'confirmado';
+      var nodo = el.hilo && el.hilo.querySelector('.principio[data-pridx="'+idx+'"]');
+      if(nodo){
+        nodo.classList.remove('emergente');
+        nodo.classList.add('confirmado');
+        var tag = nodo.querySelector('.principio-tag');
+        if(tag) tag.remove();
+      }
+    }
+  });
+}
+
 function restaurarCheckpoint(org, modulo, indice){
   var lista = org && org.checkpoints && org.checkpoints[modulo];
   var chk = lista && lista[indice];
@@ -13176,6 +13213,14 @@ function restaurarCheckpoint(org, modulo, indice){
   state.started = true;
   state.ultimaLectura = null;
   state.panelEspecializado = chk.panel ? JSON.parse(JSON.stringify(chk.panel)) : null;
+  // PR-A2.3: reset explícito de la sesión de Principios antes de reconstruirla -- necesario
+  // sobre todo si se restauran dos checkpoints distintos sin salir del organismo (sin este reset,
+  // los emergentes del checkpoint anterior quedarían pegados en el Hilo y en state.principios,
+  // con data-pridx duplicados). resetHilo(org) repinta los heredados (o.principios[], sin cambios)
+  // y dejar "esta sesión" limpia para la reconstrucción de abajo.
+  state.principios = [];
+  resetHilo(org);
+  restaurarPrincipiosDeSesion(chk.principios);
   for(var i=0; i<state.history.length; i++){
     var m = state.history[i];
     if(m.role === 'user') addUserMsg(m.content);
@@ -18085,6 +18130,168 @@ function correrPruebasAuto(){
         /profundizaci[oó]n de uno anterior/i.test(l) &&
         /relaci[oó]n organizadora distinta que cambia la comprensi[oó]n/i.test(l) &&
         /indefinici[oó]n\/posibilidad\/forma/i.test(l);
+    })());
+
+    /* ---- PR-A2.3 (25/08) · Principios emergentes sobreviven al recuerdo guardado --------------
+       Mismo patrón de prueba que OMV-F5-*: stub de guardarOrganismo para crearCheckpointSesion(),
+       objetos de checkpoint construidos a mano para restaurarCheckpoint(). No se toca la
+       caducidad de propuestas ni P10 -- PRA2-01..09 (código de PR-A2) y OMV-F5-01..06 (código de
+       checkpoints) siguen en verde sin cambios propios. */
+    chk('PRA2.3-01 · crearCheckpointSesion guarda una copia de state.principios con su estado (emergente y confirmado)', (function(){
+      var _origGuardar = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gh = state.history, gp = state.principios, gmu = state.modoUrban, gmn = state.modoNegocio, gmc = state.modoContext, gpe = state.panelEspecializado;
+      var org = { id:'__pra23_01', nombre:'PRA2.3 Uno', tipo:'empresa', ficha:{}, principios:[] };
+      try{
+        state.modoUrban = false; state.modoNegocio = false; state.modoContext = false; state.panelEspecializado = null;
+        state.principios = [];
+        addPrincipio('principio emergente de la sesión', 'espacio');
+        addPrincipio('principio ya confirmado en esta sesión', 'energia');
+        state.principios[1].estado = 'confirmado';   // simula una confirmación previa en la misma sesión
+        state.history = [{role:'user',content:'x'},{role:'assistant',content:'y'}];
+        var chkE = crearCheckpointSesion(org);
+        return !!chkE && Array.isArray(chkE.principios) && chkE.principios.length === 2 &&
+          chkE.principios[0].texto === 'principio emergente de la sesión' && chkE.principios[0].estado === 'emergente' &&
+          chkE.principios[1].texto === 'principio ya confirmado en esta sesión' && chkE.principios[1].estado === 'confirmado';
+      } finally {
+        guardarOrganismo = _origGuardar;
+        state.history = gh; state.principios = gp; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gpe;
+      }
+    })());
+    chk('PRA2.3-02 · CASO CRÍTICO: emergente -> Guardar sesión -> restaurar -> sigue visible como emergente, o.principios[] sigue vacío', (function(){
+      var _origGuardar = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gOrg = state.organismo, gh = state.history, gp = state.principios, gmu = state.modoUrban,
+          gmn = state.modoNegocio, gmc = state.modoContext, gpe = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      var org = { id:'__pra23_02', nombre:'PRA2.3 Dos', tipo:'empresa', ficha:{}, principios:[] };
+      try{
+        state.organismo = org; state.modoUrban = false; state.modoNegocio = false; state.modoContext = false; state.panelEspecializado = null;
+        state.principios = [];
+        addPrincipio('un principio todavía sin confirmar', 'trans');
+        state.history = [{role:'user',content:'contame'},{role:'assistant',content:'listo'}];
+        crearCheckpointSesion(org);   // "Guardar sesión"
+        // simula salir y reabrir: la sesión en memoria se pierde antes de restaurar
+        state.principios = [];
+        var okRestore = restaurarCheckpoint(org, 'core', 0);
+        return okRestore === true && state.principios.length === 1 &&
+          state.principios[0].texto === 'un principio todavía sin confirmar' &&
+          state.principios[0].estado === 'emergente' &&
+          org.principios.length === 0;
+      } finally {
+        guardarOrganismo = _origGuardar;
+        state.organismo = gOrg; state.history = gh; state.principios = gp; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gpe; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('PRA2.3-03 · restaurado -> confirmar -> pasa a estable (marcarPrincipiosConfirmadosEnSesion sigue funcionando después de restaurar)', (function(){
+      var _origGuardarOrg = guardarOrganismo, _origCargar = cargarPropuestas, _origPersistir = persistirPropuestas;
+      guardarOrganismo = function(){};
+      var gOrg = state.organismo, gh = state.history, gp = state.principios, gmu = state.modoUrban,
+          gmn = state.modoNegocio, gmc = state.modoContext, gpe = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      var org = { id:'__pra23_03', nombre:'PRA2.3 Tres', tipo:'empresa', ficha:{}, principios:[] };
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        state.organismo = org; state.modoUrban = false; state.modoNegocio = false; state.modoContext = false; state.panelEspecializado = null;
+        state.principios = [];
+        addPrincipio('principio a restaurar y luego confirmar', 'espacio');
+        state.history = [{role:'user',content:'a'},{role:'assistant',content:'b'}];
+        crearCheckpointSesion(org);
+        state.principios = [];
+        restaurarCheckpoint(org, 'core', 0);
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(o2){ org = o2; };
+        var prop = proponerFicha({}, null, null, null, [{ texto:'principio a restaurar y luego confirmar', fam:'espacio' }]);
+        resolverPropuesta(prop.id, 'confirmar');
+        return state.principios[0].estado === 'confirmado' && org.principios.length === 1 &&
+          org.principios[0].texto === 'principio a restaurar y luego confirmar';
+      } finally {
+        guardarOrganismo = _origGuardarOrg; cargarPropuestas = _origCargar; persistirPropuestas = _origPersistir;
+        state.organismo = gOrg; state.history = gh; state.principios = gp; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gpe; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('PRA2.3-04 · un principio confirmado en esa misma sesión (previo al checkpoint) sigue persistiendo estable al restaurar', (function(){
+      var gOrg = state.organismo, gh = state.history, gp = state.principios, gmu = state.modoUrban,
+          gmn = state.modoNegocio, gmc = state.modoContext, gpe = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      var org = {
+        id:'__pra23_04', nombre:'PRA2.3 Cuatro', tipo:'empresa', ficha:{},
+        principios:[{ texto:'principio ya confirmado antes del checkpoint', fam:'energia' }],
+        checkpoints:{ core:[{
+          fecha:new Date().toISOString(), modulo:'core', organismo_id:'__pra23_04',
+          history:[{role:'user',content:'x'},{role:'assistant',content:'y'}], panel:null,
+          principios:[{ texto:'principio ya confirmado antes del checkpoint', fam:'energia', estado:'confirmado' }]
+        }] }
+      };
+      try{
+        state.modoUrban = false; state.modoNegocio = false; state.modoContext = false; state.panelEspecializado = null;
+        state.principios = [];
+        var okRestore = restaurarCheckpoint(org, 'core', 0);
+        return okRestore === true && state.principios.length === 1 &&
+          state.principios[0].estado === 'confirmado' &&
+          state.principios[0].texto === 'principio ya confirmado antes del checkpoint' &&
+          org.principios.length === 1;   // no se duplicó ni se tocó la Memoria persistida
+      } finally {
+        state.organismo = gOrg; state.history = gh; state.principios = gp; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gpe; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('PRA2.3-05 · checkpoint viejo sin campo principios restaura normalmente, sin lanzar y sin inventar emergentes', (function(){
+      var gOrg = state.organismo, gh = state.history, gp = state.principios, gmu = state.modoUrban,
+          gmn = state.modoNegocio, gmc = state.modoContext, gpe = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      var org = {
+        id:'__pra23_05', nombre:'PRA2.3 Cinco', tipo:'empresa', ficha:{ funcion:'coordinar' }, principios:[],
+        checkpoints:{ core:[{
+          fecha:new Date().toISOString(), modulo:'core', organismo_id:'__pra23_05',
+          history:[{role:'user',content:'x'},{role:'assistant',content:'y'}], panel:null
+          // sin `principios` -- formato anterior a PR-A2.3
+        }] }
+      };
+      try{
+        state.modoUrban = false; state.modoNegocio = false; state.modoContext = false; state.panelEspecializado = null;
+        state.principios = ['no debería sobrevivir'];   // basura previa, para confirmar que se resetea igual
+        var okRestore = restaurarCheckpoint(org, 'core', 0);
+        return okRestore === true && Array.isArray(state.principios) && state.principios.length === 0 &&
+          state.history.length === 2 && org.ficha.funcion === 'coordinar';
+      } finally {
+        state.organismo = gOrg; state.history = gh; state.principios = gp; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gpe; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('PRA2.3-06 · F5 sigue intacto: un checkpoint con panel/lecturas urban Y principios de sesión restaura ambas cosas juntas, sin interferencia', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo, gh = state.history, gp = state.principios, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gpe = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      var org = {
+        id:'__pra23_06', nombre:'Barrio PRA2.3 Seis', tipo:'ciudad', ficha:{ funcion:'orientar' },
+        principios:[{ texto:'p1', fam:'espacio' }],
+        lecturas_urban:[{ version:1, fecha:'2026-01-01T00:00:00.000Z',
+          dimensiones:[{ cod:'D1', nombre:'Soporte e infraestructura', estado:'estable', nota:'x' }] }],
+        checkpoints:{ urban:[{
+          fecha:'2026-01-02T00:00:00.000Z', modulo:'urban', organismo_id:'__pra23_06',
+          history:[{role:'user',content:'contame del barrio'},{role:'assistant',content:'[[UDIM:D1|estable|x]]listo'}],
+          panel:{ tipo:'urban', version:1,
+            dimensiones:[{ cod:'D1', nombre:'Soporte e infraestructura', estado:'estable', nota:'x' }],
+            proyectivo:'hacia una consolidación gradual' },
+          principios:[{ texto:'principio emergente de esa lectura', fam:'espacio', estado:'emergente' }]
+        }] }
+      };
+      try{
+        state.principios = [];
+        var okRestore = restaurarCheckpoint(org, 'urban', 0);
+        var tituloPanel = creados.some(function(e){ return /Lectura territorial · v1/.test(e.textContent || ''); });
+        return okRestore === true && state.history.length === 2 && state.modoUrban === true &&
+          tituloPanel && org.lecturas_urban.length === 1 && org.principios.length === 1 && org.ficha.funcion === 'orientar' &&
+          state.principios.length === 1 && state.principios[0].estado === 'emergente' &&
+          state.principios[0].texto === 'principio emergente de esa lectura';
+      } finally {
+        document.createElement = _origCE;
+        state.organismo = gOrg; state.history = gh; state.principios = gp; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gpe; state.started = gst; el.stream.innerHTML = snap;
+      }
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
