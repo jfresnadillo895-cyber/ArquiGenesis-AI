@@ -9361,7 +9361,7 @@ async function C1G1_continuarCiclo(estado, accionInicial){
     }
 
     if(ejecucion.action === 'INTERPRET'){
-      return await C1G1_construirComprension(snapshot, opening, graphState, ejecucion.front, ejecucion.result);
+      return await C1G1_construirComprension(snapshot, opening, graphState, ejecucion.front, ejecucion.result, assessment, camposExcluidos);
     }
 
     // READ/TRACE: seguir en silencio -- una sola reevaluación (C1-C3B), nunca un segundo selector.
@@ -9393,7 +9393,7 @@ async function C1G1_continuarCiclo(estado, accionInicial){
 /* Comprensión: encadena C1-C4B (opcional) -> C1-E1 (Foco, obligatorio) -> C1-E2 (suficiencia) ->
    C1-F1 (Retorno, sólo si hay Foco+suficiencia). Si el Foco no se puede construir, no se fabrica
    ninguna comprensión -- se cierra en el mismo tono tranquilo que CLOSE_FRONT. */
-async function C1G1_construirComprension(snapshot, opening, graphState, front, interpretationResult){
+async function C1G1_construirComprension(snapshot, opening, graphState, front, interpretationResult, assessment, camposExcluidos){
   var funcional = await executeFunctionalInterpretation(graphState, front, interpretationResult);
   var frenteFuncional = funcional.ok ? C1C4B_aplicarResultadoAlFrente(front, funcional.result) : front;
 
@@ -9407,8 +9407,12 @@ async function C1G1_construirComprension(snapshot, opening, graphState, front, i
   var frenteFinal = sufRes.ok ? C1E2_aplicarResultadoAlFrente(frenteFocus, sufRes.result) : frenteFocus;
 
   var vista = C1G1_vistaComprension(focusRes.result, sufRes.ok ? sufRes.result : null);
+  // OMV-F8.3 (25/08): assessment/camposExcluidos viajan hasta acá (ya venían desde C1G1_iniciarConversacion/
+  // C1G1_continuarCiclo, ver F8.1) para que, más adelante, C1G1_decidirGobernanza y C1G1_explorarOtroContexto
+  // puedan reabrir el nivel Campo sin repetir el trabajo de assessment ni perder lo ya excluido.
   var estadoFinal = { snapshot: snapshot, opening: opening, graphState: graphState, front: frenteFinal,
-    focusResult: focusRes.result, sufficiencyResult: sufRes.ok ? sufRes.result : null };
+    focusResult: focusRes.result, sufficiencyResult: sufRes.ok ? sufRes.result : null,
+    assessment: assessment || null, camposExcluidos: camposExcluidos || [] };
 
   if(sufRes.ok){
     var retornoRes = await executeReturnProposal(snapshot, opening, graphState, frenteFinal, focusRes.result, sufRes.result);
@@ -9476,9 +9480,42 @@ function C1G1_decidirGobernanza(estadoConRetorno, decisionUsuario, correccionUsu
   else texto = resolucion.conflict
     ? 'La memoria del organismo cambió mientras tanto -- hace falta revisar esto de nuevo antes de aplicarlo.'
     : 'No pudimos aplicar este cambio ahora.';
+  // OMV-F8.3 (25/08): assessment/camposExcluidos se conservan acá -- sin esto, "Explorar otro
+  // contexto" no tendría con qué volver a llamar a C1G1_abrirCampoYSeleccionarFrente (F8.1) y
+  // la única salida tras cualquier decisión de gobernanza sería cerrar Contextos por completo.
   var estadoFinal = { snapshot: estadoConRetorno.snapshot, opening: estadoConRetorno.opening,
-    graphState: estadoConRetorno.graphState, front: frenteConGenealogia };
+    graphState: estadoConRetorno.graphState, front: frenteConGenealogia,
+    assessment: estadoConRetorno.assessment || null, camposExcluidos: estadoConRetorno.camposExcluidos || [] };
   return { vista: { phase:'gobernanza_resuelta', texto: texto, aplicado: !!resolucion.aplicado }, estado: estadoFinal };
+}
+
+/* OMV-F8.3 (25/08): "la decisión de gobernanza no debe equivaler implícitamente a terminar
+   Contextos Universal" -- esta función retoma el ciclo en nivel Campo después de Incorporar/
+   Mantener abierto/No incorporar, reutilizando F8.1/F8.2 tal cual (no se toca su interior).
+   Sólo hace una llamada real (vía C1G1_abrirCampoYSeleccionarFrente) cuando se invoca -- nunca
+   de forma eager al renderizar los botones de gobernanza_resuelta. Excluye explícitamente la
+   relación recién gobernada (con su propio lenguaje humano, mismo patrón que
+   camposExcluidosConEsteCampo en F8.2) para que "no repetir la relación recién gobernada" valga
+   para Incorporar, Mantener abierto y No incorporar por igual -- es un requisito de la acción de
+   explorar, no una propiedad de una decisión en particular. */
+async function C1G1_explorarOtroContexto(estadoGobernado){
+  if(!estadoGobernado || !estadoGobernado.assessment){
+    return { ok:true, vista: C1G1_vistaCierre('Por ahora no encontramos otra relación externa para seguir explorando.'), estado:null };
+  }
+  var frenteGobernado = estadoGobernado.front || null;
+  var camposExcluidosConEsteFrente = (estadoGobernado.camposExcluidos || []).concat(frenteGobernado ? [{
+    target: frenteGobernado.formulation || null,
+    manifestation: frenteGobernado.possibleIncidence || null
+  }] : []);
+  var apertura = await C1G1_abrirCampoYSeleccionarFrente(estadoGobernado.snapshot, estadoGobernado.opening, estadoGobernado.assessment, camposExcluidosConEsteFrente);
+  if(!apertura.ok){
+    var motivo = C1G1_resumenCampoAgotado(apertura.camposExcluidos) || 'Por ahora no encontramos otra relación externa para seguir explorando.';
+    return { ok:true, vista: C1G1_vistaCierre(motivo), estado:null };
+  }
+  var estadoBase = { snapshot: estadoGobernado.snapshot, opening: estadoGobernado.opening, assessment: estadoGobernado.assessment,
+    graphState: apertura.graphState, front: apertura.front, camposExcluidos: apertura.camposExcluidos };
+  var siguiente = await C1G1_continuarCiclo(estadoBase, null);
+  return { ok:true, vista: siguiente.vista, estado: siguiente.estado };
 }
 
 /* ---- Render mínimo (HTML plano, reutiliza .msg/.upanel/.btn ya existentes -- sin design system
@@ -9512,7 +9549,15 @@ function C1G1_renderVista(vista){
     return '<div class="c1g1-fase c1g1-cierre">' + h(vista.texto) + '</div>';
   }
   if(vista.phase === 'gobernanza_resuelta'){
-    return '<div class="c1g1-fase c1g1-gobernanza-resuelta">' + h(vista.texto) + '</div>';
+    // OMV-F8.3 (25/08): antes esto era un punto muerto (texto sin ninguna acción posible), lo que
+    // hacía que cualquier decisión de gobernanza equivaliera a cerrar Contextos Universal. Ahora
+    // ofrece explícitamente seguir explorando u volver a Memoria, sin llamar a nada todavía --
+    // la llamada real sólo ocurre si el usuario hace clic (ver C1G1_explorarOtroContexto).
+    return '<div class="c1g1-fase c1g1-gobernanza-resuelta">' + h(vista.texto) + '</div>' +
+      '<div class="c1g1-gobernanza-botones">' +
+        '<button class="btn secundario" type="button" data-post-gobernanza="explorar">Explorar otro contexto</button>' +
+        '<button class="btn" type="button" data-post-gobernanza="memoria">Volver a Memoria</button>' +
+      '</div>';
   }
   if(vista.phase === 'comprension'){
     var out = '<div class="c1g1-fase c1g1-comprension">' +
@@ -12127,6 +12172,34 @@ function C1G3_wireResultado(org, estado, miEpoch, cont){
       C1G3_correrGobernanza(org, estado, decision, miEpoch, cont);
     });
   });
+  // OMV-F8.3 (25/08): botones que aparecen tras resolver gobernanza (gobernanza_resuelta). "estado"
+  // acá es el estadoFinal que devuelve C1G1_decidirGobernanza (o, en un ciclo posterior, el que
+  // devuelve C1G1_explorarOtroContexto si volvió a INTERPRET) -- siempre trae assessment/
+  // camposExcluidos/front cuando corresponde.
+  var btnExplorarOtro = cont.querySelector('[data-post-gobernanza="explorar"]');
+  if(btnExplorarOtro){
+    btnExplorarOtro.addEventListener('click', function(){
+      cont.innerHTML = C1G3_htmlTrabajando();
+      C1G3_correrExplorarOtroContexto(org, estado, miEpoch, cont);
+    });
+  }
+  var btnVolverMemoria = cont.querySelector('[data-post-gobernanza="memoria"]');
+  if(btnVolverMemoria){
+    btnVolverMemoria.addEventListener('click', function(){ mostrarFicha(); });
+  }
+}
+
+async function C1G3_correrExplorarOtroContexto(org, estadoGobernado, miEpoch, cont){
+  var r;
+  try{
+    r = await C1G1_explorarOtroContexto(estadoGobernado);
+  }catch(e){
+    if(miEpoch !== state.c1g3Epoch) return;
+    cont.innerHTML = C1G1_renderVista(C1G1_vistaCierre('No pudimos seguir explorando por ahora.'));
+    return;
+  }
+  if(miEpoch !== state.c1g3Epoch) return;
+  C1G3_mostrarResultado(org, r.vista, r.estado, miEpoch, cont);
 }
 
 async function C1G3_correrRespuesta(org, estado, texto, miEpoch, cont){
@@ -12168,6 +12241,10 @@ function C1G3_correrGobernanza(org, estado, decisionUi, miEpoch, cont){
   if(org && org.id) delete state.c1g3Sesiones[org.id];
   if(miEpoch !== state.c1g3Epoch) return;
   cont.innerHTML = C1G1_renderVista(r.vista);
+  // OMV-F8.3 (25/08): antes esta vista nunca se cableaba (no tenía botones). Ahora
+  // gobernanza_resuelta trae "Explorar otro contexto"/"Volver a Memoria" -- hay que cablearlos acá,
+  // con r.estado (el estadoFinal de C1G1_decidirGobernanza, con assessment/camposExcluidos/front).
+  C1G3_wireResultado(org, r.estado, miEpoch, cont);
 }
 
 /* ================= CORTE C: Urban ================= */
@@ -17330,6 +17407,85 @@ function correrPruebasAuto(){
     // inicio que (3), pero Campo B también se agota a mitad de escalada y no aparece Campo C ->
     // cierre humano nombrando el Frente de A y el Campo B, sin ninguna aparición de "RESEARCH"/
     // "NONE_AVAILABLE"/"open_limit_reached"/ids route*/rel*/códigos internos en ningún caso.
+
+    /* ---- OMV-F8.3 (25/08) · Gobernanza no cierra Contextos ----
+       "La decisión de gobernanza no debe equivaler implícitamente a terminar Contextos Universal."
+       Igual que F81/F82: la orquestación real (C1G1_explorarOtroContexto, C1G3_correrExplorarOtroContexto)
+       es async y llama a C1G1_abrirCampoYSeleccionarFrente/C1G1_continuarCiclo de verdad -- no cabe en
+       correrPruebasAuto() (misma limitación documentada, ver C1-08/C1-18/C2-21/RES-13/F81-11/F82-12).
+       Acá: (a) verificación estructural de que assessment/camposExcluidos viajan hasta el final de
+       Comprensión y Gobernanza (el hueco real que impedía reabrir Campo), (b) verificación estructural
+       de que la exclusión de la relación recién gobernada usa el mismo patrón humano de F8.2, (c) que
+       los botones nuevos existen y están cableados, (d) ausencia de hardcodeo de dominio/especialidad.
+       El caso crítico completo (interpretación -> Mantener abierto -> confirmación -> Explorar otro
+       contexto -> Campo B distinto, sin tocar Memoria ni repetir Campo A) se verifica en vivo más abajo
+       (F83-11) con diag_gobernanza1.js. */
+    chk('F83-01 · C1G1_construirComprension recibe assessment/camposExcluidos y los deja en estadoFinal', (function(){
+      var src = C1G1_construirComprension.toString();
+      var firmaOk = /interpretationResult,\s*assessment,\s*camposExcluidos\s*\)/.test(src);
+      var estadoOk = src.indexOf('assessment: assessment || null') > -1 && src.indexOf('camposExcluidos: camposExcluidos || []') > -1;
+      return firmaOk && estadoOk;
+    })());
+    chk('F83-02 · C1G1_continuarCiclo pasa assessment/camposExcluidos a C1G1_construirComprension al llegar a INTERPRET', (function(){
+      var src = C1G1_continuarCiclo.toString();
+      var idx = src.indexOf("ejecucion.action === 'INTERPRET'");
+      var idxLlamada = src.indexOf('C1G1_construirComprension(snapshot, opening, graphState, ejecucion.front, ejecucion.result, assessment, camposExcluidos)', idx);
+      return idx > -1 && idxLlamada > idx;
+    })());
+    chk('F83-03 · C1G1_decidirGobernanza conserva assessment/camposExcluidos de estadoConRetorno en su estadoFinal', (function(){
+      var src = C1G1_decidirGobernanza.toString();
+      return src.indexOf('assessment: estadoConRetorno.assessment || null') > -1 &&
+        src.indexOf('camposExcluidos: estadoConRetorno.camposExcluidos || []') > -1;
+    })());
+    chk('F83-04 · existe C1G1_explorarOtroContexto como función', (function(){
+      return typeof C1G1_explorarOtroContexto === 'function';
+    })());
+    chk('F83-05 · C1G1_explorarOtroContexto sin assessment (estado inválido/agotado) cierra humano sin tocar la red', (function(){
+      var src = C1G1_explorarOtroContexto.toString();
+      return src.indexOf('!estadoGobernado || !estadoGobernado.assessment') > -1 &&
+        src.indexOf('C1G1_vistaCierre(') > src.indexOf('!estadoGobernado || !estadoGobernado.assessment');
+    })());
+    chk('F83-06 · C1G1_explorarOtroContexto excluye la relación recién gobernada (mismo patrón humano de F8.2)', (function(){
+      var src = C1G1_explorarOtroContexto.toString();
+      var idxConcat = src.indexOf('camposExcluidosConEsteFrente');
+      var idxFormulation = src.indexOf('frenteGobernado.formulation');
+      var idxIncidencia = src.indexOf('frenteGobernado.possibleIncidence');
+      var idxLlamada = src.indexOf('C1G1_abrirCampoYSeleccionarFrente(estadoGobernado.snapshot, estadoGobernado.opening, estadoGobernado.assessment, camposExcluidosConEsteFrente)');
+      return idxConcat > -1 && idxFormulation > idxConcat && idxIncidencia > idxFormulation && idxLlamada > idxIncidencia;
+    })());
+    chk('F83-07 · C1G1_explorarOtroContexto reutiliza F8.1/F8.2 tal cual (no reimplementa el loop de Campos alternativos)', (function(){
+      var src = C1G1_explorarOtroContexto.toString();
+      return src.indexOf('MAX_CAMPOS_ALTERNATIVOS') === -1 && src.indexOf('C1G1_abrirCampoYSeleccionarFrente(') > -1 &&
+        src.indexOf('C1G1_continuarCiclo(estadoBase, null)') > -1;
+    })());
+    chk('F83-08 · gobernanza_resuelta ofrece Explorar otro contexto y Volver a Memoria (ya no es un punto muerto)', (function(){
+      var vista = C1G1_renderVista({ phase:'gobernanza_resuelta', texto:'listo' });
+      return vista.indexOf('data-post-gobernanza="explorar"') > -1 && vista.indexOf('data-post-gobernanza="memoria"') > -1 &&
+        vista.indexOf('Explorar otro contexto') > -1 && vista.indexOf('Volver a Memoria') > -1;
+    })());
+    chk('F83-09 · C1G3_wireResultado cablea los dos botones nuevos (explorar llama a la orquestación real, memoria vuelve a la ficha)', (function(){
+      var src = C1G3_wireResultado.toString();
+      return src.indexOf('data-post-gobernanza="explorar"') > -1 && src.indexOf('C1G3_correrExplorarOtroContexto(org, estado, miEpoch, cont)') > -1 &&
+        src.indexOf('data-post-gobernanza="memoria"') > -1 && src.indexOf('mostrarFicha()') > -1;
+    })());
+    chk('F83-10 · C1G3_correrGobernanza cablea la vista resuelta (antes quedaba sin ningún botón funcional)', (function(){
+      var src = C1G3_correrGobernanza.toString();
+      var idxRender = src.indexOf("cont.innerHTML = C1G1_renderVista(r.vista)");
+      var idxWire = src.indexOf('C1G3_wireResultado(org, r.estado, miEpoch, cont)', idxRender);
+      return idxRender > -1 && idxWire > idxRender;
+    })());
+    chk('F83-11 · nada de lo nuevo (explorar otro contexto, botones post-gobernanza) hardcodea un dominio/especialidad por nombre', (function(){
+      var src = C1G1_explorarOtroContexto.toString() + C1G1_decidirGobernanza.toString() + C1G1_construirComprension.toString();
+      var patron = /urban|regulaci[oó]n|normativa|subdivisi[oó]n|negocio[s]?\b|Urbanismo/i;
+      return !patron.test(src);
+    })());
+    // F83-12 · Caso crítico del brief, verificado EN VIVO (misma limitación de siempre: la
+    // orquestación completa no cabe en correrPruebasAuto()) con diag_gobernanza1.js: interpretación
+    // contextual -> INTERPRET -> Foco+suficiencia+retorno -> gobernanza "Mantener abierto" -> el texto
+    // de confirmación aparece SIN cerrar Contextos -> clic en "Explorar otro contexto" -> excluye la
+    // relación recién gobernada (Campo A) -> abre Campo B distinto -> Contextos sigue con un Frente
+    // nuevo -- todo esto sin ninguna llamada a guardarOrganismo/Memoria fuera de la ya existente
+    // (mantener_abierto/genealogía, sin tocar la ficha) y sin que Campo A vuelva a aparecer.
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
     chk('M2.1-01 · organismo sin recuerdos devuelve colección vacía válida', (function(){
