@@ -57,6 +57,11 @@ header{
   min-width:0;overflow:hidden;
 }
 .logo{display:inline-flex;align-items:center;gap:9px;flex-shrink:0}
+/* UX-P1E (25/08): marca clickeable ("volver a home") -- deliberadamente sin apariencia de botón:
+   sin borde, sin fondo, sin cambio de tamaño. Sólo cursor y una atenuación muy leve al pasar el
+   mouse, la mínima señal de que responde a un clic. */
+.logo{cursor:pointer;transition:opacity .15s}
+.logo:hover{opacity:.82}
 .lg-txt{font-family:'DM Sans',sans-serif;font-weight:400;font-size:16px;letter-spacing:.005em;color:var(--text)}
 .lg-txt b{font-weight:700;color:var(--accent)}
 /* 17/08: identidad de Compy -- reusa la marca "toro" ya existente (mismo glifo del ecosistema,
@@ -653,7 +658,12 @@ header .spacer{flex:1}
   </div>
   <div id="main">
     <header>
-      <span class="logo">
+      <!-- UX-P1E (25/08): bloque marca -- logo+"Comprender AI"+"Compy" -- convertido en un único
+           acceso clickeable a home ("¿Qué querés comprender hoy?"). role="button"+tabindex para
+           que sea alcanzable por teclado, sin que eso cambie su apariencia (sigue sin borde,
+           fondo ni forma de botón -- ver CSS .logo). Wiring del click/teclado y la función
+           irAHome() están más abajo en el JS, junto a nuevaSesion(). -->
+      <span class="logo" id="logoHome" role="button" tabindex="0" aria-label="Volver a home">
         <svg class="toro" id="dot" viewBox="0 0 40 40" aria-hidden="true">
           <g fill="none" stroke="currentColor" stroke-linecap="round">
             <ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/>
@@ -2650,7 +2660,8 @@ const el = {
   orgchip: $('orgchip'), orgname: $('orgname'), btnFicha: $('btnFicha'),
   orglist: $('orglist'), btnOrgNuevo: $('btnOrgNuevo'),
   menu: $('menu'), btnMenu: $('btnMenu'),
-  modulosMenu: $('modulosMenu'), btnModulos: $('btnModulos')
+  modulosMenu: $('modulosMenu'), btnModulos: $('btnModulos'),
+  logoHome: $('logoHome')
 };
 
 const FAM_LABEL = { espacio: 'Espacio', energia: 'Energía', trans: 'Transformación' };
@@ -12919,6 +12930,29 @@ function guardarSesion(destilado){
 
 function cerrarOverlay(){ state.c1g3Epoch++; el.overlay.classList.remove('open'); }
 
+/* UX-P1E (25/08): "volver a home" desde la marca -- a diferencia de nuevaSesion() (arranca una
+   sesión nueva de cero: limpia state.history/organismo/principios/modos/derivarAvisado), esto
+   SOLO cambia qué pantalla se ve. Ningún dato se toca: state.organismo, state.history,
+   state.principios, state.modoUrban/modoNegocio/modoContext y lo que ya haya quedado guardado
+   por el autosave (guardarBorrador(), corrido en cada turno dentro de enviar()) siguen
+   exactamente como estaban -- el organismo activo sigue "activo" en memoria y en localStorage,
+   sólo dejó de estar a la vista. No crea ningún organismo nuevo (a diferencia de "Guardar un
+   nuevo tema"). Se recupera igual que cualquier otro organismo, abriéndolo de nuevo desde la
+   barra lateral -- abrirOrganismo() vuelve a leer todo desde cero (historial + principios +
+   modo) sin importar qué haya quedado en state acá, así que da lo mismo que esta función no
+   toque nada. Funciona igual estando en Core general o en medio de una lectura especializada
+   (Urbanismo/Negocios/Contextos son modos de ESTE mismo chat, state.modoUrban/modoNegocio/
+   modoContext -- no páginas aparte -- así que ocultar #chat alcanza para "volver al Core"). */
+function irAHome(){
+  el.chat.style.display = 'none';
+  el.welcome.style.display = 'flex';
+  el.btnGuardar.style.display = 'none';
+  document.getElementById('btnPromover').style.display = 'none';
+  el.btnNueva.style.display = 'none';
+  el.btnFicha.style.display = 'none';
+  el.orgchip.style.display = 'none';
+  renderOrgList();
+}
 function nuevaSesion(){
   state.epoch++;
   state.busy = false;
@@ -14010,6 +14044,13 @@ document.getElementById('btnVerTodos').addEventListener('click', function(){
 
 el.btnGuardar.addEventListener('click', function(){ ofrecerGuardado(null); });
 el.btnNueva.addEventListener('click', nuevaSesion);
+// UX-P1E (25/08): marca clickeable -- click normal + Enter/Espacio (role="button" con tabindex,
+// ver HTML) para que sea alcanzable por teclado. irAHome() no crea ni borra ningún organismo,
+// ver su propio comentario.
+el.logoHome.addEventListener('click', irAHome);
+el.logoHome.addEventListener('keydown', function(e){
+  if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); irAHome(); }
+});
 el.btnAcerca.addEventListener('click', mostrarAyuda);
 // UX-P1C (25/08): #panel (la columna) ya no se abre/cierra -- se retiró como elemento visible.
 // El botón de header (oculto siempre, ver CSS) y el del pie de página unificado de mobile ahora
@@ -18921,6 +18962,67 @@ function correrPruebasAuto(){
     chk('SIDEBAR-P1-04 · renderOrgList() (home, "Continuar donde lo dejaste") no se tocó: sigue con "Listo para comenzar" y sin la clase oinfo', (function(){
       var src = renderOrgList.toString();
       return src.indexOf("'Listo para comenzar'") > -1 && src.indexOf('oinfo') === -1;
+    })());
+
+    /* ---- UX-P1E (25/08) -- marca clickeable ("volver a home") en el header. irAHome() es
+       deliberadamente distinta de nuevaSesion(): sólo cambia qué pantalla se ve, nunca toca
+       state.organismo/history/principios/modos -- el organismo activo sigue disponible para
+       reabrir desde la barra lateral tal como pide el brief. */
+    chk('UXP1E-01 · irAHome() no toca state.organismo/history/principios/modos, sólo cambia la vista', (function(){
+      var gOrg = state.organismo, gh = state.history, gp = state.principios, gmu = state.modoUrban,
+          gmn = state.modoNegocio, gmc = state.modoContext, gst = state.started;
+      var orgFixture = { id:'__uxp1e_01', nombre:'UXP1E Uno', tipo:'empresa', ficha:{} };
+      try{
+        state.organismo = orgFixture;
+        state.history = [{role:'user',content:'a'},{role:'assistant',content:'b'}];
+        state.principios = [{texto:'un principio en curso', fam:'espacio', estado:'emergente'}];
+        state.modoNegocio = true; state.modoUrban = false; state.modoContext = false;
+        state.started = true;
+        irAHome();
+        return state.organismo === orgFixture && state.history.length === 2 &&
+          state.principios.length === 1 && state.modoNegocio === true && state.started === true;
+      } finally {
+        state.organismo = gOrg; state.history = gh; state.principios = gp;
+        state.modoUrban = gmu; state.modoNegocio = gmn; state.modoContext = gmc; state.started = gst;
+      }
+    })());
+    chk('UXP1E-02 · irAHome() muestra #welcome, oculta #chat y los botones de sesión (Memoria/Guardar sesión/Nueva)', (function(){
+      var gc = el.chat.style.display, gw = el.welcome.style.display, gg = el.btnGuardar.style.display,
+          gn = el.btnNueva.style.display, gf = el.btnFicha.style.display, go = el.orgchip.style.display;
+      try{
+        el.chat.style.display = 'block'; el.welcome.style.display = 'none';
+        el.btnGuardar.style.display = 'inline-block'; el.btnNueva.style.display = 'inline-block';
+        el.btnFicha.style.display = 'inline-block'; el.orgchip.style.display = 'inline-block';
+        irAHome();
+        return el.chat.style.display === 'none' && el.welcome.style.display === 'flex' &&
+          el.btnGuardar.style.display === 'none' && el.btnNueva.style.display === 'none' &&
+          el.btnFicha.style.display === 'none' && el.orgchip.style.display === 'none';
+      } finally {
+        el.chat.style.display = gc; el.welcome.style.display = gw; el.btnGuardar.style.display = gg;
+        el.btnNueva.style.display = gn; el.btnFicha.style.display = gf; el.orgchip.style.display = go;
+      }
+    })());
+    chk('UXP1E-03 · irAHome() no crea ni asigna ningún organismo -- nunca llama guardarOrganismo() ni toca state.organismo', (function(){
+      var src = irAHome.toString();
+      return src.indexOf('guardarOrganismo') === -1 && src.indexOf('state.organismo') === -1;
+    })());
+    chk('UXP1E-04 · desde un modo especializado (Urbanismo) irAHome() vuelve a home sin apagar el modo ni tocar el organismo', (function(){
+      var gOrg = state.organismo, gmu = state.modoUrban, gc = el.chat.style.display, gw = el.welcome.style.display;
+      var orgFixture = { id:'__uxp1e_04', nombre:'UXP1E Cuatro', tipo:'ciudad', ficha:{} };
+      try{
+        el.chat.style.display = 'block'; el.welcome.style.display = 'none';
+        state.organismo = orgFixture;
+        state.modoUrban = true;
+        irAHome();
+        return el.welcome.style.display === 'flex' && el.chat.style.display === 'none' &&
+          state.organismo === orgFixture && state.modoUrban === true;
+      } finally {
+        state.organismo = gOrg; state.modoUrban = gmu;
+        el.chat.style.display = gc; el.welcome.style.display = gw;
+      }
+    })());
+    chk('UXP1E-05 · la marca (logoHome) existe y está conectada en el DOM esperado', (function(){
+      return !!el.logoHome;
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
