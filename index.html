@@ -206,13 +206,17 @@ header .spacer{flex:1}
 .lectura{
   display:flex;flex-wrap:wrap;gap:7px;margin-top:2px;
 }
+/* UX-P1B (25/08): mismo contenido y lógica de siempre (tensión / función / familia, generados en
+   addMotorMsg()), un nivel más abajo en presencia -- se retiró el borde y la forma de pill (leían
+   como botón, aunque nunca tuvieron acción ni cursor:pointer) y bajó el color base a --faint
+   (terciario). El acento de familia queda sólo en el color del texto, no en un borde propio. */
 .chip{
-  font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.05em;
-  padding:3px 10px;border-radius:20px;border:1px solid var(--line);color:var(--dim);
+  font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.05em;
+  padding:2px 8px;border-radius:4px;border:none;color:var(--faint);
 }
-.chip.f-espacio{border-color:rgba(91,143,212,.5);color:var(--espacio)}
-.chip.f-energia{border-color:rgba(79,174,126,.5);color:var(--energia)}
-.chip.f-trans{border-color:rgba(155,123,212,.5);color:var(--trans)}
+.chip.f-espacio{color:var(--espacio)}
+.chip.f-energia{color:var(--energia)}
+.chip.f-trans{color:var(--trans)}
 .cristaliza{
   border-left:2px solid var(--accent);padding:10px 15px;margin-top:4px;
   background:var(--accent-soft);border-radius:0 10px 10px 0;
@@ -298,16 +302,18 @@ header .spacer{flex:1}
 #send:disabled{opacity:.3;cursor:default}
 
 /* ---------- panel principios ---------- */
-#panel{
-  width:290px;border-left:1px solid var(--line);background:var(--panel);
-  display:flex;flex-direction:column;flex-shrink:0;
-}
-#panel h2{
-  font-family:'DM Mono',monospace;font-weight:500;font-size:11px;letter-spacing:.18em;
-  color:var(--faint);padding:18px 18px 12px;text-transform:uppercase;
-}
-/* UX-P1A (25/08): gap levemente mayor -- "más aire", menos aspecto de lista de sistema. */
-#hilo{flex:1;overflow-y:auto;padding:0 18px 18px;display:flex;flex-direction:column;gap:14px}
+/* UX-P1C (25/08): se retira por completo la columna derecha permanente como elemento de layout
+   -- Principios ya vive en el chat (tarjetas emergente/confirmado, PR-UX1) y los confirmados en
+   Memoria (mostrarFicha(), sección "Principios incorporados"). #panel (con #hilo/#recorrido
+   adentro) sigue existiendo en el DOM -- oculto, sin box model propio -- porque
+   addPrincipio()/resetHilo()/marcarPrincipiosConfirmadosEnSesion()/restaurarPrincipiosDeSesion()/
+   renderRecorrido() siguen escribiendo ahí exactamente igual que antes (dato y lógica intactos,
+   incluido o.momentos[] de Recorrido); sólo dejaron de tener una vista. Con #panel fuera del
+   flujo, #main (flex:1, ver #app más abajo) ocupa automáticamente todo el ancho liberado, sin
+   reglas nuevas. Las reglas de ancho/borde/flex que antes armaban la columna se quitan de acá;
+   las de #panel h2 también (el título ya no se ve). */
+#panel{display:none}
+#hilo{padding:0 18px 18px;display:flex;flex-direction:column;gap:14px}
 /* #panel-tabs/.ptab (dos solapas Principios/Recorrido, N2.1) se retiraron: UX-P1A quitó el acceso
    visible a Recorrido desde esta columna. #recorrido sigue abajo, oculto -- su CSS de contenido
    (.rec-item/.rec-txt/.rec-dia) no se tocó, sigue usándose si algo lo vuelve a mostrar. */
@@ -580,11 +586,12 @@ header .spacer{flex:1}
      agregaron a "Tu espacio" (construirTuEspacioConfig(), sólo en mobile, sólo cuando
      corresponde -- ver ahí), que es exactamente el mismo criterio que ya se usó el 10/08 para
      Ayuda/Avisos/Cuenta cuando dejaron de caber sueltas en este header. */
-  /* 10/08: "Principios" pasa a estar disponible en el header también en mobile -- antes
-     #btnPrincipios estaba oculto siempre (línea ~73) porque en desktop el panel fijo ya
-     está a la vista sin necesitar botón, y en mobile el pie de página (candado.txt) era el
-     único camino. Con "Comprensión disponible" afuera del header ya hay lugar. */
-  #btnPrincipios{display:inline-block}
+  /* UX-P1C (25/08): #btnPrincipios volvió a quedar oculto también en mobile -- abría el panel
+     lateral que este corte retira por completo. El botón y su listener (el.btnPrincipios,
+     abajo) siguen intactos, sólo dejan de verse -- mismo criterio ya usado con Ayuda/Avisos/
+     Cuenta (ver comentario ~línea 96). El acceso a Principios en mobile sigue existiendo vía el
+     pie de página unificado (candado.txt, "Principios"), que ahora abre Memoria (ver
+     window.comprenderAbrirPrincipios más abajo). */
   #orgchip{max-width:110px}
   /* 10/08: en pantallas angostas "Escribí acá qué está pasando…" no entra en una línea y
      el placeholder envuelve a una segunda -- pero el cuadro nace con la altura de una sola
@@ -710,16 +717,18 @@ header .spacer{flex:1}
     </div>
   </div>
 
-  <!-- UX-P1A (25/08): la columna vuelve a ser un espacio dedicado a Principios -- se retiró la
-       pestaña visible "Recorrido" (su función quedó absorbida por Memoria/hitos/horizonte/
-       lecturas/sesiones) y el encabezado doble "Hilo de comprensión" + solapas. #recorrido sigue
-       en el DOM, oculto, sin botón de acceso -- renderRecorrido()/registrarMomento()/momentosDe()
-       y el resto de la lógica de Recorrido no se tocaron, sólo dejaron de ser alcanzables desde
-       acá (ver N20 en el banco: verPanel() sigue sin fallar aunque ya no existan las solapas). -->
+  <!-- UX-P1C (25/08): se retira por completo la columna derecha permanente como elemento visible
+       -- el objetivo del corte ("El descubrimiento sucede en la conversación. La Memoria conserva
+       lo aprendido.") deja a Principios viviendo en el chat (tarjetas emergente/confirmado,
+       PR-UX1) y a los confirmados en Memoria (mostrarFicha(), sección "Principios incorporados").
+       Este <aside> (con #hilo/#recorrido adentro) sigue en el DOM, oculto por CSS (#panel{display:
+       none}), porque addPrincipio()/resetHilo()/marcarPrincipiosConfirmadosEnSesion()/
+       restaurarPrincipiosDeSesion()/renderRecorrido() siguen escribiendo ahí exactamente igual
+       que antes -- dato y lógica intactos (incluido o.momentos[] de Recorrido) -- sólo dejaron de
+       tener una vista. Nada de esas funciones se tocó para este corte. -->
   <aside id="panel">
-    <h2>Principios</h2>
     <div id="hilo"><div class="vacio">Sin principios todavía.</div></div>
-    <div id="recorrido" style="display:none"></div>
+    <div id="recorrido"></div>
   </aside>
 </div>
 
@@ -13134,7 +13143,18 @@ function guardarBorrador(){
   var h = state.history.length > BORRADOR_MAX_MSGS
         ? state.history.slice(state.history.length - BORRADOR_MAX_MSGS)
         : state.history.slice();
-  o.borrador = { history: h, modo: modo, ts: new Date().toISOString() };
+  o.borrador = {
+    history: h, modo: modo, ts: new Date().toISOString(),
+    // UX-P1C (25/08): el autosave no guardaba los principios de la sesión en curso -- a
+    // diferencia de crearCheckpointSesion() (PR-A2.3), que sí los copiaba. Como el borrador se
+    // pisa solo después de cada turno (mucho más seguido que un "Guardar sesión" explícito),
+    // cualquier principio emergente (o confirmado en esta sesión) que sólo hubiera pasado por
+    // autosave se perdía por completo -- de state.principios, del Hilo y de la tarjeta en el
+    // chat -- en cuanto se reabría el organismo. Mismo formato/copia liviana que el checkpoint.
+    principios: (state.principios || []).map(function(p){
+      return { texto: p.texto, fam: p.fam || null, estado: p.estado || 'emergente' };
+    })
+  };
   guardarOrganismo(o);
 }
 function restaurarBorrador(o){
@@ -13149,6 +13169,13 @@ function restaurarBorrador(o){
     if(m.role === 'user') addUserMsg(m.content);
     else addMotorMsg(parseMotor(m.content), true);   // replay: no re-registra momentos
   }
+  // UX-P1C (25/08): reconstruir los principios de sesión perdidos por el bug de autosave --
+  // mismo patrón que restaurarCheckpoint() (PR-A2.3), reutilizando restaurarPrincipiosDeSesion()
+  // sin cambios. Se hace DESPUÉS del replay de historial por la misma razón documentada ahí: evitar
+  // reprocesar el texto crudo de los mensajes para volver a encontrar los marcadores [[PRINCIPIO:...]].
+  state.principios = [];
+  resetHilo(o);
+  restaurarPrincipiosDeSesion(b.principios);
   state.modoNegocio = b.modo === 'negocio';
   state.modoUrban   = b.modo === 'urban';
   state.modoContext = b.modo === 'context';
@@ -13156,10 +13183,11 @@ function restaurarBorrador(o){
   el.orgchip.classList.remove('context');
   el.orgchip.classList.remove('negocio');
   if(b.modo) el.orgchip.classList.add(b.modo);
-  var av = document.createElement('div');
-  av.style.cssText = 'font-size:11px;color:var(--faint);text-align:center;padding:8px 0;letter-spacing:.04em';
-  av.textContent = 'Retomás donde quedaste — la lectura sigue en curso.';
-  el.stream.appendChild(av);
+  // UX-P1B (25/08): antes acá se agregaba un cartel fijo "Retomás donde quedaste -- la lectura
+  // sigue en curso." -- una confirmación puramente informativa, sin ninguna decisión asociada, que
+  // quedaba para siempre arriba de la conversación ya retomada. El propio historial reproducido
+  // justo encima ya deja evidente que se sigue donde quedó -- no hace falta una segunda
+  // explicación permanente de interfaz para algo que el diálogo mismo ya muestra.
   scrollBottom();
   return true;
 }
@@ -13340,7 +13368,7 @@ function restaurarCheckpoint(org, modulo, indice){
   // PR-UX1 (25/08): las tarjetas de principios en el chat se insertan DESPUÉS de replayar toda la
   // conversación (ver el comentario largo de restaurarPrincipiosDeSesion() más arriba) -- quedan
   // como un bloque al pie de la conversación restaurada, en el mismo orden en que aparecieron en
-  // la sesión original, antes del aviso de "Restauraste una sesión anterior" de más abajo.
+  // la sesión original.
   restaurarPrincipiosDeSesion(chk.principios);
   state.modoNegocio = chk.modulo === 'negocio';
   state.modoUrban   = chk.modulo === 'urban';
@@ -13359,10 +13387,14 @@ function restaurarCheckpoint(org, modulo, indice){
     else if(chk.panel.tipo === 'negocio') renderPanelNegocio(chk.panel.version, chk.panel.dimensiones, chk.panel.proyectivo);
     else if(chk.panel.tipo === 'context') renderPanelContext(chk.panel.version, chk.panel.dimensiones, chk.panel.campo, chk.panel.proyectivo);
   }
-  var av = document.createElement('div');
-  av.style.cssText = 'font-size:11px;color:var(--faint);text-align:center;padding:8px 0;letter-spacing:.04em';
-  av.textContent = 'Restauraste una sesión anterior (' + (MODULO_NOMBRE_CHECKPOINT[chk.modulo] || chk.modulo) + ' · ' + new Date(chk.fecha).toLocaleString() + ').';
-  el.stream.appendChild(av);
+  // UX-P1B (25/08): antes acá se agregaba un cartel fijo "Restauraste una sesión anterior (...)."
+  // -- confirmación puramente informativa, sin decisión asociada, que quedaba para siempre en el
+  // chat. La conversación reproducida (y el chip de módulo, urban/negocio/context, ya actualizado
+  // arriba) ya dejan evidente qué se restauró; no hace falta una segunda explicación de interfaz
+  // para algo que el diálogo mismo ya muestra. `MODULO_NOMBRE_CHECKPOINT` queda igual -- lo sigue
+  // usando `cardSesionesAnteriores()`/`cardRecuerdoGuardado()`, donde el nombre del módulo SÍ hace
+  // falta para poder elegir qué restaurar (`ofrecerRecuerdoGuardado()`/`cardSesionesAnteriores()`
+  // requieren una decisión humana explícita y no se tocaron).
   scrollBottom();
   return true;
 }
@@ -13633,7 +13665,9 @@ function mostrarFicha(){
     ['Tensiones activas', f.tensiones || 'aún no registradas'],
     ['Diagnóstico vigente', f.diagnostico || 'aún no formulado'],
     ['Próximo paso', f.proximo || 'aún no definido'],
-    ['Principios acumulados', (o.principios && o.principios.length) ? o.principios.map(function(p){return p.texto;}).join(' · ') : 'ninguno todavía'],
+    // UX-P1C (25/08): esta fila se retira de la grilla -- pasa a vivir como sección discreta
+    // más abajo ("Principios incorporados", mismo criterio que "Lecturas especializadas"),
+    // para no repetir el mismo dato dos veces con dos formatos distintos dentro de Memoria.
     ['Campo mayor', (function(){ if(!o.campo_de) return 'ninguno — organismo independiente'; const pd = cargarOrganismos().find(function(x){return x.id===o.campo_de;}); return pd ? pd.nombre : 'vínculo roto (el organismo campo fue eliminado)'; })()],
     ['Organismos en su campo', (function(){ const hs = cargarOrganismos().filter(function(x){return x.campo_de===o.id;}); return hs.length ? hs.map(function(x){return x.nombre;}).join(' · ') : 'ninguno'; })()],
     ['Derivación', (o.derivable && o.derivable.indexOf('urban') > -1) ? 'Marcada para Urbanismo (lectura territorial disponible)' : 'sin derivaciones marcadas'],
@@ -13740,6 +13774,24 @@ function mostrarFicha(){
   }
   row.appendChild(b);
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(grid);
+  // UX-P1C (25/08): sección discreta -- sólo aparece si hay al menos un principio incorporado a
+  // la Memoria (o.principios[] sólo contiene confirmados: los emergentes viven en el chat/la
+  // sesión y nunca llegan acá hasta que se confirman -- esto no cambió, sólo se lo hace visible
+  // acá en vez de en la columna retirada). Mismo criterio que "Lecturas especializadas" (OMV-F6,
+  // debajo): sin contadores protagonistas ni aspecto de dashboard, sólo el texto de cada uno.
+  if(o.principios && o.principios.length){
+    var secPR = document.createElement('div'); secPR.style.marginTop = '14px';
+    var tPR = document.createElement('div'); tPR.style.cssText = 'font-size:12px;opacity:.65;letter-spacing:.04em;margin-bottom:6px';
+    tPR.textContent = 'Principios incorporados';
+    secPR.appendChild(tPR);
+    o.principios.forEach(function(p){
+      var lp = document.createElement('div'); lp.className = 'principio-memoria';
+      lp.style.cssText = 'font-size:13px;line-height:1.55;opacity:.85;padding:4px 0';
+      lp.textContent = p.texto;
+      secPR.appendChild(lp);
+    });
+    el.cardContent.appendChild(secPR);
+  }
   // OMV-F6 (22/08): sección discreta -- sólo aparece si existe al menos una lectura
   // especializada. Muestra la ÚLTIMA versión de cada tipo; las anteriores quedan a un clic
   // (cardVersionesLecturaEspecializada), nunca todas amontonadas acá.
@@ -13939,20 +13991,19 @@ document.getElementById('btnVerTodos').addEventListener('click', function(){
 el.btnGuardar.addEventListener('click', function(){ ofrecerGuardado(null); });
 el.btnNueva.addEventListener('click', nuevaSesion);
 el.btnAcerca.addEventListener('click', mostrarAyuda);
-el.btnPrincipios.addEventListener('click', function(){ el.panel.classList.toggle('open'); });
+// UX-P1C (25/08): #panel (la columna) ya no se abre/cierra -- se retiró como elemento visible.
+// El botón de header (oculto siempre, ver CSS) y el del pie de página unificado de mobile ahora
+// abren Memoria, que es donde viven los principios confirmados (sección "Principios
+// incorporados"); los emergentes se siguen viendo en el chat mismo, en el momento en que emergen.
+el.btnPrincipios.addEventListener('click', mostrarFicha);
 /* Enganche para el footer movil unificado (Avisos, Cuenta, Principios, Ayuda) que
    candado.txt arma solo en esta pagina (ver mostrarFooterMovil en candado.txt). */
-window.comprenderAbrirPrincipios = function(){ el.panel.classList.toggle('open'); };
+window.comprenderAbrirPrincipios = mostrarFicha;
 window.comprenderMostrarAyuda = mostrarAyuda;
 // 10/08: mismo patrón -- candado.txt (mostrarCuenta) llama a esto para abrir "Comprensión
 // disponible" desde adentro de "Cuenta", ahora que #cred ya no vive en el header.
 window.comprenderVerCreditos = cardCreditos;
 el.overlay.addEventListener('click', function(e){ if(e.target === el.overlay) cerrarOverlay(); });
-document.addEventListener('click', function(e){
-  if(window.innerWidth <= 840 && el.panel.classList.contains('open')){
-    if(!el.panel.contains(e.target) && e.target !== el.btnPrincipios) el.panel.classList.remove('open');
-  }
-});
 el.btnOrgNuevo.addEventListener('click', cardIncorporar);
 document.getElementById('btnPromover').addEventListener('click', promoverAOrganismo);
 el.btnFicha.addEventListener('click', mostrarFicha);
@@ -18646,6 +18697,147 @@ function correrPruebasAuto(){
       return srcProponer.indexOf('propaviso') === -1 && srcProponer.indexOf('principio-chat') === -1 &&
         srcAplicar.indexOf('propaviso') === -1 && srcAplicar.indexOf('principio-chat') === -1;
     })());
+
+    /* ---- UX-P1C (25/08) -- "El descubrimiento sucede en la conversación. La Memoria conserva
+       lo aprendido." Se retira la columna derecha permanente; Principios vive en el chat
+       (PR-UX1, sin tocar) y los confirmados pasan a una sección discreta en Memoria. Antes de
+       tocar nada se auditó/reprodujo el caso reportado ("una tarjeta de principio desapareció de
+       el.stream"): el bug real vivía en restaurarBorrador()/guardarBorrador() (autosave), un
+       camino paralelo al checkpoint que PR-A2.3 ya había corregido y que nunca guardaba
+       state.principios -- se corrigió acá, dentro de este mismo corte, antes de tocar la
+       columna. */
+    chk('UXP1C-01 · un principio emergente sigue insertando su tarjeta en el chat (retirar la columna no afecta la emisión)', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gp = state.principios;
+      try{
+        state.principios = [];
+        addPrincipio('un principio recién emergido en el chat', 'espacio');
+        var card = creados.filter(function(e){ return /^principio-chat (emergente|confirmado)/.test(e.className || ''); }).pop();
+        return !!card && card.className.indexOf('emergente') > -1;
+      } finally {
+        document.createElement = _origCE;
+        state.principios = gp;
+      }
+    })());
+    chk('UXP1C-02 · confirmar un principio emergente lo deja en estado confirmado y permanece en la sesión', (function(){
+      var gp = state.principios;
+      try{
+        state.principios = [];
+        addPrincipio('principio a confirmar dentro del chat', 'trans');
+        marcarPrincipiosConfirmadosEnSesion([{ original:'principio a confirmar dentro del chat', final:'principio a confirmar dentro del chat' }]);
+        return state.principios.length === 1 && state.principios[0].estado === 'confirmado';
+      } finally { state.principios = gp; }
+    })());
+    chk('UXP1C-03 · abrir/cerrar Memoria (mostrarFicha) no toca el.stream -- las tarjetas de principio en el chat no se ven afectadas', (function(){
+      var src = mostrarFicha.toString();
+      return src.indexOf('el.stream') === -1 && src.indexOf('stream.innerHTML') === -1;
+    })());
+    chk('UXP1C-04 · CASO CRÍTICO corregido: un principio emergente que sólo pasó por autosave (borrador, sin "Guardar sesión") sobrevive a restaurarBorrador()', (function(){
+      var _origGuardar = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gOrg = state.organismo, gh = state.history, gp = state.principios, gmu = state.modoUrban,
+          gmn = state.modoNegocio, gmc = state.modoContext, gst = state.started, snap = el.stream.innerHTML;
+      var org = { id:'__uxp1c_04', nombre:'UXP1C Cuatro', tipo:'empresa', ficha:{}, principios:[] };
+      try{
+        state.organismo = org; state.modoUrban = false; state.modoNegocio = false; state.modoContext = false;
+        state.principios = [];
+        addPrincipio('un principio que sólo vive en el autosave', 'espacio');
+        state.history = [{role:'user',content:'contame algo'},{role:'assistant',content:'listo'}];
+        guardarBorrador();   // autosave normal tras cada turno -- SIN "Guardar sesión" explícito
+        // simula salir y reabrir: la sesión en memoria se pierde antes de restaurar
+        state.principios = [];
+        var okRestore = restaurarBorrador(org);
+        return okRestore === true && state.principios.length === 1 &&
+          state.principios[0].texto === 'un principio que sólo vive en el autosave' &&
+          state.principios[0].estado === 'emergente' &&
+          org.principios.length === 0;
+      } finally {
+        guardarOrganismo = _origGuardar;
+        state.organismo = gOrg; state.history = gh; state.principios = gp; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('UXP1C-05 · un principio confirmado en la sesión antes del autosave también sobrevive a restaurarBorrador()', (function(){
+      var _origGuardar = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gOrg = state.organismo, gh = state.history, gp = state.principios, gmu = state.modoUrban,
+          gmn = state.modoNegocio, gmc = state.modoContext, gst = state.started, snap = el.stream.innerHTML;
+      var org = { id:'__uxp1c_05', nombre:'UXP1C Cinco', tipo:'empresa', ficha:{}, principios:[] };
+      try{
+        state.organismo = org; state.modoUrban = false; state.modoNegocio = false; state.modoContext = false;
+        state.principios = [];
+        addPrincipio('principio confirmado antes del autosave', 'energia');
+        state.principios[0].estado = 'confirmado';   // simula una confirmación ya ocurrida en esta sesión
+        state.history = [{role:'user',content:'a'},{role:'assistant',content:'b'}];
+        guardarBorrador();
+        state.principios = [];
+        var okRestore = restaurarBorrador(org);
+        return okRestore === true && state.principios.length === 1 &&
+          state.principios[0].estado === 'confirmado' &&
+          state.principios[0].texto === 'principio confirmado antes del autosave';
+      } finally {
+        guardarOrganismo = _origGuardar;
+        state.organismo = gOrg; state.history = gh; state.principios = gp; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('UXP1C-06 · Memoria muestra una sección discreta "Principios incorporados" con el texto de cada confirmado', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo;
+      try{
+        state.organismo = {
+          id:'__uxp1c_06', nombre:'UXP1C Seis', tipo:'empresa', ficha:{},
+          principios:[{ texto:'una relación organizadora ya incorporada', fam:'espacio' }]
+        };
+        mostrarFicha();
+        var titulo = creados.filter(function(e){ return e.textContent === 'Principios incorporados'; })[0];
+        var texto = creados.filter(function(e){ return e.textContent === 'una relación organizadora ya incorporada'; })[0];
+        return !!titulo && !!texto;
+      } catch(e){ return false; } finally {
+        document.createElement = _origCE;
+        state.organismo = gOrg;
+      }
+    })());
+    chk('UXP1C-07 · principios emergentes (todavía sin confirmar) no aparecen en la sección de Memoria', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gOrg = state.organismo, gp = state.principios;
+      try{
+        state.organismo = { id:'__uxp1c_07', nombre:'UXP1C Siete', tipo:'empresa', ficha:{}, principios:[] };
+        state.principios = [];
+        addPrincipio('un principio todavía emergente, sin confirmar', 'trans');   // sólo en sesión
+        mostrarFicha();
+        var titulo = creados.filter(function(e){ return e.textContent === 'Principios incorporados'; })[0];
+        return !titulo;
+      } catch(e){ return false; } finally {
+        document.createElement = _origCE;
+        state.organismo = gOrg; state.principios = gp;
+      }
+    })());
+    chk('UXP1C-08 · Recorrido deja de tener columna visible pero su lógica y datos siguen intactos (registrarMomento/renderRecorrido/verPanel no lanzan)', (function(){
+      var gOrg = state.organismo;
+      try{
+        var org = { id:'__uxp1c_08', nombre:'UXP1C Ocho', tipo:'empresa', ficha:{}, momentos:[] };
+        state.organismo = org;
+        registrarMomento('principio', 'un momento de recorrido', null);
+        var ok1 = org.momentos.length === 1 && !!TIPO_MOMENTO['principio'];
+        renderRecorrido();   // no debe lanzar aunque #recorrido ya no tenga layout propio
+        verPanel('recorrido');   // idem
+        return ok1;
+      } catch(e){ return false; } finally { state.organismo = gOrg; }
+    })());
+    chk('UXP1C-09 · el acceso móvil a Principios (header oculto y pie de página unificado) ya no depende del panel retirado -- ahora abre Memoria', (function(){
+      return window.comprenderAbrirPrincipios === mostrarFicha;
+    })());
+    /* UXP1C-10 (Core sin columna no deja huecos / responsive sigue funcionando): criterio
+       exclusivamente visual/CSS -- #panel{display:none} + #main{flex:1} ya existente (sin
+       reglas nuevas) se revisaron directamente en el código; no verificable por este banco --
+       mismo límite del stub de DOM ya documentado en cortes anteriores (PR-UX1, UX-P1A). */
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
     chk('M2.1-01 · organismo sin recuerdos devuelve colección vacía válida', (function(){
