@@ -3106,6 +3106,52 @@ function construirHorizonteAplicado(original, correccionHorizonte){
   return tieneAlgo ? out : null;
 }
 
+/* OMV-F10 (25/08): un PROXIMO/PROXIMOS que describe precisamente la etapa que un CIERRE_ETAPA
+   acaba de completar no puede seguir vigente -- sin esto, "Cerrar lectura territorial v2..." seguía
+   apareciendo como pendiente aunque v2 ya hubiera quedado registrada en o.hitos[] como etapa
+   completada. A propósito, conservador ("no inferir cumplimiento de tareas materiales: sólo
+   invalidar próximos cuya condición cognitiva fue explícitamente cerrada"): compara SOLO contra
+   hitoAplicado.etapa -- el nombre explícito de la etapa que se cerró, nunca contra "comprendimos"/
+   "que_cambio" (describen la comprensión lograda, no una tarea) -- y exige que TODOS los términos
+   significativos de la etapa aparezcan en el texto del próximo. Reutiliza terminosSignificativosUnicos()
+   (Punto 13) tal cual, sin crear un segundo sistema de comparación de texto. Si la etapa no deja
+   ningún término significativo (p. ej. "Etapa 1", puro número/stopwords) o no hay coincidencia
+   completa, no toca nada -- ante la duda, el próximo queda como estaba. */
+function proximoDescribeEtapaCompletada(proximoTexto, hitoAplicado){
+  if(!proximoTexto || !hitoAplicado || !hitoAplicado.etapa) return false;
+  var terminosEtapa = terminosSignificativosUnicos(hitoAplicado.etapa);
+  if(!terminosEtapa.length) return false;
+  var terminosProximo = terminosSignificativosUnicos(proximoTexto);
+  if(!terminosProximo.length) return false;
+  return terminosEtapa.every(function(t){ return terminosProximo.indexOf(t) > -1; });
+}
+
+/* Elimina (nunca sustituye por texto inventado -- "el nuevo horizonte ya contiene qué observar/
+   investigar, así que no necesitamos inventar otro próximo") los próximos que la etapa recién
+   cerrada ya resolvió cognitivamente. o.ficha.proximos es multi-item ("item1;;item2", Corte I) --
+   sólo se descartan el/los item(s) que coinciden, se conservan los demás tal cual; o.ficha.proximo
+   es un único string, se limpia entero si coincide. Sólo LEE/MODIFICA o.ficha.proximo/proximos --
+   nunca toca o.hitos/o.horizonte/o.ficha_historial ni ningún otro campo. */
+function invalidarProximosCumplidosPorCierre(o, hitoAplicado){
+  var cambios = { proximoEliminado: null, proximosEliminados: [] };
+  if(!o || !o.ficha || !hitoAplicado) return cambios;
+  if(o.ficha.proximo && proximoDescribeEtapaCompletada(o.ficha.proximo, hitoAplicado)){
+    cambios.proximoEliminado = o.ficha.proximo;
+    o.ficha.proximo = null;
+  }
+  if(o.ficha.proximos){
+    var items = String(o.ficha.proximos).split(';;').map(function(s){ return s.trim(); }).filter(Boolean);
+    var restantes = items.filter(function(it){
+      if(proximoDescribeEtapaCompletada(it, hitoAplicado)){ cambios.proximosEliminados.push(it); return false; }
+      return true;
+    });
+    if(cambios.proximosEliminados.length){
+      o.ficha.proximos = restantes.length ? restantes.join(';;') : null;
+    }
+  }
+  return cambios;
+}
+
 /* ---- persistencia de la cola (espejo de cargarOrganismos/persistirOrganismos) ---- */
 function cargarPropuestas(){
   try{
@@ -3346,6 +3392,11 @@ function aplicarPropuesta(p, correccion){
   }
 
   fusionarFicha(aplicado);            /* <-- única invocación, desde confirmación explícita */
+  // OMV-F10 (25/08): después de fusionar (para operar siempre sobre el estado final de este turno,
+  // ya sea un proximo/proximos recién propuesto en esta misma confirmación o uno que venía de antes)
+  // y antes del guardarOrganismo() final -- si el CIERRE_ETAPA que se acaba de confirmar describe
+  // precisamente lo que un próximo pedía, ese próximo deja de estar vigente.
+  if(hitoAplicado) invalidarProximosCumplidosPorCierre(o, hitoAplicado);
   try{                                 /* N2 · queda en el recorrido qué se confirmó y cuándo */
     if(p.campos.length){
       registrarMomento('ficha_confirmada',
@@ -17680,6 +17731,104 @@ function correrPruebasAuto(){
     // queda para que Javier lo pruebe en vivo con el caso real del brief (perfil de demanda
     // desconocido -> Contextos no debe consolidar "verdadero determinante"/"opera mediante" antes de
     // tener ese dato).
+
+    /* ---- OMV-F10 (25/08) · Un cierre de etapa debe invalidar próximos ya cumplidos
+       "Cerrar lectura territorial v2..." no puede seguir vigente como PROXIMO una vez que v2 quedó
+       registrada como etapa completada -- a diferencia de F4-F9 (mayormente texto de prompt), este
+       corte es lógica determinista y síncrona (aplicarPropuesta() no llama IA), así que el caso
+       crítico completo del brief SÍ es verificable por banco, no sólo en vivo. */
+    chk('F10-01 · proximoDescribeEtapaCompletada: coincide cuando el próximo contiene todos los términos significativos de la etapa', (function(){
+      return proximoDescribeEtapaCompletada('Cerrar lectura territorial v2 y avanzar con el diagnóstico',
+        { etapa:'Lectura territorial v2' }) === true;
+    })());
+    chk('F10-02 · proximoDescribeEtapaCompletada: NO coincide si sólo aparece parte de los términos de la etapa', (function(){
+      return proximoDescribeEtapaCompletada('Cerrar lectura territorial v2', { etapa:'lectura territorial v2 con el equipo comercial' }) === false;
+    })());
+    chk('F10-03 · proximoDescribeEtapaCompletada: sin hitoAplicado.etapa (o vacío) nunca coincide -- conservador', (function(){
+      var a = proximoDescribeEtapaCompletada('cerrar lectura v2', { etapa:null }) === false;
+      var b = proximoDescribeEtapaCompletada('cerrar lectura v2', {}) === false;
+      var c = proximoDescribeEtapaCompletada('cerrar lectura v2', null) === false;
+      return a && b && c;
+    })());
+    chk('F10-04 · proximoDescribeEtapaCompletada: próximo vacío/null nunca coincide', (function(){
+      return proximoDescribeEtapaCompletada('', { etapa:'lectura v2' }) === false &&
+        proximoDescribeEtapaCompletada(null, { etapa:'lectura v2' }) === false;
+    })());
+    chk('F10-05 · proximoDescribeEtapaCompletada: etapa sin ningún término significativo (todo stopwords/muy corto) nunca coincide', (function(){
+      return proximoDescribeEtapaCompletada('cerrar la etapa y avanzar', { etapa:'el la de' }) === false;
+    })());
+    chk('F10-06 · invalidarProximosCumplidosPorCierre limpia o.ficha.proximo cuando coincide, deja el resto de la ficha intacto', (function(){
+      var o = { id:'f10_06', ficha:{ proximo:'Cerrar lectura territorial v2', funcion:'coordinar', diagnostico:'x' } };
+      var cambios = invalidarProximosCumplidosPorCierre(o, { etapa:'lectura territorial v2' });
+      return o.ficha.proximo === null && cambios.proximoEliminado === 'Cerrar lectura territorial v2' &&
+        o.ficha.funcion === 'coordinar' && o.ficha.diagnostico === 'x';
+    })());
+    chk('F10-07 · invalidarProximosCumplidosPorCierre sobre proximos multi-item: sólo saca el/los que coinciden, conserva el resto con el mismo separador', (function(){
+      var o = { id:'f10_07', ficha:{ proximos:'Cerrar lectura territorial v2;;Definir presupuesto;;Agendar reunión' } };
+      var cambios = invalidarProximosCumplidosPorCierre(o, { etapa:'lectura territorial v2' });
+      return o.ficha.proximos === 'Definir presupuesto;;Agendar reunión' &&
+        cambios.proximosEliminados.length === 1 && cambios.proximosEliminados[0] === 'Cerrar lectura territorial v2';
+    })());
+    chk('F10-08 · invalidarProximosCumplidosPorCierre: si TODOS los items de proximos coinciden, queda null (no una cadena vacía)', (function(){
+      var o = { id:'f10_08', ficha:{ proximos:'Cerrar lectura territorial v2' } };
+      invalidarProximosCumplidosPorCierre(o, { etapa:'lectura territorial v2' });
+      return o.ficha.proximos === null;
+    })());
+    chk('F10-09 · invalidarProximosCumplidosPorCierre: sin coincidencia, proximo/proximos quedan exactamente igual', (function(){
+      var o = { id:'f10_09', ficha:{ proximo:'Definir presupuesto', proximos:'Agendar reunión;;Revisar contrato' } };
+      var cambios = invalidarProximosCumplidosPorCierre(o, { etapa:'lectura territorial v2' });
+      return o.ficha.proximo === 'Definir presupuesto' && o.ficha.proximos === 'Agendar reunión;;Revisar contrato' &&
+        cambios.proximoEliminado === null && cambios.proximosEliminados.length === 0;
+    })());
+    chk('F10-10 · invalidarProximosCumplidosPorCierre: defensivo ante o/ficha/hitoAplicado ausentes -- nunca lanza', (function(){
+      var okA = JSON.stringify(invalidarProximosCumplidosPorCierre(null, { etapa:'x' })) === JSON.stringify({ proximoEliminado:null, proximosEliminados:[] });
+      var okB = JSON.stringify(invalidarProximosCumplidosPorCierre({ id:'x' }, { etapa:'x' })) === JSON.stringify({ proximoEliminado:null, proximosEliminados:[] });
+      var okC = JSON.stringify(invalidarProximosCumplidosPorCierre({ id:'x', ficha:{ proximo:'y' } }, null)) === JSON.stringify({ proximoEliminado:null, proximosEliminados:[] });
+      return okA && okB && okC;
+    })());
+    chk('F10-11 · nada de lo nuevo hardcodea un dominio/especialidad por nombre', (function(){
+      var src = proximoDescribeEtapaCompletada.toString() + invalidarProximosCumplidosPorCierre.toString();
+      var patron = /urban|regulaci[oó]n|normativa|promotor|negocio[s]?\b|Urbanismo/i;
+      return !patron.test(src);
+    })());
+    chk('F10-12 · CASO CRÍTICO DEL BRIEF: PROXIMO=cerrar lectura v2 -> CIERRE_ETAPA confirma lectura v2 -> jamás vuelve a aparecer', (function(){
+      var o = { id:'f10_12', nombre:'F10 Doce', tipo:'empresa',
+        ficha:{ proximo:'Cerrar lectura territorial v2 y avanzar con el equipo', funcion:'coordinar' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'lectura territorial v2', comprendimos:'quedó comprendida la lectura territorial v2' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        var r = resolverPropuesta(prop.id, 'confirmar');
+        var hitoQuedoRegistrado = r.ok === true && o.hitos.length === 1 && o.hitos[0].etapa === 'lectura territorial v2';
+        var proximoYaNoVigente = o.ficha.proximo === null;
+        // "reapertura": lo que persiste en o (lo mismo que se releería al reabrir el organismo) ya
+        // no tiene ningún rastro del próximo cumplido -- nada aguas abajo puede volver a proponerlo.
+        var jamasReaparece = JSON.stringify(o.ficha).indexOf('lectura territorial v2') === -1;
+        var funcionIntacta = o.ficha.funcion === 'coordinar';   // sólo proximo se tocó, nada más
+        return hitoQuedoRegistrado && proximoYaNoVigente && jamasReaparece && funcionIntacta;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+    chk('F10-13 · un hito que NO describe el próximo pendiente lo deja intacto (sin falsos positivos)', (function(){
+      var o = { id:'f10_13', nombre:'F10 Trece', tipo:'empresa',
+        ficha:{ proximo:'Definir presupuesto del próximo trimestre' }, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+        var hito = { etapa:'lectura territorial v2', comprendimos:'x' };
+        var prop = proponerFicha({}, null, hito, null, []);
+        resolverPropuesta(prop.id, 'confirmar');
+        return o.ficha.proximo === 'Definir presupuesto del próximo trimestre';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
     chk('M2.1-01 · organismo sin recuerdos devuelve colección vacía válida', (function(){
