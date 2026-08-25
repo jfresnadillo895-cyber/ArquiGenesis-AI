@@ -152,7 +152,14 @@ header .spacer{flex:1}
 #teTop{padding:16px 16px 12px}
 #teOrgSec{flex:1;overflow-y:auto;padding:4px 16px 16px}
 #teOrgSec h4{font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;margin-bottom:10px}
-#teConfig{border-top:1px solid var(--line);padding:6px;flex-shrink:0;display:flex;flex-direction:column}
+#teConfig{border-top:1px solid var(--line);padding:4px 6px 6px;flex-shrink:0;display:flex;flex-direction:column}
+/* Sidebar-P1 (25/08): la zona administrativa retrocede visualmente frente a los organismos --
+   ítems más bajos y un poco más apagados (var(--dim) en vez de var(--text)), mismo contenido,
+   mismos accesos, misma lógica. Scoped a #teConfig para no afectar #menu (el dropdown viejo del
+   ☰, ya sin botón que lo abra desde la UI, ver comentario de construirMenu()) ni a #teConfig
+   mismo cuando algo adentro necesita su propio tamaño (ej. el badge de Avisos, con estilo
+   inline propio, no se ve afectado). */
+#teConfig .mitem{padding:7px 10px;font-size:12.5px;color:var(--dim)}
 @media (prefers-reduced-motion:reduce){#tuEspacio{transition:none}}
 
 /* La lista de organismos en la pantalla de bienvenida se reemplaza por Tu espacio
@@ -404,6 +411,19 @@ header .spacer{flex:1}
 .orgitem .oname{font-weight:600;font-size:13.5px;color:var(--text)}
 .orgitem .otipo{font-family:'DM Mono',monospace;font-size:10px;color:var(--faint);letter-spacing:.06em;display:block}
 .orgitem .ostado{flex:1;font-size:12px;color:var(--dim);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* Sidebar-P1 (25/08): ajustes acotados SÓLO a la lista de la barra lateral (#teOrgList) --
+   .orgitem/.oname/.otipo/.ostado son compartidos con renderOrgList() (home, "Continuar donde lo
+   dejaste"), que este corte no toca. Nombre a 2 líneas máximo con corte prolijo; metadata (tipo)
+   un poco más tenue; el spacer de estado deja de forzar flex:1 (ver .oinfo) para que un estado
+   vacío no le robe la mitad del ancho al nombre -- "⋯" (flex-shrink:0, sin cambios) sigue
+   cayendo siempre pegado al borde derecho, con o sin texto de estado. */
+#teOrgList .oinfo{flex:1;min-width:0}
+#teOrgList .orgitem .oname{
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden;line-height:1.32;word-break:break-word;
+}
+#teOrgList .orgitem .otipo{opacity:.75}
+#teOrgList .orgitem .ostado{flex:0 1 auto;max-width:42%}
 .orgWrap{width:100%}
 .orgWrap-indent{padding-left:14px;box-sizing:border-box}
 .orgMenuBtn{flex-shrink:0;padding:2px 7px;margin-left:2px;font-size:14px;line-height:1.4;color:var(--faint);border-radius:6px}
@@ -14176,6 +14196,11 @@ function construirTuEspacioOrganismos(){
     const b = document.createElement('button');
     b.className = 'orgitem';
     const left = document.createElement('span');
+    // Sidebar-P1 (25/08): className propio (sólo acá -- renderOrgList() de la home, "Continuar
+    // donde lo dejaste", no se toca) para poder acotar el nombre a 2 líneas sin afectar esa otra
+    // lista, que comparte .orgitem/.oname/.otipo/.ostado. Ver reglas #teOrgList .oinfo/.oname más
+    // abajo en el CSS.
+    left.className = 'oinfo';
     const nm = document.createElement('span'); nm.className='oname'; nm.textContent = org.nombre;
     const tp = document.createElement('span'); tp.className='otipo'; tp.textContent = org.tipo;
     left.appendChild(nm);
@@ -14191,7 +14216,14 @@ function construirTuEspacioOrganismos(){
     }
     left.appendChild(tp);
     const st = document.createElement('span'); st.className='ostado';
-    st.textContent = (org.ficha && org.ficha.proximo) ? org.ficha.proximo : 'Listo para comenzar';
+    // Sidebar-P1 (25/08): "Listo para comenzar" era relleno genérico -- el mismo texto para
+    // cualquier organismo sin próximo paso todavía, sin aportar nada distinto de uno a otro. Acá
+    // (la barra lateral) sólo se muestra texto cuando hay algo real que decir
+    // (org.ficha.proximo); si no, el span queda vacío -- sigue siendo el mismo separador flex
+    // que alinea "⋯" a la derecha en todas las filas por igual (ver CSS #teOrgList .ostado).
+    // renderOrgList() (home, "Continuar donde lo dejaste") no se tocó: sigue mostrando "Listo
+    // para comenzar" como antes, tal como pide el brief ("No tocar: home").
+    st.textContent = (org.ficha && org.ficha.proximo) ? org.ficha.proximo : '';
     // 21/08: el organismo activo, en mobile, despliega su panel solo -- no necesita el botón
     // "⋯" (nada que togglear: mientras siga activo, el panel queda abierto). Para todos los
     // demás casos (desktop, o cualquier organismo que no sea el activo) "⋯" sigue igual.
@@ -14391,7 +14423,9 @@ function construirTuEspacioConfig(){
   // sueltos, uno abajo del otro, sin ninguna jerarquía visual.
   const tit = document.createElement('h4');
   tit.textContent = 'Configuración y ayuda';
-  tit.style.cssText = "font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;padding:10px 14px 4px;";
+  // Sidebar-P1 (25/08): menos aire arriba/abajo -- misma etiqueta, zona más compacta y
+  // claramente secundaria frente a la lista de organismos.
+  tit.style.cssText = "font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;padding:6px 10px 3px;";
   cfg.appendChild(tit);
   // "Instalar la app" (10/08): solo aparece si el navegador ya avisó (beforeinstallprompt,
   // ver más abajo en el archivo) que la instalación real está disponible -- en iOS/Safari
@@ -18838,6 +18872,56 @@ function correrPruebasAuto(){
        exclusivamente visual/CSS -- #panel{display:none} + #main{flex:1} ya existente (sin
        reglas nuevas) se revisaron directamente en el código; no verificable por este banco --
        mismo límite del stub de DOM ya documentado en cortes anteriores (PR-UX1, UX-P1A). */
+
+    /* ---- Sidebar-P1 (25/08) -- la barra lateral (#tuEspacio) se percibe primero como el lugar
+       de los organismos; la zona administrativa (#teConfig) retrocede visualmente sin perder
+       ningún acceso. renderOrgList() (home, "Continuar donde lo dejaste") comparte .orgitem/
+       .oname/.otipo/.ostado pero es una función distinta y no se tocó -- estos tests confirman
+       explícitamente esa separación además del comportamiento nuevo. */
+    chk('SIDEBAR-P1-01 · sin próximo paso definido, el estado de la fila queda vacío (ya no "Listo para comenzar")', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var _origCargar = cargarOrganismos;
+      var gOrg = state.organismo;
+      try{
+        state.organismo = null;
+        cargarOrganismos = function(){ return [{ id:'__sbp1_01', nombre:'Sin próximo paso todavía', tipo:'empresa', ficha:{} }]; };
+        construirTuEspacioOrganismos();
+        var estados = creados.filter(function(e){ return e.className === 'ostado'; });
+        return estados.length === 1 && estados[0].textContent === '';
+      } finally {
+        document.createElement = _origCE;
+        cargarOrganismos = _origCargar;
+        state.organismo = gOrg;
+      }
+    })());
+    chk('SIDEBAR-P1-02 · con próximo paso real, el estado de la fila lo sigue mostrando tal cual', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var _origCargar = cargarOrganismos;
+      var gOrg = state.organismo;
+      try{
+        state.organismo = null;
+        cargarOrganismos = function(){ return [{ id:'__sbp1_02', nombre:'Con próximo paso', tipo:'empresa', ficha:{ proximo:'revisar el flujo de caja' } }]; };
+        construirTuEspacioOrganismos();
+        var estados = creados.filter(function(e){ return e.className === 'ostado'; });
+        return estados.length === 1 && estados[0].textContent === 'revisar el flujo de caja';
+      } finally {
+        document.createElement = _origCE;
+        cargarOrganismos = _origCargar;
+        state.organismo = gOrg;
+      }
+    })());
+    chk('SIDEBAR-P1-03 · la fila de la sidebar usa la clase oinfo y ya no hardcodea "Listo para comenzar"', (function(){
+      var src = construirTuEspacioOrganismos.toString();
+      return src.indexOf('oinfo') > -1 && src.indexOf("'Listo para comenzar'") === -1;
+    })());
+    chk('SIDEBAR-P1-04 · renderOrgList() (home, "Continuar donde lo dejaste") no se tocó: sigue con "Listo para comenzar" y sin la clase oinfo', (function(){
+      var src = renderOrgList.toString();
+      return src.indexOf("'Listo para comenzar'") > -1 && src.indexOf('oinfo') === -1;
+    })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
     chk('M2.1-01 · organismo sin recuerdos devuelve colección vacía válida', (function(){
