@@ -2969,8 +2969,13 @@ function marcarPrincipiosConfirmadosEnSesion(pares){
             nodo.classList.add('confirmado');
             var txtEl = nodo.querySelector('.principio-texto');
             if(txtEl) txtEl.textContent = par.final;
+            // PR-UX1.1 (25/08): antes se sacaba el tag entero al confirmar -- dejaba el panel sin
+            // ningún estado explícito para un principio ya confirmado en esta sesión (ambiguo:
+            // había que deducirlo por la ausencia de borde punteado). Ahora el tag se conserva y
+            // cambia de texto, así el panel siempre dice inequívocamente "emergente" o
+            // "confirmado" para cada principio.
             var tag = nodo.querySelector('.principio-tag');
-            if(tag) tag.remove();
+            if(tag) tag.textContent = 'confirmado';
           }
           // PR-UX1 (25/08): la tarjeta gemela dentro del chat (mismo data-pridx) se actualiza
           // en el mismo momento -- mismo criterio que el Hilo: pasa a "Principio confirmado" y
@@ -3628,12 +3633,23 @@ function resolverPropuesta(id, accion, correccion){
 
 /* ================= N1.0 · interfaz ================= */
 
+/* PR-UX1.1 (25/08): mismo barrido que ya hacía avisoPropuesta() al crear una propuesta nueva,
+   pero disparado desde el otro extremo del ciclo -- al RESOLVER una propuesta (confirmar/corregir/
+   rechazar), no sólo al reemplazarla por una siguiente. Antes de este corte, confirmar la única
+   propuesta pendiente de la sesión no quitaba su cartel: quedaba un "El motor propone agregar 1
+   principio a la memoria" visible en el chat indefinidamente, hasta que -- si acaso -- llegara una
+   propuesta nueva. Presentación pura: no toca resolverPropuesta()/aplicarPropuesta() ni ningún dato. */
+function retirarAvisoPropuestaDelChat(){
+  if(!el.stream) return;
+  var viejos = el.stream.querySelectorAll('.propaviso');
+  for(var v=0; v<viejos.length; v++){ viejos[v].remove(); }
+}
+
 function avisoPropuesta(p){
   // Sólo puede haber UNA propuesta pendiente por organismo: retirar del hilo los
   // carteles anteriores (ya caducados) antes de mostrar el nuevo, para no dejar
   // varios "Revisar" colgados apuntando a propuestas superadas.
-  var viejos = el.stream.querySelectorAll('.propaviso');
-  for(var v=0; v<viejos.length; v++){ viejos[v].remove(); }
+  retirarAvisoPropuestaDelChat();
   var d = document.createElement('div');
   d.className = 'propaviso';
   var t = document.createElement('span'); t.className = 'pa-txt';
@@ -3644,8 +3660,16 @@ function avisoPropuesta(p){
   if(vis && nPrin){
     t.textContent = 'El motor propone actualizar la memoria en ' + vis + (vis === 1 ? ' aspecto' : ' aspectos') +
       ' y agregar ' + nPrin + (nPrin === 1 ? ' principio.' : ' principios.');
+  } else if(nPrin === 1){
+    // PR-UX1.1: con un solo candidato, identificarlo por su texto (acotado) en vez de sólo
+    // contarlo -- así se puede asociar visualmente el cartel con el principio emergente al que
+    // corresponde, sin agregar un componente nuevo. Con más de uno se mantiene el conteo genérico
+    // (sumar varios extractos en una sola línea sería más ruido que ayuda).
+    var textoUnico = p.principios_candidatos[0].texto || '';
+    var extracto = textoUnico.length > 60 ? (textoUnico.slice(0, 57) + '…') : textoUnico;
+    t.textContent = 'El motor propone agregar a la memoria el principio "' + extracto + '".';
   } else if(nPrin){
-    t.textContent = 'El motor propone agregar ' + nPrin + (nPrin === 1 ? ' principio a la memoria.' : ' principios a la memoria.');
+    t.textContent = 'El motor propone agregar ' + nPrin + ' principios a la memoria.';
   } else if(vis){
     t.textContent = 'El motor propone actualizar la memoria en ' + vis + (vis === 1 ? ' aspecto.' : ' aspectos.');
   } else if(tieneHito && tieneHorizonte){
@@ -3963,6 +3987,7 @@ function cardPropuesta(id, editando){
           T1_CAMPOS_HORIZONTE.forEach(function(k){ corr.horizonte[k] = editorHorizonte[k] ? editorHorizonte[k].value : ''; });
         }
         var r = resolverPropuesta(p.id, 'corregir', corr);
+        retirarAvisoPropuestaDelChat();   // PR-UX1.1: ya se resolvió -- no dejar el cartel colgado
         cerrarOverlay();
         if(!r.ok) cardMensaje('No se pudo aplicar', r.motivo + '.');
         else mostrarCierreSegunPropuesta(r, state.organismo);
@@ -3973,7 +3998,11 @@ function cardPropuesta(id, editando){
     }else{
       var bR = document.createElement('button'); bR.className = 'btn danger'; bR.textContent = 'Rechazar';
       bR.style.marginRight = 'auto';
-      bR.onclick = function(){ resolverPropuesta(p.id, 'rechazar'); cerrarOverlay(); };
+      bR.onclick = function(){
+        resolverPropuesta(p.id, 'rechazar');
+        retirarAvisoPropuestaDelChat();   // PR-UX1.1: ya se resolvió -- no dejar el cartel colgado
+        cerrarOverlay();
+      };
       var bE = null;
       if(visibles.length || principiosCand.length || tieneHito || tieneHorizonte){   // D-01/T1: sin nada corregible no hay botón "Corregir"
         bE = document.createElement('button'); bE.className = 'btn'; bE.textContent = 'Corregir';
@@ -3982,6 +4011,7 @@ function cardPropuesta(id, editando){
       var bC = document.createElement('button'); bC.className = 'btn primary'; bC.textContent = 'Confirmar';
       bC.onclick = function(){
         var r = resolverPropuesta(p.id, 'confirmar');
+        retirarAvisoPropuestaDelChat();   // PR-UX1.1: ya se resolvió -- no dejar el cartel colgado
         cerrarOverlay();
         if(!r.ok) cardMensaje('No se pudo aplicar', r.motivo + '.');
         else mostrarCierreSegunPropuesta(r, state.organismo);
@@ -13268,7 +13298,7 @@ function restaurarPrincipiosDeSesion(guardados){
         nodo.classList.remove('emergente');
         nodo.classList.add('confirmado');
         var tag = nodo.querySelector('.principio-tag');
-        if(tag) tag.remove();
+        if(tag) tag.textContent = 'confirmado';   // PR-UX1.1: estado explícito, nunca ambiguo
       }
       var cardChat = el.stream && el.stream.querySelector('.principio-chat[data-pridx="'+idx+'"]');
       if(cardChat){
@@ -18486,6 +18516,134 @@ function correrPruebasAuto(){
     chk('PRUX1-07 · el microcopy del Hilo ya no dice "por confirmar" -- ahora "emergente", sin lenguaje administrativo', (function(){
       var src = addPrincipio.toString();
       return !/tag\.textContent\s*=\s*'por confirmar'/.test(src) && /tag\.textContent\s*=\s*'emergente'/.test(src);
+    })());
+
+    /* ---- PR-UX1.1 (25/08) · Sincronía visual de Principios post-confirmación ------------------
+       Auditoría, no gobernanza: no se tocó emisión (addPrincipio salvo el texto del tag),
+       persistencia (o.principios[]/aplicarPropuesta), ni caducidad/cola de proponerFicha(). Nota
+       de alcance: NEG·8 (histórico, sigue fallando igual que siempre) prueba un escenario distinto
+       -- dos avisoPropuesta() consecutivos -- y su falla es un artefacto del stub de DOM
+       (el.stream.querySelectorAll() del banco siempre devuelve [], nunca ve nodos reales), no el
+       mismo bug que este corte corrige (un cartel que sobrevive a la RESOLUCIÓN de su propia
+       propuesta, sin que llegue una propuesta nueva). Por eso PRUX1.1-02/03 usan un el.stream
+       sustituto controlado por el propio test (o un spy sobre retirarAvisoPropuestaDelChat), en vez
+       de depender de querySelectorAll del stub global -- mismo criterio que ya usa este banco para
+       sortear esa limitación conocida. */
+    chk('PRUX1.1-01 · el tag del Hilo pasa a "confirmado" (no desaparece) al confirmar o al restaurar ya confirmado', (function(){
+      var srcMarcar = marcarPrincipiosConfirmadosEnSesion.toString();
+      var srcRestaurar = restaurarPrincipiosDeSesion.toString();
+      var noQuitaElTag = !/tag\.remove\(\)/.test(srcMarcar) && !/tag\.remove\(\)/.test(srcRestaurar);
+      var diceConfirmado = /tag\.textContent\s*=\s*'confirmado'/.test(srcMarcar) &&
+        /tag\.textContent\s*=\s*'confirmado'/.test(srcRestaurar);
+      return noQuitaElTag && diceConfirmado;
+    })());
+    chk('PRUX1.1-02 · retirarAvisoPropuestaDelChat() remueve todos los .propaviso existentes en el chat', (function(){
+      var origStream = el.stream;
+      var removidos = 0;
+      el.stream = { querySelectorAll: function(sel){
+        return sel === '.propaviso' ? [{ remove:function(){ removidos++; } }, { remove:function(){ removidos++; } }] : [];
+      } };
+      try{
+        retirarAvisoPropuestaDelChat();
+        return removidos === 2;
+      } finally { el.stream = origStream; }
+    })());
+    chk('PRUX1.1-03 · CASO REAL: confirmar/rechazar/corregir desde cardPropuesta() retiran el cartel de propuesta -- ya no queda como residuo', (function(){
+      var _origRetirar = retirarAvisoPropuestaDelChat;
+      var llamadas = 0;
+      retirarAvisoPropuestaDelChat = function(){ llamadas++; };
+      var _origCargar = cargarPropuestas, _origPersistir = persistirPropuestas, _origGuardar = guardarOrganismo, _origState = state.organismo;
+      var _origCE = document.createElement;
+      var o = { id:'__prux11_03', nombre:'PRUX1.1 Tres', tipo:'empresa', ficha:{}, principios:[] };
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      function botonPor(creados, texto){
+        return creados.filter(function(e){ return e.className && e.className.indexOf('btn') > -1 && new RegExp(texto).test(e.textContent||''); })[0];
+      }
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o;
+
+        // proponerFicha() ya llama avisoPropuesta(), que a su vez llama
+        // retirarAvisoPropuestaDelChat() para barrer el cartel anterior -- eso también incrementa
+        // el spy, así que se resetea el contador después de crear cada propuesta y ANTES de
+        // clickear el botón, para medir sólo lo que dispara la resolución en sí.
+        var creados1 = [];
+        document.createElement = function(tag){ var e = _origCE(tag); creados1.push(e); return e; };
+        var prop1 = proponerFicha({}, null, null, null, [{ texto:'principio uno', fam:'espacio' }]);
+        cardPropuesta(prop1.id, false);
+        llamadas = 0;
+        botonPor(creados1, 'Confirmar').onclick();
+        var okConfirmar = llamadas >= 1;
+
+        var creados2 = [];
+        document.createElement = function(tag){ var e = _origCE(tag); creados2.push(e); return e; };
+        var prop2 = proponerFicha({}, null, null, null, [{ texto:'principio dos', fam:'espacio' }]);
+        cardPropuesta(prop2.id, false);
+        llamadas = 0;
+        botonPor(creados2, 'Rechazar').onclick();
+        var okRechazar = llamadas >= 1;
+
+        var creados3 = [];
+        document.createElement = function(tag){ var e = _origCE(tag); creados3.push(e); return e; };
+        var prop3 = proponerFicha({}, null, null, null, [{ texto:'principio tres', fam:'espacio' }]);
+        cardPropuesta(prop3.id, true);   // editando
+        llamadas = 0;
+        botonPor(creados3, 'Guardar corrección').onclick();
+        var okCorregir = llamadas >= 1;
+
+        return okConfirmar && okRechazar && okCorregir;
+      } finally {
+        document.createElement = _origCE;
+        retirarAvisoPropuestaDelChat = _origRetirar;
+        cargarPropuestas = _origCargar; persistirPropuestas = _origPersistir; guardarOrganismo = _origGuardar; state.organismo = _origState;
+      }
+    })());
+    chk('PRUX1.1-04 · un único principio candidato se identifica por su texto en el cartel, no sólo por el conteo', (function(){
+      var o = { id:'__prux11_04', nombre:'PRUX1.1 Cuatro', tipo:'empresa', ficha:{}, principios:[] };
+      var _origCargar = cargarPropuestas, _origPersistir = persistirPropuestas, _origState = state.organismo;
+      var _origCE = document.createElement;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        state.organismo = o;
+        proponerFicha({}, null, null, null, [{ texto:'la indefinición conserva posibilidades', fam:'espacio' }]);
+        var txt = creados.filter(function(e){ return e.className === 'pa-txt'; })[0];
+        return !!txt && txt.textContent.indexOf('la indefinición conserva posibilidades') > -1;
+      } finally {
+        document.createElement = _origCE;
+        cargarPropuestas = _origCargar; persistirPropuestas = _origPersistir; state.organismo = _origState;
+      }
+    })());
+    chk('PRUX1.1-05 · con más de un principio candidato se mantiene el conteo genérico (sin agregar complejidad)', (function(){
+      var o = { id:'__prux11_05', nombre:'PRUX1.1 Cinco', tipo:'empresa', ficha:{}, principios:[] };
+      var _origCargar = cargarPropuestas, _origPersistir = persistirPropuestas, _origState = state.organismo;
+      var _origCE = document.createElement;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        state.organismo = o;
+        proponerFicha({}, null, null, null, [{ texto:'uno', fam:'x' }, { texto:'dos', fam:'x' }]);
+        var txt = creados.filter(function(e){ return e.className === 'pa-txt'; })[0];
+        return !!txt && /2 principios a la memoria/.test(txt.textContent);
+      } finally {
+        document.createElement = _origCE;
+        cargarPropuestas = _origCargar; persistirPropuestas = _origPersistir; state.organismo = _origState;
+      }
+    })());
+    chk('PRUX1.1-06 · nada de este corte tocó proponerFicha()/aplicarPropuesta() (gobernanza y caducidad intactas)', (function(){
+      var srcProponer = proponerFicha.toString(), srcAplicar = aplicarPropuesta.toString();
+      // guarda liviana: siguen sin conocer nada de tarjetas/DOM de chat -- si alguna vez alguien
+      // mete presentación ahí adentro, esto se rompe primero.
+      return srcProponer.indexOf('propaviso') === -1 && srcProponer.indexOf('principio-chat') === -1 &&
+        srcAplicar.indexOf('propaviso') === -1 && srcAplicar.indexOf('principio-chat') === -1;
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
