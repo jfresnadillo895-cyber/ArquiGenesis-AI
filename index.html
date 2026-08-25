@@ -219,6 +219,27 @@ header .spacer{flex:1}
   font-size:13.5px;color:var(--dim);font-style:italic;
 }
 .cristaliza::before{content:"◆ ";color:var(--accent);font-style:normal}
+/* PR-UX1 (25/08) · tarjeta de principio dentro del chat -- un pequeño momento de pausa, no un
+   mensaje más ni una alerta: borde apenas diferenciado, fondo casi igual al de la página, bastante
+   aire (la separa el mismo gap:18px de .stream, sin margen propio agregado), sin iconografía. Se
+   centra y se angosta un poco respecto del ancho de los globos -- para no leerse como parte de la
+   conversación sino como una pausa aparte. Misma tarjeta en mobile y desktop, sin CSS por
+   dispositivo: en pantallas chicas simplemente ocupa el ancho disponible dentro de #chat. */
+.principio-chat{
+  max-width:440px;width:100%;margin:0 auto;box-sizing:border-box;
+  padding:16px 20px;border-radius:14px;
+  border:1px solid var(--line);background:var(--panel2);
+  animation:fadein .5s ease;
+}
+.principio-chat.f-espacio{border-left:2px solid var(--espacio)}
+.principio-chat.f-energia{border-left:2px solid var(--energia)}
+.principio-chat.f-trans{border-left:2px solid var(--trans)}
+.principio-chat-lbl{
+  display:block;font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--faint);margin-bottom:7px;
+}
+.principio-chat-txt{display:block;font-size:13.5px;line-height:1.6;color:var(--dim);font-style:italic}
+.principio-chat.confirmado{background:var(--panel)}
 .derivacion{
   border:1px solid rgba(46,90,135,.22);border-radius:12px;padding:12px 16px;
   background:var(--accent-soft);font-size:13px;color:var(--dim);line-height:1.55;
@@ -2882,13 +2903,41 @@ function addPrincipio(texto, fam){
   d.appendChild(txt);
   const tag = document.createElement('span');
   tag.className = 'principio-tag';
-  tag.textContent = 'por confirmar';
+  tag.textContent = 'emergente';   // PR-UX1 (25/08): antes "por confirmar" -- lenguaje administrativo
   d.appendChild(tag);
   el.hilo.appendChild(d);
   el.hilo.scrollTop = el.hilo.scrollHeight;
   el.dot.classList.remove('principio');
   void el.dot.offsetWidth;
   el.dot.classList.add('principio');
+  // PR-UX1 (25/08): además del Hilo (panel lateral), una tarjeta liviana en el chat mismo, en la
+  // posición temporal donde surge -- mismo data-pridx, para poder actualizar ambas piezas juntas
+  // cuando se confirme. addPrincipio() sigue siendo el único punto de aparición en sesión, tanto
+  // en vivo (enviar()) como al restaurar un checkpoint (restaurarPrincipiosDeSesion()) -- por eso
+  // alcanza con este único call site para que la tarjeta de chat aparezca en los dos casos.
+  insertarTarjetaPrincipioEnChat(idx, texto, fam, 'emergente');
+}
+
+/* PR-UX1 (25/08): tarjeta liviana dentro del flujo conversacional -- el chat pasa a ser el lugar
+   primario donde se percibe un principio (el panel lateral queda como índice/resumen, sin cambios
+   de fondo). Deliberadamente chica: una etiqueta de estado + el texto, sin iconografía, sin color
+   de alerta -- no debe leerse como un mensaje más del motor ni como un aviso. Mismo criterio en
+   mobile y desktop: no hay lógica de dispositivo distinta, sólo CSS responsive normal. */
+function insertarTarjetaPrincipioEnChat(idx, texto, fam, estado){
+  if(!el.stream) return;
+  var d = document.createElement('div');
+  d.className = 'principio-chat ' + (estado === 'confirmado' ? 'confirmado' : 'emergente') + (fam ? ' f-'+fam : '');
+  d.setAttribute('data-pridx', String(idx));
+  var lbl = document.createElement('span');
+  lbl.className = 'principio-chat-lbl';
+  lbl.textContent = estado === 'confirmado' ? 'Principio confirmado' : 'Principio emergente';
+  d.appendChild(lbl);
+  var txt = document.createElement('span');
+  txt.className = 'principio-chat-txt';
+  txt.textContent = texto;
+  d.appendChild(txt);
+  el.stream.appendChild(d);
+  scrollBottom();
 }
 
 /* PR-A2 (25/08): al confirmarse una propuesta con principios_candidatos, aplicarPropuesta() ya
@@ -2922,6 +2971,18 @@ function marcarPrincipiosConfirmadosEnSesion(pares){
             if(txtEl) txtEl.textContent = par.final;
             var tag = nodo.querySelector('.principio-tag');
             if(tag) tag.remove();
+          }
+          // PR-UX1 (25/08): la tarjeta gemela dentro del chat (mismo data-pridx) se actualiza
+          // en el mismo momento -- mismo criterio que el Hilo: pasa a "Principio confirmado" y
+          // muestra el texto final (corregido o no).
+          var cardChat = el.stream && el.stream.querySelector('.principio-chat[data-pridx="'+i+'"]');
+          if(cardChat){
+            cardChat.classList.remove('emergente');
+            cardChat.classList.add('confirmado');
+            var lblChat = cardChat.querySelector('.principio-chat-lbl');
+            if(lblChat) lblChat.textContent = 'Principio confirmado';
+            var txtChat = cardChat.querySelector('.principio-chat-txt');
+            if(txtChat) txtChat.textContent = par.final;
           }
           break;   // sólo el primer emergente sin marcar que matchea este texto
         }
@@ -10142,6 +10203,10 @@ async function enviar(texto){
     // Punto 10 (21/08): addPrincipio() ahora sólo hace aparición en sesión (Hilo + state.principios)
     // -- ya NO escribe en state.organismo.principios[]. La incorporación persistente pasa a ser un
     // candidato más de la misma propuesta que ya gobierna ficha/hito/horizonte (ver proponerFicha()).
+    // PR-UX1 (25/08): addPrincipio() también inserta, en el mismo llamado, la tarjeta liviana
+    // dentro del chat (insertarTarjetaPrincipioEnChat()) -- justo acá, inmediatamente después de
+    // addMotorMsg(parsed) de arriba, así que la tarjeta queda en la posición temporal exacta donde
+    // el motor lo emitió, no en un lugar aparte.
     for(const p of parsed.principios){
       addPrincipio(p, parsed.diag);
     }
@@ -13168,21 +13233,33 @@ function checkpointMasReciente(org){
   return lista.length ? lista[0] : null;
 }
 
-/* PR-A2.3 (25/08): reconstruye state.principios + el Hilo a partir de la copia guardada en un
-   checkpoint (chk.principios) -- SOLO aparición en sesión, igual que addPrincipio() en vivo:
-   nunca toca o.principios[] ni dispara ninguna propuesta. Reutiliza addPrincipio() tal cual para
-   la parte común (empuja a state.principios, pinta el nodo con data-pridx alineado, clase
-   .emergente + tag "por confirmar") y sólo corrige el estado a 'confirmado' cuando el checkpoint
-   guardó ese principio como ya confirmado en esa sesión -- mismo ajuste de clase/tag que ya hace
-   marcarPrincipiosConfirmadosEnSesion(), sin duplicar esa función porque acá no hace falta
-   buscar/matchear nada (el índice recién insertado ya es el correcto). Un checkpoint viejo sin
-   `principios` (guardado antes de este corte) simplemente no reconstruye nada -- ni error, ni
-   heredado falso: la sesión restaurada queda igual que quedaba antes de este corte. */
+/* PR-A2.3 (25/08), extendida por PR-UX1 (25/08): reconstruye state.principios + el Hilo + la
+   representación en el chat a partir de la copia guardada en un checkpoint (chk.principios) --
+   SOLO aparición en sesión, igual que addPrincipio() en vivo: nunca toca o.principios[] ni
+   dispara ninguna propuesta. Reutiliza addPrincipio() tal cual para la parte común (empuja a
+   state.principios, pinta el nodo del Hilo con data-pridx alineado + tag "emergente", Y la
+   tarjeta gemela en el chat con el mismo data-pridx -- un único call site cubre las dos vistas) y
+   sólo corrige el estado a 'confirmado' cuando el checkpoint guardó ese principio como ya
+   confirmado en esa sesión -- mismo ajuste de clase/texto que ya hace
+   marcarPrincipiosConfirmadosEnSesion() sobre AMBAS piezas (Hilo y chat), sin duplicar esa función
+   porque acá no hace falta buscar/matchear nada (el índice recién insertado ya es el correcto). Un
+   checkpoint viejo sin `principios` (guardado antes de PR-A2.3) simplemente no reconstruye nada --
+   ni error, ni heredado falso: la sesión restaurada queda igual que quedaba antes de estos cortes.
+
+   PR-UX1: se llama DESPUÉS del replay del historial de chat (ver restaurarCheckpoint() más abajo),
+   no intercalada mensaje por mensaje -- insertar cada tarjeta en su posición exacta del turno
+   original exigiría volver a parsear el texto crudo de cada mensaje histórico para encontrar sus
+   [[PRINCIPIO:...]] y volver a matchearlos, y ese texto crudo puede ya no coincidir con
+   state.principios si hubo una corrección humana antes de guardar el checkpoint (PR-A2.3 guarda el
+   texto YA corregido). Para no reintroducir ese problema de matching, y porque el brief pide
+   explícitamente que PR-A2.3 siga siendo la fuente de verdad, las tarjetas se insertan en bloque,
+   en el orden de la sesión, al final de la conversación restaurada -- nunca se duplican (el chat
+   se vacía por completo al empezar restaurarCheckpoint()). */
 function restaurarPrincipiosDeSesion(guardados){
   if(!guardados || !guardados.length) return;
   guardados.forEach(function(p){
     if(!p || typeof p.texto !== 'string' || !p.texto.trim()) return;
-    addPrincipio(p.texto, p.fam || null);
+    addPrincipio(p.texto, p.fam || null);   // pinta Hilo + tarjeta de chat, estado inicial 'emergente'
     if(p.estado === 'confirmado'){
       var idx = state.principios.length - 1;
       state.principios[idx].estado = 'confirmado';
@@ -13192,6 +13269,13 @@ function restaurarPrincipiosDeSesion(guardados){
         nodo.classList.add('confirmado');
         var tag = nodo.querySelector('.principio-tag');
         if(tag) tag.remove();
+      }
+      var cardChat = el.stream && el.stream.querySelector('.principio-chat[data-pridx="'+idx+'"]');
+      if(cardChat){
+        cardChat.classList.remove('emergente');
+        cardChat.classList.add('confirmado');
+        var lblChat = cardChat.querySelector('.principio-chat-lbl');
+        if(lblChat) lblChat.textContent = 'Principio confirmado';
       }
     }
   });
@@ -13217,15 +13301,19 @@ function restaurarCheckpoint(org, modulo, indice){
   // sobre todo si se restauran dos checkpoints distintos sin salir del organismo (sin este reset,
   // los emergentes del checkpoint anterior quedarían pegados en el Hilo y en state.principios,
   // con data-pridx duplicados). resetHilo(org) repinta los heredados (o.principios[], sin cambios)
-  // y dejar "esta sesión" limpia para la reconstrucción de abajo.
+  // y deja "esta sesión" limpia para la reconstrucción de más abajo.
   state.principios = [];
   resetHilo(org);
-  restaurarPrincipiosDeSesion(chk.principios);
   for(var i=0; i<state.history.length; i++){
     var m = state.history[i];
     if(m.role === 'user') addUserMsg(m.content);
     else addMotorMsg(parseMotor(m.content), true);   // replay: no re-registra momentos
   }
+  // PR-UX1 (25/08): las tarjetas de principios en el chat se insertan DESPUÉS de replayar toda la
+  // conversación (ver el comentario largo de restaurarPrincipiosDeSesion() más arriba) -- quedan
+  // como un bloque al pie de la conversación restaurada, en el mismo orden en que aparecieron en
+  // la sesión original, antes del aviso de "Restauraste una sesión anterior" de más abajo.
+  restaurarPrincipiosDeSesion(chk.principios);
   state.modoNegocio = chk.modulo === 'negocio';
   state.modoUrban   = chk.modulo === 'urban';
   state.modoContext = chk.modulo === 'context';
@@ -18292,6 +18380,112 @@ function correrPruebasAuto(){
         state.organismo = gOrg; state.history = gh; state.principios = gp; state.modoUrban = gmu; state.modoNegocio = gmn;
         state.modoContext = gmc; state.panelEspecializado = gpe; state.started = gst; el.stream.innerHTML = snap;
       }
+    })());
+
+    /* ---- PR-UX1 (25/08) · Principio visible en el momento de descubrimiento -----------------
+       El stub de DOM de este banco (dom_stub.js) hace que CUALQUIER .querySelector() devuelva un
+       elemento fantasma nuevo, nunca el nodo realmente insertado -- por eso el código de
+       marcarPrincipiosConfirmadosEnSesion()/restaurarPrincipiosDeSesion() que reactualiza la
+       tarjeta del chat vía querySelector no es verificable por esa vía en este banco (mismo límite
+       ya documentado para toda mutación post-inserción). Lo que SÍ es verificable acá, con la
+       misma técnica que ya usa OMV-F5-05/PRA2.3-06 (hookear document.createElement para capturar
+       los nodos reales en el momento en que se crean), es: que la tarjeta de chat se crea a la vez
+       que la del Hilo, con el estado correcto en el momento de creación; y que el estado en
+       state.principios/o.principios[] -- que es lo que gobierna esas dos vistas -- efectivamente
+       cambia como corresponde. Lo puramente visual (que la tarjeta YA insertada cambie de clase en
+       vivo) queda, como toda esta clase de comportamiento en este proyecto, para verificación en
+       vivo por Javier. */
+    chk('PRUX1-01 · un [[PRINCIPIO]] nuevo crea a la vez la tarjeta del Hilo y la tarjeta del chat, ambas "emergente"', (function(){
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      var gp = state.principios;
+      try{
+        state.principios = [];
+        addPrincipio('un principio recién emergido', 'espacio');
+        var nodoHilo = creados.filter(function(e){ return e.className && e.className.indexOf('principio emergente') === 0; })[0];
+        var cardChat = creados.filter(function(e){ return e.className && e.className.indexOf('principio-chat') === 0; })[0];
+        var lblCreado = creados.filter(function(e){ return e.className === 'principio-chat-lbl'; })[0];
+        return !!nodoHilo && !!cardChat && cardChat.className.indexOf('emergente') > -1 &&
+          !!lblCreado && lblCreado.textContent === 'Principio emergente';
+      } finally { document.createElement = _origCE; state.principios = gp; }
+    })());
+    chk('PRUX1-02 · el principio queda "emergente" y NO toca o.principios[] hasta que se confirme', (function(){
+      var o = { id:'__prux1_02', nombre:'PRUX1 Dos', tipo:'empresa', ficha:{}, principios:[] };
+      var gOrg = state.organismo, gp = state.principios;
+      try{
+        state.organismo = o; state.principios = [];
+        addPrincipio('principio sin confirmar todavía', 'trans');
+        return o.principios.length === 0 && state.principios.length === 1 && state.principios[0].estado === 'emergente';
+      } finally { state.organismo = gOrg; state.principios = gp; }
+    })());
+    chk('PRUX1-03 · confirmar pasa el principio a estable -- el mismo estado que leen la tarjeta del chat y la del Hilo', (function(){
+      var o = { id:'__prux1_03', nombre:'PRUX1 Tres', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo, origPrincipios = state.principios;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o; state.principios = [];
+        addPrincipio('principio a confirmar desde el chat', 'espacio');
+        var prop = proponerFicha({}, null, null, null, [{ texto:'principio a confirmar desde el chat', fam:'espacio' }]);
+        resolverPropuesta(prop.id, 'confirmar');
+        return state.principios[0].estado === 'confirmado' && o.principios.length === 1;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; state.principios = origPrincipios; }
+    })());
+    chk('PRUX1-04 · corregir al confirmar deja el texto corregido en state.principios (fuente de ambas vistas), no el original', (function(){
+      var o = { id:'__prux1_04', nombre:'PRUX1 Cuatro', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo, origPrincipios = state.principios;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o; state.principios = [];
+        addPrincipio('texto original del motor', 'trans');
+        var prop = proponerFicha({}, null, null, null, [{ texto:'texto original del motor', fam:'trans' }]);
+        resolverPropuesta(prop.id, 'corregir', { principios:['texto corregido por el usuario'] });
+        return state.principios[0].texto === 'texto corregido por el usuario' &&
+          o.principios[0].texto === 'texto corregido por el usuario';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; state.principios = origPrincipios; }
+    })());
+    chk('PRUX1-05 · Guardar sesión -> restaurar no duplica la tarjeta del chat (el.stream se vacía en cada restauración)', (function(){
+      var _origGuardar = guardarOrganismo;
+      guardarOrganismo = function(){};
+      var gOrg = state.organismo, gh = state.history, gp = state.principios, gmu = state.modoUrban, gmn = state.modoNegocio,
+          gmc = state.modoContext, gpe = state.panelEspecializado, gst = state.started, snap = el.stream.innerHTML;
+      var org = { id:'__prux1_05', nombre:'PRUX1 Cinco', tipo:'empresa', ficha:{}, principios:[] };
+      try{
+        state.organismo = org; state.modoUrban = false; state.modoNegocio = false; state.modoContext = false; state.panelEspecializado = null;
+        state.principios = [];
+        addPrincipio('principio único de la sesión', 'espacio');
+        state.history = [{role:'user',content:'a'},{role:'assistant',content:'b'}];
+        crearCheckpointSesion(org);
+        state.principios = [];
+        restaurarCheckpoint(org, 'core', 0);
+        var trasPrimeraVez = state.principios.length;
+        // restaurar el MISMO checkpoint de nuevo (p.ej. el usuario reabre "Sesiones anteriores" y
+        // vuelve a tocar "Restaurar") -- el.stream se vacía de nuevo al empezar, así que no debería
+        // acumular una segunda tarjeta para el mismo principio.
+        restaurarCheckpoint(org, 'core', 0);
+        return trasPrimeraVez === 1 && state.principios.length === 1 &&
+          state.principios[0].texto === 'principio único de la sesión';
+      } finally {
+        guardarOrganismo = _origGuardar;
+        state.organismo = gOrg; state.history = gh; state.principios = gp; state.modoUrban = gmu; state.modoNegocio = gmn;
+        state.modoContext = gmc; state.panelEspecializado = gpe; state.started = gst; el.stream.innerHTML = snap;
+      }
+    })());
+    chk('PRUX1-06 · la tarjeta de chat se inserta siempre en el.stream, sin lógica de dispositivo ni condicionada a que el panel esté abierto', (function(){
+      var src = addPrincipio.toString() + insertarTarjetaPrincipioEnChat.toString();
+      var sinLogicaDispositivo = !/mobile|innerWidth|matchMedia|userAgent/i.test(src);
+      var siempreEscribeEnStream = /el\.stream\.appendChild/.test(insertarTarjetaPrincipioEnChat.toString());
+      return sinLogicaDispositivo && siempreEscribeEnStream;
+    })());
+    chk('PRUX1-07 · el microcopy del Hilo ya no dice "por confirmar" -- ahora "emergente", sin lenguaje administrativo', (function(){
+      var src = addPrincipio.toString();
+      return !/tag\.textContent\s*=\s*'por confirmar'/.test(src) && /tag\.textContent\s*=\s*'emergente'/.test(src);
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
