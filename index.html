@@ -366,6 +366,7 @@ header .spacer{flex:1}
 .c1g1-cambio-item{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;font-size:13px}
 .c1g1-antes{color:var(--faint)}
 .c1g1-ahora{color:var(--text)}
+.c1g1-cambio-hipotesis{font-size:11.5px;font-style:italic;color:var(--dim);white-space:nowrap}
 .c1g1-gobernanza-botones{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .c1g1-gobernanza-resuelta{color:var(--dim);font-size:13.5px;line-height:1.5}
 @media (max-width:480px){
@@ -7512,6 +7513,24 @@ function C1C4A_PROMPT_INTERPRET(ventana){
     '6. "relationRefs" solo puede contener ids que realmente aparecen en la ventana -- nunca ' +
     'inventes un id.\n' +
     '7. No expliques tu razonamiento paso a paso.\n\n' +
+    /* OMV-F9 (25/08): un mecanismo hipotético (una cadena causal que ORGANIZA la interpretación pero
+       depende de un eslabón sin evidencia) no puede redactarse igual que un mecanismo confirmado --
+       distinción genérica, sin nombrar ningún dominio, aplicable a cualquier Organismo. */
+    'DISTINCIÓN OBLIGATORIA -- dato confirmado / relación posible / mecanismo a contrastar: antes de ' +
+    'redactar "observation"/"dynamics", separá en tu propio razonamiento qué es un dato confirmado ' +
+    '(lo que quedó realmente trazado en la ventana, sin huecos), qué es una relación posible (una ' +
+    'conexión plausible entre elementos, todavía no establecida) y qué sería un mecanismo a ' +
+    'contrastar (una cadena causal que ORGANIZA la lectura pero depende de un eslabón sin evidencia ' +
+    'todavía). Si CUALQUIERA de las relaciones centrales de "relacionesPertinentes" tiene ' +
+    '"epistemicState" "hipotesis" o "inferencia_contextos", o su "uncertainty" señala que falta un ' +
+    'dato central para sostenerla, "dynamics" (y "observation" si corresponde) tiene que quedar en ' +
+    'formulación condicional -- "podría estar operando", "si se confirma que...", "una hipótesis es ' +
+    'que..." -- nunca en indicativo cerrado. Prohibido en ese caso presentar el mecanismo como ya ' +
+    'establecido con frases como "verdadero determinante", "es producto de", "opera mediante", ' +
+    '"resultado lógico" u otras equivalentes. Una relación plausible puede organizar hacia dónde ' +
+    'seguir mirando, pero no se convierte en mecanismo causal confirmado mientras alguno de sus ' +
+    'eslabones centrales siga sin evidencia -- "provisional"/"insufficient" existen justamente para ' +
+    'sostener eso sin fabricar una certeza que la ventana no tiene.\n\n' +
     'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
     'después. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
     '[[INTERPRET_RESULT:{\n' +
@@ -7977,12 +7996,17 @@ function C1E1_ventanaFoco(graphState, front, interpretationResult, functionalRes
   var relPorId = {};
   (graphState.relations || []).forEach(function(r){ relPorId[r.id] = r; });
 
+  // OMV-F9 (25/08): epistemicState/uncertainty viajan tal cual vienen del grafo (mismo campo que ya
+  // ve C1-C4A en su propia ventana) -- sin esto, C1-E1 no tenía forma de saber si la relación que
+  // está comprimiendo era un dato confirmado o una hipótesis, y podía "firmar" en el Foco algo que
+  // la interpretación de origen había dejado condicional.
   var relacionesPertinentes = (front.relationRefs || []).map(function(id){
     var r = relPorId[id];
     if(!r) return null;
     return { id: r.id, from: porId[r.sourceNodeId] ? porId[r.sourceNodeId].label : null,
       to: porId[r.targetNodeId] ? porId[r.targetNodeId].label : null,
-      manifestation: r.manifestation, possibleIncidence: r.possibleIncidence };
+      manifestation: r.manifestation, possibleIncidence: r.possibleIncidence,
+      epistemicState: r.epistemicState, uncertainty: r.uncertainty };
   }).filter(Boolean);
 
   var cfg = (interpretationResult && interpretationResult.configuration) || {};
@@ -8042,7 +8066,18 @@ function C1E1_PROMPT_FOCUS(ventana){
     'Si al quitar esa relación el Foco se cae o pierde su sustento central -> "fragile".\n' +
     '8. Los ids en "supportRefs" solo pueden ser ids que realmente aparecen en "relacionesPertinentes" ' +
     '-- nunca inventes un id.\n' +
-    '9. No expliques tu razonamiento paso a paso.\n\n' +
+    '9. No expliques tu razonamiento paso a paso.\n' +
+    /* OMV-F9 (25/08): comprimir no es licencia para volver definitivo lo que la interpretación de
+       origen dejó condicional -- distinción genérica, sin nombrar ningún dominio. */
+    '10. Comprimir NO es volver definitivo lo que todavía es condicional: si la "dynamics"/' +
+    '"observation" que estás comprimiendo ya viene en formulación condicional ("podría", "si se ' +
+    'confirma", "una hipótesis es"), o si alguna de "relacionesPertinentes" tiene "epistemicState" ' +
+    '"hipotesis"/"inferencia_contextos" o una "uncertainty" que señala un dato central sin confirmar, ' +
+    'el "statement" del Foco TIENE que conservar ese mismo estatus condicional -- nunca presentarlo ' +
+    'como "verdadero determinante", "es producto de", "opera mediante", "resultado lógico" ni ' +
+    'formulación equivalente que dé por establecido lo que la interpretación de origen dejó abierto. ' +
+    'Un Foco puede organizar una hipótesis pertinente ("interpretationShift" puede decir que esto ' +
+    'ABRE una hipótesis, no que la confirma) sin necesidad de que esa hipótesis ya esté sostenida.\n\n' +
     'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
     'después. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
     '[[FOCUS_RESULT:{\n' +
@@ -8447,13 +8482,18 @@ function C1F1_ventanaRetorno(snapshot, opening, graphState, front, focusResult, 
   var nodoPorId = {};
   ((graphState && graphState.nodes) || []).forEach(function(n){ nodoPorId[n.id] = n; });
 
+  // OMV-F9 (25/08): epistemicState/uncertainty viajan tal cual (mismo criterio que C1-E1) -- C1-F1
+  // necesita saber si lo que sostiene el cambio propuesto es un dato confirmado o una hipótesis para
+  // poder declarar su propio "epistemicState" con honestidad, en vez de heredar por defecto el tono
+  // más firme del Foco que está comparando.
   var relacionesSoporte = (focusResult.supportRefs || []).map(function(id){
     var r = relPorId[id];
     if(!r) return null;
     return { id: r.id,
       from: nodoPorId[r.sourceNodeId] ? nodoPorId[r.sourceNodeId].label : null,
       to: nodoPorId[r.targetNodeId] ? nodoPorId[r.targetNodeId].label : null,
-      manifestation: r.manifestation, possibleIncidence: r.possibleIncidence };
+      manifestation: r.manifestation, possibleIncidence: r.possibleIncidence,
+      epistemicState: r.epistemicState, uncertainty: r.uncertainty };
   }).filter(Boolean);
 
   var mem = (snapshot && snapshot.currentMemory) || {};
@@ -8532,7 +8572,24 @@ function C1F1_PROMPT_RETORNO(ventana){
     'directo de una relación ya trazada), "memoria_gobernada" (ya pasó por el lazo propuesta/' +
     'confirmación), "recuerdo_historico" (se apoya en un Recuerdo previo), "inferencia_contextos" ' +
     '(inferencia propia de este razonamiento), "evidencia_existente" (evidencia ya reunida), ' +
-    '"hipotesis" (todavía especulativo).\n\n' +
+    '"hipotesis" (todavía especulativo). Declaralo con honestidad -- no le asignes "evidencia_' +
+    'existente"/"relacion_declarada" a algo que en el fondo sostenés por inferencia propia sólo ' +
+    'porque suena más firme.\n\n' +
+    /* OMV-F9 (25/08): "before"/"after" son literalmente lo que se escribe en Memoria si se incorpora
+       (C1F2_construirFichaCandidata copia "after" tal cual) -- si acá queda en indicativo cerrado, la
+       Memoria queda hablando de un mecanismo confirmado aunque el cambio sea "hipotesis". Distinción
+       genérica, sin nombrar ningún dominio. */
+    'SI "epistemicState" es "hipotesis" o "inferencia_contextos", o alguna de "relacionesSoporte" ' +
+    'tiene su propio "epistemicState" "hipotesis"/"inferencia_contextos" o una "uncertainty" que ' +
+    'señala que falta un dato central, "after" (y "before" si aplica) TIENE que quedar en formulación ' +
+    'condicional -- "podría estar operando", "si se confirma que...", "una hipótesis es que..." -- ' +
+    'nunca presentado como transformación ya adquirida. Prohibido en ese caso: "verdadero ' +
+    'determinante", "es producto de", "opera mediante", "resultado lógico" u otra formulación ' +
+    'equivalente que dé el mecanismo por establecido. Una relación contextual plausible puede ' +
+    'organizar hacia dónde seguir mirando, pero no se convierte en mecanismo causal confirmado ' +
+    'mientras alguno de sus eslabones centrales siga sin evidencia -- eso vale igual para "add" que ' +
+    'para cualquier otro "type": el tipo de cambio no vuelve confirmado lo que sigue siendo hipótesis.' +
+    '\n\n' +
     'No expliques tu razonamiento paso a paso.\n\n' +
     'PRIORIDAD DE FORMATO: empezá tu respuesta directamente con el marcador, sin texto antes ni ' +
     'después. Cerrá con el marcador exacto (JSON válido, sin comentarios):\n' +
@@ -9132,10 +9189,26 @@ function C1G1_vistaComprension(focusResult, sufficiencyResult){
   };
 }
 
+// OMV-F9 (25/08): un cambio "hipotesis"/"inferencia_contextos" -- o "keep_open" (por diseño,
+// C1F2_construirFichaCandidata ya lo excluye de Memoria, ver PENDIENTES.md) -- no es un desplazamiento
+// ya sostenido: nunca hardcodea dominio, sólo mira epistemicState/type, campos genéricos del propio
+// contrato de C1-F1 (F8.1..F8.3 no se tocan).
+function C1G1_esCambioHipotesis(c){
+  return !!c && (c.epistemicState === 'hipotesis' || c.epistemicState === 'inferencia_contextos' || c.type === 'keep_open');
+}
+
 function C1G1_vistaRetorno(returnProposal){
+  var cambios = returnProposal.changes || [];
+  var hayHipotesis = cambios.some(C1G1_esCambioHipotesis);
   return {
+    // "Esto cambia nuestra comprensión" sólo corresponde a un desplazamiento sustentado -- si lo
+    // nuevo es (aunque sea en parte) una hipótesis pertinente, el título tiene que decirlo así, no
+    // presentarla como transformación ya adquirida.
+    titulo: hayHipotesis ? 'Esto abre una nueva hipótesis' : 'Esto cambia nuestra comprensión',
     resumen: C1G1_lenguajeNatural(returnProposal.overallSummary),
-    cambios: (returnProposal.changes || []).map(function(c){ return { antes: C1G1_lenguajeNatural(c.before), ahora: C1G1_lenguajeNatural(c.after) }; })
+    cambios: cambios.map(function(c){
+      return { antes: C1G1_lenguajeNatural(c.before), ahora: C1G1_lenguajeNatural(c.after), esHipotesis: C1G1_esCambioHipotesis(c) };
+    })
   };
 }
 
@@ -9572,11 +9645,12 @@ function C1G1_renderVista(vista){
     }
     if(vista.retorno){
       out += '<div class="c1g1-retorno">' +
-        '<div class="c1g1-retorno-titulo">Esto cambia nuestra comprensión</div>' +
+        '<div class="c1g1-retorno-titulo">' + h(vista.retorno.titulo || 'Esto cambia nuestra comprensión') + '</div>' +
         '<div class="c1g1-retorno-resumen">' + h(vista.retorno.resumen) + '</div>' +
         vista.retorno.cambios.map(function(c){
           return '<div class="c1g1-cambio-item"><div class="c1g1-antes"><span class="c1g1-label">Antes</span>' + h(c.antes) + '</div>' +
-            '<div class="c1g1-ahora"><span class="c1g1-label">Ahora</span>' + h(c.ahora) + '</div></div>';
+            '<div class="c1g1-ahora"><span class="c1g1-label">Ahora</span>' + h(c.ahora) +
+            (c.esHipotesis ? ' <span class="c1g1-cambio-hipotesis">hipótesis a confirmar</span>' : '') + '</div></div>';
         }).join('') +
         '<div class="c1g1-gobernanza-botones">' +
           '<button class="btn primary" type="button" data-decision="incorporar">Incorporar</button>' +
@@ -9617,8 +9691,20 @@ window.debugC1G1Demo = function(caso){
       principal:'El estudio prioriza lo urgente porque no tiene un lugar donde lo importante quede protegido.',
       cambio:'Antes se entendía como un problema de organización personal; ahora se ve como una falta de estructura del estudio.',
       incertidumbre:null, provisional:false, verPorQue:{ explica:['la carga reactiva'] },
-      retorno:{ resumen:'Esto cambia nuestra comprensión de por qué se posterga lo importante.',
-        cambios:[{ antes:'Se entendía como falta de disciplina personal.', ahora:'Se entiende como ausencia de un espacio protegido en el estudio.' }] } }
+      retorno:{ titulo:'Esto cambia nuestra comprensión',
+        resumen:'Esto cambia nuestra comprensión de por qué se posterga lo importante.',
+        cambios:[{ antes:'Se entendía como falta de disciplina personal.', ahora:'Se entiende como ausencia de un espacio protegido en el estudio.', esHipotesis:false }] } },
+    // OMV-F9 (25/08): mismo caso, pero con un eslabón central todavía sin evidencia -- título y
+    // etiqueta cambian, sin que el resto de la vista se altere.
+    retorno_hipotesis: { phase:'comprension',
+      principal:'El estudio prioriza lo urgente porque no tiene un lugar donde lo importante quede protegido.',
+      cambio:'Antes se entendía como un problema de organización personal; ahora aparece una posible causa externa todavía sin confirmar.',
+      incertidumbre:'No confirmamos todavía si el volumen de pedidos externos es realmente el factor central.', provisional:true,
+      verPorQue:{ explica:['la carga reactiva'] },
+      retorno:{ titulo:'Esto abre una nueva hipótesis',
+        resumen:'Esto abre una hipótesis pertinente sobre por qué se posterga lo importante -- todavía no confirmada.',
+        cambios:[{ antes:'Se entendía como falta de disciplina personal.',
+          ahora:'Si se confirma el volumen de pedidos externos, podría estar operando como causa adicional -- todavía es una hipótesis.', esHipotesis:true }] } }
   };
   var vista = vistas[caso] || vistas.apertura;
   var cont = (typeof document !== 'undefined') ? document.getElementById('c1g1Demo') : null;
@@ -17486,6 +17572,114 @@ function correrPruebasAuto(){
     // relación recién gobernada (Campo A) -> abre Campo B distinto -> Contextos sigue con un Frente
     // nuevo -- todo esto sin ninguna llamada a guardarOrganismo/Memoria fuera de la ya existente
     // (mantener_abierto/genealogía, sin tocar la ficha) y sin que Campo A vuelva a aparecer.
+
+    /* ---- OMV-F9 (25/08) · Contextos no puede convertir un mecanismo hipotético en causa confirmada
+       "Una relación contextual plausible puede organizar una investigación, pero no convertirse en
+       mecanismo causal confirmado mientras alguno de sus eslabones fundamentales siga sin evidencia."
+       El grueso del fix es texto de prompt (C1C4A_PROMPT_INTERPRET/C1E1_PROMPT_FOCUS/
+       C1F1_PROMPT_RETORNO) -- mismo criterio que OMV-F4/F4.2/F4.3/F7: ningún chk() depende del
+       contenido textual de un prompt, no verificable por banco (queda para prueba en vivo). Lo que
+       SÍ es lógica determinista nueva -- y por eso SÍ tiene pruebas acá -- es (a) que C1-E1/C1-F1
+       ahora ven epistemicState/uncertainty de las relaciones que procesan (antes no llegaba, aunque
+       C1-C4A ya lo tenía), y (b) que la vista de Retorno deja de anunciar siempre "Esto cambia
+       nuestra comprensión": si algún cambio propuesto es hipótesis/inferencia_contextos/keep_open,
+       título y etiqueta por ítem lo dicen explícitamente. */
+    chk('F9-01 · C1G1_esCambioHipotesis identifica hipotesis/inferencia_contextos/keep_open y ningún otro caso', (function(){
+      var si1 = C1G1_esCambioHipotesis({ epistemicState:'hipotesis', type:'add' });
+      var si2 = C1G1_esCambioHipotesis({ epistemicState:'inferencia_contextos', type:'reinterpret' });
+      var si3 = C1G1_esCambioHipotesis({ epistemicState:'evidencia_existente', type:'keep_open' });
+      var no1 = C1G1_esCambioHipotesis({ epistemicState:'relacion_declarada', type:'add' });
+      var no2 = C1G1_esCambioHipotesis({ epistemicState:'memoria_gobernada', type:'reinterpret' });
+      var no3 = C1G1_esCambioHipotesis({ epistemicState:'recuerdo_historico', type:'weaken' });
+      var no4 = C1G1_esCambioHipotesis({ epistemicState:'evidencia_existente', type:'contradict' });
+      var noNulo = C1G1_esCambioHipotesis(null) === false;
+      return si1 && si2 && si3 && !no1 && !no2 && !no3 && !no4 && noNulo;
+    })());
+    chk('F9-02 · C1G1_vistaRetorno: todos los cambios confirmados -> título "Esto cambia nuestra comprensión"', (function(){
+      var rp = { overallSummary:'resumen', changes:[
+        { before:'a', after:'b', epistemicState:'relacion_declarada', type:'add' },
+        { before:'c', after:'d', epistemicState:'evidencia_existente', type:'reinterpret' }
+      ] };
+      var v = C1G1_vistaRetorno(rp);
+      return v.titulo === 'Esto cambia nuestra comprensión' && v.cambios.every(function(c){ return c.esHipotesis === false; });
+    })());
+    chk('F9-03 · C1G1_vistaRetorno: al menos un cambio hipótesis (aunque haya otros confirmados) -> "Esto abre una nueva hipótesis"', (function(){
+      var rp = { overallSummary:'resumen', changes:[
+        { before:'a', after:'b', epistemicState:'relacion_declarada', type:'add' },
+        { before:'c', after:'d', epistemicState:'hipotesis', type:'add' }
+      ] };
+      var v = C1G1_vistaRetorno(rp);
+      return v.titulo === 'Esto abre una nueva hipótesis';
+    })());
+    chk('F9-04 · C1G1_vistaRetorno: esHipotesis se calcula por ítem, no globalmente (el confirmado sigue sin etiqueta)', (function(){
+      var rp = { overallSummary:'resumen', changes:[
+        { before:'a', after:'b', epistemicState:'relacion_declarada', type:'add' },
+        { before:'c', after:'d', epistemicState:'hipotesis', type:'add' }
+      ] };
+      var v = C1G1_vistaRetorno(rp);
+      return v.cambios[0].esHipotesis === false && v.cambios[1].esHipotesis === true;
+    })());
+    chk('F9-05 · C1G1_vistaRetorno sin ningún cambio (changes vacío) no fuerza el título de hipótesis', (function(){
+      var v = C1G1_vistaRetorno({ overallSummary:'r', changes:[] });
+      return v.titulo === 'Esto cambia nuestra comprensión' && v.cambios.length === 0;
+    })());
+    chk('F9-06 · C1G1_renderVista usa vista.retorno.titulo dinámico (ya no hardcodea "Esto cambia nuestra comprensión")', (function(){
+      var vista = { phase:'comprension', principal:'p', cambio:'c', incertidumbre:null, provisional:false,
+        verPorQue:{ explica:[] }, retorno:{ titulo:'Esto abre una nueva hipótesis', resumen:'r', cambios:[] } };
+      var html = C1G1_renderVista(vista);
+      return html.indexOf('Esto abre una nueva hipótesis') > -1 && html.indexOf('c1g1-retorno-titulo') > -1;
+    })());
+    chk('F9-07 · C1G1_renderVista conserva el título por defecto si vista.retorno.titulo no viene (compatibilidad)', (function(){
+      var vista = { phase:'comprension', principal:'p', cambio:'c', incertidumbre:null, provisional:false,
+        verPorQue:{ explica:[] }, retorno:{ resumen:'r', cambios:[] } };
+      var html = C1G1_renderVista(vista);
+      return html.indexOf('Esto cambia nuestra comprensión') > -1;
+    })());
+    chk('F9-08 · C1G1_renderVista etiqueta "hipótesis a confirmar" sólo en los cambios marcados, nunca en los confirmados', (function(){
+      var vista = { phase:'comprension', principal:'p', cambio:'c', incertidumbre:null, provisional:false,
+        verPorQue:{ explica:[] }, retorno:{ titulo:'Esto abre una nueva hipótesis', resumen:'r', cambios:[
+          { antes:'x1', ahora:'y1', esHipotesis:true }, { antes:'x2', ahora:'y2', esHipotesis:false }
+        ] } };
+      var html = C1G1_renderVista(vista);
+      var iY1 = html.indexOf('y1'), iY2 = html.indexOf('y2');
+      var entreY1yY2 = html.slice(iY1, iY2);
+      var despuesDeY2 = html.slice(iY2);
+      return entreY1yY2.indexOf('hipótesis a confirmar') > -1 && despuesDeY2.indexOf('hipótesis a confirmar') === -1;
+    })());
+    chk('F9-09 · C1E1_ventanaFoco ahora expone epistemicState/uncertainty de relacionesPertinentes (antes no llegaba)', (function(){
+      var graphState = { nodes:[{id:'n1',label:'Organismo'},{id:'n2',label:'Elemento externo'}],
+        relations:[{id:'rel1', sourceNodeId:'n1', targetNodeId:'n2', manifestation:'m', possibleIncidence:'i',
+          epistemicState:'hipotesis', uncertainty:['falta confirmar el vínculo']}] };
+      var front = { id:'f1', formulation:'x', uncertainty:'y', relationRefs:['rel1'] };
+      var interpretationResult = { status:'interpreted', configuration:{ observation:'o', dynamics:'d', tension:null, relationRefs:['rel1'], uncertainties:[] } };
+      var ventana = C1E1_ventanaFoco(graphState, front, interpretationResult, null);
+      return ventana.relacionesPertinentes[0].epistemicState === 'hipotesis' &&
+        ventana.relacionesPertinentes[0].uncertainty[0] === 'falta confirmar el vínculo';
+    })());
+    chk('F9-10 · C1F1_ventanaRetorno ahora expone epistemicState/uncertainty de relacionesSoporte (antes no llegaba)', (function(){
+      var graphState = { nodes:[{id:'n1',label:'Organismo'},{id:'n2',label:'Elemento externo'}],
+        relations:[{id:'rel1', sourceNodeId:'n1', targetNodeId:'n2', manifestation:'m', possibleIncidence:'i',
+          epistemicState:'inferencia_contextos', uncertainty:['dato central sin confirmar']}] };
+      var front = { id:'f1' };
+      var focusResult = { statement:'s', explains:[], stability:'provisional', interpretationShift:'sh', supportRefs:['rel1'], uncertainties:[] };
+      var sufficiencyResult = { sufficient:true, recommendation:'close', epistemicRisk:'medium', expectedMarginalGain:'low' };
+      var ventana = C1F1_ventanaRetorno({ currentMemory:{} }, { openingId:'op1' }, graphState, front, focusResult, sufficiencyResult);
+      return ventana.relacionesSoporte[0].epistemicState === 'inferencia_contextos' &&
+        ventana.relacionesSoporte[0].uncertainty[0] === 'dato central sin confirmar';
+    })());
+    chk('F9-11 · nada de lo nuevo (esCambioHipotesis, título condicional) hardcodea un dominio/especialidad por nombre', (function(){
+      var src = C1G1_esCambioHipotesis.toString() + C1G1_vistaRetorno.toString();
+      var patron = /urban|regulaci[oó]n|normativa|promotor|valorizaci[oó]n|demanda|negocio[s]?\b|Urbanismo/i;
+      return !patron.test(src);
+    })());
+    // F9-12 · La calidad real del lenguaje que genera el modelo (formulaciones condicionales, frases
+    // prohibidas evitadas, distinción dato/relación/mecanismo) depende del contenido de
+    // C1C4A_PROMPT_INTERPRET/C1E1_PROMPT_FOCUS/C1F1_PROMPT_RETORNO -- mismo límite documentado que
+    // OMV-F4/F4.2/F4.3/F7: no hay forma de probar la calidad de una respuesta de IA con el banco Node
+    // del proyecto (dom_stub no ejecuta llamadas reales). Auditado y reforzado en los tres prompts;
+    // queda para que Javier lo pruebe en vivo con el caso real del brief (perfil de demanda
+    // desconocido -> Contextos no debe consolidar "verdadero determinante"/"opera mediante" antes de
+    // tener ese dato).
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
     chk('M2.1-01 · organismo sin recuerdos devuelve colección vacía válida', (function(){
