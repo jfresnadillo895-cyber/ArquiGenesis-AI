@@ -1581,9 +1581,22 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--azul);ba
 .logo-wrap{margin-bottom:2.5rem;position:relative;display:flex;flex-direction:column;align-items:center}
 .hexmark{display:block;margin:0 auto 1.3rem;filter:drop-shadow(0 6px 18px rgba(74,158,204,.22))}
 .logo-tag{font-size:13px;color:var(--texto2);margin-top:1rem;max-width:430px;line-height:1.75;text-align:center;font-weight:400;opacity:.85}
+/* UX-P3A (25/08): segunda línea, secundaria -- misma familia visual que .logo-tag, un escalón más
+   discreta (más chica, más tenue), para que la frase de capacidad quede primera y esta sea apoyo. */
+.logo-tag-sec{font-size:.82rem;opacity:.68;margin-top:.35rem}
 .main-card{background:var(--card);border:1px solid var(--borde);border-radius:6px;padding:2rem 2.25rem;width:100%;max-width:580px;box-shadow:var(--sombra)}
 .main-card h3{font-size:16px;font-weight:700;color:var(--azul-2);margin-bottom:.5rem;letter-spacing:-.01em}
 .main-card>p{font-size:12.5px;color:var(--texto2);margin-bottom:1.4rem;line-height:1.75}
+/* UX-P3A (25/08): continuidad del organismo, ahora próxima al encabezado de la tarjeta -- mismo
+   <span id="contexto-indicador"> de siempre (misma lógica JS, mismo id), sólo se le da presencia
+   de línea propia y aspecto de insignia discreta en vez de texto suelto. Oculta por defecto
+   (ninguna organismo de origen): no ocupa espacio ni complejiza la pantalla en el caso común. */
+#contexto-indicador{margin:0 0 12px;padding:5px 11px;border-radius:20px;background:#F3E5F5;font-weight:600}
+/* UX-P3A (25/08): control de carga manual, sólo cuando ya llegó continuidad automática del Core
+   -- sigue siendo el mismo botón/onclick/lógica de siempre (fallback intacto), sólo baja un
+   escalón de peso visual para no competir con la línea de continuidad que ya resolvió el caso
+   común. Selector por clase + !important porque el botón trae su color/borde por estilo inline. */
+.control-secundario{opacity:.65 !important;font-weight:500 !important;color:var(--texto3) !important;border-color:var(--borde) !important;padding:8px 11px !important;font-size:12px !important}
 .inp-row{display:flex;gap:8px;margin-bottom:.75rem}
 .city-inp{flex:1;padding:12px 16px;font-size:15px;border:1px solid var(--borde2);border-radius:6px;color:var(--texto);transition:border-color .2s,box-shadow .2s}
 .city-inp:focus{outline:none;border-color:var(--azul);box-shadow:0 0 0 3px rgba(74,158,204,.18)}
@@ -2375,19 +2388,37 @@ canvas{animation:none !important}
     <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
   </header>
   <div class="logo-wrap">
-    <div class="logo-tag">Diagnóstico urbano sistémico. Integrá conocimiento experto o analizá cualquier ciudad del mundo en modo automático.</div>
+    <!-- UX-P3A (25/08): mensaje principal reordenado -- primero la capacidad ("comprender cómo se
+         organiza un territorio a partir de relaciones"), no el diagnóstico genérico; segunda línea
+         secundaria nombra Geometría Urbana y las dos vías (automática + incorporación humana), sin
+         mencionar 324/matrices/EET/modos/ontología/algoritmos -- la profundidad se siente, no se
+         explica acá. -->
+    <div class="logo-tag">Comprendé cómo se organiza un territorio a partir de las relaciones que lo constituyen.</div>
+    <div class="logo-tag logo-tag-sec">Geometría Urbana combina una lectura automática con el conocimiento que vos incorporás del lugar.</div>
   </div>
   <div class="main-card">
     <h3>Diagnosticar un territorio</h3>
-    <p>Escribí el nombre de una ciudad y el sistema la evalúa con la información disponible. Si sumás documentación propia — planes, relevamientos, informes —, el diagnóstico gana precisión.</p>
+    <!-- UX-P3A (25/08): texto simplificado -- deja explícitas las dos vías (lectura automática +
+         enriquecimiento propio) sin listar todavía qué documentos exactos acepta cada botón de
+         abajo (eso ya lo dicen los propios botones). -->
+    <p>Escribí una ciudad, barrio o territorio. Comprender construirá una primera lectura con la información disponible; podés enriquecerla con observaciones, relevamientos, planes o informes propios.</p>
+    <!-- UX-P3A (25/08): "Continuidad del organismo" sube de rango -- mismo <span id=
+         "contexto-indicador"> de siempre (mismo id, misma lógica JS en procesarContextoJSON()/
+         quitarContexto(), sin tocar), reposicionado próximo al encabezado de la tarjeta en vez de
+         quedar debajo de los controles secundarios. Oculto por defecto (display:none inline, igual
+         que antes) -- no aparece ni ocupa espacio cuando no hay organismo de origen. -->
+    <span id="contexto-indicador" style="font-size:11px;color:#6A1B9A;display:none"></span>
     <div class="inp-row">
       <input type="text" class="city-inp" id="city-inp" placeholder="Ej: Barcelona, Medellín, Tokio, Rosario..." />
       <button class="btn-go" id="btn-go" onclick="iniciar()">Analizar →</button>
     </div>
     <button onclick="abrirPasivo()" style="display:block;width:100%;padding:11px;font-size:13px;font-weight:600;color:var(--azul);background:none;border:1px solid var(--azul);border-radius:8px;cursor:pointer;transition:all .15s;margin-bottom:.4rem" onmouseover="this.style.background='var(--azul-c)'" onmouseout="this.style.background='none'">+ Agregar observación previa del territorio</button>
     <span id="pasivo-indicador" style="font-size:11px;color:var(--verde);display:none">✓ Observación cargada</span>
-    <button onclick="abrirContexto()" style="display:block;width:100%;padding:11px;font-size:13px;font-weight:600;color:#6A1B9A;background:none;border:1px solid #6A1B9A;border-radius:8px;cursor:pointer;transition:all .15s;margin-top:.5rem;margin-bottom:.75rem" onmouseover="this.style.background='#F3E5F5'" onmouseout="this.style.background='none'">🌐 Cargar contexto o marco de Comprender AI</button>
-    <span id="contexto-indicador" style="font-size:11px;color:#6A1B9A;display:none"></span>
+    <!-- UX-P3A (25/08): id nuevo, puramente para poder bajarle un escalón de peso visual desde
+         procesarContextoJSON() cuando ya llegó continuidad automática del Core (ver CSS
+         .control-secundario) -- mismo onclick, mismo comportamiento, sigue siendo el fallback de
+         carga manual, no se elimina. -->
+    <button id="btn-cargar-contexto" onclick="abrirContexto()" style="display:block;width:100%;padding:11px;font-size:13px;font-weight:600;color:#6A1B9A;background:none;border:1px solid #6A1B9A;border-radius:8px;cursor:pointer;transition:all .15s;margin-top:.5rem;margin-bottom:.75rem" onmouseover="this.style.background='#F3E5F5'" onmouseout="this.style.background='none'">🌐 Cargar contexto o marco de Comprender AI</button>
     <div class="ej-label" id="ej-label">Ejemplos:</div>
     <div class="ej-chips" id="ej-chips">
       <button class="ej-chip" onclick="sc('Trenque Lauquen, Argentina')">Trenque Lauquen</button>
@@ -4970,9 +5001,14 @@ function procesarContextoJSON(txt){
         + '<br><span style="font-size:10px;color:var(--texto3)">Orienta el diagnóstico como comprensión previa del Sujeto; no reemplaza el diagnóstico interno.</span>';
       document.getElementById('ctx-quitar').style.display = 'inline-block';
       const ind = document.getElementById('contexto-indicador');
-      ind.style.display = 'inline';
+      ind.style.display = 'block';   // UX-P3A (25/08): línea propia, próxima al encabezado (antes 'inline')
       // 14/08: frase unificada con Contextos/Negocios Pro -- misma etiqueta en los tres Pro.
       ind.textContent = '↺ Continuidad del organismo «'+(marcoOrganismoNombre||c.investigacion||'—')+'»';
+      // UX-P3A (25/08): ya está la continuidad automática resuelta -- la carga manual sigue
+      // disponible como fallback (no se toca su onclick ni su lógica), pero baja un escalón de
+      // peso visual para no competir con la línea de continuidad de arriba.
+      var btnCtxManual = document.getElementById('btn-cargar-contexto');
+      if(btnCtxManual) btnCtxManual.classList.add('control-secundario');
       return;
     }
     // 14/08, hallazgo real (no relacionado con el handoff automático, pero en el mismo camino):
@@ -4999,7 +5035,7 @@ function procesarContextoJSON(txt){
       + (c.revalorado ? ' · revalorada con aportes del usuario' : '');
     document.getElementById('ctx-quitar').style.display = 'inline-block';
     const ind = document.getElementById('contexto-indicador');
-    ind.style.display = 'inline';
+    ind.style.display = 'block';   // UX-P3A (25/08): línea propia, próxima al encabezado (antes 'inline')
     ind.textContent = '✓ Contexto'+(esV2?' v2':'')+': '+(c.ciudad||'—')+' · IVC '+c.ivc_global;
   }catch(e){
     est.innerHTML = '<span style="color:var(--rojo)">'+e.message+'</span>';
