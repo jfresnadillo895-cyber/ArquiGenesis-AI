@@ -431,6 +431,10 @@ header .spacer{flex:1}
 /* C-09 · principios heredados en el hilo */
 .hilo-heredado-cab{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:2px 0 8px}
 .principio.heredado{opacity:.55}
+/* PR-A2 (25/08) · emergente (provisional, esta sesión, todavía sin confirmar) vs confirmado
+   (estable). .heredado (arriba) sigue significando "de una sesión anterior" -- no se toca. */
+.principio.emergente{border-left-style:dashed;opacity:.85}
+.principio-tag{display:block;margin-top:4px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-style:normal}
 .hilo-sep{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);border-top:1px solid var(--line);margin:12px 0 8px;padding-top:8px}
 /* ---- N1.0 · lazo propuesta -> confirmación ---- */
 .propaviso{margin:8px 0 2px;padding:9px 12px;border:1px solid var(--line);border-left:2px solid var(--espacio);border-radius:8px;font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -2431,7 +2435,7 @@ Al INICIO de cada respuesta, ANTES de cualquier texto visible, en bloque y cada 
 [[TENSION:Txx]] — código de la tensión raíz.
 [[FUNCION:verbo]] — función universal derivada (minúscula).
 REGLA DE ELICITACIÓN: DIAG, TENSION y FUNCION se emiten SOLO cuando hay diagnóstico real. Si tu respuesta es principalmente un pedido de datos para completar la lectura, NO los emitas: un diagnóstico prematuro es peor que ninguno. La lectura llega cuando la comprensión está.
-[[PRINCIPIO:texto]] — SOLO cuando emerge un principio organizador genuinamente nuevo en la sesión: una ley universal reutilizable de una línea, no una descripción del caso.
+[[PRINCIPIO:texto]] — cuando se vuelve reconocible una relación organizadora del caso, no una descripción del caso. No necesita constituir una ley universal de ARQUIGÉNESIS ni valer más allá de este organismo: alcanza con que (1) haya surgido de lo conversado; (2) explique por qué varias observaciones aparentemente separadas se comportan como lo hacen; (3) pueda expresarse en una línea, de forma sintética; (4) sea suficientemente generalizable como para orientar la comprensión siguiente de este caso; (5) represente un desplazamiento respecto de lo que ya se sabía. Emitilo en el momento en que esa relación se vuelve reconocible, durante el recorrido — no hace falta esperar a un cierre de etapa ni al final de la conversación. No emitas: un simple resumen de lo dicho; un consejo o recomendación; una frase motivacional; una reformulación del principio anterior sin desplazamiento real; ni una asociación todavía puramente hipotética, sin sustento directo en lo conversado. No hay número ni frecuencia fija: emitilo tantas veces como aparezca una relación organizadora nueva, ni más ni menos.
 [[CRISTALIZA:texto]] — SOLO cuando algo importante tomó forma pero no fue dicho explícitamente.
 [[DERIVAR:urban]] — SOLO la primera vez en la sesión que se vuelve evidente que el caso pertenece al dominio urbano-territorial (ciudad, barrio, territorio, movilidad, expansión, centralidades, suelo, infraestructura urbana) y se beneficiaría de un diagnóstico territorial completo. No lo repitas en la misma sesión.
 [[DERIVAR:profesional]] — SOLO la primera vez en la sesión que aparece un límite de seguridad o de incumbencia matriculada (ver LÍMITES Y DERIVACIÓN PROFESIONAL). Marcador interno de trazabilidad. No lo repitas en la misma sesión.
@@ -2847,25 +2851,83 @@ function resetHilo(org){
    o.principios[] ni registra momento persistente: eso ahora requiere confirmación humana explícita
    vía la gobernanza de propuestas (proponerFicha() -> resolverPropuesta() -> aplicarPropuesta(),
    con principios_candidatos). registrarMomento('principio', ...) se movió a aplicarPropuesta(), y
-   sólo corre para los principios efectivamente confirmados (nunca por la mera emisión del motor). */
+   sólo corre para los principios efectivamente confirmados (nunca por la mera emisión del motor).
+
+   PR-A2 (25/08): esta función es, a propósito, la ÚNICA fuente de aparición en sesión, y NO
+   depende en absoluto del estado de ninguna propuesta -- pushea a state.principios y pinta el
+   Hilo apenas el motor emite [[PRINCIPIO:...]], sin mirar proponerFicha()/resolverPropuesta().
+   Eso ya garantizaba (auditado en PR-A1, no era un bug) que una propuesta que después caduca
+   nunca se lleva puesto el principio emergente de esta función -- lo que faltaba era hacer
+   visible esa distinción: cada entrada ahora guarda `estado:'emergente'` y se pinta con la
+   clase .principio.emergente (provisional, "por confirmar"); cuando aplicarPropuesta() confirma
+   ese mismo texto (dedup vía normalizarPrincipioParaComparar, misma función que ya usa Punto 10),
+   marcarPrincipiosConfirmadosEnSesion() la pasa a estado:'confirmado' y la repinta estable, en el
+   mismo lugar del Hilo, sin duplicar la tarjeta ni recargar nada. */
 function addPrincipio(texto, fam){
   if(state.principios.length === 0){
     var v = el.hilo.querySelector('.vacio');   // C-09: sólo se quita el marcador de vacío
     if(v) v.remove();
   }
-  state.principios.push({texto, fam});
+  var idx = state.principios.length;
+  state.principios.push({texto, fam, estado:'emergente'});
   const n = String(state.principios.length).padStart(2,'0');
   const d = document.createElement('div');
-  d.className = 'principio' + (fam ? ' f-'+fam : '');
+  d.className = 'principio emergente' + (fam ? ' f-'+fam : '');
+  d.setAttribute('data-pridx', String(idx));
   const s = document.createElement('span');
   s.className = 'num'; s.textContent = n;
   d.appendChild(s);
-  d.appendChild(document.createTextNode(texto));
+  const txt = document.createElement('span');
+  txt.className = 'principio-texto'; txt.textContent = texto;
+  d.appendChild(txt);
+  const tag = document.createElement('span');
+  tag.className = 'principio-tag';
+  tag.textContent = 'por confirmar';
+  d.appendChild(tag);
   el.hilo.appendChild(d);
   el.hilo.scrollTop = el.hilo.scrollHeight;
   el.dot.classList.remove('principio');
   void el.dot.offsetWidth;
   el.dot.classList.add('principio');
+}
+
+/* PR-A2 (25/08): al confirmarse una propuesta con principios_candidatos, aplicarPropuesta() ya
+   dedup-a y persiste en o.principios[] (Punto 10, sin cambios); esta función SOLO actualiza la
+   presencia visual/en memoria de sesión de esos mismos textos -- nunca escribe o.principios[],
+   nunca crea entradas nuevas en state.principios (si por algún motivo el texto confirmado no
+   tiene un emergente correspondiente en esta sesión -- p.ej. se confirmó desde otra pestaña/
+   cardPropuestas -- no hace nada, silenciosamente). Recorre state.principios UNA vez por texto
+   confirmado y marca el primer emergente cuyo texto normalizado coincide y todavía no fue
+   marcado -- así dos candidatos con el mismo texto en session no pisan la misma tarjeta dos veces. */
+function marcarPrincipiosConfirmadosEnSesion(pares){
+  // `pares`: [{original, final}, ...] -- original es el texto tal como lo emitió el motor (el
+  // mismo que quedó en state.principios al emitirse); final es lo efectivamente persistido en
+  // o.principios[] (puede ser igual, o el texto corregido por el usuario). Se matchea siempre
+  // contra `original` -- el emergente en sesión nunca tuvo el texto corregido hasta este momento.
+  if(!pares || !pares.length || !state.principios || !state.principios.length) return;
+  try{
+    pares.forEach(function(par){
+      var clave = normalizarPrincipioParaComparar(par.original);
+      if(!clave) return;
+      for(var i=0;i<state.principios.length;i++){
+        var it = state.principios[i];
+        if(it.estado === 'emergente' && normalizarPrincipioParaComparar(it.texto) === clave){
+          it.estado = 'confirmado';
+          it.texto = par.final;   // si hubo corrección, la tarjeta pasa a mostrar lo persistido
+          var nodo = el.hilo && el.hilo.querySelector('.principio[data-pridx="'+i+'"]');
+          if(nodo){
+            nodo.classList.remove('emergente');
+            nodo.classList.add('confirmado');
+            var txtEl = nodo.querySelector('.principio-texto');
+            if(txtEl) txtEl.textContent = par.final;
+            var tag = nodo.querySelector('.principio-tag');
+            if(tag) tag.remove();
+          }
+          break;   // sólo el primer emergente sin marcar que matchea este texto
+        }
+      }
+    });
+  }catch(e){}   // nunca puede romper la confirmación misma
 }
 
 function scrollBottom(){ el.chat.scrollTop = el.chat.scrollHeight; }
@@ -3387,7 +3449,11 @@ function aplicarPropuesta(p, correccion){
       if(!clave || vistos[clave]) return;   // vacío tras corregir, o ya existe -- no duplicar
       vistos[clave] = true;
       o.principios.push({ texto: texto, fam: cand.fam || null });
-      principiosConfirmados.push(texto);
+      // PR-A2 (25/08): se guarda el par {original, final} -- original es lo que emitió el motor
+      // (lo que ya está en state.principios desde que apareció en sesión), final es lo persistido
+      // acá (igual al original salvo corrección humana). marcarPrincipiosConfirmadosEnSesion()
+      // matchea por `original` para encontrar la tarjeta emergente correcta en el Hilo.
+      principiosConfirmados.push({ original: cand.texto, final: texto });
     });
   }
 
@@ -3410,7 +3476,7 @@ function aplicarPropuesta(p, correccion){
     }
     // Punto 10: un momento 'principio' por cada principio efectivamente incorporado (nunca por
     // los descartados por duplicado, y nunca si la propuesta se rechaza -- eso ni siquiera llega acá).
-    principiosConfirmados.forEach(function(texto){ registrarMomento('principio', texto, p.lectura); });
+    principiosConfirmados.forEach(function(pc){ registrarMomento('principio', pc.final, p.lectura); });
   }catch(e){}
 
   o.ficha.version = fichaVersion(o) + 1;
@@ -3492,6 +3558,9 @@ function resolverPropuesta(id, accion, correccion){
   p.resuelto_como = r.aplicado;
   persistirPropuestas(c);
   registrarSenalVital('comprension_confirmada', p.organismo_id);   // SV1: best effort, no bloquea el retorno de abajo
+  // PR-A2 (25/08): los principios recién confirmados (si los hay) pasan de "emergente" a
+  // "confirmado" en el Hilo de esta misma sesión, sin recargar nada.
+  if(r.principios && r.principios.length) marcarPrincipiosConfirmadosEnSesion(r.principios);
   renderChipPropuestas();
   return { ok:true, estado: p.estado, aplicado: r.aplicado, hito: r.hito, horizonte: r.horizonte };   // Corte I/J: viajan para las tarjetas de cierre
 }
@@ -17828,6 +17897,182 @@ function correrPruebasAuto(){
         resolverPropuesta(prop.id, 'confirmar');
         return o.ficha.proximo === 'Definir presupuesto del próximo trimestre';
       } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; }
+    })());
+
+    /* ---- PR-A2 (25/08) · Recuperar Principios emergentes, PRA2-01 a PRA2-10 -----------------
+       Mismo patrón de prueba que M10-*: stub de cargarPropuestas/persistirPropuestas/
+       guardarOrganismo, state.organismo/state.principios reales, addPrincipio() ->
+       proponerFicha() -> resolverPropuesta(). No se verifica DOM/CSS por banco automático (mismo
+       límite ya documentado para prompts y para vistas -- lo visual se prueba en vivo); lo que sí
+       es determinista y se verifica acá es el estado (`state.principios[i].estado`/`.texto`), que
+       es exactamente lo que gobierna qué se pinta. */
+    chk('PRA2-01 · addPrincipio() marca el emergente con estado explícito, sin tocar o.principios[]', (function(){
+      var o = { id:'org_pra2_01', nombre:'PRA2 Uno', tipo:'empresa', ficha:{}, principios:[] };
+      var origState = state.organismo, origPrincipios = state.principios;
+      try{
+        state.organismo = o; state.principios = [];
+        addPrincipio('la forma sigue a la tensión no resuelta', 'espacio');
+        return state.principios.length === 1 && state.principios[0].estado === 'emergente' &&
+          state.principios[0].texto === 'la forma sigue a la tensión no resuelta' &&
+          state.principios[0].fam === 'espacio' && o.principios.length === 0;
+      } finally { state.organismo = origState; state.principios = origPrincipios; }
+    })());
+    chk('PRA2-02 · varios PRINCIPIO en turnos sucesivos se acumulan, ninguno desaparece', (function(){
+      var origPrincipios = state.principios;
+      try{
+        state.principios = [];
+        addPrincipio('principio uno', 'espacio');
+        addPrincipio('principio dos', 'energia');
+        addPrincipio('principio tres', 'trans');
+        return state.principios.length === 3 &&
+          state.principios.every(function(p){ return p.estado === 'emergente'; }) &&
+          state.principios[0].texto === 'principio uno' && state.principios[2].texto === 'principio tres';
+      } finally { state.principios = origPrincipios; }
+    })());
+    chk('PRA2-03 · una propuesta posterior que hace caducar a la anterior NO borra los emergentes de la sesión', (function(){
+      var o = { id:'org_pra2_03', nombre:'PRA2 Tres', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origState = state.organismo, origPrincipios = state.principios;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        state.organismo = o; state.principios = [];
+        addPrincipio('principio del turno uno', 'espacio');
+        var prop1 = proponerFicha({}, null, null, null, [{ texto:'principio del turno uno', fam:'espacio' }]);
+        addPrincipio('principio del turno dos', 'energia');
+        var prop2 = proponerFicha({}, null, null, null, [{ texto:'principio del turno dos', fam:'energia' }]);
+        var prop1Caduca = cola.propuestas.filter(function(x){ return x.id === prop1.id; })[0].estado === 'caduca';
+        return prop1Caduca && !!prop2 && state.principios.length === 2 &&
+          state.principios[0].texto === 'principio del turno uno' && state.principios[0].estado === 'emergente' &&
+          state.principios[1].texto === 'principio del turno dos' && state.principios[1].estado === 'emergente';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; state.organismo = origState; state.principios = origPrincipios; }
+    })());
+    chk('PRA2-04 · varios emergentes sin confirmar -- ninguno entra a o.principios[]', (function(){
+      var o = { id:'org_pra2_04', nombre:'PRA2 Cuatro', tipo:'empresa', ficha:{}, principios:[] };
+      var origState = state.organismo, origPrincipios = state.principios;
+      try{
+        state.organismo = o; state.principios = [];
+        addPrincipio('primero', 'espacio'); addPrincipio('segundo', 'energia');
+        return o.principios.length === 0 && state.principios.length === 2;
+      } finally { state.organismo = origState; state.principios = origPrincipios; }
+    })());
+    chk('PRA2-05 · confirmar pasa el emergente correspondiente a estado confirmado, sin tocar los demás emergentes de la sesión', (function(){
+      var o = { id:'org_pra2_05', nombre:'PRA2 Cinco', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo, origPrincipios = state.principios;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o; state.principios = [];
+        addPrincipio('principio a confirmar', 'espacio');
+        addPrincipio('principio que queda emergente todavía', 'energia');
+        var prop = proponerFicha({}, null, null, null, [{ texto:'principio a confirmar', fam:'espacio' }]);
+        resolverPropuesta(prop.id, 'confirmar');
+        return state.principios[0].estado === 'confirmado' && state.principios[0].texto === 'principio a confirmar' &&
+          state.principios[1].estado === 'emergente' && o.principios.length === 1;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; state.principios = origPrincipios; }
+    })());
+    chk('PRA2-06 · confirmar con corrección de texto también marca el emergente original y actualiza su texto al corregido', (function(){
+      var o = { id:'org_pra2_06', nombre:'PRA2 Seis', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo, origPrincipios = state.principios;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o; state.principios = [];
+        addPrincipio('texto tal como lo emitió el motor', 'trans');
+        var prop = proponerFicha({}, null, null, null, [{ texto:'texto tal como lo emitió el motor', fam:'trans' }]);
+        resolverPropuesta(prop.id, 'corregir', { principios:['texto corregido por el usuario'] });
+        return state.principios[0].estado === 'confirmado' && state.principios[0].texto === 'texto corregido por el usuario' &&
+          o.principios[0].texto === 'texto corregido por el usuario';
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; state.principios = origPrincipios; }
+    })());
+    chk('PRA2-07 · rechazar la propuesta deja el emergente correspondiente en estado emergente (no lo confirma ni lo borra)', (function(){
+      var o = { id:'org_pra2_07', nombre:'PRA2 Siete', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origState = state.organismo, origPrincipios = state.principios;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        state.organismo = o; state.principios = [];
+        addPrincipio('principio a rechazar', 'espacio');
+        var prop = proponerFicha({}, null, null, null, [{ texto:'principio a rechazar', fam:'espacio' }]);
+        resolverPropuesta(prop.id, 'rechazar');
+        return state.principios[0].estado === 'emergente' && o.principios.length === 0;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; state.organismo = origState; state.principios = origPrincipios; }
+    })());
+    chk('PRA2-08 · emergente y confirmado son distinguibles por estado -- nunca hay dos con el mismo texto marcado confirmado dos veces', (function(){
+      var o = { id:'org_pra2_08', nombre:'PRA2 Ocho', tipo:'empresa', ficha:{}, principios:[] };
+      var origCargar = cargarPropuestas, origPersistir = persistirPropuestas, origGuardar = guardarOrganismo, origState = state.organismo, origPrincipios = state.principios;
+      var cola = { version_cola: COLA_VERSION, propuestas: [] };
+      try{
+        cargarPropuestas = function(){ return cola; };
+        persistirPropuestas = function(c){ cola = c; return true; };
+        guardarOrganismo = function(org){ o = org; };
+        state.organismo = o; state.principios = [];
+        addPrincipio('mismo texto', 'espacio');
+        addPrincipio('mismo texto', 'espacio');   // dos emergentes con texto idéntico, dos apariciones reales
+        var prop = proponerFicha({}, null, null, null, [{ texto:'mismo texto', fam:'espacio' }]);
+        resolverPropuesta(prop.id, 'confirmar');
+        var confirmados = state.principios.filter(function(p){ return p.estado === 'confirmado'; }).length;
+        var emergentes = state.principios.filter(function(p){ return p.estado === 'emergente'; }).length;
+        return confirmados === 1 && emergentes === 1 && o.principios.length === 1;
+      } finally { cargarPropuestas = origCargar; persistirPropuestas = origPersistir; guardarOrganismo = origGuardar; state.organismo = origState; state.principios = origPrincipios; }
+    })());
+    chk('PRA2-09 · marcarPrincipiosConfirmadosEnSesion es defensiva: sin state.principios, sin pares, o sin match, nunca lanza', (function(){
+      var origPrincipios = state.principios;
+      try{
+        state.principios = [];
+        marcarPrincipiosConfirmadosEnSesion(null);
+        marcarPrincipiosConfirmadosEnSesion([]);
+        marcarPrincipiosConfirmadosEnSesion([{ original:'no existe', final:'no existe' }]);
+        state.principios = [{ texto:'otro texto', fam:'x', estado:'emergente' }];
+        marcarPrincipiosConfirmadosEnSesion([{ original:'no coincide con nada', final:'no coincide con nada' }]);
+        return state.principios[0].estado === 'emergente';
+      } finally { state.principios = origPrincipios; }
+    })());
+    chk('PRA2-10 · la regla PRINCIPIO del SYSTEM_PROMPT ya no ata la emisión a un cierre', (function(){
+      var m = SYSTEM_PROMPT.match(/\[\[PRINCIPIO:texto\]\][^\n]*/);
+      if(!m) return false;
+      var linea = m[0];
+      return /durante el recorrido/i.test(linea) && /no hace falta esperar/i.test(linea);
+    })());
+    /* ---- PR-A2.1 (25/08) · Calibración de emisión -- sólo prompt, sin tocar addPrincipio(),
+       marcarPrincipiosConfirmadosEnSesion(), proponerFicha() ni o.principios[] (todo lo de PR-A2
+       queda intacto, cubierto por PRA2-01..09 arriba, que siguen en verde sin cambios). Bajó la
+       exigencia de "ley universal de ARQUIGÉNESIS" a "relación organizadora de este caso", con los
+       5 criterios y las 6 exclusiones del brief -- lo único chequeable por banco es que el texto de
+       la regla efectivamente contiene esas piezas; si el modelo la aplica bien en vivo (el caso de
+       calibración del brief: "elegir tiene un costo visible e inmediato; no elegir tiene un costo
+       invisible y diferido") es verificación en vivo, no de banco -- mismo límite de siempre para
+       contenido generado por IA. */
+    chk('PRA2.1-01 · la regla PRINCIPIO ya no exige una ley universal de ARQUIGÉNESIS', (function(){
+      var m = SYSTEM_PROMPT.match(/\[\[PRINCIPIO:texto\]\][^\n]*/);
+      return !!m && /no necesita constituir una ley universal/i.test(m[0]);
+    })());
+    chk('PRA2.1-02 · la regla PRINCIPIO trae los 5 criterios positivos del brief', (function(){
+      var m = SYSTEM_PROMPT.match(/\[\[PRINCIPIO:texto\]\][^\n]*/);
+      if(!m) return false;
+      var l = m[0];
+      return /haya surgido de lo conversado/i.test(l) &&
+        /por qu[eé] varias observaciones/i.test(l) &&
+        /expresarse en una l[ií]nea/i.test(l) &&
+        /orientar la comprensi[oó]n siguiente/i.test(l) &&
+        /desplazamiento respecto de lo que ya se sab[ií]a/i.test(l);
+    })());
+    chk('PRA2.1-03 · la regla PRINCIPIO excluye explícitamente las 6 categorías del brief', (function(){
+      var m = SYSTEM_PROMPT.match(/\[\[PRINCIPIO:texto\]\][^\n]*/);
+      if(!m) return false;
+      var l = m[0];
+      return /resumen de lo dicho/i.test(l) && /consejo o recomendaci[oó]n/i.test(l) &&
+        /frase motivacional/i.test(l) && /reformulaci[oó]n del principio anterior/i.test(l) &&
+        /asociaci[oó]n todav[ií]a puramente hipot[eé]tica/i.test(l);
+    })());
+    chk('PRA2.1-04 · la regla PRINCIPIO no fija número ni frecuencia', (function(){
+      var m = SYSTEM_PROMPT.match(/\[\[PRINCIPIO:texto\]\][^\n]*/);
+      return !!m && /no hay n[uú]mero ni frecuencia fija/i.test(m[0]);
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
