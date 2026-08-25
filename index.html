@@ -13704,6 +13704,17 @@ function cardVersionesLecturaEspecializada(org, tipo){
   el.overlay.classList.add('open');
 }
 
+// UX-P2A (25/08): fila de grilla de Memoria, factorizada -- antes se repetía este mismo bloque de
+// 4 líneas (crear .fitem/.flabel/.fval) para cada campo dentro de un único for; ahora hay varias
+// grillas separadas (estado actual / continuidad / secundarios), así que se factoriza una vez.
+// Puramente visual -- misma estructura de nodos/clases que antes, cero cambio de comportamiento.
+function construirFilaFicha(label, valor){
+  const it = document.createElement('div'); it.className='fitem';
+  const lb = document.createElement('span'); lb.className='flabel'; lb.textContent = label;
+  const vl = document.createElement('span'); vl.className='fval'; vl.textContent = valor;
+  it.appendChild(lb); it.appendChild(vl);
+  return it;
+}
 function mostrarFicha(){
   if(!state.organismo) return;
   state.c1g3Epoch++;   // C1-G3: volver a Memoria invalida cualquier tarjeta de Contextos Universal en vuelo
@@ -13713,39 +13724,42 @@ function mostrarFicha(){
   const h = document.createElement('h3'); h.textContent = 'Memoria · ' + o.nombre;
   const p1 = document.createElement('p');
   p1.textContent = o.tipo + ' · actualizada ' + (o.actualizado ? new Date(o.actualizado).toLocaleString() : '—');
-  const grid = document.createElement('div'); grid.className = 'fichagrid';
-  const campos = [
-    ['Función vigente', f.funcion || 'aún no identificada'],
-    ['Tensiones activas', f.tensiones || 'aún no registradas'],
-    ['Diagnóstico vigente', f.diagnostico || 'aún no formulado'],
-    ['Próximo paso', f.proximo || 'aún no definido'],
-    // UX-P1C (25/08): esta fila se retira de la grilla -- pasa a vivir como sección discreta
-    // más abajo ("Principios incorporados", mismo criterio que "Lecturas especializadas"),
-    // para no repetir el mismo dato dos veces con dos formatos distintos dentro de Memoria.
-    ['Campo mayor', (function(){ if(!o.campo_de) return 'ninguno — organismo independiente'; const pd = cargarOrganismos().find(function(x){return x.id===o.campo_de;}); return pd ? pd.nombre : 'vínculo roto (el organismo campo fue eliminado)'; })()],
-    ['Organismos en su campo', (function(){ const hs = cargarOrganismos().filter(function(x){return x.campo_de===o.id;}); return hs.length ? hs.map(function(x){return x.nombre;}).join(' · ') : 'ninguno'; })()],
-    ['Derivación', (o.derivable && o.derivable.indexOf('urban') > -1) ? 'Marcada para Urbanismo (lectura territorial disponible)' : 'sin derivaciones marcadas'],
-    ['Lecturas territoriales', (o.lecturas_urban && o.lecturas_urban.length) ? o.lecturas_urban.length + ' realizadas (última v' + o.lecturas_urban.length + ')' : 'ninguna todavía'],
-    ['Evaluaciones de campo', (o.evaluaciones_context && o.evaluaciones_context.length) ? o.evaluaciones_context.length + ' realizadas (última v' + o.evaluaciones_context.length + ')' : 'ninguna todavía'],
-    ['Lecturas de negocio', (o.lecturas_negocio && o.lecturas_negocio.length) ? o.lecturas_negocio.length + ' realizadas (última v' + o.lecturas_negocio.length + ')' : 'ninguna todavía'],
-    ['Diagnósticos Pro', (o.diagnosticos_pro && o.diagnosticos_pro.length) ? o.diagnosticos_pro[o.diagnosticos_pro.length-1].resumen : 'ninguno incorporado'],
-  ];
-  /* Punto 11 (21/08): última etapa (hito) y horizonte vigente -- compacto, sólo si existen (a
-     diferencia del resto de esta grilla no llevan fallback "aún no..."; la cronología completa
-     de hitos vive en el Recorrido, acá sólo el último). Reusa el mismo helper puro que buildSystem(). */
+  el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
+
+  // ---- UX-P2A · 1. Estado actual -- siempre visibles arriba, léase de un vistazo. No llevan
+  // condición de "vacío": "aún no identificada/formulado/definido" ES la información -- que
+  // todavía no exista un diagnóstico es distinto de que la sección no aporte nada. ----
+  const gridEstado = document.createElement('div'); gridEstado.className = 'fichagrid';
+  gridEstado.appendChild(construirFilaFicha('Función vigente', f.funcion || 'aún no identificada'));
+  gridEstado.appendChild(construirFilaFicha('Tensiones activas', f.tensiones || 'aún no registradas'));
+  gridEstado.appendChild(construirFilaFicha('Diagnóstico vigente', f.diagnostico || 'aún no formulado'));
+  gridEstado.appendChild(construirFilaFicha('Próximo paso', f.proximo || 'aún no definido'));
+  // "Próximos pendientes" (o.ficha.proximos, plural -- Corte I) es un dato aparte de "Próximo
+  // paso" (singular): varios ítems pendientes tras un cierre de etapa. Sólo se agrega acá, junto
+  // al estado actual, cuando realmente hay algo -- si no, "Próximo paso" ya cubre el caso común
+  // y no hace falta una segunda fila vacía repitiendo la misma idea.
+  if(f.proximos){
+    var itemsProx = String(f.proximos).split(';;').map(function(s){ return s.trim(); }).filter(Boolean);
+    if(itemsProx.length) gridEstado.appendChild(construirFilaFicha('Próximos pendientes', itemsProx.join(' · ')));
+  }
+  el.cardContent.appendChild(gridEstado);
+
+  // ---- UX-P2A · 3. Continuidad cognitiva -- bloque propio, sólo si existe. Antes vivían como
+  // dos filas más dentro de la misma grilla de "estado actual" (Punto 11/T2); acá se separan con
+  // su propio título discreto porque, como dice el brief, valen más que varios campos técnicos
+  // que antes aparecían primero. Mismo helper puro (continuidadTemporalDelOrganismo) y mismo
+  // contenido/formato de antes -- sólo cambia la agrupación visual. ----
   var ct11 = continuidadTemporalDelOrganismo(o);
+  var camposContinuidad = [];
   if(ct11.ultimoHito){
     var h11 = ct11.ultimoHito;
     var partesEtapa = [];
     if(h11.etapa) partesEtapa.push(h11.etapa);
-    // T2 (21/08): contraste cognitivo compacto, sólo si el hito lo tiene -- hitos legacy no lo
-    // muestran (no se toca nada para ellos). No convierte Memoria en una cronología: sigue siendo
-    // sólo el último hito, un renglón más dentro del mismo campo de la grilla.
     if(h11.antes) partesEtapa.push('antes: ' + h11.antes);
     if(h11.ahora) partesEtapa.push('ahora: ' + h11.ahora);
     if(h11.comprendimos) partesEtapa.push('comprendimos que ' + h11.comprendimos);
     if(h11.que_cambio) partesEtapa.push('cambió: ' + h11.que_cambio);
-    if(partesEtapa.length) campos.push(['Última etapa comprendida', partesEtapa.join(' · ')]);
+    if(partesEtapa.length) camposContinuidad.push(['Última etapa comprendida', partesEtapa.join(' · ')]);
   }
   if(ct11.horizonte){
     var hz11 = ct11.horizonte;
@@ -13755,29 +13769,54 @@ function mostrarFicha(){
     if(hz11.relacion) partesHz.push('relación: ' + hz11.relacion);
     if(hz11.accion) partesHz.push('acción: ' + hz11.accion);
     if(hz11.cuando) partesHz.push('cuándo: ' + hz11.cuando);
-    if(partesHz.length) campos.push(['Horizonte vigente', partesHz.join(' · ')]);
+    if(partesHz.length) camposContinuidad.push(['Horizonte vigente', partesHz.join(' · ')]);
   }
-  campos.push(
-    // Punto 12 (21/08): "último" ya no se anuncia como "vigente" en la tarjeta de Memoria --
-    // una posición de array no es una afirmación epistemológica. Estado del paradigma sólo si
-    // es verificable (vigenciaParadigma), nunca inferido de fechas.
-    ['Último proyectivo', (o.proyectivos && o.proyectivos.length) ? ('v' + o.proyectivos[o.proyectivos.length-1].version + ' · alcance ' + o.proyectivos[o.proyectivos.length-1].alcance) : 'aún no generado'],
-    ['Último paradigma', (function(){
-      if(!o.paradigmas || !o.paradigmas.length) return 'aún no construido';
-      var ultimoParadigmaFicha = o.paradigmas[o.paradigmas.length-1];
-      var vpFicha = vigenciaParadigma(o, ultimoParadigmaFicha);
-      return ultimoParadigmaFicha.texto + (vpFicha.estado === 'requiere_revision' ? ' · requiere revisión' : '');
-    })()],
-    ['Historial de memoria', textoHistorialFicha(o)],
-    ['Recuerdos', obtenerRecuerdos(o).length ? (obtenerRecuerdos(o).length + (obtenerRecuerdos(o).length === 1 ? ' recuerdo guardado' : ' recuerdos guardados')) : 'ninguno todavía'],
-    ['Último proyectivo (texto)', (o.proyectivos && o.proyectivos.length) ? '(v' + o.proyectivos[o.proyectivos.length-1].version + ' · ' + o.proyectivos[o.proyectivos.length-1].alcance + ') ' + o.proyectivos[o.proyectivos.length-1].texto : 'ninguno todavía']
-  );
-  for(const c of campos){
-    const it = document.createElement('div'); it.className='fitem';
-    const lb = document.createElement('span'); lb.className='flabel'; lb.textContent = c[0];
-    const vl = document.createElement('span'); vl.className='fval'; vl.textContent = c[1];
-    it.appendChild(lb); it.appendChild(vl); grid.appendChild(it);
+  if(camposContinuidad.length){
+    var tCont = document.createElement('div'); tCont.style.cssText = 'font-size:12px;opacity:.65;letter-spacing:.04em;margin:14px 0 6px';
+    tCont.textContent = 'Continuidad';
+    el.cardContent.appendChild(tCont);
+    var gridCont = document.createElement('div'); gridCont.className = 'fichagrid';
+    camposContinuidad.forEach(function(c){ gridCont.appendChild(construirFilaFicha(c[0], c[1])); });
+    el.cardContent.appendChild(gridCont);
   }
+
+  // ---- UX-P2A · 2. Secundarios -- sólo si realmente existen/aportan. Mismos datos, misma
+  // lógica de cálculo que antes (nada de esto se tocó): sólo se agrega un chequeo de "vacío" por
+  // campo, con el mismo criterio que ya usaban sus propios textos de relleno ("ninguno",
+  // "ninguna todavía", "sin derivaciones marcadas", "aún no generado"/"construido"). Un dato como
+  // "vínculo roto" en Campo mayor NO se considera vacío -- es información real, distinta de no
+  // tener campo mayor. ----
+  var camposSecundarios = [];
+  if(o.campo_de){
+    var pdSec = cargarOrganismos().find(function(x){return x.id===o.campo_de;});
+    camposSecundarios.push(['Campo mayor', pdSec ? pdSec.nombre : 'vínculo roto (el organismo campo fue eliminado)']);
+  }
+  var hijosSec = cargarOrganismos().filter(function(x){return x.campo_de===o.id;});
+  if(hijosSec.length) camposSecundarios.push(['Organismos en su campo', hijosSec.map(function(x){return x.nombre;}).join(' · ')]);
+  if(o.derivable && o.derivable.indexOf('urban') > -1) camposSecundarios.push(['Derivación', 'Marcada para Urbanismo (lectura territorial disponible)']);
+  if(o.lecturas_urban && o.lecturas_urban.length) camposSecundarios.push(['Lecturas territoriales', o.lecturas_urban.length + ' realizadas (última v' + o.lecturas_urban.length + ')']);
+  if(o.evaluaciones_context && o.evaluaciones_context.length) camposSecundarios.push(['Evaluaciones de campo', o.evaluaciones_context.length + ' realizadas (última v' + o.evaluaciones_context.length + ')']);
+  if(o.lecturas_negocio && o.lecturas_negocio.length) camposSecundarios.push(['Lecturas de negocio', o.lecturas_negocio.length + ' realizadas (última v' + o.lecturas_negocio.length + ')']);
+  if(o.diagnosticos_pro && o.diagnosticos_pro.length) camposSecundarios.push(['Diagnósticos Pro', o.diagnosticos_pro[o.diagnosticos_pro.length-1].resumen]);
+  if(o.proyectivos && o.proyectivos.length){
+    var ultProy = o.proyectivos[o.proyectivos.length-1];
+    camposSecundarios.push(['Último proyectivo', 'v' + ultProy.version + ' · alcance ' + ultProy.alcance]);
+  }
+  if(o.paradigmas && o.paradigmas.length){
+    var ultimoParadigmaFicha = o.paradigmas[o.paradigmas.length-1];
+    var vpFicha = vigenciaParadigma(o, ultimoParadigmaFicha);
+    camposSecundarios.push(['Último paradigma', ultimoParadigmaFicha.texto + (vpFicha.estado === 'requiere_revision' ? ' · requiere revisión' : '')]);
+  }
+  if(o.proyectivos && o.proyectivos.length){
+    var ultProyTxt = o.proyectivos[o.proyectivos.length-1];
+    camposSecundarios.push(['Último proyectivo (texto)', '(v' + ultProyTxt.version + ' · ' + ultProyTxt.alcance + ') ' + ultProyTxt.texto]);
+  }
+  if(camposSecundarios.length){
+    var gridSec = document.createElement('div'); gridSec.className = 'fichagrid'; gridSec.style.marginTop = '14px';
+    camposSecundarios.forEach(function(c){ gridSec.appendChild(construirFilaFicha(c[0], c[1])); });
+    el.cardContent.appendChild(gridSec);
+  }
+
   const row = document.createElement('div'); row.className='cardrow';
   const bDel = document.createElement('button'); bDel.className='btn danger'; bDel.textContent='Eliminar organismo';
   bDel.style.marginRight = 'auto';
@@ -13827,7 +13866,6 @@ function mostrarFicha(){
     row.appendChild(bS);
   }
   row.appendChild(b);
-  el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(grid);
   // UX-P1C (25/08): sección discreta -- sólo aparece si hay al menos un principio incorporado a
   // la Memoria (o.principios[] sólo contiene confirmados: los emergentes viven en el chat/la
   // sesión y nunca llegan acá hasta que se confirman -- esto no cambió, sólo se lo hace visible
@@ -13858,7 +13896,15 @@ function mostrarFicha(){
     ['urban','negocio'].forEach(function(tipo){
       var lista = o[LECTURAS_CAMPO_POR_TIPO[tipo]];
       if(!lista || !lista.length) return;
-      secLE.appendChild(construirTarjetaLecturaEspecializada(tipo, lista[lista.length - 1]));
+      // UX-P2A (25/08): la tarjeta en sí (construirTarjetaLecturaEspecializada) no se toca --
+      // se envuelve en un <details> colapsado por defecto (mismo patrón nativo ya usado en
+      // cardRecuerdos(), sin CSS nuevo) para que no ocupe siempre todo el largo de Memoria.
+      var detLE = document.createElement('details');
+      var sumLE = document.createElement('summary');
+      sumLE.textContent = (LECTURA_TITULO_POR_TIPO && LECTURA_TITULO_POR_TIPO[tipo]) ? LECTURA_TITULO_POR_TIPO[tipo] : (tipo === 'urban' ? 'Lectura territorial' : 'Lectura de negocio');
+      detLE.appendChild(sumLE);
+      detLE.appendChild(construirTarjetaLecturaEspecializada(tipo, lista[lista.length - 1]));
+      secLE.appendChild(detLE);
       if(lista.length > 1){
         var bAnt = document.createElement('button'); bAnt.className = 'btn'; bAnt.style.marginTop = '4px';
         bAnt.textContent = 'Ver versiones anteriores (' + (lista.length - 1) + ')';
@@ -13868,6 +13914,21 @@ function mostrarFicha(){
     });
     el.cardContent.appendChild(secLE);
   }
+  // ---- UX-P2A · 5. Historia/profundidad -- Historial de memoria y Recuerdos no se borran, pasan
+  // a segundo nivel: mismo patrón visual discreto que "Principios incorporados"/"Lecturas
+  // especializadas" arriba, siempre al final antes de los botones. No llevan condición de vacío
+  // (textoHistorialFicha ya devuelve su propio fallback "sin cambios registrados", y "ningún
+  // recuerdo todavía" es en sí un dato de historia, no ruido) -- sólo cambia dónde viven. ----
+  var secHist = document.createElement('div'); secHist.style.marginTop = '14px';
+  var tHist = document.createElement('div'); tHist.style.cssText = 'font-size:12px;opacity:.65;letter-spacing:.04em;margin-bottom:6px';
+  tHist.textContent = 'Historia';
+  secHist.appendChild(tHist);
+  var gridHist = document.createElement('div'); gridHist.className = 'fichagrid';
+  gridHist.appendChild(construirFilaFicha('Historial de memoria', textoHistorialFicha(o)));
+  var nRec = obtenerRecuerdos(o).length;
+  gridHist.appendChild(construirFilaFicha('Recuerdos', nRec ? (nRec + (nRec === 1 ? ' recuerdo guardado' : ' recuerdos guardados')) : 'ninguno todavía'));
+  secHist.appendChild(gridHist);
+  el.cardContent.appendChild(secHist);
   el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
 }
@@ -19023,6 +19084,149 @@ function correrPruebasAuto(){
     })());
     chk('UXP1E-05 · la marca (logoHome) existe y está conectada en el DOM esperado', (function(){
       return !!el.logoHome;
+    })());
+
+    /* ---- UX-P2A (25/08) -- Memoria por pertinencia: mostrarFicha() reordenada ---- */
+    chk('UXP2A-01 · estado actual (Función/Tensiones/Diagnóstico/Próximo paso) siempre se renderiza, incluso vacío', (function(){
+      var gOrg = state.organismo;
+      var org = { id:'__p2a_01', nombre:'Casi vacío', tipo:'proyecto', ficha:{}, principios:[] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var labels = creados.filter(function(e){ return e.className === 'flabel'; }).map(function(e){ return e.textContent; });
+      var flabelsConVal = creados.filter(function(e){ return e.className === 'fval'; }).map(function(e){ return e.textContent; });
+      return labels.indexOf('Función vigente') > -1 && flabelsConVal.indexOf('aún no identificada') > -1 &&
+             labels.indexOf('Tensiones activas') > -1 && flabelsConVal.indexOf('aún no registradas') > -1 &&
+             labels.indexOf('Diagnóstico vigente') > -1 && flabelsConVal.indexOf('aún no formulado') > -1 &&
+             labels.indexOf('Próximo paso') > -1 && flabelsConVal.indexOf('aún no definido') > -1;
+    })());
+    chk('UXP2A-02 · "Próximos pendientes" sólo aparece cuando f.proximos tiene contenido', (function(){
+      var gOrg = state.organismo;
+      var orgCon = { id:'__p2a_02a', nombre:'Con pendientes', tipo:'proyecto', ficha:{ proximos:'revisar contrato;;llamar al socio' }, principios:[] };
+      var orgSin = { id:'__p2a_02b', nombre:'Sin pendientes', tipo:'proyecto', ficha:{}, principios:[] };
+      var _origCE = document.createElement;
+      var creadosCon = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creadosCon.push(e); return e; };
+      try{ state.organismo = orgCon; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var creadosSin = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creadosSin.push(e); return e; };
+      try{ state.organismo = orgSin; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var valsCon = creadosCon.filter(function(e){ return e.className === 'fval'; }).map(function(e){ return e.textContent; });
+      var labelsSin = creadosSin.filter(function(e){ return e.className === 'flabel'; }).map(function(e){ return e.textContent; });
+      return valsCon.indexOf('revisar contrato · llamar al socio') > -1 && labelsSin.indexOf('Próximos pendientes') === -1;
+    })());
+    chk('UXP2A-03 · Campo mayor no se muestra si no hay campo_de, pero sí se muestra "vínculo roto" cuando el vínculo existe y está quebrado', (function(){
+      var gOrg = state.organismo, _origCarg = cargarOrganismos;
+      var orgIndep = { id:'__p2a_03a', nombre:'Independiente', tipo:'proyecto', ficha:{}, principios:[] };
+      var orgRoto = { id:'__p2a_03b', nombre:'Vínculo roto', tipo:'proyecto', ficha:{}, principios:[], campo_de:'__inexistente' };
+      cargarOrganismos = function(){ return []; };
+      var _origCE = document.createElement;
+      var creadosIndep = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creadosIndep.push(e); return e; };
+      try{ state.organismo = orgIndep; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var creadosRoto = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creadosRoto.push(e); return e; };
+      try{ state.organismo = orgRoto; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; cargarOrganismos = _origCarg; }
+      var labelsIndep = creadosIndep.filter(function(e){ return e.className === 'flabel'; }).map(function(e){ return e.textContent; });
+      var valsRoto = creadosRoto.filter(function(e){ return e.className === 'fval'; }).map(function(e){ return e.textContent; });
+      return labelsIndep.indexOf('Campo mayor') === -1 && valsRoto.indexOf('vínculo roto (el organismo campo fue eliminado)') > -1;
+    })());
+    chk('UXP2A-04 · organismo casi vacío no muestra ninguno de los campos secundarios técnicos', (function(){
+      var gOrg = state.organismo, _origCarg = cargarOrganismos;
+      cargarOrganismos = function(){ return []; };
+      var org = { id:'__p2a_04', nombre:'Casi vacío 2', tipo:'proyecto', ficha:{}, principios:[] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; cargarOrganismos = _origCarg; }
+      var labels = creados.filter(function(e){ return e.className === 'flabel'; }).map(function(e){ return e.textContent; });
+      var secundariosProhibidos = ['Campo mayor','Organismos en su campo','Derivación','Lecturas territoriales',
+        'Evaluaciones de campo','Lecturas de negocio','Diagnósticos Pro','Último proyectivo','Último paradigma','Último proyectivo (texto)'];
+      return secundariosProhibidos.every(function(l){ return labels.indexOf(l) === -1; });
+    })());
+    chk('UXP2A-05 · un campo secundario con datos reales sí se muestra (Lecturas territoriales)', (function(){
+      var gOrg = state.organismo, _origCarg = cargarOrganismos;
+      cargarOrganismos = function(){ return []; };
+      var org = { id:'__p2a_05', nombre:'Barrio con lectura', tipo:'ciudad', ficha:{}, principios:[],
+        lecturas_urban:[{ version:1, fecha:'2026-01-01T00:00:00.000Z', dimensiones:[{ cod:'D1', nombre:'Soporte', estado:'estable' }] }] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; cargarOrganismos = _origCarg; }
+      var labels = creados.filter(function(e){ return e.className === 'flabel'; }).map(function(e){ return e.textContent; });
+      return labels.indexOf('Lecturas territoriales') > -1;
+    })());
+    chk('UXP2A-06 · "Última etapa comprendida"/"Horizonte vigente" viven en su propio bloque "Continuidad", antes de los secundarios', (function(){
+      var gOrg = state.organismo, _origCarg = cargarOrganismos;
+      cargarOrganismos = function(){ return []; };
+      var org = { id:'__p2a_06', nombre:'Con continuidad', tipo:'ciudad', ficha:{}, principios:[],
+        hitos:[{ etapa:'primera comprensión', comprendimos:'que el barrio necesita agua' }],
+        horizonte:{ observar:'la napa', pregunta:'¿cuándo baja?' },
+        lecturas_urban:[{ version:1, fecha:'2026-01-01T00:00:00.000Z', dimensiones:[] }] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; cargarOrganismos = _origCarg; }
+      var textos = creados.map(function(e){ return e.textContent; });
+      var idxContinuidad = textos.indexOf('Continuidad');
+      var labelsIdx = creados.map(function(e, i){ return { i:i, cls:e.className, txt:e.textContent }; });
+      var idxUltimaEtapa = labelsIdx.filter(function(x){ return x.cls==='flabel' && x.txt==='Última etapa comprendida'; })[0];
+      var idxHorizonte = labelsIdx.filter(function(x){ return x.cls==='flabel' && x.txt==='Horizonte vigente'; })[0];
+      var idxLecturas = labelsIdx.filter(function(x){ return x.cls==='flabel' && x.txt==='Lecturas territoriales'; })[0];
+      return idxContinuidad > -1 && !!idxUltimaEtapa && !!idxHorizonte && !!idxLecturas &&
+             idxContinuidad < idxUltimaEtapa.i && idxUltimaEtapa.i < idxLecturas.i && idxHorizonte.i < idxLecturas.i;
+    })());
+    chk('UXP2A-07 · "Principios incorporados" sigue idéntico: sólo confirmados, mismas clases/texto', (function(){
+      var gOrg = state.organismo;
+      var org = { id:'__p2a_07', nombre:'Con principios', tipo:'proyecto', ficha:{},
+        principios:[{ texto:'la comunidad decide', fam:'espacio', estado:'confirmado' }] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var tituloOk = creados.some(function(e){ return e.textContent === 'Principios incorporados'; });
+      var principioOk = creados.some(function(e){ return e.className === 'principio-memoria' && e.textContent === 'la comunidad decide'; });
+      return tituloOk && principioOk;
+    })());
+    chk('UXP2A-08 · Lecturas especializadas ahora vienen colapsadas dentro de un <details>/<summary>', (function(){
+      var gOrg = state.organismo;
+      var org = { id:'__p2a_08', nombre:'Barrio con lectura 2', tipo:'ciudad', ficha:{}, principios:[],
+        lecturas_urban:[{ version:1, fecha:'2026-01-01T00:00:00.000Z', dimensiones:[{ cod:'D1', nombre:'Soporte', estado:'estable' }] }] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push({ tag:tag, el:e }); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var tieneDetails = creados.some(function(c){ return c.tag === 'details'; });
+      var tieneSummary = creados.some(function(c){ return c.tag === 'summary' && /Lectura territorial/.test(c.el.textContent||''); });
+      return tieneDetails && tieneSummary;
+    })());
+    chk('UXP2A-09 · Historial de memoria/Recuerdos ya no están en la grilla de estado actual, viven en "Historia" al final', (function(){
+      var gOrg = state.organismo;
+      var org = { id:'__p2a_09', nombre:'Con historia', tipo:'proyecto', ficha:{}, principios:[] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var idxTituloHistoria = creados.map(function(e,i){ return {i:i, txt:e.textContent}; }).filter(function(x){ return x.txt === 'Historia'; })[0];
+      var idxLabelHist = creados.map(function(e,i){ return {i:i, cls:e.className, txt:e.textContent}; }).filter(function(x){ return x.cls==='flabel' && x.txt==='Historial de memoria'; })[0];
+      var idxLabelRec = creados.map(function(e,i){ return {i:i, cls:e.className, txt:e.textContent}; }).filter(function(x){ return x.cls==='flabel' && x.txt==='Recuerdos'; })[0];
+      var idxProximo = creados.map(function(e,i){ return {i:i, cls:e.className, txt:e.textContent}; }).filter(function(x){ return x.cls==='flabel' && x.txt==='Próximo paso'; })[0];
+      return !!idxTituloHistoria && !!idxLabelHist && !!idxLabelRec && !!idxProximo &&
+             idxProximo.i < idxTituloHistoria.i && idxTituloHistoria.i < idxLabelHist.i && idxLabelHist.i < idxLabelRec.i;
+    })());
+    chk('UXP2A-10 · la fila de botones inferiores (cardrow) no fue tocada -- mismos botones en el mismo lugar', (function(){
+      var gOrg = state.organismo;
+      var org = { id:'__p2a_10', nombre:'Botones', tipo:'ciudad', ficha:{}, principios:[], derivable:['urban','negocio'] };
+      var _origCE = document.createElement;
+      var creados = [];
+      document.createElement = function(tag){ var e = _origCE(tag); creados.push(e); return e; };
+      try{ state.organismo = org; mostrarFicha(); } finally { document.createElement = _origCE; state.organismo = gOrg; }
+      var textosBtn = creados.filter(function(e){ return e.className && e.className.indexOf('btn') > -1; }).map(function(e){ return e.textContent; });
+      return textosBtn.indexOf('Eliminar organismo') > -1 && textosBtn.indexOf('Abrir en Urbanismo') > -1 &&
+             textosBtn.indexOf('Contextos') > -1 && textosBtn.indexOf('Abrir en Negocios') > -1 &&
+             textosBtn.indexOf('Marco para Pro') > -1 && textosBtn.indexOf('Recuerdos') > -1 &&
+             textosBtn.indexOf('Exportar') > -1 && textosBtn.indexOf('Informe') > -1 && textosBtn.indexOf('Cerrar') > -1;
     })());
 
     /* ---- Memoria Viva · Corte M2.1 (17/08) -- recuperación de recuerdos ---- */
