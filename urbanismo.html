@@ -3547,7 +3547,12 @@ function registrarUso(tipo, data, extra){
       // punto exacto se perdió la llamada: 'red_pre_headers' (fetch() nunca recibió respuesta),
       // 'http' (respondió pero con status de error) o 'body_<clasificación>' (respondió 200 pero
       // la lectura del cuerpo se interrumpió después -- el gap que cierra este mismo corte).
-      motivo: (extra && extra.motivo) || null
+      motivo: (extra && extra.motivo) || null,
+      // URB-ROBUST 03 (26/08): true sólo cuando este registro fue corregido in-place por
+      // reconciliarUsoRecuperado() -- ver esa función más abajo. Sirve para distinguir, mirando
+      // el registro bruto, un éxito de punta a punta del lado cliente de uno que en realidad se
+      // resolvió en el servidor y el cliente sólo llegó a buscarlo después.
+      recuperado: (extra && extra.recuperado === true) || false
     };
     r.registros.push(reg);
     if(r.registros.length > USO_MAX) r.registros = r.registros.slice(r.registros.length - USO_MAX);
@@ -3559,14 +3564,25 @@ function registrarUso(tipo, data, extra){
 /* Helper compartido: llama al proxy con un prompt y devuelve el texto crudo de la respuesta.
    No parsea JSON aca -- eso lo hace parsearJSONIA(), reutilizado por las tres llamadas.
    'fase'/'etapa' (CAP-M1, 26/08) son opcionales -- si no se pasan, registrarUso() simplemente
-   guarda fase:null/etapa:null, sin romper nada de lo que ya hacía esta función. */
-async function llamarAnthropicUrbanismo(prompt,maxTokens,fase,etapa){
+   guarda fase:null/etapa:null, sin romper nada de lo que ya hacía esta función.
+   'firma' (URB-ROBUST 03, 26/08) es un 5to argumento OPCIONAL, nuevo: sólo lo pasan las tres
+   fases largas de llamarAPI() (items/nucleo/receptivos_espiral) -- las llamadas standalone
+   (detalle, inercia, haiku, recomendacion_urgente, proyectivo) no lo pasan y siguen exactamente
+   igual que antes: sin headers nuevos, sin persistencia server-side para ellas (no las pidió el
+   brief, y son bastante más cortas/baratas como para justificarlo). Cuando 'firma' está presente,
+   se manda como header junto con 'fase' -- el backend (api/anthropic.js) los usa para conservar
+   temporalmente el resultado si Anthropic responde bien, de forma que si ESTA MISMA llamada
+   pierde igual la lectura del cuerpo más abajo, el resultado no se pierde del todo: puede
+   recuperarse después vía /api/anthropic-resultado (ver llamarFaseConRecuperacion()). */
+async function llamarAnthropicUrbanismo(prompt,maxTokens,fase,etapa,firma){
   const t0=Date.now();
   let res;
   try{
+    var headersUrb={'Content-Type':'application/json'};
+    if(firma){ headersUrb['x-comprender-urb-firma']=firma; headersUrb['x-comprender-urb-fase']=fase; }
     res=await fetch(apiEndpoint(),{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:headersUrb,
       body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens,messages:[{role:'user',content:prompt}]})
     });
   }catch(eRed){
@@ -3599,11 +3615,106 @@ async function llamarAnthropicUrbanismo(prompt,maxTokens,fase,etapa){
   try{
     data=await res.json();
   }catch(eBody){
-    registrarUso('urbanismo', {}, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:false, motivo:'body_'+clasificarErrorUrbanismo(eBody) });
+    var motivoBody='body_'+clasificarErrorUrbanismo(eBody);
+    registrarUso('urbanismo', {}, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:false, motivo:motivoBody });
+    // URB-ROBUST 03 (26/08): se etiqueta el error ANTES de relanzarlo, con el mismo motivo que ya
+    // se guardó en CAP-M1, para que quien llama (llamarFaseConRecuperacion) sepa si vale la pena
+    // intentar recuperar del servidor sin tener que reclasificar el mismo error dos veces. Sólo
+    // este camino (headers ya OK, cuerpo interrumpido después) es candidato a recuperación --
+    // los otros dos (red antes de headers, error HTTP) nunca llegaron a tener un 200 real del
+    // lado servidor, así que no hay nada ahí para buscar.
+    eBody._motivoUrb=motivoBody;
     throw eBody;
   }
   registrarUso('urbanismo', data, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:true });
   return data.content.map(i=>i.text||'').join('');
+}
+
+/* URB-ROBUST 03 (26/08) -- intenta recuperar del servidor un resultado de fase que sabemos
+   terminó ahí (headers 200 ya recibidos, ver el catch de arriba) pero cuyo cuerpo el cliente no
+   llegó a leer completo. Fuera de modo prod no hay proxy ni persistencia server-side posible
+   (modoEfectivo()==='test' llama directo a Anthropic, sin pasar por api/anthropic.js) -- ahí esto
+   directamente no intenta nada. 404/cualquier error se tratan igual: "no había nada que
+   recuperar" -- nunca se lanza desde acá, siempre devuelve null en ese caso, para que quien llama
+   decida qué hacer (en la práctica: caer al mismo camino de error que existía antes de este
+   corte). La URL empieza con '/api/anthropic' a propósito: así el interceptor de fetch de
+   candado.txt (compartido por los 4 HTML, ver el 'envoltorio de fetch' más arriba en este mismo
+   archivo) la reconoce como llamada a la API de Comprender y le agrega sesión (Authorization) y
+   x-comprender-modulo automáticamente, sin tener que tocar ese interceptor. */
+async function intentarRecuperarFaseUrbanismo(firma, fase){
+  if(modoEfectivo()!=='prod') return null;
+  if(!firma || !fase) return null;
+  try{
+    var r=await fetch('/api/anthropic-resultado?firma='+encodeURIComponent(firma)+'&fase='+encodeURIComponent(fase));
+    if(!r.ok) return null;
+    var data=await r.json();
+    if(!data || !data.content) return null;
+    return data;
+  }catch(e){ return null; }
+}
+
+/* Envuelve una llamada de fase larga con el intento de recuperación server-side. Devuelve el
+   texto crudo -- mismo contrato que llamarAnthropicUrbanismo() -- para que parsearJSONIA() lo
+   procese exactamente igual venga de una llamada nueva o de un resultado recuperado. Si la
+   llamada nueva tiene éxito, esto es 100% transparente (mismo comportamiento que antes de
+   URB-ROBUST 03). Sólo entra en juego el camino de recuperación cuando: (a) la llamada falló, Y
+   (b) falló específicamente con el gap conocido (headers OK, cuerpo interrumpido) -- nunca para
+   errores de red antes de headers o errores HTTP, que nunca tuvieron un resultado real que
+   recuperar (invariante del brief: "nunca dar una fase por terminada antes de obtener respuesta
+   válida de Anthropic"). */
+async function llamarFaseConRecuperacion(prompt, maxTokens, fase, etapa, firma){
+  try{
+    return await llamarAnthropicUrbanismo(prompt, maxTokens, fase, etapa, firma);
+  }catch(e){
+    if(!(e && typeof e._motivoUrb==='string' && e._motivoUrb.indexOf('body_')===0)){
+      throw e;
+    }
+    var recuperado=await intentarRecuperarFaseUrbanismo(firma, fase);
+    if(!recuperado){ throw e; }
+    reconciliarUsoRecuperado(fase, etapa, recuperado.usage);
+    return (recuperado.content||[]).map(function(i){ return i.text||''; }).join('');
+  }
+}
+
+/* URB-ROBUST 03 (26/08) -- cuando se recupera del servidor una fase que localmente había quedado
+   registrada como fallida (motivo body_*, el gap que cerró URB-ROBUST 02A), NO se agrega un
+   registro nuevo de éxito encima del fallido: eso duplicaría el conteo de "llamadas" en
+   cardConsumo() para lo que en los hechos fue UNA sola llamada real a Claude (la reserva/cobro de
+   créditos en Supabase también ocurrió una sola vez, en el momento en que el servidor recibió la
+   respuesta -- ver api/anthropic.js; la recuperación NUNCA vuelve a llamar a Anthropic ni a
+   cobrar créditos, sólo lee un resultado ya guardado). En cambio, se busca el registro fallido
+   más reciente que coincide en fase/etapa y se lo corrige in-place: pasa a exito:true, con los
+   tokens reales que informó el servidor, motivo:'recuperado_servidor' (para dejar rastro de que
+   no fue un éxito de punta a punta del lado cliente) y recuperado:true. Si por algún motivo no se
+   encuentra ese registro (ej. se superó USO_MAX y se recortó, o localStorage se limpió mientras
+   tanto), se agrega uno nuevo -- perder el dato entero sería peor que el riesgo remoto de un
+   registro de más en un caso ya de por sí infrecuente. */
+function reconciliarUsoRecuperado(fase, etapa, usage){
+  try{
+    var r=cargarUso();
+    var idx=-1;
+    for(var i=r.registros.length-1;i>=0;i--){
+      var reg=r.registros[i];
+      if(reg.tipo==='urbanismo' && reg.fase===fase && reg.etapa===etapa && reg.exito===false &&
+         typeof reg.motivo==='string' && reg.motivo.indexOf('body_')===0){
+        idx=i; break;
+      }
+    }
+    var u=usage||{};
+    if(idx>-1){
+      var reg2=r.registros[idx];
+      reg2.exito=true;
+      reg2.ent=u.input_tokens||0;
+      reg2.sal=u.output_tokens||0;
+      reg2.cle=u.cache_read_input_tokens||0;
+      reg2.ces=u.cache_creation_input_tokens||0;
+      reg2.motivo='recuperado_servidor';
+      reg2.recuperado=true;
+      localStorage.setItem('ag_core_uso', JSON.stringify(r));
+      return reg2;
+    }
+    return registrarUso('urbanismo', { usage:u }, { fase:fase, etapa:etapa, exito:true, recuperado:true, motivo:'recuperado_servidor' });
+  }catch(e){ return null; }
 }
 
 /* Mismo parser de siempre (3 estrategias de recuperacion ante JSON truncado o con caracteres
@@ -3757,7 +3868,11 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
     // posterior (validaciones 1 y 2 del brief).
     parsedItems = fasesPrevias.items;
   } else {
-    const rawItems=await llamarAnthropicUrbanismo(buildPromptItems(ciudad,pasivo,c2,ref),2000,'items',etapaCap);
+    // URB-ROBUST 03 (26/08): llamarFaseConRecuperacion() envuelve la llamada de siempre -- si
+    // sale bien acá, es indistinguible de antes de este corte. Sólo entra en juego un intento de
+    // recuperación server-side si ESTA llamada falla específicamente con el gap que cerró
+    // URB-ROBUST 02A (headers 200 recibidos, cuerpo interrumpido después).
+    const rawItems=await llamarFaseConRecuperacion(buildPromptItems(ciudad,pasivo,c2,ref),2000,'items',etapaCap,firmaCap);
     parsedItems=parsearJSONIA(rawItems);
 
     // Normalizar items (misma logica de siempre) ANTES de pasarlos a las otras dos llamadas, asi
@@ -3795,7 +3910,7 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   if(fasesPrevias.nucleo){
     parsedNucleo = fasesPrevias.nucleo;
   } else {
-    const rawNucleo=await llamarAnthropicUrbanismo(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800,'nucleo',etapaCap);
+    const rawNucleo=await llamarFaseConRecuperacion(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800,'nucleo',etapaCap,firmaCap);
     parsedNucleo=parsearJSONIA(rawNucleo);
     guardarFaseCheckpointUrbanismo(firmaCap, ciudad, organismoIdCap, etapaCap, 'nucleo', parsedNucleo);
   }
@@ -3806,7 +3921,7 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   // ---- Llamada 3: receptivos + espiral, leyendo el nucleo ya resuelto como contexto ----
   // (Esta fase nunca se resume desde checkpoint: es la última -- si llegó hasta acá con éxito, el
   // análisis completo termina en este mismo llamado y el checkpoint se limpia más abajo.)
-  const rawRecEsp=await llamarAnthropicUrbanismo(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200,'receptivos_espiral',etapaCap);
+  const rawRecEsp=await llamarFaseConRecuperacion(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200,'receptivos_espiral',etapaCap,firmaCap);
   const parsedRecEsp=parsearJSONIA(rawRecEsp);
 
   // Análisis completo de punta a punta -- el checkpoint de ESTA firma ya cumplió su función.
