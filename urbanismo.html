@@ -7484,6 +7484,10 @@ function credEstado(){
   return { plan:plan, clave:clave, usado:usado, extra:extra, total:total,
            resta: resta, renueva: credEtiquetaVentana(plan) };
 }
+function capacidadDisponiblePct(c){
+  if(!c || !c.total) return 0;
+  return Math.max(0, Math.min(100, Math.round((c.resta/c.total)*100)));
+}
 function credAlcanza(tipo){ return credEstado().resta >= (CRED_COSTO[tipo]||1); }
 function credConsumir(tipo){
   const c = credEstado();
@@ -7505,10 +7509,10 @@ function credRender(){
 function credTarjeta(){
   const c = credEstado();
   const card = caiOverlay(); card.innerHTML='';
-  const h=document.createElement('h3'); h.textContent='Tus créditos';
+  const pct = capacidadDisponiblePct(c);
+  const h=document.createElement('h3'); h.textContent='Tu capacidad';
   const p=document.createElement('p');
-  p.textContent = 'Plan ' + c.plan.nombre + ' · ' + c.resta + ' de ' + c.total + ' créditos' +
-    (c.extra ? ' (incluye ' + c.extra + ' de recarga)' : '') + ', se renuevan cada ' + c.renueva + '.';
+  p.textContent = 'Plan ' + c.plan.nombre + ' · Capacidad disponible · ' + pct + ' %, se renueva cada ' + c.renueva + '.';
   card.appendChild(h); card.appendChild(p);
   const filas = [['Diagnóstico completo', CRED_COSTO.diagnostico],['Abordaje proyectivo', CRED_COSTO.proyectivo],['Refinamiento', CRED_COSTO.refinamiento]];
   for(const f of filas){

@@ -10992,6 +10992,22 @@ function credEstado(){
            renueva: etiquetaVentana(plan) };
 }
 
+// CAP-C1B (26/08): traducción visible del saldo a un porcentaje de "capacidad disponible" --
+// no es una unidad contable nueva, es sólo la presentación. c.total ya viene de
+// PLANES[plan].creditos (+ extra de recarga si algún día se reactiva), así que el porcentaje
+// se calcula contra el cupo REAL del plan de la cuenta -- no asume 1800 para todas: una cuenta
+// legacy Estudio/Magister obtiene su propio 100% (4500/9000) automáticamente porque credEstado()
+// ya resuelve `plan` con planActual(), no con un valor fijo. Acotado 0-100 para cubrir saldo por
+// encima del cupo (ajustes/legacy) o, en teoría, negativo -- credEstado() ya lo evita con
+// Math.max(0,...), pero el acotado queda acá también, autocontenido, por si esa garantía cambia.
+function capacidadDisponiblePct(c){
+  if(!c || !c.total) return 0;
+  let pct = Math.round((c.resta / c.total) * 100);
+  if(pct < 0) pct = 0;
+  if(pct > 100) pct = 100;
+  return pct;
+}
+
 /* 17/08: aviso de créditos al 75%/90% del límite -- PENDIENTES.md punto 5 del panel lateral.
    No existía en ningún lado: cardCreditos() es pasiva (solo se ve si el usuario la abre) y
    cardSinCreditos() recién salta en 0. Se dispara desde anotarSaldo(), el único punto por el
@@ -11596,12 +11612,14 @@ function credAlcanza(tipo){
 
 function cardCreditos(){
   const c = credEstado();
+  const pct = capacidadDisponiblePct(c);
   el.cardContent.innerHTML = '';
-  const h = document.createElement('h3'); h.textContent = 'Tus créditos';
+  const h = document.createElement('h3'); h.textContent = 'Tu capacidad';
   const p1 = document.createElement('p');
-  p1.textContent = 'Plan ' + c.plan.nombre + ' · ' + c.resta + ' de ' + c.total + ' créditos' +
-    (c.extra ? ' (incluye ' + c.extra + ' de recarga)' : '') +
-    ', se renuevan cada ' + c.renueva + '. Tu plan determina qué capacidades y aplicaciones tenés habilitadas; los créditos regulan cuánto podés usarlas.';
+  // CAP-C1B (26/08): se deja de mostrar el conteo de créditos ("resta de total créditos") --
+  // el porcentaje (abajo, en el total "Capacidad disponible") es ahora la única representación
+  // del saldo. No se muestran los dos juntos.
+  p1.textContent = 'Plan ' + c.plan.nombre + ' · se renueva cada ' + c.renueva + '. Tu plan determina qué capacidades y aplicaciones tenés habilitadas; la capacidad disponible regula cuánto podés usarlas.';
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
   const filas = [
     ['Consulta de comprensión', COSTO.chat],
@@ -11617,8 +11635,8 @@ function cardCreditos(){
     d.appendChild(a); d.appendChild(b); el.cardContent.appendChild(d);
   }
   const tot = document.createElement('div'); tot.className='cr-tot';
-  const ta = document.createElement('span'); ta.textContent = 'Disponible ahora';
-  const tb = document.createElement('b'); tb.textContent = c.resta;
+  const ta = document.createElement('span'); ta.textContent = 'Capacidad disponible';
+  const tb = document.createElement('b'); tb.textContent = pct + ' %';
   tot.appendChild(ta); tot.appendChild(tb); el.cardContent.appendChild(tot);
   /* D-06 · Se saco el boton "Recargar" de aca (29/07): dependia de window.iniciarPagoRecarga,
      que no existe en ningun lado del codigo -- tocarlo solo mostraba "Recarga no disponible".
