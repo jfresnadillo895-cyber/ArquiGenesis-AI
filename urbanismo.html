@@ -3658,20 +3658,38 @@ async function intentarRecuperarFaseUrbanismo(firma, fase){
 
 /* Envuelve una llamada de fase larga con el intento de recuperación server-side. Devuelve el
    texto crudo -- mismo contrato que llamarAnthropicUrbanismo() -- para que parsearJSONIA() lo
-   procese exactamente igual venga de una llamada nueva o de un resultado recuperado. Si la
-   llamada nueva tiene éxito, esto es 100% transparente (mismo comportamiento que antes de
-   URB-ROBUST 03). Sólo entra en juego el camino de recuperación cuando: (a) la llamada falló, Y
-   (b) falló específicamente con el gap conocido (headers OK, cuerpo interrumpido) -- nunca para
-   errores de red antes de headers o errores HTTP, que nunca tuvieron un resultado real que
-   recuperar (invariante del brief: "nunca dar una fase por terminada antes de obtener respuesta
-   válida de Anthropic"). */
-async function llamarFaseConRecuperacion(prompt, maxTokens, fase, etapa, firma){
+   procese exactamente igual venga de una llamada nueva o de un resultado recuperado.
+
+   URB-ROBUST 03A (26/08) -- auditoría previa (ver PENDIENTES.md) encontró que el único camino de
+   recuperación que existía (el de más abajo, reactivo) sólo se disparaba DENTRO del catch del
+   propio intento que acababa de fallar -- nunca en una reanudación posterior. Eso dejaba expuesta
+   a receptivos_espiral (la única fase sin resguardo de checkpoint local): un "↻ Retomar análisis"
+   volvía a golpear a Claude en vez de reclamar un resultado que el servidor ya tenía guardado.
+   Este corte agrega un camino PROACTIVO, pero sólo cuando 'esReanudacion' es true (decidido una
+   sola vez en llamarAPI(), con la misma señal que ya gobierna el botón "↻ Retomar análisis") --
+   para una ejecución nueva de punta a punta esReanudacion es false y el comportamiento es
+   idéntico al de antes de este corte: POST directo, sin ningún round-trip de más. */
+async function llamarFaseConRecuperacion(prompt, maxTokens, fase, etapa, firma, esReanudacion){
+  if(esReanudacion){
+    // Preflight: estamos retomando un análisis que ya venía de antes -- antes de gastar una
+    // llamada nueva a Claude para esta fase, preguntarle al servidor si ya la tiene resuelta.
+    var yaDisponible=await intentarRecuperarFaseUrbanismo(firma, fase);
+    if(yaDisponible){
+      reconciliarUsoRecuperado(fase, etapa, yaDisponible.usage);
+      return (yaDisponible.content||[]).map(function(i){ return i.text||''; }).join('');
+    }
+    // No había nada -- sigue de largo al camino normal, exactamente como si esReanudacion fuera
+    // false. No se repite la consulta: si esto tampoco estaba, hay que derivarla de una.
+  }
   try{
     return await llamarAnthropicUrbanismo(prompt, maxTokens, fase, etapa, firma);
   }catch(e){
     if(!(e && typeof e._motivoUrb==='string' && e._motivoUrb.indexOf('body_')===0)){
       throw e;
     }
+    // Rescate reactivo (URB-ROBUST 03 original) -- se mantiene sin cambios como red de seguridad
+    // adicional: cubre el caso de que ESTA MISMA llamada, recién iniciada acá, sea la que termine
+    // en servidor pero se corte para el cliente antes de que exista un próximo "Retomar análisis".
     var recuperado=await intentarRecuperarFaseUrbanismo(firma, fase);
     if(!recuperado){ throw e; }
     reconciliarUsoRecuperado(fase, etapa, recuperado.usage);
@@ -3863,6 +3881,23 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   const firmaCap = firmaCheckpointUrbanismo(ciudad, organismoIdCap, pasivo, c2, ref);
   const fasesPrevias = fasesResumiblesDeCheckpoint(firmaCap);
 
+  // URB-ROBUST 03A (26/08): "reanudación conocida" -- capturado UNA VEZ acá, con el estado del
+  // checkpoint tal como estaba al ARRANCAR esta llamada (antes de que cualquiera de las tres
+  // fases de más abajo pueda escribir en él). Si items o nucleo ya estaban resueltos de un
+  // intento anterior con esta MISMA firma, es la misma condición que ya decide si se muestra el
+  // botón "↻ Retomar análisis" (hayCheckpointResumible) -- se reusa tal cual, sin inventar una
+  // señal nueva. Se la pasa a llamarFaseConRecuperacion() para la fase que falte: le dice "antes
+  // de pedirle esto a Claude, preguntale primero al servidor si ya lo tiene" -- sólo en ese caso.
+  // Una ejecución nueva de punta a punta (esReanudacion=false, el caso normal y más frecuente)
+  // sigue yendo directo al POST, sin ningún round-trip de más -- exactamente el comportamiento de
+  // antes de este corte. 'items' en concreto SIEMPRE cae del lado "ejecución nueva": si items
+  // todavía no está resuelto, por construcción tampoco puede estarlo nucleo (nucleo depende de
+  // items ya parseado), así que esReanudacion es estructuralmente false en su propio turno -- no
+  // hay ninguna señal local disponible para distinguir "primer intento" de "primer intento otra
+  // vez, tras un fallo total" cuando no quedó nada guardado. Documentado como límite conocido y
+  // deliberado (ver PENDIENTES.md, URB-ROBUST 03A) -- no es lo que reportó la evidencia real.
+  const esReanudacion = !!(fasesPrevias.items || fasesPrevias.nucleo);
+
   // ---- Llamada 1: los 36 indicadores ----
   let parsedItems;
   if(fasesPrevias.items){
@@ -3875,7 +3910,7 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
     // sale bien acá, es indistinguible de antes de este corte. Sólo entra en juego un intento de
     // recuperación server-side si ESTA llamada falla específicamente con el gap que cerró
     // URB-ROBUST 02A (headers 200 recibidos, cuerpo interrumpido después).
-    const rawItems=await llamarFaseConRecuperacion(buildPromptItems(ciudad,pasivo,c2,ref),2000,'items',etapaCap,firmaCap);
+    const rawItems=await llamarFaseConRecuperacion(buildPromptItems(ciudad,pasivo,c2,ref),2000,'items',etapaCap,firmaCap,esReanudacion);
     parsedItems=parsearJSONIA(rawItems);
 
     // Normalizar items (misma logica de siempre) ANTES de pasarlos a las otras dos llamadas, asi
@@ -3913,7 +3948,7 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   if(fasesPrevias.nucleo){
     parsedNucleo = fasesPrevias.nucleo;
   } else {
-    const rawNucleo=await llamarFaseConRecuperacion(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800,'nucleo',etapaCap,firmaCap);
+    const rawNucleo=await llamarFaseConRecuperacion(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800,'nucleo',etapaCap,firmaCap,esReanudacion);
     parsedNucleo=parsearJSONIA(rawNucleo);
     guardarFaseCheckpointUrbanismo(firmaCap, ciudad, organismoIdCap, etapaCap, 'nucleo', parsedNucleo);
   }
@@ -3924,7 +3959,7 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   // ---- Llamada 3: receptivos + espiral, leyendo el nucleo ya resuelto como contexto ----
   // (Esta fase nunca se resume desde checkpoint: es la última -- si llegó hasta acá con éxito, el
   // análisis completo termina en este mismo llamado y el checkpoint se limpia más abajo.)
-  const rawRecEsp=await llamarFaseConRecuperacion(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200,'receptivos_espiral',etapaCap,firmaCap);
+  const rawRecEsp=await llamarFaseConRecuperacion(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200,'receptivos_espiral',etapaCap,firmaCap,esReanudacion);
   const parsedRecEsp=parsearJSONIA(rawRecEsp);
 
   // Análisis completo de punta a punta -- el checkpoint de ESTA firma ya cumplió su función.
