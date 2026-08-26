@@ -1205,7 +1205,7 @@
   // respaldo instantáneo (ver obtenerCatalogo() más arriba); api/catalogo.js sigue siendo la
   // única fuente real, y la pisa apenas responde.
   var PLANES = [
-    { id:'profesional', nombre:'Profesional', precio:'$39.000', creditos:'1.800 créditos por mes', precioUsd:25,
+    { id:'profesional', nombre:'Profesional', precio:'$39.000', creditos:'Capacidad mensual incluida', precioUsd:25,
       lema:'Para comprender y desarrollar organismos con capacidades profesionales',
       incluye:['Chat completo de Comprender AI','Ficha viva y memoria funcional','Comprender Urbanismo','Comprender Contextos'],
       excluye:[],
@@ -1289,13 +1289,14 @@
         var real = cat[p.id];
         if(!real) return;
         var elP = capa.querySelector('[data-plan-precio="' + p.id + '"]');
-        var elC = capa.querySelector('[data-plan-creditos="' + p.id + '"]');
         if(elP && typeof real.precio_usd === 'number'){
           elP.textContent = 'USD $' + real.precio_usd;
         }
-        if(elC && typeof real.creditos === 'number'){
-          elC.textContent = real.creditos.toLocaleString('es-AR') + ' créditos por mes';
-        }
+        // CAP-C1A (26/08): se deja de mostrar la cantidad de créditos en la tarjeta pública --
+        // "Capacidad mensual incluida" queda fijo (definido en el propio PLANES de arriba,
+        // p.creditos ahora es ese texto, no un número), para que el catálogo vivo no lo
+        // vuelva a pisar con "1.800 créditos por mes". El valor interno 1800 sigue intacto
+        // en api/catalogo.js y en el sistema de saldo -- esto es sólo lo que se muestra.
         var elA = capa.querySelector('[data-plan-ars="' + p.id + '"]');
         if(elA && typeof real.precio_ars === 'number'){
           elA.textContent = '$' + real.precio_ars.toLocaleString('es-AR');
