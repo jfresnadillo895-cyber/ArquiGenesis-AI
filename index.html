@@ -11458,6 +11458,61 @@ function cardConsumo(){
       fila('Contextos Universal · tiempo de IA total', llamadasFase + ' llamada' + (llamadasFase === 1 ? '' : 's') +
         ' · ' + (msTotal / 1000).toFixed(1) + ' s (sin contar red/espera del navegador)');
     }
+    // URB-PRELAUNCH 01.4 (26/08): desglose de Urbanismo por fase, análogo al de Contextos
+    // Universal de arriba. Se lee directamente de cargarUso().registros (no de s.porFase) porque
+    // acá además hace falta diferenciar análisis inicial vs refinamiento por fase -- una distinción
+    // que resumenUso().porFase no hace y que se decidió no mezclar en su agregación genérica para
+    // no arriesgar el código ya probado que usa Contextos Universal. No crea cardConsumo() propia
+    // en urbanismo.html: la lectura entera pasa por acá, como pidió el brief.
+    var URB_FASE_ORDEN_CONSUMO = ['items','nucleo','receptivos_espiral','proyectivo','detalle','inercia',
+      'recomendacion_urgente','haiku'];
+    var URB_FASE_LABEL_CONSUMO = {
+      items: 'Ítems (36 indicadores)', nucleo: 'Núcleo sistémico', receptivos_espiral: 'Receptivos + espiral',
+      proyectivo: 'Proyectivo', detalle: 'Detalle (9 dimensiones)', inercia: 'Inercia sin intervención',
+      recomendacion_urgente: 'Recomendación urgente', haiku: 'Haiku'
+    };
+    var regsUrb = cargarUso().registros.filter(function(r){ return r.tipo === 'urbanismo'; });
+    if(regsUrb.length){
+      var porFaseUrb = {};
+      regsUrb.forEach(function(r){
+        if(!r.fase) return;
+        var fu = porFaseUrb[r.fase] || (porFaseUrb[r.fase] = { n:0, ms:0, porEtapa:{} });
+        fu.n++;
+        if(typeof r.ms === 'number') fu.ms += r.ms;
+        var etKey = r.etapa || 'sin-etapa';
+        var et = fu.porEtapa[etKey] || (fu.porEtapa[etKey] = { n:0, ms:0 });
+        et.n++;
+        if(typeof r.ms === 'number') et.ms += r.ms;
+      });
+      var fasesUrbPresentes = URB_FASE_ORDEN_CONSUMO.filter(function(id){ return porFaseUrb[id]; });
+      // Defensivo: si algún día se agrega una fase que no está en el orden previsto arriba, igual
+      // se muestra (al final de la lista) en vez de perderse en silencio.
+      Object.keys(porFaseUrb).forEach(function(id){
+        if(URB_FASE_ORDEN_CONSUMO.indexOf(id) === -1) fasesUrbPresentes.push(id);
+      });
+      if(fasesUrbPresentes.length){
+        var msTotalUrb = 0, llamadasFaseUrb = 0;
+        var fpUrb = fasesUrbPresentes.map(function(id){
+          var du = porFaseUrb[id];
+          msTotalUrb += du.ms; llamadasFaseUrb += du.n;
+          var nombreUrb = URB_FASE_LABEL_CONSUMO[id] || id;
+          var etapasUrb = Object.keys(du.porEtapa);
+          var tieneAmbasEtapas = etapasUrb.indexOf('inicial') !== -1 && etapasUrb.indexOf('refinamiento') !== -1;
+          if(tieneAmbasEtapas){
+            var ini = du.porEtapa.inicial, ref = du.porEtapa.refinamiento;
+            var promIni = ini.n ? Math.round(ini.ms / ini.n) : 0;
+            var promRef = ref.n ? Math.round(ref.ms / ref.n) : 0;
+            return nombreUrb + ': ' + du.n + ' (inicial ' + ini.n + ' · ' + promIni.toLocaleString('es-AR') +
+              ' ms promedio; refinamiento ' + ref.n + ' · ' + promRef.toLocaleString('es-AR') + ' ms promedio)';
+          }
+          var promUrb = du.n ? Math.round(du.ms / du.n) : 0;
+          return nombreUrb + ': ' + du.n + ' · ' + promUrb.toLocaleString('es-AR') + ' ms promedio';
+        });
+        fila('Urbanismo · por fase', fpUrb.join('  ·  '));
+        fila('Urbanismo · tiempo de IA total', llamadasFaseUrb + ' llamada' + (llamadasFaseUrb === 1 ? '' : 's') +
+          ' · ' + (msTotalUrb / 1000).toFixed(1) + ' s (sin contar red/espera del navegador)');
+      }
+    }
     var ses = [], sk;
     for(sk in s.sesiones){ if(Object.prototype.hasOwnProperty.call(s.sesiones,sk)) ses.push(s.sesiones[sk]); }
     if(ses.length){

@@ -3299,6 +3299,44 @@ function back(){
   setErr('');
 }
 
+/* URB-PRELAUNCH 01.3 (26/08): clasifica el error real capturado por ejecutar()/nuevaCiudad()
+   para no traducir todo como "problema de conexión" -- que fue exactamente la regresión que
+   reportó Javier ("The operation was aborted" mostrado como si fuera la conexión del usuario).
+   Tres casos reales, distintos entre sí:
+   - 'abortado': el fetch nunca llegó a resolver porque el navegador/SO cortó la espera (pestaña
+     en segundo plano, navegación, cambio de red, etc. -- AbortError o mensaje que contiene
+     "abort"). Los logs reales de Vercel confirmaron que en este escenario la función del
+     servidor sigue corriendo y suele terminar con status 200 igual -- el cliente simplemente
+     dejó de esperar. Hoy no existe manera de recuperar ese resultado ya calculado ni de
+     reconectar con esa ejecución, así que el mensaje NO promete poder "retomarlo".
+   - 'servidor': llamarAnthropicUrbanismo() respondió pero con un status de error (mensaje con
+     forma 'Error <código>: ...'). Hubo comunicación real de punta a punta -- el problema no es
+     la conexión del usuario, es algo que falló del lado del servidor/proveedor.
+   - 'red': fetch() nunca llegó a completarse por un problema real de red local del usuario
+     (TypeError típico de "Failed to fetch"/"NetworkError"/"Load failed" de Safari). Acá sí
+     corresponde pedir que verifique su conexión -- es el único caso real de eso.
+   Cualquier otro caso (JSON inválido, etc.) cae en 'desconocido' y usa un mensaje neutro que
+   no le atribuye la falla a ninguna causa que no se pueda confirmar. */
+function clasificarErrorUrbanismo(e){
+  if(!e) return 'desconocido';
+  var nombre = (e.name||'').toLowerCase();
+  var msg = (e.message||'').toLowerCase();
+  if(nombre === 'aborterror' || msg.indexOf('abort') !== -1) return 'abortado';
+  if(/^error \d+:/.test(msg)) return 'servidor';
+  if(nombre === 'typeerror' && (msg.indexOf('fetch') !== -1 || msg.indexOf('network') !== -1 || msg.indexOf('load failed') !== -1)) return 'red';
+  return 'desconocido';
+}
+function mensajeErrorUrbanismo(e, conDetalle){
+  var tipo = clasificarErrorUrbanismo(e);
+  var base;
+  if(tipo === 'abortado') base = 'El análisis se interrumpió antes de completarse. Podés intentarlo nuevamente.';
+  else if(tipo === 'red') base = 'No se pudo contactar al servidor. Verificá tu conexión e intentá nuevamente.';
+  else if(tipo === 'servidor') base = 'El servidor no pudo completar el análisis. Intentá nuevamente en unos minutos.';
+  else base = 'No se pudo completar el análisis. Intentá nuevamente.';
+  if(conDetalle && e && e.message) return base + '<br><small>'+e.message+'</small>';
+  return base;
+}
+
 function nuevaCiudad(){
   // Abrir modal rápido para analizar otra ciudad sin perder la actual
   const ciudad = prompt('Ingresá el nombre de la ciudad a analizar:');
@@ -3310,14 +3348,18 @@ function nuevaCiudad(){
   document.getElementById('etapa-proy').style.display='none';
   document.getElementById('etapa-diag').style.display='block';
   mostrarCarga(true);
+  // URB-PRELAUNCH 01.3 (26/08): este timer es un watchdog de UI, no una detección real de
+  // falla -- a los 90s todavía no hay evidencia de que algo se haya roto (los 3 llamados de
+  // llamarAPI() pueden tardar más que eso en un caso normal, según los logs reales de Vercel).
+  // Por eso ya no dice "verificá tu conexión": eso implicaría un diagnóstico que acá no existe.
   const timeoutId = setTimeout(()=>{
     mostrarCarga(false);
-    alert('El análisis tardó demasiado. Verificá tu conexión e intentá nuevamente.');
+    alert('El análisis está tardando más de lo esperado. Podés seguir esperando o intentarlo nuevamente en unos minutos.');
   }, 90000);
   if(!permitirOperacion('diagnostico')){ clearTimeout(timeoutId); mostrarCarga(false); return; }
   llamarAPI(ciudad.trim(),'','','')
     .then(()=>clearTimeout(timeoutId))
-    .catch(e=>{clearTimeout(timeoutId);mostrarCarga(false);alert('Error: '+e.message);})
+    .catch(e=>{clearTimeout(timeoutId);mostrarCarga(false);alert(mensajeErrorUrbanismo(e).replace(/<[^>]*>/g,''));})
     .finally(()=>mostrarCarga(false));
 }
 function toggleGuia(){
@@ -3388,10 +3430,13 @@ async function ejecutar(){
   // Timeout de 180 segundos (red de seguridad del lado del cliente; el limite real hoy lo pone
   // maxDuration:60 de api/anthropic.js en vercel.json -- si el servidor corta la funcion antes,
   // el fetch() falla con NetworkError bastante antes de llegar a este timeout)
+  // URB-PRELAUNCH 01.3 (26/08): igual que en nuevaCiudad(), este watchdog no detecta ninguna
+  // falla concreta -- sólo deja de esperar. Ya no dice "verificá tu conexión" porque a los 180s
+  // no hay evidencia de que sea eso (puede seguir corriendo del lado del servidor).
   const timeoutId = setTimeout(()=>{
     mostrarCarga(false);
     document.getElementById('p-inicio').style.display='flex';
-    setErr('El análisis tardó demasiado. Verificá tu conexión e intentá nuevamente.');
+    setErr('El análisis está tardando más de lo esperado. Podés seguir esperando o intentarlo nuevamente en unos minutos.');
     document.getElementById('btn-go').disabled=false;
   }, 180000);
 
@@ -3403,7 +3448,11 @@ async function ejecutar(){
     clearTimeout(timeoutId);
     mostrarCarga(false);
     document.getElementById('p-inicio').style.display='flex';
-    setErr('No se pudo completar el análisis. Verificá tu conexión e intentá nuevamente.<br><small>'+e.message+'</small>');
+    // URB-PRELAUNCH 01.3 (26/08): antes esto siempre decía "Verificá tu conexión", aun cuando
+    // el error real era un abort del navegador (el bug que reportó Javier) o un status de error
+    // del servidor -- ninguno de los dos es un problema de conexión del usuario. Ver
+    // mensajeErrorUrbanismo()/clasificarErrorUrbanismo() más arriba para el criterio real.
+    setErr(mensajeErrorUrbanismo(e, true));
     console.error(e);
   }
   mostrarCarga(false);
@@ -3424,16 +3473,80 @@ function apiEndpoint(){
   return 'https://api.anthropic.com/v1/messages';
 }
 
+/* ---- CAP-M1 (26/08) · Consumo real de Urbanismo -- mismo mecanismo que ya usa el Core -----------
+   urbanismo.html no comparte scope de JS con index.html (son documentos distintos); lo único
+   compartido de verdad es el origen, así que esto escribe en la misma clave de localStorage
+   ('ag_core_uso') con el mismo shape de registro que registrarUso() de index.html -- la lectura
+   sigue viviendo enteramente ahí (cardConsumo()), acá sólo se escribe. No se crea ningún
+   cardConsumo() propio de Urbanismo (decisión explícita de Javier, URB-PRELAUNCH 01). Se agregan
+   dos campos que Contextos Universal no necesitaba: 'etapa' (análisis inicial vs. refinamiento,
+   sólo tiene sentido para items/nucleo/receptivos_espiral) y 'exito' (para que una llamada que
+   falló -- error de red, 4xx/5xx, lo que sea -- quede igual de visible que las que sí respondieron;
+   antes de este corte Urbanismo no registraba consumo de ningún tipo, ni éxitos ni fallos). */
+var USO_MAX = 500;
+function cargarUso(){
+  try{
+    var raw = JSON.parse(localStorage.getItem('ag_core_uso') || 'null');
+    if(!raw || !Array.isArray(raw.registros)) return { version_uso:1, registros:[] };
+    return raw;
+  }catch(e){ return { version_uso:1, registros:[] }; }
+}
+function registrarUso(tipo, data, extra){
+  try{
+    var u = data && data.usage;
+    // A diferencia de index.html: acá SÍ puede no haber 'usage' y aun así valer la pena
+    // registrar el intento, si extra.exito===false explícitamente lo marca como fallido
+    // (una llamada que nunca llegó a responder no tiene tokens que informar, pero sí duración
+    // y el hecho de que falló -- justamente lo que pide "éxito/error" en el brief).
+    if(!u && !(extra && extra.exito === false)) return null;
+    var r = cargarUso();
+    var reg = {
+      f: new Date().toISOString(),
+      tipo: tipo,
+      org: (typeof __organismoIdCoreUrbanismo !== 'undefined' && __organismoIdCoreUrbanismo) || null,
+      turno: 0,
+      ent: (u && u.input_tokens) || 0,
+      sal: (u && u.output_tokens) || 0,
+      cle: (u && u.cache_read_input_tokens) || 0,
+      ces: (u && u.cache_creation_input_tokens) || 0,
+      fase: (extra && extra.fase) || null,
+      ms: (extra && typeof extra.duracionMs === 'number') ? extra.duracionMs : null,
+      etapa: (extra && extra.etapa) || null,
+      exito: (extra && typeof extra.exito === 'boolean') ? extra.exito : true
+    };
+    r.registros.push(reg);
+    if(r.registros.length > USO_MAX) r.registros = r.registros.slice(r.registros.length - USO_MAX);
+    localStorage.setItem('ag_core_uso', JSON.stringify(r));
+    return reg;
+  }catch(e){ return null; }
+}
+
 /* Helper compartido: llama al proxy con un prompt y devuelve el texto crudo de la respuesta.
-   No parsea JSON aca -- eso lo hace parsearJSONIA(), reutilizado por las dos llamadas. */
-async function llamarAnthropicUrbanismo(prompt,maxTokens){
-  const res=await fetch(apiEndpoint(),{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens,messages:[{role:'user',content:prompt}]})
-  });
-  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error('Error '+res.status+': '+(e.error?.message||''))}
+   No parsea JSON aca -- eso lo hace parsearJSONIA(), reutilizado por las tres llamadas.
+   'fase'/'etapa' (CAP-M1, 26/08) son opcionales -- si no se pasan, registrarUso() simplemente
+   guarda fase:null/etapa:null, sin romper nada de lo que ya hacía esta función. */
+async function llamarAnthropicUrbanismo(prompt,maxTokens,fase,etapa){
+  const t0=Date.now();
+  let res;
+  try{
+    res=await fetch(apiEndpoint(),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens,messages:[{role:'user',content:prompt}]})
+    });
+  }catch(eRed){
+    // Ni siquiera hubo respuesta -- red cortada, abort, lo que sea. Se registra igual como
+    // intento fallido (sin tokens, porque no hay data.usage posible acá).
+    registrarUso('urbanismo', {}, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:false });
+    throw eRed;
+  }
+  if(!res.ok){
+    const e=await res.json().catch(()=>({}));
+    registrarUso('urbanismo', {}, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:false });
+    throw new Error('Error '+res.status+': '+(e.error?.message||''));
+  }
   const data=await res.json();
+  registrarUso('urbanismo', data, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:true });
   return data.content.map(i=>i.text||'').join('');
 }
 
@@ -3494,9 +3607,13 @@ function parsearJSONIA(raw){
    sin datos reales para basarla. */
 async function llamarAPI(ciudad,pasivo,c2,ref){
   // setSt manejado por mostrarCarga
+  // CAP-M1 (26/08): 'ref' no vacío es exactamente la señal de que este llamado es un
+  // refinamiento (ver cerrarRef(), único call site que pasa un ref con contenido) -- se calcula
+  // una sola vez acá y viaja a las tres llamadas de esta pasada.
+  const etapaCap = ref ? 'refinamiento' : 'inicial';
 
   // ---- Llamada 1: los 36 indicadores ----
-  const rawItems=await llamarAnthropicUrbanismo(buildPromptItems(ciudad,pasivo,c2,ref),2000);
+  const rawItems=await llamarAnthropicUrbanismo(buildPromptItems(ciudad,pasivo,c2,ref),2000,'items',etapaCap);
   const parsedItems=parsearJSONIA(rawItems);
 
   // Normalizar items (misma logica de siempre) ANTES de pasarlos a las otras dos llamadas, asi
@@ -3523,14 +3640,14 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   if(typeof actualizarPasoCarga==='function'){ cargaPasoActual=Math.max(cargaPasoActual,3); actualizarPasoCarga(cargaPasoActual); }
 
   // ---- Llamada 2: nucleo de la sintesis (numeros + haiku + sintesis + sustentabilidad) ----
-  const rawNucleo=await llamarAnthropicUrbanismo(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800);
+  const rawNucleo=await llamarAnthropicUrbanismo(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800,'nucleo',etapaCap);
   const parsedNucleo=parsearJSONIA(rawNucleo);
 
   // Avanza a "Generando sintesis diagnostica" -- arranca la parte mas pesada (receptivos+espiral).
   if(typeof actualizarPasoCarga==='function'){ cargaPasoActual=Math.max(cargaPasoActual,4); actualizarPasoCarga(cargaPasoActual); }
 
   // ---- Llamada 3: receptivos + espiral, leyendo el nucleo ya resuelto como contexto ----
-  const rawRecEsp=await llamarAnthropicUrbanismo(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200);
+  const rawRecEsp=await llamarAnthropicUrbanismo(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200,'receptivos_espiral',etapaCap);
   const parsedRecEsp=parsearJSONIA(rawRecEsp);
 
   // Fusion: mismo objeto final que antes armaba una sola llamada -- todo el codigo de abajo
@@ -4342,6 +4459,9 @@ async function regenerarProyectivo(nota, intencion){
   document.getElementById('ap-desc').innerHTML = '';
   window.scrollTo(0,0);
 
+  var _t0Proy = Date.now();   // CAP-M1 (26/08) -- declarado antes del try para poder registrar
+                              // también si fetch() ni siquiera llega a responder (catch de abajo)
+  var _regProy = false;       // evita registrar dos veces el mismo fallo (acá y en res.ok===false)
   try{
     const ciudad = diagData.ciudad;
     const c2 = document.getElementById('c2-txt')?.value?.trim()||'';
@@ -4382,8 +4502,14 @@ Responde SOLO JSON compacto:
       body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:3000,messages:[{role:'user',content:prompt}]})
     });
 
-    if(!res.ok) throw new Error('Error API '+res.status);
+    if(!res.ok){
+      registrarUso('urbanismo', {}, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:false });
+      _regProy = true;
+      throw new Error('Error API '+res.status);
+    }
     const data = await res.json();
+    registrarUso('urbanismo', data, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:true });
+    _regProy = true;
     const raw = data.content.map(i=>i.text||'').join('');
     const m = raw.match(/\{[\s\S]*\}/);
     if(!m) throw new Error('JSON inválido');
@@ -4405,6 +4531,9 @@ Responde SOLO JSON compacto:
 
   } catch(e){
     console.error('Error regenerando proyectivo:', e);
+    // CAP-M1 (26/08): si llegamos hasta acá SIN haber registrado nada (fetch() ni siquiera
+    // respondió, o el body no se pudo leer), es el único lugar que se entera del fallo.
+    if(!_regProy) registrarUso('urbanismo', {}, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:false });
     // Si falla, continuar con lo que hay
   }
 
@@ -4908,6 +5037,8 @@ INSTRUCCIÓN: Para cada subtítulo:
 Responde SOLO JSON compacto:
 {"subs":[{"n":"Principio rector","v":0,"d":"descripción específica","r":"recomendación si déficit"},{"n":"Tensión reguladora","v":0,"d":"..."},{"n":"Patrones organizadores","v":0,"d":"..."},{"n":"Inteligencia colectiva","v":0,"d":"..."},{"n":"Energía integradora","v":0,"d":"..."},{"n":"Carácter propio","v":0,"d":"..."},{"n":"Orientación estratégica","v":0,"d":"..."},{"n":"Manifestación concreta","v":0,"d":"..."},{"n":"Horizonte proyectual","v":0,"d":"...","r":""}]}`;
 
+  var _t0Det = Date.now();
+  var _regDet = false;
   try{
     incrementarAPI('det');
     /* Timeout por Promise.race: AbortSignal no es clonable en el sandbox
@@ -4920,8 +5051,14 @@ Responde SOLO JSON compacto:
       }),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout de 60 segundos')),60000))
     ]);
-    if(!res.ok) throw new Error('Error API '+res.status);
+    if(!res.ok){
+      registrarUso('urbanismo', {}, { fase:'detalle', duracionMs: Date.now()-_t0Det, exito:false });
+      _regDet = true;
+      throw new Error('Error API '+res.status);
+    }
     const data = await res.json();
+    registrarUso('urbanismo', data, { fase:'detalle', duracionMs: Date.now()-_t0Det, exito:true });
+    _regDet = true;
     const raw = data.content.map(i=>i.text||'').join('');
     const m = raw.match(/\{[\s\S]*\}/);
     if(!m) throw new Error('JSON inválido');
@@ -4949,6 +5086,7 @@ Responde SOLO JSON compacto:
     btn.disabled = false;
 
   } catch(e){
+    if(!_regDet) registrarUso('urbanismo', {}, { fase:'detalle', duracionMs: Date.now()-_t0Det, exito:false });
     row.style.display = 'none';
     panel.classList.remove('vis');
     panel.innerHTML = '';
@@ -5200,6 +5338,8 @@ Responde SOLO JSON compacto:
 {"inercia_5":"3-4 oraciones: el sistema a 5 años sin intervención","inercia_10":"3-4 oraciones: el sistema a 10 años sin intervención","punto_no_retorno":{"existe":true,"horizonte":"ej: 7-9 años","dimension":"dimensión crítica","descripcion":"máx 25 palabras: qué se vuelve irreversible y por qué"},"dimensiones_criticas":["2-3 dimensiones que lideran la degradación"]}
 Si no hay punto de no retorno en 15 años, "existe":false y explicá en descripcion qué lo evita.`;
 
+  var _t0Iner = Date.now();
+  var _regIner = false;
   try{
     incrementarAPI('inercia');
     /* Timeout por Promise.race: AbortSignal no es clonable en el sandbox
@@ -5212,8 +5352,14 @@ Si no hay punto de no retorno en 15 años, "existe":false y explicá en descripc
       }),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout de 90 segundos')),90000))
     ]);
-    if(!res.ok) throw new Error('Error API '+res.status);
+    if(!res.ok){
+      registrarUso('urbanismo', {}, { fase:'inercia', duracionMs: Date.now()-_t0Iner, exito:false });
+      _regIner = true;
+      throw new Error('Error API '+res.status);
+    }
     const data = await res.json();
+    registrarUso('urbanismo', data, { fase:'inercia', duracionMs: Date.now()-_t0Iner, exito:true });
+    _regIner = true;
     const raw = data.content.map(i=>i.text||'').join('');
     const m = raw.match(/\{[\s\S]*\}/);
     if(!m) throw new Error('JSON inválido');
@@ -5238,6 +5384,7 @@ Si no hay punto de no retorno en 15 años, "existe":false y explicá en descripc
     diagData.inercia = p;
     btn.style.display = 'none';
   }catch(e){
+    if(!_regIner) registrarUso('urbanismo', {}, { fase:'inercia', duracionMs: Date.now()-_t0Iner, exito:false });
     cont.innerHTML = '';
     btn.disabled = false;
     btn.textContent = '⚠ Calcular escenario sin intervención';
@@ -5816,6 +5963,8 @@ async function generarRecomendacionUrgente(el, eje){
     + 'En máximo 3 oraciones concretas: ¿cuál es la intervención urgente más efectiva para esta dimensión específica en este territorio? Si la síntesis nombra una tensión raíz, la intervención debe atacar su manifestación en esta dimensión. '
     + 'Sé específico para ' + diagData.ciudad + ', no genérico.';
 
+  var _t0Rec = Date.now();
+  var _regRec = false;
   try {
     var res = await fetch(apiEndpoint(),{
       method:'POST',
@@ -5823,9 +5972,12 @@ async function generarRecomendacionUrgente(el, eje){
       body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:200,messages:[{role:'user',content:prompt}]})
     });
     var data = await res.json();
+    registrarUso('urbanismo', data, { fase:'recomendacion_urgente', duracionMs: Date.now()-_t0Rec, exito:true });
+    _regRec = true;
     var texto = data.content.map(function(i){ return i.text||''; }).join('').trim();
     recDiv.innerHTML = '<strong style="color:var(--rojo);font-size:9px;font-family:var(--mono)">INTERVENCIÓN URGENTE:</strong><br>' + texto;
   } catch(err){
+    if(!_regRec) registrarUso('urbanismo', {}, { fase:'recomendacion_urgente', duracionMs: Date.now()-_t0Rec, exito:false });
     recDiv.innerHTML = '<span style="color:var(--rojo)">Error: ' + err.message + '</span>';
   }
 }
@@ -6325,6 +6477,8 @@ async function regenerarHaiku(){
     +'\nUSA elementos concretos y únicos de '+diagData.ciudad+' — lugares reales, fenómenos específicos.'
     +'\nResponde SOLO JSON: {"haiku":"verso1 · verso2 · verso3","exp":"explicación breve de 1 oración"}';
 
+  const _t0Haiku = Date.now();
+  let _regHaiku = false;
   try{
     const res = await fetch(apiEndpoint(),{
       method:'POST',
@@ -6332,6 +6486,8 @@ async function regenerarHaiku(){
       body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:300,messages:[{role:'user',content:prompt}]})
     });
     const data = await res.json();
+    registrarUso('urbanismo', data, { fase:'haiku', duracionMs: Date.now()-_t0Haiku, exito:true });
+    _regHaiku = true;
     const raw = data.content.map(i=>i.text||'').join('');
     const m = raw.match(/\{[\s\S]*\}/);
     if(m){
@@ -6351,6 +6507,7 @@ async function regenerarHaiku(){
     btn.textContent = '✓ Regenerado';
     setTimeout(()=>{ btn.textContent='↻ Regenerar impulsor creativo'; btn.disabled=false; },2000);
   }catch(e){
+    if(!_regHaiku) registrarUso('urbanismo', {}, { fase:'haiku', duracionMs: Date.now()-_t0Haiku, exito:false });
     btn.textContent='↻ Regenerar impulsor creativo';
     btn.disabled=false;
     console.error(e);
