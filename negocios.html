@@ -807,7 +807,14 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
   function autenticarConGoogle(){
     try{ sessionStorage.setItem('comprender_oauth_google', '1'); }catch(e){}
     var destino = location.origin + location.pathname;
-    location.href = SB_URL + '/auth/v1/authorize?provider=google&apikey=' + encodeURIComponent(SB_KEY) +
+    // GATE-01B (25/08): prompt=select_account (NO prompt=consent, que reabriria la pantalla de
+    // permisos de Google en cada login) -- asi "Continuar con Google" siempre pasa por el
+    // selector de cuenta de Google, aun si el navegador ya tiene una sesion de Google activa.
+    // Sin esto, Google entraba directo con la ultima cuenta usada y la unica forma de cambiar de
+    // cuenta era cerrar sesion en Google o borrar cookies. Sintaxis confirmada contra el endpoint
+    // REST crudo de GoTrue (no supabase-js, que no se usa aca): parametro plano, reenviado tal
+    // cual al OpenID Connect de Google (ver discusion supabase/supabase#9628).
+    location.href = SB_URL + '/auth/v1/authorize?provider=google&prompt=select_account&apikey=' + encodeURIComponent(SB_KEY) +
       '&redirect_to=' + encodeURIComponent(destino);
   }
   // Se consume una sola vez (igual que leerHash/leerQuerySignup): si vuelve true, ya borro la
@@ -2041,29 +2048,54 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
   })();
   if(_arranqueInicial) portal('', _arranqueInicial.modo, _arranqueInicial.extra);
 
+  // GATE-01B (25/08): mismo mecanismo de los Cortes AD/AE de arriba, aplicado a un caso que se
+  // les habia escapado. El segundo <script> de esta pagina dispara su propio fetch de arranque
+  // apenas se parsea, sin esperar a DOMContentLoaded (igual que describe el comentario de Corte
+  // AD). arrancar(), en cambio, queda diferido a DOMContentLoaded cada vez que este primer
+  // <script> todavia se esta parseando a mitad del documento -- que es siempre. Mientras el
+  // token de un login con Google (o un link de correo) llegara por el hash y arrancar() fuera el
+  // unico lugar que lo leia y guardaba, ese guardado quedaba atrapado detras de DOMContentLoaded:
+  // en el primer regreso de Google (sin sesion previa en localStorage), el fetch del segundo
+  // script le ganaba la carrera, tokenVigente() resolvia null al instante (sin red, ver mas
+  // arriba) y el envoltorio de fetch mostraba "Tu sesion vencio" tapando el regreso real -- el
+  // mismo sintoma que ya se habia corregido para recuperacion y alta, con la misma causa de
+  // fondo. Arreglo: leer el hash y guardar la sesion ACA, sincronico, en el mismo instante en que
+  // se resuelven los otros casos de arranque -- arrancar() ya no vuelve a leer el hash
+  // (limpiarHash() ya lo borro de la barra apenas se guarda), solo usa lo que quedo en
+  // _hashInicial para decidir si hace falta el gate de consentimiento de Google, que sigue siendo
+  // async (necesita obtenerUsuario()) y por eso no puede resolverse aca mismo. Si el hash ya era
+  // de recuperacion, el bloque de arriba ya lo limpio -- leerHash() vuelve null y este bloque no
+  // hace nada.
+  var _hashInicial = (function(){
+    var h = leerHash();
+    if(!h || !h.access_token) return null;
+    var esGoogle = esRetornoGoogle();
+    var s = {
+      token: h.access_token,
+      refresco: h.refresh_token || '',
+      vence: Date.now() + ((Number(h.expires_in) || 3600) * 1000),
+      correo: ''
+    };
+    guardar(s);
+    limpiarHash();
+    return { session: s, esGoogle: esGoogle };
+  })();
+
   function arrancar(){
     if(_arranqueInicial) return;
-    var h = leerHash();
-    if(h && h.access_token){
+    if(_hashInicial){
       // MB2 (21/08): mismo hash que ya leia arrancar() para magic link/invitacion -- Google
       // OAuth vuelve con el mismo formato (#access_token=...), asi que no hace falta un parser
       // nuevo. Lo unico nuevo es esRetornoGoogle(): si la marca dice que este viaje de ida y
       // vuelta lo disparo el boton de Google, se verifica el consentimiento antes de dejar
       // pasar -- para cualquier otro hash-token (magic link, invitacion, como ya funcionaba)
-      // el comportamiento sigue exactamente igual: sesion directa, sin portal.
-      var esGoogle = esRetornoGoogle();
-      var s = {
-        token: h.access_token,
-        refresco: h.refresh_token || '',
-        vence: Date.now() + ((Number(h.expires_in) || 3600) * 1000),
-        correo: ''
-      };
-      guardar(s);
-      limpiarHash();
-      if(esGoogle){
-        obtenerUsuario(s.token).then(function(u){
+      // el comportamiento sigue exactamente igual: sesion directa, sin portal. GATE-01B (25/08):
+      // la sesion ya se guardo sincronicamente en _hashInicial, arriba -- aca solo queda resolver
+      // el gate de consentimiento (si corresponde), que es async.
+      if(_hashInicial.esGoogle){
+        obtenerUsuario(_hashInicial.session.token).then(function(u){
           if(u && tieneConsentimientoCompleto(u)){ sincronizarSaldo().then(verificarAccesoModulo); }
-          else{ portal('', 'consentir_google', { token: s.token, correo: (u && u.email) || '' }); }
+          else{ portal('', 'consentir_google', { token: _hashInicial.session.token, correo: (u && u.email) || '' }); }
         });
         return;
       }
