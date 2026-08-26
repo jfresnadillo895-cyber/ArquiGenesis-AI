@@ -3496,7 +3496,23 @@ function apiEndpoint(){
    dos campos que Contextos Universal no necesitaba: 'etapa' (análisis inicial vs. refinamiento,
    sólo tiene sentido para items/nucleo/receptivos_espiral) y 'exito' (para que una llamada que
    falló -- error de red, 4xx/5xx, lo que sea -- quede igual de visible que las que sí respondieron;
-   antes de este corte Urbanismo no registraba consumo de ningún tipo, ni éxitos ni fallos). */
+   antes de este corte Urbanismo no registraba consumo de ningún tipo, ni éxitos ni fallos).
+
+   URB-ROBUST 02 (26/08) -- límite encontrado en este mecanismo, confirmado con logs reales de
+   Vercel (status 200 + 'respondiendo_al_cliente' del lado servidor sin ningún registro nuevo del
+   lado cliente): "no aparece en cardConsumo()" NO era lo mismo que "no ocurrió ni se facturó". Si
+   la conexión se cortaba DESPUÉS de que el servidor ya había respondido 200 pero MIENTRAS el
+   cliente todavía leía el cuerpo, esa llamada podía haberse ejecutado y facturado íntegramente
+   del lado servidor sin dejar ningún rastro acá -- ni éxito ni fallo.
+   URB-ROBUST 02A (26/08) -- ese gap puntual está cerrado: `llamarAnthropicUrbanismo()` ahora
+   envuelve la lectura del cuerpo en su propio try/catch (ver el comentario junto a
+   `data=await res.json();`, más abajo) y registra exito:false con motivo:'body_<clasificación>'
+   si se interrumpe ahí. Esto NO resuelve por qué el navegador corta esa conexión -- sigue siendo
+   una causa externa al código, no un bug propio -- sólo garantiza que la instrumentación diga la
+   verdad: ninguna llamada de Urbanismo debería poder desaparecer del registro sin dejar un
+   registro fallido explícito. Campo nuevo en cada registro: `motivo` (null en los históricos y en
+   los éxitos; 'red_pre_headers'/'http'/'body_<clasificación>' en los fallidos, según en qué punto
+   se perdió la llamada). */
 var USO_MAX = 500;
 function cargarUso(){
   try{
@@ -3526,7 +3542,12 @@ function registrarUso(tipo, data, extra){
       fase: (extra && extra.fase) || null,
       ms: (extra && typeof extra.duracionMs === 'number') ? extra.duracionMs : null,
       etapa: (extra && extra.etapa) || null,
-      exito: (extra && typeof extra.exito === 'boolean') ? extra.exito : true
+      exito: (extra && typeof extra.exito === 'boolean') ? extra.exito : true,
+      // URB-ROBUST 02A (26/08) -- sólo se completa en llamadas fallidas, para distinguir en qué
+      // punto exacto se perdió la llamada: 'red_pre_headers' (fetch() nunca recibió respuesta),
+      // 'http' (respondió pero con status de error) o 'body_<clasificación>' (respondió 200 pero
+      // la lectura del cuerpo se interrumpió después -- el gap que cierra este mismo corte).
+      motivo: (extra && extra.motivo) || null
     };
     r.registros.push(reg);
     if(r.registros.length > USO_MAX) r.registros = r.registros.slice(r.registros.length - USO_MAX);
@@ -3551,15 +3572,36 @@ async function llamarAnthropicUrbanismo(prompt,maxTokens,fase,etapa){
   }catch(eRed){
     // Ni siquiera hubo respuesta -- red cortada, abort, lo que sea. Se registra igual como
     // intento fallido (sin tokens, porque no hay data.usage posible acá).
-    registrarUso('urbanismo', {}, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:false });
+    registrarUso('urbanismo', {}, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:false, motivo:'red_pre_headers' });
     throw eRed;
   }
   if(!res.ok){
     const e=await res.json().catch(()=>({}));
-    registrarUso('urbanismo', {}, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:false });
+    registrarUso('urbanismo', {}, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:false, motivo:'http' });
     throw new Error('Error '+res.status+': '+(e.error?.message||''));
   }
-  const data=await res.json();
+  // URB-ROBUST 02A (26/08) -- cierre del gap de observabilidad documentado en URB-ROBUST 02:
+  // `res.ok` sólo confirma que llegaron los encabezados/status (acá, 200) -- leer el cuerpo con
+  // res.json() es un paso async APARTE que sigue leyendo el stream de la conexión. Si esa
+  // conexión se corta DESPUÉS de los encabezados pero MIENTRAS se lee el cuerpo (el mismo
+  // fenómeno de abort del cliente que documenta URB-PRELAUNCH 01), este await puede rechazar con
+  // el mismo "The operation was aborted". Antes de este corte no había try/catch acá, así que esa
+  // excepción salía de la función SIN pasar por registrarUso() -- exactamente el caso real que
+  // confirmaron los logs de Vercel (status 200 + 'respondiendo_al_cliente' del lado servidor, sin
+  // ningún registro nuevo del lado cliente). Este catch cierra esa brecha: registra exito:false
+  // igual que los otros dos caminos de esta función, con motivo:'body_<clasificación>' (via
+  // clasificarErrorUrbanismo(), ya usado para los mensajes de error visibles) para distinguirlo
+  // de un error HTTP (motivo:'http') o de un error de red anterior a los encabezados
+  // (motivo:'red_pre_headers'). Importante: esto NO resuelve el abort en sí -- sólo garantiza que
+  // ninguna llamada desaparezca del registro sin dejar rastro. El error se sigue propagando igual
+  // que antes al manejo visible existente (mensajeErrorUrbanismo() en el catch de ejecutar()).
+  let data;
+  try{
+    data=await res.json();
+  }catch(eBody){
+    registrarUso('urbanismo', {}, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:false, motivo:'body_'+clasificarErrorUrbanismo(eBody) });
+    throw eBody;
+  }
   registrarUso('urbanismo', data, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:true });
   return data.content.map(i=>i.text||'').join('');
 }
