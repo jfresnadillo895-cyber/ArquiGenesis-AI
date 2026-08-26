@@ -103,6 +103,91 @@ async function identificar(token, secreta) {
   return r.datos.id;
 }
 
+// --- URB-ROBUST 03 (26/08): GET = recuperar una fase larga de Urbanismo ya resuelta en servidor -
+// Vive en ESTE mismo archivo (una rama por método, dentro del mismo handler) y no en un archivo
+// aparte a propósito: Vercel Hobby tiene un límite duro de 12 Serverless Functions por
+// deployment, y api/ ya tenía exactamente 12 archivos antes de este corte -- un archivo nuevo
+// rompía el deploy con el error de límite de Vercel. Comparte identificar() con el resto de este
+// archivo, no se duplica esa lógica en un segundo lugar.
+//
+// QUE HACE: GET ?firma=<firma>&fase=<items|nucleo|receptivos_espiral>. Si existe una fila sin
+// expirar y sin entregar para (usuario de la sesión, firma, fase), la marca como entregada --
+// UPDATE atómico con la condición en el WHERE, mismo patrón que reservar() -- y la devuelve como
+// { content, usage }, el mismo shape que ya consumen parsearJSONIA()/registrarUso() del lado
+// cliente. 404 si no hay nada (nunca existió, ya se reclamó, o venció) -- el cliente cae al mismo
+// camino de error que ya tenía antes de URB-ROBUST 03.
+//
+// AISLAMIENTO: el WHERE siempre incluye perfil=<usuario de ESTA sesión, vía identificar(token)>
+// -- nunca se puede reclamar la fila de otro usuario. La firma ya trae adentro el
+// organismo/ciudad/insumos (ver firmaCheckpointUrbanismo() en urbanismo.html).
+function filtroPgExacto(valor) {
+  // PostgREST interpreta una coma o un paréntesis sin escapar dentro del VALOR de un filtro como
+  // sintaxis propia -- 'firma' se arma en el cliente con texto libre del usuario (ciudad, pasivo,
+  // info local), así que puede legítimamente contener cualquiera de esos caracteres. Encerrarlo
+  // entre comillas dobles (con las internas escapadas) le dice a PostgREST "tratalo como
+  // literal", evitando falsos negativos o errores 400 con una firma en los hechos correcta.
+  return 'eq."' + String(valor).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+}
+async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
+  let perfil;
+  try {
+    perfil = await identificar(token, secreta);
+  } catch (e) {
+    console.error(JSON.stringify({ evento: 'base_inalcanzable', detalle: String((e && e.message) || e) }));
+    return res.status(503).json({
+      error: { message: 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.', codigo: 'servicio_no_disponible' },
+    });
+  }
+  if (!perfil) {
+    return res.status(401).json({ error: { message: 'Sesion vencida o invalida. Volve a iniciar sesion.', codigo: 'sesion_invalida' } });
+  }
+
+  const firma = String((req.query && req.query.firma) || '').trim();
+  const fase = String((req.query && req.query.fase) || '').trim();
+  const FASES_VALIDAS = ['items', 'nucleo', 'receptivos_espiral'];
+  if (!firma || FASES_VALIDAS.indexOf(fase) === -1) {
+    return res.status(400).json({ error: { message: 'Falta firma o fase invalida.' } });
+  }
+
+  try {
+    const ahora = new Date().toISOString();
+    const ruta = '/rest/v1/urb_resultados_pendientes' +
+      '?perfil=eq.' + encodeURIComponent(perfil) +
+      '&firma=' + encodeURIComponent(filtroPgExacto(firma)) +
+      '&fase=eq.' + encodeURIComponent(fase) +
+      '&entregado=eq.false' +
+      '&expira=gt.' + encodeURIComponent(ahora);
+    const r = await fetch(urlBase + ruta, {
+      method: 'PATCH',
+      headers: {
+        apikey: secreta,
+        Authorization: 'Bearer ' + secreta,
+        'content-type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({ entregado: true, entregado_en: ahora }),
+    });
+    if (!r.ok) throw new Error('reclamo devolvio ' + r.status);
+    const filas = await r.json();
+    if (!Array.isArray(filas) || filas.length === 0) {
+      return res.status(404).json({ error: { message: 'No hay nada para recuperar.', codigo: 'no_encontrado' } });
+    }
+    const fila = filas[0];
+    return res.status(200).json({
+      content: (fila.resultado && fila.resultado.content) || [],
+      usage: fila.usage || null,
+    });
+  } catch (e) {
+    console.error(JSON.stringify({
+      evento: 'URB_RESULTADO_FALLO_RECLAMO',
+      perfil: String(perfil).slice(0, 8),
+      fase,
+      detalle: String((e && e.message) || e),
+    }));
+    return res.status(503).json({ error: { message: 'No se pudo recuperar. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+}
+
 // --- Llamada a una funcion de la base ----------------------------------------
 async function rpc(nombre, cuerpo, secreta, tiempoLimiteMs, reintentos) {
   const r = await pedirASupabase('/rest/v1/rpc/' + nombre, {
@@ -203,26 +288,33 @@ async function liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: { message: 'Metodo no permitido. Usa POST.' } });
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    res.setHeader('Allow', 'GET, POST');
+    return res.status(405).json({ error: { message: 'Metodo no permitido. Usa POST o GET.' } });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
   const secreta = process.env.SUPABASE_SECRET_KEY;
   const urlBase = process.env.SUPABASE_URL;
-
-  if (!apiKey)  return res.status(500).json({ error: { message: 'Falta ANTHROPIC_API_KEY en el servidor.' } });
   if (!secreta || !urlBase) {
     return res.status(500).json({ error: { message: 'Falta SUPABASE_URL o SUPABASE_SECRET_KEY. El proxy no atiende sin base.' } });
   }
 
-  // --- Token ---
+  // --- Token (comun a GET y POST) ---
   const cabecera = String(req.headers['authorization'] || '');
   const token = cabecera.toLowerCase().startsWith('bearer ') ? cabecera.slice(7).trim() : '';
   if (!token) {
     return res.status(401).json({ error: { message: 'Falta la sesion. Inicia sesion para continuar.', codigo: 'sin_sesion' } });
   }
+
+  // URB-ROBUST 03 (26/08): GET recupera una fase larga de Urbanismo -- ver
+  // manejarRecuperacionUrbanismo() mas arriba para el detalle completo y por que vive en esta
+  // misma funcion en vez de un archivo aparte.
+  if (req.method === 'GET') {
+    return manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta);
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: { message: 'Falta ANTHROPIC_API_KEY en el servidor.' } });
 
   const modulo = String(req.headers['x-comprender-modulo'] || 'core').trim().toLowerCase() || 'core';
 
