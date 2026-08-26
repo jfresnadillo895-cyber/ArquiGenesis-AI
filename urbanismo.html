@@ -3297,6 +3297,10 @@ function back(){
   ponderados={};
   document.getElementById('pasivo-indicador').style.display='none';
   setErr('');
+  // URB-ROBUST 01 (26/08): "volver" es la salida explícita de este análisis -- exactamente el
+  // "análisis nuevo explícito" que el brief pidió que pudiera descartar el checkpoint anterior
+  // (validación 6). Sin firma: borra lo que haya, sea de la ciudad que sea.
+  limpiarCheckpointUrbanismo();
 }
 
 /* URB-PRELAUNCH 01.3 (26/08): clasifica el error real capturado por ejecutar()/nuevaCiudad()
@@ -3452,7 +3456,17 @@ async function ejecutar(){
     // el error real era un abort del navegador (el bug que reportó Javier) o un status de error
     // del servidor -- ninguno de los dos es un problema de conexión del usuario. Ver
     // mensajeErrorUrbanismo()/clasificarErrorUrbanismo() más arriba para el criterio real.
-    setErr(mensajeErrorUrbanismo(e, true));
+    var msgErr = mensajeErrorUrbanismo(e, true);
+    // URB-ROBUST 01 (26/08): si llamarAPI() ya dejó fases resueltas en el checkpoint para estos
+    // MISMOS insumos (ciudad/pasivo/c2, sin ref -- ejecutar() nunca manda ref), se lo decimos al
+    // usuario en vez de dejar que asuma que tiene que empezar de cero. El botón llama a ejecutar()
+    // de nuevo tal cual -- no hace falta una función separada: la ciudad sigue en el campo de
+    // texto (nunca se limpia en un error) y llamarAPI() va a detectar y reusar esas fases solo.
+    var organismoIdActual = (typeof __organismoIdCoreUrbanismo!=='undefined' && __organismoIdCoreUrbanismo) || null;
+    if(hayCheckpointResumible(ciudad, organismoIdActual, pasivoTxt, c2, '')){
+      msgErr += '<div style="margin-top:8px"><button type="button" class="btn-comp" onclick="ejecutar()">↻ Retomar análisis</button></div>';
+    }
+    setErr(msgErr);
     console.error(e);
   }
   mostrarCarga(false);
@@ -3598,6 +3612,79 @@ function parsearJSONIA(raw){
   return parsed;
 }
 
+/* URB-ROBUST 01 (26/08): checkpoint de fase, para que una lectura interrumpida a mitad de camino
+   (el mismo escenario de "The operation was aborted" de URB-PRELAUNCH 01: el navegador deja de
+   esperar mientras el servidor puede seguir corriendo) no obligue a rederivar fases que ya habían
+   terminado bien. Vive en su propia clave de localStorage (`ag_urb_checkpoint`), deliberadamente
+   NO en el mecanismo de checkpoints versionados del Core (`crearCheckpointSesion`/
+   `restaurarCheckpoint` en index.html): ese vive atado a `state.organismo`/
+   `org.checkpoints[modulo]`/`guardarOrganismo()`, ninguno de los cuales existe en este documento
+   -- misma razón estructural por la que CAP-M1 (25/08) tuvo que portar su propia copia de
+   `registrarUso()`/`cargarUso()` en vez de reusar la del Core. Tampoco es el array `historial` de
+   esta página: ese vive sólo en memoria (se pierde al recargar, que es justamente el modo más
+   común en que ocurre un abort) y sólo guarda diagnósticos YA completos vía `guardarEnHistorial()`
+   -- nunca fases parciales. Por eso hace falta una pieza nueva, chica y de un solo slot: no un
+   historial de intentos (no se necesita), sólo "el intento en curso ahora mismo". */
+var UC_LLAVE = 'ag_urb_checkpoint';
+
+/* Firma exacta de los insumos que determinan el CONTENIDO de cada fase. Si cualquiera de estos
+   cambia entre un intento y el siguiente (el usuario editó el abordaje pasivo, la info local, o
+   es directamente otra ciudad/organismo), las fases guardadas ya no son fieles a lo que se está
+   por pedir -- no se reutilizan. Esto es lo que impide que el checkpoint de una ciudad/organismo
+   se mezcle con el análisis de otro (validación 5 del brief). */
+function firmaCheckpointUrbanismo(ciudad, organismoId, pasivo, c2, ref){
+  return [String(ciudad||''), String(organismoId||''), String(pasivo||''), String(c2||''), String(ref||'')].join('|');
+}
+function cargarCheckpointUrbanismo(){
+  try{
+    var raw = JSON.parse(localStorage.getItem(UC_LLAVE) || 'null');
+    if(!raw || typeof raw !== 'object' || !raw.firma || !raw.fases) return null;
+    return raw;
+  }catch(e){ return null; }
+}
+/* Devuelve las fases guardadas SÓLO si la firma coincide exactamente con la que se está por
+   ejecutar -- objeto vacío si no hay checkpoint o si es de otro análisis (nunca lanza). */
+function fasesResumiblesDeCheckpoint(firma){
+  var ck = cargarCheckpointUrbanismo();
+  if(!ck || ck.firma !== firma) return {};
+  return ck.fases || {};
+}
+/* Para la UI: si hay algo de qué "retomar" para estos insumos exactos -- alcanza con que 'items'
+   o 'nucleo' estén guardados (si sólo faltara receptivos_espiral, ya se habría completado y
+   limpiado el checkpoint entero, ver el llamado a limpiarCheckpointUrbanismo() al final de
+   llamarAPI()). */
+function hayCheckpointResumible(ciudad, organismoId, pasivo, c2, ref){
+  var fases = fasesResumiblesDeCheckpoint(firmaCheckpointUrbanismo(ciudad, organismoId, pasivo, c2, ref));
+  return !!(fases.items || fases.nucleo);
+}
+function guardarFaseCheckpointUrbanismo(firma, ciudad, organismoId, etapa, fase, resultado){
+  try{
+    var ck = cargarCheckpointUrbanismo();
+    if(!ck || ck.firma !== firma){
+      // Firma nueva -- primer intento de este análisis, o cambiaron insumos/organismo respecto
+      // del checkpoint anterior. Se arranca uno nuevo (el viejo, si había, queda reemplazado: ya
+      // no describe el análisis que se está corriendo ahora).
+      ck = { version:1, firma:firma, ciudad:ciudad, organismoId:organismoId, etapa:etapa, fases:{} };
+    }
+    ck.fases[fase] = resultado;
+    ck.actualizado = new Date().toISOString();
+    localStorage.setItem(UC_LLAVE, JSON.stringify(ck));
+  }catch(e){ /* si falla el guardado, la próxima vuelta simplemente rederiva esa fase -- no hay
+    nada más grave en juego que perder el ahorro puntual de esa fase. */ }
+}
+/* 'firma' opcional: si se pasa, sólo borra si el checkpoint guardado es efectivamente el de ESE
+   análisis -- evita que completar un análisis borre por accidente el checkpoint en curso de otro
+   (ej. dos pestañas del mismo origen trabajando ciudades distintas a la vez). */
+function limpiarCheckpointUrbanismo(firma){
+  try{
+    if(firma){
+      var ck = cargarCheckpointUrbanismo();
+      if(ck && ck.firma !== firma) return;
+    }
+    localStorage.removeItem(UC_LLAVE);
+  }catch(e){}
+}
+
 /* N3.0-URB-1 (12/08): antes era una sola llamada. Ahora son dos, secuenciales -- ver el
    comentario completo junto a buildPromptItems()/buildPromptSintesis(). max_tokens de cada
    llamada quedan bien por debajo del tope real del servidor (MAX_TOKENS_TOPE=4000 en
@@ -3612,43 +3699,76 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   // una sola vez acá y viaja a las tres llamadas de esta pasada.
   const etapaCap = ref ? 'refinamiento' : 'inicial';
 
-  // ---- Llamada 1: los 36 indicadores ----
-  const rawItems=await llamarAnthropicUrbanismo(buildPromptItems(ciudad,pasivo,c2,ref),2000,'items',etapaCap);
-  const parsedItems=parsearJSONIA(rawItems);
+  // URB-ROBUST 01 (26/08): firma exacta de este intento -- si un intento anterior con estos
+  // MISMOS insumos dejó fases ya resueltas en el checkpoint, se reusan en vez de rederivarlas.
+  // Distinto organismo/ciudad/insumos = firma distinta = fasesPrevias vacío = comportamiento
+  // idéntico al de siempre (validación 3 del brief).
+  const organismoIdCap = (typeof __organismoIdCoreUrbanismo!=='undefined' && __organismoIdCoreUrbanismo) || null;
+  const firmaCap = firmaCheckpointUrbanismo(ciudad, organismoIdCap, pasivo, c2, ref);
+  const fasesPrevias = fasesResumiblesDeCheckpoint(firmaCap);
 
-  // Normalizar items (misma logica de siempre) ANTES de pasarlos a las otras dos llamadas, asi
-  // leen los mismos valores normalizados que despues se van a renderizar.
-  if(parsedItems.items&&parsedItems.items.length>0){
-    parsedItems.items=parsedItems.items.map(function(it,ii){
-      var base=ITEMS_36[ii]||ITEMS_36[0];
-      return {
-        eje:  base.e,
-        nombre: base.n,
-        abordaje: base.a,
-        nivel: base.nv,
-        grupo: base.g,
-        orientacion: base.o,
-        valor: Number(it.v||it.valor||5),
-        PT:(it.pt||it.PT||'M').toUpperCase(),
-        AP:(it.ap||it.AP||'M').toUpperCase(),
-        conf:(it.conf||'M').toUpperCase().charAt(0),
-        sb:it.sb||''
-      };
-    });
+  // ---- Llamada 1: los 36 indicadores ----
+  let parsedItems;
+  if(fasesPrevias.items){
+    // Ya está resuelta y validada de un intento anterior con esta MISMA firma -- no se vuelve a
+    // pedir. Esto es lo que evita rederivar los 36 indicadores cuando sólo abortó una fase
+    // posterior (validaciones 1 y 2 del brief).
+    parsedItems = fasesPrevias.items;
+  } else {
+    const rawItems=await llamarAnthropicUrbanismo(buildPromptItems(ciudad,pasivo,c2,ref),2000,'items',etapaCap);
+    parsedItems=parsearJSONIA(rawItems);
+
+    // Normalizar items (misma logica de siempre) ANTES de pasarlos a las otras dos llamadas, asi
+    // leen los mismos valores normalizados que despues se van a renderizar.
+    if(parsedItems.items&&parsedItems.items.length>0){
+      parsedItems.items=parsedItems.items.map(function(it,ii){
+        var base=ITEMS_36[ii]||ITEMS_36[0];
+        return {
+          eje:  base.e,
+          nombre: base.n,
+          abordaje: base.a,
+          nivel: base.nv,
+          grupo: base.g,
+          orientacion: base.o,
+          valor: Number(it.v||it.valor||5),
+          PT:(it.pt||it.PT||'M').toUpperCase(),
+          AP:(it.ap||it.AP||'M').toUpperCase(),
+          conf:(it.conf||'M').toUpperCase().charAt(0),
+          sb:it.sb||''
+        };
+      });
+    }
+    // Sólo se guarda como checkpoint acá, DESPUÉS de tener un resultado parseado y utilizable --
+    // si el fetch se abortó o el JSON llegó incompleto, nunca se llega a esta línea, así que la
+    // fase correctamente NO queda marcada como completada (aunque el servidor, ajeno al abort del
+    // navegador, pueda haber terminado de procesarla igual -- ver URB-PRELAUNCH 01, hallazgo #10:
+    // eso no se puede confirmar ni recuperar desde el cliente hoy).
+    guardarFaseCheckpointUrbanismo(firmaCap, ciudad, organismoIdCap, etapaCap, 'items', parsedItems);
   }
   // Avanza la barra de carga a un paso real: los indicadores ya estan, arranca el nucleo.
   if(typeof actualizarPasoCarga==='function'){ cargaPasoActual=Math.max(cargaPasoActual,3); actualizarPasoCarga(cargaPasoActual); }
 
   // ---- Llamada 2: nucleo de la sintesis (numeros + haiku + sintesis + sustentabilidad) ----
-  const rawNucleo=await llamarAnthropicUrbanismo(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800,'nucleo',etapaCap);
-  const parsedNucleo=parsearJSONIA(rawNucleo);
+  let parsedNucleo;
+  if(fasesPrevias.nucleo){
+    parsedNucleo = fasesPrevias.nucleo;
+  } else {
+    const rawNucleo=await llamarAnthropicUrbanismo(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800,'nucleo',etapaCap);
+    parsedNucleo=parsearJSONIA(rawNucleo);
+    guardarFaseCheckpointUrbanismo(firmaCap, ciudad, organismoIdCap, etapaCap, 'nucleo', parsedNucleo);
+  }
 
   // Avanza a "Generando sintesis diagnostica" -- arranca la parte mas pesada (receptivos+espiral).
   if(typeof actualizarPasoCarga==='function'){ cargaPasoActual=Math.max(cargaPasoActual,4); actualizarPasoCarga(cargaPasoActual); }
 
   // ---- Llamada 3: receptivos + espiral, leyendo el nucleo ya resuelto como contexto ----
+  // (Esta fase nunca se resume desde checkpoint: es la última -- si llegó hasta acá con éxito, el
+  // análisis completo termina en este mismo llamado y el checkpoint se limpia más abajo.)
   const rawRecEsp=await llamarAnthropicUrbanismo(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200,'receptivos_espiral',etapaCap);
   const parsedRecEsp=parsearJSONIA(rawRecEsp);
+
+  // Análisis completo de punta a punta -- el checkpoint de ESTA firma ya cumplió su función.
+  limpiarCheckpointUrbanismo(firmaCap);
 
   // Fusion: mismo objeto final que antes armaba una sola llamada -- todo el codigo de abajo
   // (normalizacion de alias, render, refinamiento) queda exactamente igual.
