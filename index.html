@@ -1978,19 +1978,20 @@ header .spacer{flex:1}
   // Textos definitivos (catálogo comercial vigente, 04/08). Profesional YA incluye
   // Urbanismo y Contextos -- a proposito no hay ningun "excluye" para ese plan (antes
   // decia lo contrario, era un error real, no solo de redaccion).
+  // PLAN-C2A (26/08): oferta pública reducida a un único plan contratable (Profesional).
+  // Pro · Estudio se retiró de esta tarjeta visual -- sigue existiendo intacto en
+  // api/catalogo.js (PLANES.estudio, contratable:false) y en el PLANES/ORDEN_PLANES técnico más
+  // abajo para reconocer cuentas legacy; sólo deja de ofrecerse acá.
+  // PLAN-C2B (26/08): precio convergido a USD 25 / ARS 39.000 -- estos dos valores son sólo el
+  // respaldo instantáneo (ver obtenerCatalogo() más arriba); api/catalogo.js sigue siendo la
+  // única fuente real, y la pisa apenas responde.
   var PLANES = [
-    { id:'profesional', nombre:'Profesional', precio:'$30.000', creditos:'1.800 créditos por mes', precioUsd:19,
+    { id:'profesional', nombre:'Profesional', precio:'$39.000', creditos:'1.800 créditos por mes', precioUsd:25,
       lema:'Para comprender y desarrollar organismos con capacidades profesionales',
       incluye:['Chat completo de Comprender AI','Ficha viva y memoria funcional','Comprender Urbanismo','Comprender Contextos'],
       excluye:[],
       boton:'Elegir Profesional',
-      destacado:false },
-    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
-      lema:'Para estudios y prácticas profesionales con mayor escala',
-      incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
-      excluye:[],
-      boton:'Elegir Pro · Estudio',
-      destacado:true }
+      destacado:false }
   ];
 
   var planesAbierto = false;
@@ -2005,7 +2006,7 @@ header .spacer{flex:1}
 
     var aviso = '';
     if(motivo === 'sin_saldo')     aviso = 'Se te terminaron los créditos.';
-    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Pro · Estudio.';
+    if(motivo === 'requiere_plan') aviso = 'Esta capacidad no está disponible en tu plan actual.';
 
     var tarjetas = PLANES.map(function(p){
       var creditosItem = '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
@@ -2050,7 +2051,7 @@ header .spacer{flex:1}
             'color:#999;cursor:pointer;padding:0 4px;">&times;</button>' +
         '</div>' +
         (aviso ? '<div style="font-size:14px;color:#b4441f;margin-bottom:16px;">' + aviso + '</div>'
-               : '<div style="font-size:14px;color:#666;margin-bottom:16px;">Elegí cómo querés seguir.</div>') +
+               : '<div style="font-size:14px;color:#666;margin-bottom:16px;">Conocé Comprender Profesional.</div>') +
         '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;">' + tarjetas + '</div>' +
         '<div id="cpEstado" style="font-size:13px;color:#b4441f;margin-top:16px;min-height:18px;"></div>' +
         '<div style="font-size:12px;color:#999;margin-top:20px;line-height:1.5;">' +
@@ -10928,8 +10929,8 @@ function ejecutarImportForzado(org, nombreOrigen, aplicar){
 const PLANES = {
   gratis:      { nombre:'Gratis',        creditos: 50,   ventana:'unica', precio:'USD 0',
                  desc:'Paquete de bienvenida, por única vez: alcanza para recorrer el ciclo completo — llegar a un organismo con ficha, probar los módulos especializados y generar un informe. No se renueva.' },
-  profesional: { nombre:'Profesional',   creditos: 1800, ventana:'mes',  precio:'USD 19/mes',
-                 anual:'USD 190/año (2 meses sin cargo)',
+  profesional: { nombre:'Profesional',   creditos: 1800, ventana:'mes',  precio:'USD 25/mes',
+                 anual:'USD 250/año (2 meses sin cargo)',
                  desc:'Comprender AI completo, sin tope diario: bolsa mensual de créditos para conversar, construir organismos y generar informes. No incluye los módulos especializados.' },
   estudio:     { nombre:'Pro · Estudio', creditos: 4500, ventana:'mes',  precio:'USD 49/mes',
                  anual:'USD 490/año (2 meses sin cargo)',
@@ -11022,7 +11023,7 @@ function cardAvisoCreditos(umbral, c){
   p1.textContent = 'Te quedan ' + c.resta + ' de ' + c.total + ' créditos de tu plan ' + c.plan.nombre +
     ', se renuevan cada ' + c.renueva + '.';
   const p2 = document.createElement('p');
-  p2.textContent = 'Tus organismos y fichas están intactos -- nada se pierde si se agotan, solo esperás a que se renueven o pasás a un plan mayor.';
+  p2.textContent = 'Tus organismos y fichas están intactos -- nada se pierde si se agotan, sólo esperás a que se renueven.';
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(p2);
   const row = document.createElement('div'); row.className='cardrow';
   const b1 = document.createElement('button'); b1.className='btn'; b1.textContent='Entendido'; b1.onclick = cerrarOverlay;
@@ -11304,10 +11305,16 @@ function abrirModulo(id, orgId){
 }
 function cardModuloBloqueado(id){
   var m = ACCESO_MODULOS[id];
+  // PLAN-C2A (26/08): Estudio/Magister ya no son contratables -- si el módulo bloqueado
+  // pertenece a una aplicación legacy (plan_minimo estudio/magister), no hay que ofrecer "Ver
+  // planes" (Profesional no lo desbloquea) ni nombrar un plan que ya no se puede comprar. Para
+  // Urbanismo/Negocios (plan_minimo profesional) el comportamiento sigue igual que siempre.
+  var esLegado = (m.plan_minimo === 'estudio' || m.plan_minimo === 'magister');
   var req = (PLANES[m.plan_minimo] || {}).nombre || m.plan_minimo;
   el.cardContent.innerHTML = '';
   var h = document.createElement('h3');
-  h.textContent = m.nombre + ' está incluido en ' + req;
+  h.textContent = esLegado ? ('Esta capacidad no está disponible en tu plan actual')
+                            : (m.nombre + ' está incluido en ' + req);
   var p1 = document.createElement('p'); p1.textContent = m.desc || '';
   var p2 = document.createElement('p');
   p2.textContent = 'Tu plan actual no lo incluye. Todo lo que comprendiste hasta acá queda intacto: al cambiar de plan, el organismo sigue donde está.';
@@ -11317,9 +11324,12 @@ function cardModuloBloqueado(id){
   var row = document.createElement('div'); row.className = 'cardrow';
   var b1 = document.createElement('button'); b1.className='btn'; b1.textContent='Ahora no';
   b1.onclick = cerrarOverlay;
-  var b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Ver planes';
-  b2.onclick = function(){ cerrarOverlay(); cardCreditos(); };
-  row.appendChild(b1); row.appendChild(b2);
+  row.appendChild(b1);
+  if(!esLegado){
+    var b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Ver planes';
+    b2.onclick = function(){ cerrarOverlay(); cardCreditos(); };
+    row.appendChild(b2);
+  }
   el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
 }
@@ -11632,18 +11642,15 @@ function cardSinCreditos(tipo){
   h.textContent = esGratis ? 'Usaste el paquete de bienvenida' : 'Se agotaron tus créditos del mes';
   const p1 = document.createElement('p');
   p1.textContent = 'Te quedan ' + c.resta + ' créditos y ' + nombres[tipo] + ' cuesta ' + (COSTO[tipo]||1) + '.';
+  // PLAN-C2A (26/08): con un único plan contratable, ya no corresponde sugerir "un plan mayor"
+  // a nadie en esta rama (Profesional/Estudio/Magister) -- Estudio y Magister no se pueden
+  // comprar, y no hay nada por encima de Profesional. Se retira la promesa, no el botón "Ver
+  // planes" (sigue siendo válido para quien está en gratis o quiere confirmar su plan actual).
   const p2 = document.createElement('p');
   p2.textContent = esGratis
     ? 'Tus organismos y fichas están intactos — nada se pierde. El paquete de bienvenida se otorga una sola vez: para seguir, elegí un plan.'
-    : 'Tus organismos y fichas están intactos — nada se pierde. Esperá a que el crédito se renueve el mes que viene, o pasá a un plan mayor.';
+    : 'Tus organismos y fichas están intactos — nada se pierde. Esperá a que el crédito se renueve el mes que viene.';
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(p2);
-
-  if(planActual() !== 'estudio'){
-    const pAviso = document.createElement('p');
-    pAviso.style.cssText = 'font-size:12px;color:var(--faint);margin-bottom:12px';
-    pAviso.textContent = 'Si esto te pasa seguido, un plan mayor puede convenirte más.';
-    el.cardContent.appendChild(pAviso);
-  }
 
   const row = document.createElement('div'); row.className='cardrow';
   const b1 = document.createElement('button'); b1.className='btn'; b1.textContent = esGratis ? 'Ahora no' : 'Esperar la renovación';
@@ -14968,7 +14975,15 @@ el.btnMenu.addEventListener('click', function(e){
    aparece acá solo, sin tocar este bloque. */
 function construirModulosMenu(){
   el.modulosMenu.innerHTML = '';
-  const ids = modulosDisponibles();
+  // PLAN-C2A (26/08): Contextos standalone es legacy (Contextos Universal ya vive en el
+  // Core) -- en la navegación entre aplicaciones sólo debe aparecer para cuentas que YA
+  // tienen un plan legacy (estudio/magister). Gratis y Profesional no lo ven acá: Profesional
+  // no lo desbloquea comprando planes (ya no es contratable), así que ofrecerlo prometería
+  // algo que no se puede comprar. modulosDisponibles() no se toca -- sigue siendo "qué módulos
+  // tienen archivo publicado" (lo usa C11); acá sólo se filtra qué se OFRECE en el menú.
+  const _planNav = planActual();
+  const _esLegado = (_planNav === 'estudio' || _planNav === 'magister');
+  const ids = modulosDisponibles().filter(function(id){ return id !== 'contextos' || _esLegado; });
   if(!ids.length){
     const v = document.createElement('div'); v.className = 'vacio';
     v.textContent = 'Todavía no hay módulos disponibles.';
@@ -22636,8 +22651,11 @@ function correrPruebasAuto(){
           Object.keys(ACCESO_MODULOS).length === 7 && !!ACCESO_MODULOS.negocios &&
           ACCESO_MODULOS.trayectoria.prueba_en_gratis === false);
       chk('C07 · la recarga es mas cara por credito que la suscripcion',
+          // PLAN-C2B (26/08): el 19 de referencia era el precio USD de Profesional antes de
+          // este corte -- RECARGA.precio (aparte, no tocado en C2B) sigue en USD 19 por
+          // coincidencia con el precio viejo, no por relacion real entre ambos valores.
           (parseFloat(RECARGA.precio.replace(/[^0-9.]/g,'')) / RECARGA.creditos) >
-          (19 / PLANES.profesional.creditos) * 2);
+          (25 / PLANES.profesional.creditos) * 2);
       chk('C01 · plan gratis: 50 créditos, ventana única',
           PLANES.gratis.creditos === 50 && PLANES.gratis.ventana === 'unica' &&
           claveVentana(PLANES.gratis) === 'bienvenida' && etiquetaVentana(PLANES.gratis) === 'única vez');

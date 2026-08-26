@@ -1054,19 +1054,20 @@
   // Textos definitivos (catálogo comercial vigente, 04/08). Profesional YA incluye
   // Urbanismo y Contextos -- a proposito no hay ningun "excluye" para ese plan (antes
   // decia lo contrario, era un error real, no solo de redaccion).
+  // PLAN-C2A (26/08): oferta pública reducida a un único plan contratable (Profesional).
+  // Comprender · Estudio se retiró de esta tarjeta visual -- sigue existiendo intacto en
+  // api/catalogo.js (PLANES.estudio, contratable:false) para reconocer cuentas legacy; sólo
+  // deja de ofrecerse acá.
+  // PLAN-C2B (26/08): precio convergido a USD 25 / ARS 39.000 -- estos dos valores son sólo el
+  // respaldo instantáneo (ver obtenerCatalogo() más arriba); api/catalogo.js sigue siendo la
+  // única fuente real, y la pisa apenas responde.
   var PLANES = [
-    { id:'profesional', nombre:'Profesional', precio:'$30.000', creditos:'1.800 créditos por mes', precioUsd:19,
+    { id:'profesional', nombre:'Profesional', precio:'$39.000', creditos:'1.800 créditos por mes', precioUsd:25,
       lema:'Para comprender y desarrollar organismos con capacidades profesionales',
       incluye:['Chat completo de Comprender AI','Ficha viva y memoria funcional','Comprender Urbanismo','Comprender Contextos'],
       excluye:[],
       boton:'Elegir Profesional',
-      destacado:false },
-    { id:'estudio', nombre:'Comprender · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
-      lema:'Para estudios y prácticas profesionales con mayor escala',
-      incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
-      excluye:[],
-      boton:'Elegir Comprender · Estudio',
-      destacado:true }
+      destacado:false }
   ];
 
   var planesAbierto = false;
@@ -1081,7 +1082,7 @@
 
     var aviso = '';
     if(motivo === 'sin_saldo')     aviso = 'Se te terminaron los créditos.';
-    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Comprender · Estudio.';
+    if(motivo === 'requiere_plan') aviso = 'Esta capacidad no está disponible en tu plan actual.';
 
     var tarjetas = PLANES.map(function(p){
       var creditosItem = '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
@@ -1126,7 +1127,7 @@
             'color:#999;cursor:pointer;padding:0 4px;">&times;</button>' +
         '</div>' +
         (aviso ? '<div style="font-size:14px;color:#b4441f;margin-bottom:16px;">' + aviso + '</div>'
-               : '<div style="font-size:14px;color:#666;margin-bottom:16px;">Elegí cómo querés seguir.</div>') +
+               : '<div style="font-size:14px;color:#666;margin-bottom:16px;">Conocé Comprender Profesional.</div>') +
         '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;">' + tarjetas + '</div>' +
         '<div id="cpEstado" style="font-size:13px;color:#b4441f;margin-top:16px;min-height:18px;"></div>' +
         '<div style="font-size:12px;color:#999;margin-top:20px;line-height:1.5;">' +

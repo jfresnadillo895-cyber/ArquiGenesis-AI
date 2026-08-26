@@ -1197,19 +1197,20 @@
   // Textos definitivos (catálogo comercial vigente, 04/08). Profesional YA incluye
   // Urbanismo y Contextos -- a proposito no hay ningun "excluye" para ese plan (antes
   // decia lo contrario, era un error real, no solo de redaccion).
+  // PLAN-C2A (26/08): oferta pública reducida a un único plan contratable (Profesional).
+  // Pro · Estudio se retiró de esta tarjeta visual -- sigue existiendo intacto en
+  // api/catalogo.js (PLANES.estudio, contratable:false) y en CRED_PLANES/ORDEN_PLANES más
+  // abajo para reconocer cuentas legacy; sólo deja de ofrecerse acá.
+  // PLAN-C2B (26/08): precio convergido a USD 25 / ARS 39.000 -- estos dos valores son sólo el
+  // respaldo instantáneo (ver obtenerCatalogo() más arriba); api/catalogo.js sigue siendo la
+  // única fuente real, y la pisa apenas responde.
   var PLANES = [
-    { id:'profesional', nombre:'Profesional', precio:'$30.000', creditos:'1.800 créditos por mes', precioUsd:19,
+    { id:'profesional', nombre:'Profesional', precio:'$39.000', creditos:'1.800 créditos por mes', precioUsd:25,
       lema:'Para comprender y desarrollar organismos con capacidades profesionales',
       incluye:['Chat completo de Comprender AI','Ficha viva y memoria funcional','Comprender Urbanismo','Comprender Contextos'],
       excluye:[],
       boton:'Elegir Profesional',
-      destacado:false },
-    { id:'estudio', nombre:'Pro · Estudio', precio:'$80.000', creditos:'4.500 créditos por mes', precioUsd:49,
-      lema:'Para estudios y prácticas profesionales con mayor escala',
-      incluye:['Todo lo incluido en Profesional','Múltiples organismos y procesos de mayor alcance','Mayor continuidad de uso profesional','Exportación de informes'],
-      excluye:[],
-      boton:'Elegir Pro · Estudio',
-      destacado:true }
+      destacado:false }
   ];
 
   var planesAbierto = false;
@@ -1224,7 +1225,7 @@
 
     var aviso = '';
     if(motivo === 'sin_saldo')     aviso = 'Se te terminaron los créditos.';
-    if(motivo === 'requiere_plan') aviso = 'Este módulo requiere el plan Pro · Estudio.';
+    if(motivo === 'requiere_plan') aviso = 'Esta capacidad no está disponible en tu plan actual.';
 
     var tarjetas = PLANES.map(function(p){
       var creditosItem = '<li style="margin:6px 0;padding-left:18px;position:relative;font-size:14px;color:#333;">' +
@@ -1269,7 +1270,7 @@
             'color:#999;cursor:pointer;padding:0 4px;">&times;</button>' +
         '</div>' +
         (aviso ? '<div style="font-size:14px;color:#b4441f;margin-bottom:16px;">' + aviso + '</div>'
-               : '<div style="font-size:14px;color:#666;margin-bottom:16px;">Elegí cómo querés seguir.</div>') +
+               : '<div style="font-size:14px;color:#666;margin-bottom:16px;">Conocé Comprender Profesional.</div>') +
         '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;">' + tarjetas + '</div>' +
         '<div id="cpEstado" style="font-size:13px;color:#b4441f;margin-top:16px;min-height:18px;"></div>' +
         '<div style="font-size:12px;color:#999;margin-top:20px;line-height:1.5;">' +
@@ -7276,11 +7277,17 @@ function caiIrA(archivo){
 }
 function caiNavItems(){
   var out = [], k, m;
+  // PLAN-C2A (26/08): Contextos standalone es legacy -- en la navegación entre aplicaciones
+  // sólo debe ofrecerse a cuentas que YA tienen un plan legacy (estudio/magister). Gratis y
+  // Profesional no lo ven acá (ver el mismo criterio en index.html/construirModulosMenu).
+  var _p = credPlan();
+  var _esLegado = (_p === 'estudio' || _p === 'magister');
   out.push([NAV_CORE.nombre + ' →', function(){ caiIrA(NAV_CORE.archivo); }]);
   for(k in ACCESO_MODULOS){
     if(!Object.prototype.hasOwnProperty.call(ACCESO_MODULOS, k)) continue;
     m = ACCESO_MODULOS[k];
     if(!m.archivo || k === MODULE_ID) continue;
+    if(k === 'contextos' && !_esLegado) continue;
     (function(id, mod){
       out.push([mod.nombre + (moduloHabilitado(id) ? ' →' : ' · Estudio'),
                 function(){ if(moduloHabilitado(id)) caiIrA(mod.archivo); else moduloBloqueado(id); }]);
@@ -7563,13 +7570,20 @@ function entitlementsDeCuenta(){
 }
 function moduloBloqueado(id){
   var m = ACCESO_MODULOS[id || MODULE_ID] || { nombre:'Este módulo', plan_minimo:'estudio' };
+  // PLAN-C2A (26/08): Estudio/Magister ya no son contratables -- si lo que bloquea es un
+  // plan_minimo legacy, no corresponde nombrarlo como si comprándolo se resolviera (ya no se
+  // puede). Texto neutral en ese caso; el resto (Urbanismo/Negocios, plan_minimo profesional)
+  // sigue igual que siempre.
+  var esLegado = (m.plan_minimo === 'estudio' || m.plan_minimo === 'magister');
   var req = (typeof CRED_PLANES !== 'undefined' && CRED_PLANES[m.plan_minimo])
             ? CRED_PLANES[m.plan_minimo].nombre : m.plan_minimo;
   var card = caiOverlay(); card.innerHTML = '';
-  var h = document.createElement('h3'); h.textContent = m.nombre + ' está incluido en ' + req;
+  var h = document.createElement('h3');
+  h.textContent = esLegado ? 'Esta capacidad no está disponible en tu plan actual' : (m.nombre + ' está incluido en ' + req);
   var p1 = document.createElement('p');
-  p1.textContent = 'Tu plan actual no incluye este módulo. ' + m.nombre +
-    ' entrega diagnóstico y proyectivo completos, y forma parte de ' + req + '.';
+  p1.textContent = esLegado
+    ? ('Tu plan actual no incluye este módulo. ' + m.nombre + ' entrega diagnóstico y proyectivo completos.')
+    : ('Tu plan actual no incluye este módulo. ' + m.nombre + ' entrega diagnóstico y proyectivo completos, y forma parte de ' + req + '.');
   var p2 = document.createElement('p');
   p2.textContent = 'Lo que ya cargaste queda intacto: nada se pierde al cambiar de plan.';
   var row = document.createElement('div'); row.className = 'cai-row';
@@ -7662,7 +7676,7 @@ function credSinCreditos(tipo){
   const p1=document.createElement('p');
   p1.textContent = 'Te quedan ' + c.resta + ' créditos y ' + (nombres[tipo]||'esta operación') + ' cuesta ' + (CRED_COSTO[tipo]||1) + '.';
   const p2=document.createElement('p');
-  p2.textContent = 'Tus diagnósticos están intactos — nada se pierde. Esperá la renovación, o pasá a un plan mayor.';
+  p2.textContent = 'Tus diagnósticos están intactos — nada se pierde. Esperá la renovación.';
   const row=document.createElement('div'); row.className='cai-row';
   const b1=document.createElement('button'); b1.className='cai-btn'; b1.textContent='Esperar'; b1.onclick=caiCerrar;
   const b2=document.createElement('button'); b2.className='cai-btn pri'; b2.textContent='Ver planes'; b2.onclick=function(){ caiCerrar(); window.mostrarPlanes('ampliar'); };
@@ -7707,7 +7721,7 @@ function cardAvisoCreditos(umbral, c){
   p1.textContent = 'Te quedan ' + c.resta + ' de ' + c.total + ' créditos de tu plan ' + c.plan.nombre +
     ', se renuevan cada ' + c.renueva + '.';
   const p2 = document.createElement('p');
-  p2.textContent = 'Tus diagnósticos están intactos -- nada se pierde si se agotan, solo esperás a que se renueven o pasás a un plan mayor.';
+  p2.textContent = 'Tus diagnósticos están intactos -- nada se pierde si se agotan, sólo esperás a que se renueven.';
   const row = document.createElement('div'); row.className = 'cai-row';
   const b1 = document.createElement('button'); b1.className = 'cai-btn'; b1.textContent = 'Entendido'; b1.onclick = caiCerrar;
   const b2 = document.createElement('button'); b2.className = 'cai-btn pri'; b2.textContent = 'Ver planes';
