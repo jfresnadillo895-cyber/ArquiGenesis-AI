@@ -128,6 +128,62 @@ async function rpc(nombre, cuerpo, secreta, tiempoLimiteMs, reintentos) {
 // Un solo intento de 4s en vez del default (hasta 3 intentos de 6s = ~19s) -- si falla, ya
 // quedo el RESERVA_NO_LIBERADA en los logs para revisar a mano, pero no se juega el resto del
 // presupuesto de tiempo de la funcion en reintentar.
+// --- URB-ROBUST 03 (26/08): persistencia temporal de fases largas de Urbanismo ----------------
+// Sólo hace algo cuando el cliente manda los headers opcionales x-comprender-urb-firma /
+// x-comprender-urb-fase (sólo los mandan las tres fases largas de Urbanismo -- items, nucleo,
+// receptivos_espiral -- ver llamarAnthropicUrbanismo() en urbanismo.html) Y la respuesta de
+// Anthropic es utilizable. Para Core, Negocios, Contextos, y para las llamadas standalone de
+// Urbanismo (detalle/inercia/haiku/recomendacion_urgente/proyectivo, que no mandan estos
+// headers), esta función nunca se llama -- cero llamadas nuevas a Supabase, cero cambio de
+// latencia ni de comportamiento respecto de antes de este corte.
+//
+// Best-effort y no bloqueante para el usuario: si esto falla (Supabase lento/caído), NO se le
+// niega la respuesta -- en el peor caso se pierde la chance futura de recuperarla si el cliente
+// corta la lectura del cuerpo más abajo, que es exactamente el mismo riesgo que ya existía antes
+// de URB-ROBUST 03, no uno nuevo. Un solo intento corto (3s, sin reintentos), mismo criterio de
+// presupuesto de tiempo que liberarSeguro()/consumir(): esto corre sobre el mismo reloj de 60s
+// de Vercel, después de ya tener la respuesta de la IA lista.
+//
+// Por qué un upsert por REST (Prefer: resolution=merge-duplicates) y no una función RPC propia:
+// la tabla tiene un índice único (perfil, firma, fase) -- alcanza con eso para que guardar dos
+// veces la misma fase (ej. un reintento manual que sí vuelve a llamar a Claude) actualice la
+// misma fila en vez de duplicar, sin necesitar lógica adicional del lado servidor.
+async function guardarResultadoPendienteUrbanismo(usuario, firma, fase, data, secreta) {
+  try {
+    const ahora = Date.now();
+    const r = await pedirASupabase('/rest/v1/urb_resultados_pendientes', {
+      method: 'POST',
+      headers: {
+        apikey: secreta,
+        Authorization: 'Bearer ' + secreta,
+        'content-type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify({
+        perfil: usuario,
+        firma: firma,
+        fase: fase,
+        resultado: data,
+        usage: data.usage || null,
+        creado: new Date(ahora).toISOString(),
+        expira: new Date(ahora + 30 * 60 * 1000).toISOString(),
+        entregado: false,
+        entregado_en: null,
+      }),
+    }, 3000, 0);
+    if (!r.ok) {
+      console.error(JSON.stringify({ evento: 'URB_RESULTADO_NO_GUARDADO', usuario: String(usuario).slice(0, 8), fase, estado: r.estado }));
+    }
+  } catch (e) {
+    console.error(JSON.stringify({
+      evento: 'URB_RESULTADO_NO_GUARDADO',
+      usuario: String(usuario).slice(0, 8),
+      fase,
+      detalle: String((e && e.message) || e),
+    }));
+  }
+}
+
 async function liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog) {
   try {
     const lib = await rpc('liberar_reserva', { p_perfil: usuario, p_estimado: estimado || 0 }, secreta, 4000, 0);
@@ -291,6 +347,19 @@ export default async function handler(req, res) {
   // analisis completo.
   if (r.ok && data && data.usage) {
     const u = data.usage;
+
+    // URB-ROBUST 03 (26/08): antes de intentar cobrar/devolver, si esta es una fase larga de
+    // Urbanismo (headers opcionales presentes), conservar el resultado del lado servidor -- ver
+    // guardarResultadoPendienteUrbanismo() más arriba para el detalle de por qué esto no afecta a
+    // ningún otro módulo ni llamada.
+    const firmaUrb = String(req.headers['x-comprender-urb-firma'] || '').trim();
+    const faseUrb = String(req.headers['x-comprender-urb-fase'] || '').trim();
+    const FASES_LARGAS_URB = ['items', 'nucleo', 'receptivos_espiral'];
+    if (modulo === 'urbanismo' && firmaUrb && FASES_LARGAS_URB.indexOf(faseUrb) > -1) {
+      await guardarResultadoPendienteUrbanismo(usuario, firmaUrb, faseUrb, data, secreta);
+      _tlog('urb_resultado_pendiente_guardado');
+    }
+
     try {
       _tlog('arrancando_consumir');
       const cobro = await rpc('consumir', {
