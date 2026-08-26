@@ -3573,7 +3573,7 @@ function registrarUso(tipo, data, extra){
    se manda como header junto con 'fase' -- el backend (api/anthropic.js) los usa para conservar
    temporalmente el resultado si Anthropic responde bien, de forma que si ESTA MISMA llamada
    pierde igual la lectura del cuerpo más abajo, el resultado no se pierde del todo: puede
-   recuperarse después vía /api/anthropic-resultado (ver llamarFaseConRecuperacion()). */
+   recuperarse después vía un GET a /api/anthropic (ver llamarFaseConRecuperacion()). */
 async function llamarAnthropicUrbanismo(prompt,maxTokens,fase,etapa,firma){
   const t0=Date.now();
   let res;
@@ -3637,15 +3637,18 @@ async function llamarAnthropicUrbanismo(prompt,maxTokens,fase,etapa,firma){
    directamente no intenta nada. 404/cualquier error se tratan igual: "no había nada que
    recuperar" -- nunca se lanza desde acá, siempre devuelve null en ese caso, para que quien llama
    decida qué hacer (en la práctica: caer al mismo camino de error que existía antes de este
-   corte). La URL empieza con '/api/anthropic' a propósito: así el interceptor de fetch de
-   candado.txt (compartido por los 4 HTML, ver el 'envoltorio de fetch' más arriba en este mismo
-   archivo) la reconoce como llamada a la API de Comprender y le agrega sesión (Authorization) y
-   x-comprender-modulo automáticamente, sin tener que tocar ese interceptor. */
+   corte). Es un GET al MISMO endpoint que ya usan las llamadas normales ('/api/anthropic',
+   apiEndpoint() en modo prod) -- no un archivo/ruta aparte: Vercel Hobby tiene un límite duro de
+   12 Serverless Functions por deployment y api/ ya estaba exactamente en ese número antes de este
+   corte, así que la recuperación se resolvió como una rama de método (GET) dentro del mismo
+   api/anthropic.js en vez de sumar un archivo nuevo. Esto además evita tocar el interceptor de
+   fetch de candado.txt (compartido por los 4 HTML): cualquier URL que contenga '/api/anthropic'
+   ya la reconoce y le agrega sesión (Authorization) y x-comprender-modulo automáticamente. */
 async function intentarRecuperarFaseUrbanismo(firma, fase){
   if(modoEfectivo()!=='prod') return null;
   if(!firma || !fase) return null;
   try{
-    var r=await fetch('/api/anthropic-resultado?firma='+encodeURIComponent(firma)+'&fase='+encodeURIComponent(fase));
+    var r=await fetch('/api/anthropic?firma='+encodeURIComponent(firma)+'&fase='+encodeURIComponent(fase));
     if(!r.ok) return null;
     var data=await r.json();
     if(!data || !data.content) return null;
