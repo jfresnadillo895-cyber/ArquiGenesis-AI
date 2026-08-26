@@ -5191,6 +5191,7 @@ function C1A2_llamarIA(systemPrompt, mensajes){
         throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
       }
       var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      registrarUso('contextos_universal', data, { fase: 'origen', duracionMs: Date.now() - t0 }); // CU-ENERGY 01A/01C (26/08)
       return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
     });
   });
@@ -5629,6 +5630,7 @@ function C1B1_llamarIA(systemPrompt, mensajes){
         throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
       }
       var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      registrarUso('contextos_universal', data, { fase: 'campo', duracionMs: Date.now() - t0 }); // CU-ENERGY 01A/01C (26/08)
       return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
     });
   });
@@ -5956,6 +5958,7 @@ function C1B2_llamarIA(systemPrompt, mensajes){
         throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
       }
       var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      registrarUso('contextos_universal', data, { fase: 'propagacion', duracionMs: Date.now() - t0 }); // CU-ENERGY 01A/01C (26/08)
       return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
     });
   });
@@ -6337,6 +6340,7 @@ function C1C1_llamarIA(systemPrompt, mensajes){
         throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
       }
       var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      registrarUso('contextos_universal', data, { fase: 'frente', duracionMs: Date.now() - t0 }); // CU-ENERGY 01A/01C (26/08)
       return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
     });
   });
@@ -6714,6 +6718,7 @@ function C1C2_llamarIA(systemPrompt, mensajes){
         throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
       }
       var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      registrarUso('contextos_universal', data, { fase: 'accion', duracionMs: Date.now() - t0 }); // CU-ENERGY 01A/01C (26/08)
       return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
     });
   });
@@ -6963,6 +6968,7 @@ function C1C3A_llamarIAAsk(systemPrompt, mensajes){
         throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
       }
       var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      registrarUso('contextos_universal', data, { fase: 'pregunta', duracionMs: Date.now() - t0 }); // CU-ENERGY 01A/01C (26/08)
       return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
     });
   });
@@ -7199,6 +7205,7 @@ function C1C3A_llamarIATrace(systemPrompt, mensajes){
         throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
       }
       var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      registrarUso('contextos_universal', data, { fase: 'rastreo', duracionMs: Date.now() - t0 }); // CU-ENERGY 01A/01C (26/08)
       return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
     });
   });
@@ -7835,6 +7842,7 @@ function C1C4A_llamarIA(systemPrompt, mensajes){
         throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
       }
       var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      registrarUso('contextos_universal', data, { fase: 'interpretacion', duracionMs: Date.now() - t0 }); // CU-ENERGY 01A/01C (26/08)
       return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
     });
   });
@@ -8100,6 +8108,7 @@ function C1C4B_llamarIA(systemPrompt, mensajes){
         throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
       }
       var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      registrarUso('contextos_universal', data, { fase: 'funcion', duracionMs: Date.now() - t0 }); // CU-ENERGY 01A/01C (26/08)
       return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
     });
   });
@@ -8381,6 +8390,7 @@ function C1E1_llamarIA(systemPrompt, mensajes){
         throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
       }
       var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      registrarUso('contextos_universal', data, { fase: 'foco', duracionMs: Date.now() - t0 }); // CU-ENERGY 01A/01C (26/08)
       return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
     });
   });
@@ -8618,6 +8628,7 @@ function C1E2_llamarIA(systemPrompt, mensajes){
         throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
       }
       var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      registrarUso('contextos_universal', data, { fase: 'suficiencia', duracionMs: Date.now() - t0 }); // CU-ENERGY 01A/01C (26/08)
       return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
     });
   });
@@ -8897,6 +8908,7 @@ function C1F1_llamarIA(systemPrompt, mensajes){
         throw new Error((data && data.error && data.error.message) || ('Error ' + res.status));
       }
       var texto = (data.content || []).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text || ''; }).join('');
+      registrarUso('contextos_universal', data, { fase: 'retorno', duracionMs: Date.now() - t0 }); // CU-ENERGY 01A/01C (26/08)
       return { texto: texto, usage: data.usage || null, duracionMs: Date.now() - t0 };
     });
   });
@@ -9426,14 +9438,36 @@ function C1G1_lenguajeNatural(texto){
    epistemicState/etc.) aparece en los textos que devuelven -- lo que el motor haya redactado pasa
    siempre por C1G1_lenguajeNatural() antes de salir de esta capa. ---- */
 
+// CU-ENERGY 01B (26/08): C1G1_lenguajeNatural() sólo reemplaza los tokens conocidos de antemano
+// (C1G1_TOKENS_ACCION) -- residuo de jerga que el modelo redacte con OTRO nombre (un id como
+// "route1"/"rel4", un ALL_CAPS nuevo, un snake_case cualquiera) pasaba de largo. C1G1_vistaCierre ya
+// tenía, desde antes de este corte, un chequeo final contra C1G1_PATRON_JERGA con un texto de
+// reemplazo genérico -- pero era el ÚNICO de los cinco "vista*" que lo hacía: vistaApertura/
+// vistaPregunta/vistaComprension/vistaRetorno llamaban a C1G1_lenguajeNatural() y confiaban en que
+// alcanzara. C1G1_lenguajeSeguro() generaliza ese mismo chequeo (lenguajeNatural + PATRON_JERGA +
+// alternativa honesta si sigue habiendo jerga) para poder aplicarlo en los cinco por igual, sin
+// tocar la disciplina de hipótesis/incertidumbre (que vive en otro lado: epistemicState/
+// esCambioHipotesis/provisional, ninguno de los cuales pasa por acá). "alternativa" es un texto
+// llano ya elegido por quien llama, nunca inventado acá -- si no se pasa ninguna, cae a ''.
+function C1G1_lenguajeSeguro(texto, alternativa){
+  var s = C1G1_lenguajeNatural(texto);
+  if(C1G1_PATRON_JERGA.test(s)) return (alternativa == null) ? '' : alternativa;
+  return s;
+}
+
 function C1G1_vistaApertura(organismoNombre, opening, front){
   var texto = (opening && (opening.question || opening.intention)) || (front && front.formulation) || '';
-  return { phase:'apertura', organismo: organismoNombre || null, texto: C1G1_lenguajeNatural(texto) };
+  return { phase:'apertura', organismo: organismoNombre || null, texto: C1G1_lenguajeSeguro(texto, '') };
 }
 
 function C1G1_vistaPregunta(askResult){
   var q = (askResult && askResult.userQuestion) || {};
-  return { phase:'pregunta', pregunta: C1G1_lenguajeNatural(q.text || ''), porQue: q.whyNeeded ? C1G1_lenguajeNatural(q.whyNeeded) : null };
+  var fallbackPregunta = 'Hay algo más que ayudaría a entender esto, pero no pudimos formularlo con claridad ahora mismo.';
+  return {
+    phase:'pregunta',
+    pregunta: C1G1_lenguajeSeguro(q.text || '', fallbackPregunta) || fallbackPregunta,
+    porQue: q.whyNeeded ? (C1G1_lenguajeSeguro(q.whyNeeded, null) || null) : null
+  };
 }
 
 function C1G1_vistaTrabajando(){
@@ -9445,23 +9479,27 @@ function C1G1_vistaTrabajando(){
    de cara al usuario, "no hay más para hacer acá ahora" y "todavía no sabemos cómo seguir" se
    presentan igual de tranquilos -- nunca como error técnico, nunca fabricando un resultado. */
 function C1G1_vistaCierre(motivoTexto){
-  var base = (motivoTexto && String(motivoTexto).trim()) || 'Por ahora no hay más para agregar acá.';
-  var texto = C1G1_lenguajeNatural(base);
-  if(C1G1_PATRON_JERGA.test(texto)){
-    texto = 'Por ahora no hay más para agregar acá.';
-  }
-  return { phase:'cierre', texto: texto };
+  var fallbackCierre = 'Por ahora no hay más para agregar acá.';
+  var base = (motivoTexto && String(motivoTexto).trim()) || fallbackCierre;
+  // CU-ENERGY 01B (26/08): reescrito sobre C1G1_lenguajeSeguro() -- mismo comportamiento exacto de
+  // siempre (mismo texto de reemplazo, mismo chequeo), ahora compartido con el resto de las vistas
+  // en vez de reimplementado sólo acá.
+  return { phase:'cierre', texto: C1G1_lenguajeSeguro(base, fallbackCierre) || fallbackCierre };
 }
 
 function C1G1_vistaComprension(focusResult, sufficiencyResult){
   var incertidumbres = focusResult.uncertainties || [];
   return {
     phase:'comprension',
-    principal: C1G1_lenguajeNatural(focusResult.statement),
-    cambio: C1G1_lenguajeNatural(focusResult.interpretationShift),
-    incertidumbre: incertidumbres.length ? C1G1_lenguajeNatural(incertidumbres[0]) : null,
+    principal: C1G1_lenguajeSeguro(focusResult.statement, 'Encontramos algo, pero no pudimos expresarlo con claridad todavía.'),
+    cambio: C1G1_lenguajeSeguro(focusResult.interpretationShift, ''),
+    incertidumbre: incertidumbres.length ? (C1G1_lenguajeSeguro(incertidumbres[0], null) || null) : null,
     provisional: focusResult.stability !== 'stable',
-    verPorQue: { explica: (focusResult.explains || []).map(function(e){ return C1G1_lenguajeNatural(e); }), cantidadSoportes: (focusResult.supportRefs || []).length },
+    // CU-ENERGY 01B: cada explicación se filtra por separado -- si una sola trae jerga residual, se
+    // descarta esa (nunca se inventa una alternativa para un ítem de lista), no se vacía la lista
+    // entera por una sola entrada corrupta.
+    verPorQue: { explica: (focusResult.explains || []).map(function(e){ return C1G1_lenguajeSeguro(e, null); }).filter(Boolean),
+      cantidadSoportes: (focusResult.supportRefs || []).length },
     sugerenciaCierre: sufficiencyResult ? (sufficiencyResult.recommendation === 'close') : null
   };
 }
@@ -9482,9 +9520,13 @@ function C1G1_vistaRetorno(returnProposal){
     // nuevo es (aunque sea en parte) una hipótesis pertinente, el título tiene que decirlo así, no
     // presentarla como transformación ya adquirida.
     titulo: hayHipotesis ? 'Esto abre una nueva hipótesis' : 'Esto cambia nuestra comprensión',
-    resumen: C1G1_lenguajeNatural(returnProposal.overallSummary),
+    resumen: C1G1_lenguajeSeguro(returnProposal.overallSummary, 'Esto ajusta la comprensión del organismo, aunque no pudimos resumirlo con precisión ahora.'),
     cambios: cambios.map(function(c){
-      return { antes: C1G1_lenguajeNatural(c.before), ahora: C1G1_lenguajeNatural(c.after), esHipotesis: C1G1_esCambioHipotesis(c) };
+      return {
+        antes: C1G1_lenguajeSeguro(c.before, 'sin datos claros'),
+        ahora: C1G1_lenguajeSeguro(c.after, 'sin datos claros'),
+        esHipotesis: C1G1_esCambioHipotesis(c)
+      };
     })
   };
 }
@@ -9493,6 +9535,19 @@ function C1G1_vistaRetorno(returnProposal){
    cognitivo. Devuelve siempre { vista, estado } -- "estado" es lo que la interfaz guarda y vuelve a
    pasar en la próxima llamada (responder la pregunta / decidir gobernanza), o null si la
    conversación llegó a un punto terminal (cierre) y no hay nada que retomar. ---- */
+
+// CU-UX 01D (26/08): "onFase" es un callback OPCIONAL, el mismo patrón ya usado para telemetría
+// (ver "telemetry" en cada resultado de executeXxx) -- nunca decide nada, sólo avisa en qué fase
+// real está el trabajo para que quien llama (hoy, C1G3) pueda actualizar lo que el usuario ve
+// mientras espera. Nunca se le pasa un id técnico crudo del motor: los ids ('origen'/'campo'/
+// 'accion'/'rastreo'/'comprension'/'validacion') son un vocabulario propio de esta capa de UI,
+// deliberadamente más chico que las fases internas de C1-A2..C1-F1 (ver C1G3_FASE_LABEL). Si nadie
+// pasa onFase (cualquier llamador viejo, o cualquier test que invoque estas funciones sin ese
+// argumento), no cambia nada de lo que ya hacían -- por eso va siempre último y siempre protegido
+// con try/catch: un error en el callback de UI jamás puede tirar abajo el motor cognitivo.
+function C1G1_avisarFase(onFase, faseId){
+  try{ if(typeof onFase === 'function') onFase(faseId); }catch(e){}
+}
 
 /* OMV-F8.1 (24/08): nivel de Campo (C1-B1 abre -> C1-B2 propaga -> C1-C1 selecciona un Frente),
    reutilizado tanto para la apertura inicial de Contextos como para cuando un Campo se agota en
@@ -9504,8 +9559,9 @@ function C1G1_vistaRetorno(returnProposal){
    llama pueda seguir excluyendo en la próxima escalada si hiciera falta. No hardcodea ningún
    dominio/especialidad -- opera sobre snapshot/opening/assessment genéricos, igual que C1-B1/B2/C1
    en sí mismos. */
-async function C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidosIniciales){
+async function C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidosIniciales, onFase){
   var camposExcluidos = (camposExcluidosIniciales || []).slice();
+  C1G1_avisarFase(onFase, 'campo');
   for(var intento = 0; intento <= C1G1_MAX_CAMPOS_ALTERNATIVOS; intento++){
     var r2 = await openField(snapshot, opening, assessment, camposExcluidos);
     if(!r2.ok || r2.result.status !== 'candidates_found' || !r2.result.candidateRelations.length){
@@ -9529,18 +9585,19 @@ async function C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, 
   return { ok:false, camposExcluidos: camposExcluidos };
 }
 
-async function C1G1_iniciarConversacion(organismoId, question, intention){
+async function C1G1_iniciarConversacion(organismoId, question, intention, onFase){
   var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
   if(!o) return { ok:true, vista: C1G1_vistaCierre('No encontramos ese organismo.'), estado:null };
   registrarSenalVital('comprension_iniciada', o.id);   // SV1: best effort, no bloquea lo que sigue
   var snap = OrganismSnapshotAdapter(o);
   var opening = crearContextOpening(o.id, { basedOnVersion: snap.organismVersion, question: question, intention: intention });
 
+  C1G1_avisarFase(onFase, 'origen');
   var r1 = await reconstructOrigin(snap, opening);
   if(!r1.ok || r1.assessment.status !== 'continue'){
     return { ok:true, vista: C1G1_vistaCierre('Todavía no hay suficiente para abrir un Contexto acá.'), estado:null };
   }
-  var apertura = await C1G1_abrirCampoYSeleccionarFrente(snap, r1.opening, r1.assessment, []);
+  var apertura = await C1G1_abrirCampoYSeleccionarFrente(snap, r1.opening, r1.assessment, [], onFase);
   if(!apertura.ok){
     // OMV-F8.2 (24/08): mismo caso que el cierre por agotamiento dentro de C1G1_continuarCiclo --
     // si ya se probaron Campos alternativos (apertura.camposExcluidos) antes de rendirse, el cierre
@@ -9555,7 +9612,7 @@ async function C1G1_iniciarConversacion(organismoId, question, intention){
   var vistaApertura = C1G1_vistaApertura(o.nombre, r1.opening, front);
   var estadoBase = { snapshot: snap, opening: r1.opening, assessment: r1.assessment, graphState: apertura.graphState,
     front: front, camposExcluidos: apertura.camposExcluidos };
-  var siguiente = await C1G1_continuarCiclo(estadoBase, null);
+  var siguiente = await C1G1_continuarCiclo(estadoBase, null, onFase);
   return { ok:true, vista: { apertura: vistaApertura, siguiente: siguiente.vista }, estado: siguiente.estado };
 }
 
@@ -9593,7 +9650,7 @@ function C1G1_resumenFrentesPendientes(frentesCerradosPorFaltaDeEvidencia){
 /* Bucle silencioso: READ/TRACE nunca se muestran -- se ejecutan y se reevalúa (C1-C3B, reutilizado
    tal cual, UNA vez por paso) hasta llegar a algo que sí corresponde mostrar (ASK/CLOSE_FRONT/
    NONE_AVAILABLE/INTERPRET->Comprensión) o al tope defensivo C1G1_MAX_CICLOS. */
-async function C1G1_continuarCiclo(estado, accionInicial){
+async function C1G1_continuarCiclo(estado, accionInicial, onFase){
   var snapshot = estado.snapshot, opening = estado.opening, graphState = estado.graphState, front = estado.front;
   var assessment = estado.assessment || null;   // OMV-F8.1: sólo hace falta para escalar a otro Campo
   var camposExcluidos = estado.camposExcluidos || [];
@@ -9646,7 +9703,7 @@ async function C1G1_continuarCiclo(estado, accionInicial){
       var camposExcluidosConEsteCampo = camposExcluidos.concat(frentesCerradosPorFaltaDeEvidencia.map(function(f){
         return { target: f.formulation || null, manifestation: f.possibleIncidence || null };
       }));
-      var otroCampo = await C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidosConEsteCampo);
+      var otroCampo = await C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidosConEsteCampo, onFase);
       camposExcluidos = otroCampo.camposExcluidos || camposExcluidosConEsteCampo;
       if(otroCampo.ok){
         graphState = otroCampo.graphState;
@@ -9668,6 +9725,7 @@ async function C1G1_continuarCiclo(estado, accionInicial){
     if(accionPendiente){
       seleccion = { ok:true, result: accionPendiente };   // ya viene de una reevaluación C1-C3B
     } else {
+      C1G1_avisarFase(onFase, 'accion');
       seleccion = await selectNextCognitiveAction(snapshot, opening, graphState, front);
     }
     if(!seleccion.ok){
@@ -9711,10 +9769,12 @@ async function C1G1_continuarCiclo(estado, accionInicial){
     }
 
     if(ejecucion.action === 'INTERPRET'){
-      return await C1G1_construirComprension(snapshot, opening, graphState, ejecucion.front, ejecucion.result, assessment, camposExcluidos);
+      C1G1_avisarFase(onFase, 'comprension');
+      return await C1G1_construirComprension(snapshot, opening, graphState, ejecucion.front, ejecucion.result, assessment, camposExcluidos, onFase);
     }
 
     // READ/TRACE: seguir en silencio -- una sola reevaluación (C1-C3B), nunca un segundo selector.
+    C1G1_avisarFase(onFase, 'rastreo');
     var reeval = await reassessCognitiveAction(snapshot, opening, graphState, ejecucion.front, accion, ejecucion.result, null);
     if(!reeval.ok){
       return { vista: C1G1_vistaCierre('No pudimos seguir evaluando este Contexto por ahora.'), estado:null };
@@ -9743,7 +9803,7 @@ async function C1G1_continuarCiclo(estado, accionInicial){
 /* Comprensión: encadena C1-C4B (opcional) -> C1-E1 (Foco, obligatorio) -> C1-E2 (suficiencia) ->
    C1-F1 (Retorno, sólo si hay Foco+suficiencia). Si el Foco no se puede construir, no se fabrica
    ninguna comprensión -- se cierra en el mismo tono tranquilo que CLOSE_FRONT. */
-async function C1G1_construirComprension(snapshot, opening, graphState, front, interpretationResult, assessment, camposExcluidos){
+async function C1G1_construirComprension(snapshot, opening, graphState, front, interpretationResult, assessment, camposExcluidos, onFase){
   var funcional = await executeFunctionalInterpretation(graphState, front, interpretationResult);
   var frenteFuncional = funcional.ok ? C1C4B_aplicarResultadoAlFrente(front, funcional.result) : front;
 
@@ -9753,6 +9813,11 @@ async function C1G1_construirComprension(snapshot, opening, graphState, front, i
   }
   var frenteFocus = C1E1_aplicarResultadoAlFrente(frenteFuncional, focusRes.result);
 
+  // CU-UX 01D (26/08): a partir de acá el trabajo pasa de "construir una lectura" (funcional+foco,
+  // ya corrido arriba) a "revisar qué tan sólida es" (suficiencia+retorno) -- dos momentos
+  // perceptiblemente distintos para quien espera, aunque C1-E2/C1-F1 sigan siendo, como siempre,
+  // sólo secuenciados acá, nunca decididos.
+  C1G1_avisarFase(onFase, 'validacion');
   var sufRes = await executeSufficiencyAssessment(graphState, frenteFocus, focusRes.result);
   var frenteFinal = sufRes.ok ? C1E2_aplicarResultadoAlFrente(frenteFocus, sufRes.result) : frenteFocus;
 
@@ -9777,7 +9842,7 @@ async function C1G1_construirComprension(snapshot, opening, graphState, front, i
 
 /* Retoma tras la única pregunta que la interfaz muestra: aplica la respuesta (applyUserAnswer, ya
    auditado en C1-C3A) y reevalúa (C1-C3B) antes de seguir el mismo ciclo silencioso de arriba. */
-async function C1G1_responderPregunta(estadoPausado, respuestaTexto){
+async function C1G1_responderPregunta(estadoPausado, respuestaTexto, onFase){
   if(!estadoPausado){
     return { vista: C1G1_vistaCierre('No hay una pregunta pendiente para responder.'), estado:null };
   }
@@ -9789,6 +9854,7 @@ async function C1G1_responderPregunta(estadoPausado, respuestaTexto){
   if(!aplicado.ok){
     return { vista: C1G1_vistaCierre('No pudimos registrar la respuesta por ahora.'), estado: estadoPausado };
   }
+  C1G1_avisarFase(onFase, 'rastreo');
   var reeval = await reassessCognitiveAction(estadoPausado.snapshot, aplicado.opening, estadoPausado.graphState, aplicado.front,
     estadoPausado.previousAction, estadoPausado.previousResult, texto);
   if(!reeval.ok){
@@ -9805,7 +9871,7 @@ async function C1G1_responderPregunta(estadoPausado, respuestaTexto){
   }
   var estadoContinuar = { snapshot: estadoPausado.snapshot, opening: aplicado.opening, assessment: estadoPausado.assessment,
     camposExcluidos: estadoPausado.camposExcluidos, graphState: estadoPausado.graphState, front: frontContinuar };
-  return await C1G1_continuarCiclo(estadoContinuar, reeval.result.nextAction);
+  return await C1G1_continuarCiclo(estadoContinuar, reeval.result.nextAction, onFase);
 }
 
 /* Gobernanza F2, reutilizada tal cual -- esta capa nunca crea un segundo sistema de propuestas.
@@ -9848,7 +9914,7 @@ function C1G1_decidirGobernanza(estadoConRetorno, decisionUsuario, correccionUsu
    camposExcluidosConEsteCampo en F8.2) para que "no repetir la relación recién gobernada" valga
    para Incorporar, Mantener abierto y No incorporar por igual -- es un requisito de la acción de
    explorar, no una propiedad de una decisión en particular. */
-async function C1G1_explorarOtroContexto(estadoGobernado){
+async function C1G1_explorarOtroContexto(estadoGobernado, onFase){
   if(!estadoGobernado || !estadoGobernado.assessment){
     return { ok:true, vista: C1G1_vistaCierre('Por ahora no encontramos otra relación externa para seguir explorando.'), estado:null };
   }
@@ -9857,14 +9923,14 @@ async function C1G1_explorarOtroContexto(estadoGobernado){
     target: frenteGobernado.formulation || null,
     manifestation: frenteGobernado.possibleIncidence || null
   }] : []);
-  var apertura = await C1G1_abrirCampoYSeleccionarFrente(estadoGobernado.snapshot, estadoGobernado.opening, estadoGobernado.assessment, camposExcluidosConEsteFrente);
+  var apertura = await C1G1_abrirCampoYSeleccionarFrente(estadoGobernado.snapshot, estadoGobernado.opening, estadoGobernado.assessment, camposExcluidosConEsteFrente, onFase);
   if(!apertura.ok){
     var motivo = C1G1_resumenCampoAgotado(apertura.camposExcluidos) || 'Por ahora no encontramos otra relación externa para seguir explorando.';
     return { ok:true, vista: C1G1_vistaCierre(motivo), estado:null };
   }
   var estadoBase = { snapshot: estadoGobernado.snapshot, opening: estadoGobernado.opening, assessment: estadoGobernado.assessment,
     graphState: apertura.graphState, front: apertura.front, camposExcluidos: apertura.camposExcluidos };
-  var siguiente = await C1G1_continuarCiclo(estadoBase, null);
+  var siguiente = await C1G1_continuarCiclo(estadoBase, null, onFase);
   return { ok:true, vista: siguiente.vista, estado: siguiente.estado };
 }
 
@@ -11273,7 +11339,17 @@ function cargarUso(){
     return raw;
   }catch(e){ return { version_uso:1, registros:[] }; }
 }
-function registrarUso(tipo, data){
+// CU-ENERGY 01C/01A (26/08): "extra" es opcional -- {fase, duracionMs} -- y hasta ahora nadie lo
+// pasaba. Los tres call sites viejos ('chat'/'informe'/'profundizar') siguen llamando a
+// registrarUso(tipo, data) sin tercer argumento, byte a byte igual que siempre: reg.fase/reg.ms
+// quedan null para esos registros, resumenUso() los ignora al armar porFase (abajo) sin romper
+// nada de lo que ya calculaba. Contextos Universal es la primera fuente que sí lo usa (ver los
+// C1x_llamarIA más abajo en el archivo) -- cada una de sus llamadas reales queda registrada bajo
+// tipo:'contextos_universal', diferenciada de 'chat'/'informe'/'profundizar' como pedía el punto
+// 01C, y con su fase + duración real (duracionMs, ya calculado en cada _llamarIA con Date.now()-t0,
+// hasta ahora descartado) para poder ver, en el mismo lugar de siempre, dónde se va el tiempo de
+// una Apertura (punto 01A: "identificar llamadas, fases y tiempo real").
+function registrarUso(tipo, data, extra){
   try{
     var u = data && data.usage;
     if(!u) return null;
@@ -11286,7 +11362,9 @@ function registrarUso(tipo, data){
       ent: u.input_tokens || 0,
       sal: u.output_tokens || 0,
       cle: u.cache_read_input_tokens || 0,
-      ces: u.cache_creation_input_tokens || 0
+      ces: u.cache_creation_input_tokens || 0,
+      fase: (extra && extra.fase) || null,
+      ms: (extra && typeof extra.duracionMs === 'number') ? extra.duracionMs : null
     };
     r.registros.push(reg);
     if(r.registros.length > USO_MAX) r.registros = r.registros.slice(r.registros.length - USO_MAX);
@@ -11298,9 +11376,21 @@ function costoUso(r){
   return (r.ent * TARIFA.entrada + r.sal * TARIFA.salida +
           r.cle * TARIFA.cache_lectura + r.ces * TARIFA.cache_escritura) / 1000000;
 }
+// CU-ENERGY 01A (26/08): nombres legibles para la fase interna de cada llamada de Contextos
+// Universal en la pantalla de Consumo real -- es una pantalla técnica/administrativa (ya muestra
+// tipos como "chat"/"informe"/"profundizar"), no la conversación que ve el usuario final, así que
+// no le aplica la misma prohibición de nombres técnicos que a C1G1_lenguajeNatural/lenguajeSeguro
+// (esos protegen lo que lee la persona dentro de Contextos, esto es para que Javier pueda leer
+// dónde se va el tiempo). Aun así, ninguno es un id crudo del motor (nunca "route1"/"rel4"/un
+// nombre de función) -- son el nombre en español de cada paso real.
+var C1_FASE_LABEL_CONSUMO = {
+  origen: 'Origen', campo: 'Apertura de campo', propagacion: 'Propagación', frente: 'Selección de frente',
+  accion: 'Selección de acción', pregunta: 'Pregunta', rastreo: 'Rastreo', interpretacion: 'Interpretación',
+  funcion: 'Función', foco: 'Foco', suficiencia: 'Suficiencia', retorno: 'Retorno'
+};
 function resumenUso(){
   var regs = cargarUso().registros, i, r;
-  var out = { n: regs.length, ent:0, sal:0, cle:0, ces:0, costo:0, porTipo:{}, sesiones:{} };
+  var out = { n: regs.length, ent:0, sal:0, cle:0, ces:0, costo:0, porTipo:{}, sesiones:{}, porFase:{} };
   for(i=0;i<regs.length;i++){
     r = regs[i];
     out.ent += r.ent; out.sal += r.sal; out.cle += r.cle; out.ces += r.ces;
@@ -11310,6 +11400,14 @@ function resumenUso(){
     var k = (r.org || 'sin-organismo') + '|' + r.f.slice(0,10);
     var ses = out.sesiones[k] || (out.sesiones[k] = { n:0, costo:0, maxTurno:0 });
     ses.n++; ses.costo += c; if(r.turno > ses.maxTurno) ses.maxTurno = r.turno;
+    // CU-ENERGY 01A/01C: sólo agrega a porFase lo que realmente trae fase (hoy, sólo
+    // 'contextos_universal') -- registros viejos o de otros tipos, sin fase, se ignoran acá sin
+    // afectar ningún otro cálculo de este resumen.
+    if(r.fase){
+      var f = out.porFase[r.fase] || (out.porFase[r.fase] = { n:0, ms:0, costo:0 });
+      f.n++; f.costo += c;
+      if(typeof r.ms === 'number') f.ms += r.ms;
+    }
   }
   return out;
 }
@@ -11339,6 +11437,27 @@ function cardConsumo(){
     for(k in s.porTipo){ if(Object.prototype.hasOwnProperty.call(s.porTipo,k))
       tp.push(k + ': ' + s.porTipo[k].n + ' · ' + usd(s.porTipo[k].costo / s.porTipo[k].n) + ' c/u'); }
     fila('Por operación', tp.join('  ·  '));
+    // CU-ENERGY 01A/01C (26/08): desglose por fase real de Contextos Universal -- sólo aparece si
+    // hay algún registro con fase (hoy, únicamente las llamadas de Contextos, ver C1x_llamarIA más
+    // abajo), no cambia nada de lo que ya se mostraba para 'chat'/'informe'/'profundizar'. El orden
+    // es el orden real en que ocurren dentro de una Apertura (no alfabético ni de inserción), para
+    // que la lista se lea como el recorrido real de la llamada.
+    var C1_FASE_ORDEN_CONSUMO = ['origen','campo','propagacion','frente','accion','pregunta','rastreo',
+      'interpretacion','funcion','foco','suficiencia','retorno'];
+    var fasesPresentes = C1_FASE_ORDEN_CONSUMO.filter(function(id){ return s.porFase[id]; });
+    if(fasesPresentes.length){
+      var msTotal = 0, llamadasFase = 0;
+      var fp = fasesPresentes.map(function(id){
+        var d = s.porFase[id];
+        msTotal += d.ms; llamadasFase += d.n;
+        var nombre = C1_FASE_LABEL_CONSUMO[id] || id;
+        var prom = d.n ? Math.round(d.ms / d.n) : 0;
+        return nombre + ': ' + d.n + ' · ' + prom.toLocaleString('es-AR') + ' ms promedio';
+      });
+      fila('Contextos Universal · por fase', fp.join('  ·  '));
+      fila('Contextos Universal · tiempo de IA total', llamadasFase + ' llamada' + (llamadasFase === 1 ? '' : 's') +
+        ' · ' + (msTotal / 1000).toFixed(1) + ' s (sin contar red/espera del navegador)');
+    }
     var ses = [], sk;
     for(sk in s.sesiones){ if(Object.prototype.hasOwnProperty.call(s.sesiones,sk)) ses.push(s.sesiones[sk]); }
     if(ses.length){
@@ -12362,8 +12481,45 @@ function ofrecerDerivacionInterna(){
    corrección de campos (correccionUsuario queda null, que el motor ya tolera) -- fuera de
    alcance de este corte, documentado en PENDIENTES.md. */
 
-function C1G3_htmlTrabajando(){
-  return '<div class="c1g1-fase"><div class="pensando"><i></i>Comprendiendo el contexto…</div></div>';
+/* CU-UX 01D (26/08): hasta acá el único estado durante toda una Apertura (que puede encadenar
+   entre 10 y 20 llamadas reales, uno por uno -- ver CU-ENERGY 01A) era este mismo texto fijo,
+   "Comprendiendo el contexto…", sin moverse un segundo desde el arranque hasta el resultado final.
+   El criterio pedido por Javier: "si un proceso tarda, el usuario no necesita que parezca
+   instantáneo; necesita percibir que está vivo, avanzando, y que cada espera tiene sentido" --
+   por eso C1G3_htmlTrabajando(fase) ahora acepta un id de fase REAL (el mismo que reciben los
+   callbacks onFase repartidos por C1G1_iniciarConversacion/continuarCiclo/construirComprension/
+   responderPregunta/explorarOtroContexto, ver más abajo) y cambia el texto visible a medida que el
+   motor avanza de una fase a la siguiente -- nunca un porcentaje ni un cronómetro (ninguno de los
+   dos describiría algo real: no hay forma de saber de antemano cuántos pasos silenciosos hará
+   falta), y nunca un nombre técnico (Campo/Frente/grafo/etc., mismo criterio de C1G1_lenguajeNatural/
+   C1G1_lenguajeSeguro más arriba). Sin fase (o con una fase desconocida) cae al texto genérico de
+   siempre, así que cualquier llamador viejo que todavía invoque C1G3_htmlTrabajando() sin argumento
+   sigue funcionando exactamente igual que antes de este corte. */
+var C1G3_FASE_LABEL = {
+  origen:      'Leyendo lo que ya sabemos de este organismo…',
+  campo:       'Buscando por dónde puede seguir esta comprensión…',
+  accion:      'Decidiendo cómo seguir con esto…',
+  rastreo:     'Siguiendo el hilo de esta relación…',
+  comprension: 'Armando una lectura de lo que encontramos…',
+  validacion:  'Chequeando qué tan sólida es esta lectura…'
+};
+function C1G3_htmlTrabajando(fase){
+  var texto = (fase && C1G3_FASE_LABEL[fase]) || 'Comprendiendo el contexto…';
+  return '<div class="c1g1-fase"><div class="pensando"><i></i>' + C1G1_escapeHtml(texto) + '</div></div>';
+}
+
+// CU-UX 01D (26/08): fábrica del callback onFase que se le pasa a C1G1_iniciarConversacion/
+// responderPregunta/explorarOtroContexto -- mismo criterio de aislamiento que el resto de C1G3
+// (epoch propio de esta tarjeta): si el usuario ya se fue (cerró, cambió de organismo, empezó otra
+// Apertura) antes de que el motor avise la siguiente fase, este callback no reescribe un `cont` que
+// ya no corresponde a nada visible. `cont` puede haberse desprendido del DOM real (el usuario ya
+// navegó), en cuyo caso escribirle innerHTML es inerte -- mismo comentario de arquitectura de más
+// arriba en este archivo.
+function C1G3_onFase(miEpoch, cont){
+  return function(fase){
+    if(miEpoch !== state.c1g3Epoch) return;
+    cont.innerHTML = C1G3_htmlTrabajando(fase);
+  };
 }
 
 /* C1-Z1.1-B: arma el DOM base de la tarjeta (título + contenedor #c1g3Card + "Volver a Memoria" +
@@ -12485,7 +12641,7 @@ function C1G3_focoActualCore(org){
 async function C1G3_correrApertura(org, miEpoch, cont){
   var r;
   try{
-    r = await C1G1_iniciarConversacion(org.id, C1G3_focoActualCore(org), null);
+    r = await C1G1_iniciarConversacion(org.id, C1G3_focoActualCore(org), null, C1G3_onFase(miEpoch, cont));
   }catch(e){
     if(miEpoch !== state.c1g3Epoch) return;
     cont.innerHTML = C1G1_renderVista(C1G1_vistaCierre('No pudimos abrir Contextos por ahora.'));
@@ -12563,7 +12719,7 @@ function C1G3_wireResultado(org, estado, miEpoch, cont){
 async function C1G3_correrExplorarOtroContexto(org, estadoGobernado, miEpoch, cont){
   var r;
   try{
-    r = await C1G1_explorarOtroContexto(estadoGobernado);
+    r = await C1G1_explorarOtroContexto(estadoGobernado, C1G3_onFase(miEpoch, cont));
   }catch(e){
     if(miEpoch !== state.c1g3Epoch) return;
     cont.innerHTML = C1G1_renderVista(C1G1_vistaCierre('No pudimos seguir explorando por ahora.'));
@@ -12576,7 +12732,7 @@ async function C1G3_correrExplorarOtroContexto(org, estadoGobernado, miEpoch, co
 async function C1G3_correrRespuesta(org, estado, texto, miEpoch, cont){
   var r;
   try{
-    r = await C1G1_responderPregunta(estado, texto);
+    r = await C1G1_responderPregunta(estado, texto, C1G3_onFase(miEpoch, cont));
   }catch(e){
     if(miEpoch !== state.c1g3Epoch) return;
     cont.innerHTML = C1G1_renderVista(C1G1_vistaCierre('No pudimos registrar la respuesta por ahora.'));
@@ -18082,7 +18238,10 @@ function correrPruebasAuto(){
     chk('F82-10 · la escalada a mitad de ciclo agrega los Frentes recién cerrados de ESTE Campo a la exclusión antes de abrir otro (el hallazgo real del brief)', (function(){
       var src = C1G1_continuarCiclo.toString();
       var idxConcat = src.indexOf('camposExcluidos.concat(frentesCerradosPorFaltaDeEvidencia.map(');
-      var idxLlamada = src.indexOf('C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidosConEsteCampo)');
+      // CU-ENERGY 01A/01D (26/08): la llamada ahora suma un onFase opcional al final (ver
+      // C1G1_avisarFase) -- no cambia el orden ni el contenido de los argumentos que este test
+      // verifica, así que el patrón se ajusta para tolerar ese parámetro extra.
+      var idxLlamada = src.indexOf('C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, camposExcluidosConEsteCampo, onFase)');
       return idxConcat > -1 && idxLlamada > idxConcat;
     })());
     chk('F82-11 · nada de lo nuevo (resúmenes humanos, red de jerga ampliada) hardcodea un dominio/especialidad por nombre', (function(){
@@ -18116,14 +18275,16 @@ function correrPruebasAuto(){
        (F83-11) con diag_gobernanza1.js. */
     chk('F83-01 · C1G1_construirComprension recibe assessment/camposExcluidos y los deja en estadoFinal', (function(){
       var src = C1G1_construirComprension.toString();
-      var firmaOk = /interpretationResult,\s*assessment,\s*camposExcluidos\s*\)/.test(src);
+      // CU-UX 01D (26/08): la firma suma un onFase opcional al final (ver C1G1_avisarFase) --
+      // el orden/presencia de assessment/camposExcluidos que este test verifica no cambió.
+      var firmaOk = /interpretationResult,\s*assessment,\s*camposExcluidos,\s*onFase\s*\)/.test(src);
       var estadoOk = src.indexOf('assessment: assessment || null') > -1 && src.indexOf('camposExcluidos: camposExcluidos || []') > -1;
       return firmaOk && estadoOk;
     })());
     chk('F83-02 · C1G1_continuarCiclo pasa assessment/camposExcluidos a C1G1_construirComprension al llegar a INTERPRET', (function(){
       var src = C1G1_continuarCiclo.toString();
       var idx = src.indexOf("ejecucion.action === 'INTERPRET'");
-      var idxLlamada = src.indexOf('C1G1_construirComprension(snapshot, opening, graphState, ejecucion.front, ejecucion.result, assessment, camposExcluidos)', idx);
+      var idxLlamada = src.indexOf('C1G1_construirComprension(snapshot, opening, graphState, ejecucion.front, ejecucion.result, assessment, camposExcluidos, onFase)', idx);
       return idx > -1 && idxLlamada > idx;
     })());
     chk('F83-03 · C1G1_decidirGobernanza conserva assessment/camposExcluidos de estadoConRetorno en su estadoFinal', (function(){
@@ -18144,13 +18305,15 @@ function correrPruebasAuto(){
       var idxConcat = src.indexOf('camposExcluidosConEsteFrente');
       var idxFormulation = src.indexOf('frenteGobernado.formulation');
       var idxIncidencia = src.indexOf('frenteGobernado.possibleIncidence');
-      var idxLlamada = src.indexOf('C1G1_abrirCampoYSeleccionarFrente(estadoGobernado.snapshot, estadoGobernado.opening, estadoGobernado.assessment, camposExcluidosConEsteFrente)');
+      // CU-ENERGY 01A/01D (26/08): mismo onFase opcional al final -- no cambia el orden/contenido
+      // de assessment/camposExcluidos que este test verifica.
+      var idxLlamada = src.indexOf('C1G1_abrirCampoYSeleccionarFrente(estadoGobernado.snapshot, estadoGobernado.opening, estadoGobernado.assessment, camposExcluidosConEsteFrente, onFase)');
       return idxConcat > -1 && idxFormulation > idxConcat && idxIncidencia > idxFormulation && idxLlamada > idxIncidencia;
     })());
     chk('F83-07 · C1G1_explorarOtroContexto reutiliza F8.1/F8.2 tal cual (no reimplementa el loop de Campos alternativos)', (function(){
       var src = C1G1_explorarOtroContexto.toString();
       return src.indexOf('MAX_CAMPOS_ALTERNATIVOS') === -1 && src.indexOf('C1G1_abrirCampoYSeleccionarFrente(') > -1 &&
-        src.indexOf('C1G1_continuarCiclo(estadoBase, null)') > -1;
+        src.indexOf('C1G1_continuarCiclo(estadoBase, null, onFase)') > -1;
     })());
     chk('F83-08 · gobernanza_resuelta ofrece Explorar otro contexto y Volver a Memoria (ya no es un punto muerto)', (function(){
       var vista = C1G1_renderVista({ phase:'gobernanza_resuelta', texto:'listo' });
@@ -22439,6 +22602,91 @@ function correrPruebasAuto(){
       chk('C06 · resumenUso agrupa por tipo y suma',
           _s.n === 2 && _s.ent === 11500 && _s.sal === 2600 &&
           _s.porTipo.chat.n === 1 && _s.porTipo.informe.n === 1 && _s.costo > 0);
+      /* ---- CU-ENERGY 01A/01C (26/08) · Consumo real de Contextos Universal, con fase y duración ----
+         "Contextos produce una pregunta real pero Consumo real sigue exactamente igual" / "Instrumentar
+         la cadena real para devolver cantidad de llamadas, tiempo de IA por llamada, tiempo total y
+         fases". Mismo patrón de prueba que C03-C06 (arriba): sobre el mismo _uso ya en marcha, sin
+         tocar auth/C1/gobernanza -- sólo registrarUso()/resumenUso(), que es donde vive el fix real. */
+      chk('CU01C-01 · registrarUso(tipo, data, extra) guarda fase/ms cuando se pasan',
+          (function(){
+            var reg = registrarUso('contextos_universal', { usage:{ input_tokens:100, output_tokens:50 } }, { fase:'origen', duracionMs:1234 });
+            return !!reg && reg.fase === 'origen' && reg.ms === 1234;
+          })());
+      chk('CU01C-02 · registrarUso sin extra (compat con los 3 sitios previos: chat/informe/profundizar) deja fase/ms en null, sin lanzar',
+          (function(){
+            var reg = registrarUso('profundizar', { usage:{ input_tokens:10, output_tokens:5 } });
+            return !!reg && reg.fase === null && reg.ms === null;
+          })());
+      chk('CU01C-03 · registrarUso admite extra.duracionMs === 0 (no lo confunde con "sin dato")',
+          (function(){
+            var reg = registrarUso('contextos_universal', { usage:{ input_tokens:1, output_tokens:1 } }, { fase:'retorno', duracionMs:0 });
+            return !!reg && reg.ms === 0;
+          })());
+      var _s2 = resumenUso();
+      chk('CU01A-01 · resumenUso().porFase agrega cantidad/tiempo por fase real, sólo para registros con fase',
+          _s2.porFase.origen && _s2.porFase.origen.n === 1 && _s2.porFase.origen.ms === 1234 &&
+          _s2.porFase.retorno && _s2.porFase.retorno.n === 1 && _s2.porFase.retorno.ms === 0 &&
+          !_s2.porFase.chat && !_s2.porFase.informe);
+      chk('CU01C-04 · las llamadas de Contextos Universal quedan diferenciadas en porTipo, junto a chat/informe/profundizar',
+          _s2.porTipo.contextos_universal && _s2.porTipo.contextos_universal.n === 2 &&
+          _s2.porTipo.chat.n === 1 && _s2.porTipo.informe.n === 1 && _s2.porTipo.profundizar.n === 1);
+      chk('CU01A-02 · los 12 Cx_llamarIA de Contextos Universal llaman a registrarUso con su propia fase (verificación estructural, ver C1_FASE_LABEL_CONSUMO)',
+          (function(){
+            var pares = [
+              [C1A2_llamarIA, 'origen'], [C1B1_llamarIA, 'campo'], [C1B2_llamarIA, 'propagacion'],
+              [C1C1_llamarIA, 'frente'], [C1C2_llamarIA, 'accion'], [C1C3A_llamarIAAsk, 'pregunta'],
+              [C1C3A_llamarIATrace, 'rastreo'], [C1C4A_llamarIA, 'interpretacion'], [C1C4B_llamarIA, 'funcion'],
+              [C1E1_llamarIA, 'foco'], [C1E2_llamarIA, 'suficiencia'], [C1F1_llamarIA, 'retorno']
+            ];
+            return pares.every(function(p){
+              var src = p[0].toString();
+              return src.indexOf("registrarUso('contextos_universal', data, { fase: '" + p[1] + "'") > -1;
+            });
+          })());
+      chk('CU01B-01 · C1G1_lenguajeSeguro filtra jerga interna (ids tipo route1/rel4, snake_case, ALL_CAPS) y devuelve la alternativa humana',
+          C1G1_lenguajeSeguro('esto referencia route1 y rel4 directamente', 'texto humano de repuesto') === 'texto humano de repuesto' &&
+          C1G1_lenguajeSeguro('algo con snake_case_interno', 'alt') === 'alt' &&
+          C1G1_lenguajeSeguro('un ESTADOTOTAL raro', 'alt') === 'alt' &&
+          C1G1_lenguajeSeguro('un texto perfectamente humano y normal', 'alt') === 'un texto perfectamente humano y normal');
+      chk('CU01B-02 · las 5 vistas de Contextos (Apertura/Pregunta/Comprensión/Cierre/Retorno) pasan por el mismo filtro de jerga, no sólo el cierre',
+          (function(){
+            var vA = C1G1_vistaApertura('Org', { question:'route1 y rel4 sin sentido' }, { formulation:'algo' });
+            var vP = C1G1_vistaPregunta({ userQuestion:{ text:'pregunta con snake_case_interno', whyNeeded:'porque rel7' } });
+            var vC = C1G1_vistaComprension({ statement:'HALLAZGOTOTAL raro', explains:[], supportRefs:[], uncertainties:[] }, null);
+            var vR = C1G1_vistaRetorno({ overallSummary:'route9 concluyo esto', changes:[{ before:'rel3 antes', after:'rel3 ahora', type:'add' }] });
+            return !C1G1_PATRON_JERGA.test(vA.texto || '') &&
+              !C1G1_PATRON_JERGA.test(vP.pregunta || '') && !C1G1_PATRON_JERGA.test(vP.porQue || '') &&
+              !C1G1_PATRON_JERGA.test(vC.principal || '') &&
+              !C1G1_PATRON_JERGA.test(vR.resumen || '') &&
+              vR.cambios.every(function(c){ return !C1G1_PATRON_JERGA.test(c.antes || '') && !C1G1_PATRON_JERGA.test(c.ahora || ''); });
+          })());
+      chk('CU01D-01 · C1G1_avisarFase invoca onFase(faseId) cuando es función, y no lanza si no lo es o si el callback tira error',
+          (function(){
+            var vista = null;
+            C1G1_avisarFase(function(f){ vista = f; }, 'origen');
+            var ok1 = vista === 'origen';
+            var ok2 = true; try{ C1G1_avisarFase(undefined, 'campo'); C1G1_avisarFase(null, 'campo'); C1G1_avisarFase('no-funcion', 'campo'); }catch(e){ ok2 = false; }
+            var ok3 = true; try{ C1G1_avisarFase(function(){ throw new Error('x'); }, 'campo'); }catch(e){ ok3 = false; }
+            return ok1 && ok2 && ok3;
+          })());
+      chk('CU01D-02 · C1G3_htmlTrabajando muestra un texto humano distinto por fase real, y conserva un texto por defecto si la fase es desconocida/ausente',
+          (function(){
+            var textos = ['origen','campo','accion','rastreo','comprension','validacion'].map(function(f){ return C1G3_htmlTrabajando(f); });
+            var todosDistintos = textos.every(function(t, i){ return textos.indexOf(t) === i; });
+            var conFallback = C1G3_htmlTrabajando('fase_inexistente').indexOf('Comprendiendo el contexto') > -1 &&
+              C1G3_htmlTrabajando().indexOf('Comprendiendo el contexto') > -1;
+            var sinPorcentajes = textos.every(function(t){ return !/%|\d+\s*(seg|s\b|ms\b)/.test(t); });
+            return todosDistintos && conFallback && sinPorcentajes;
+          })());
+      chk('CU01D-03 · las funciones de orquestación (iniciarConversacion/continuarCiclo/construirComprension/responderPregunta/explorarOtroContexto) aceptan onFase y lo pasan hacia abajo (patrón reutilizable, sin decidir nada con él)',
+          (function(){
+            var srcs = [C1G1_iniciarConversacion, C1G1_continuarCiclo, C1G1_construirComprension, C1G1_responderPregunta, C1G1_explorarOtroContexto]
+              .map(function(f){ return f.toString(); });
+            return srcs.every(function(s){ return /onFase/.test(s); }) &&
+              // Doctrina de siempre: C1G1_* nunca toca DOM -- avisarFase es la única forma en que
+              // esta capa "habla" hacia afuera, y sigue siendo un callback opcional observacional.
+              srcs.every(function(s){ return s.indexOf('document.') === -1 && s.indexOf('innerHTML') === -1; });
+          })());
     }finally{
       if(_uso === null) localStorage.removeItem('ag_core_uso'); else localStorage.setItem('ag_core_uso', _uso);
     }
