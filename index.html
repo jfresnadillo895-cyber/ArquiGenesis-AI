@@ -554,6 +554,16 @@ header .spacer{flex:1}
 .cr-fila b{color:var(--text);font-weight:600}
 .cr-tot{display:flex;justify-content:space-between;font-size:15px;margin:14px 0 4px}
 .cr-tot b{color:var(--accent);font-weight:700}
+/* CAP-C1G (28/08): anillo toroidal de Capacidad disponible -- SVG liviano, sin librerías
+   nuevas. .cr-fila queda sin uso (la tabla de costo por operación se sacó de cardCreditos())
+   pero no se borra la regla: no rompe nada quedarse, ya es criterio del proyecto no tocar CSS
+   muerto sin necesidad (mismo criterio que RECARGA en CAP-C1E). */
+.cr-ring{position:relative;width:112px;height:112px;margin:16px auto 6px}
+.cr-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.cr-ring-bg{fill:none;stroke:var(--line);stroke-width:10}
+.cr-ring-fg{fill:none;stroke:var(--accent);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .35s ease,stroke .35s ease}
+.cr-ring-fg.critico{stroke:#b4441f}
+.cr-ring-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:700;color:var(--text)}
 
 /* ---------- onboarding ---------- */
 #onb{position:fixed;inset:0;background:var(--bg);z-index:90;display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center}
@@ -11634,30 +11644,56 @@ function credAlcanza(tipo){
   return credEstado().resta >= (COSTO[tipo] || 1);
 }
 
+// CAP-C1G (28/08): indicador circular/toroidal de Capacidad disponible -- reemplaza la lectura
+// puramente textual de la tarjeta "Tu capacidad". Recibe el mismo pct ya calculado por
+// capacidadDisponiblePct() (CAP-C1B): no hay un segundo cálculo acá, sólo dibujo. `estado` sólo
+// admite 'normal' o 'critico' (ver comentario en cardCreditos()). El wrapper lleva
+// role="progressbar" + aria-value* para que el valor exista como semántica accesible real,
+// además del texto real "Capacidad disponible · XX %" que sigue debajo (dato soberano, sin
+// tocar). El número dentro del anillo se marca aria-hidden para no duplicar el anuncio del
+// lector de pantalla, que ya recibe el valor por el progressbar.
+function anilloCapacidadHTML(pct, estado){
+  const p = Math.max(0, Math.min(100, pct));
+  const r = 52, cx = 60, cy = 60;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - p / 100);
+  const claseFg = 'cr-ring-fg' + (estado === 'critico' ? ' critico' : '');
+  return '<div class="cr-ring" role="progressbar" aria-valuemin="0" aria-valuemax="100" ' +
+      'aria-valuenow="' + p + '" aria-label="Capacidad disponible">' +
+    '<svg viewBox="0 0 120 120" aria-hidden="true" focusable="false">' +
+      '<circle class="cr-ring-bg" cx="' + cx + '" cy="' + cy + '" r="' + r + '"></circle>' +
+      '<circle class="' + claseFg + '" cx="' + cx + '" cy="' + cy + '" r="' + r + '" ' +
+        'stroke-dasharray="' + circ.toFixed(2) + '" stroke-dashoffset="' + offset.toFixed(2) + '"></circle>' +
+    '</svg>' +
+    '<div class="cr-ring-pct" aria-hidden="true">' + p + '%</div>' +
+  '</div>';
+}
+
 function cardCreditos(){
   const c = credEstado();
   const pct = capacidadDisponiblePct(c);
   el.cardContent.innerHTML = '';
   const h = document.createElement('h3'); h.textContent = 'Tu capacidad';
   const p1 = document.createElement('p');
-  // CAP-C1B (26/08): se deja de mostrar el conteo de créditos ("resta de total créditos") --
-  // el porcentaje (abajo, en el total "Capacidad disponible") es ahora la única representación
-  // del saldo. No se muestran los dos juntos.
-  p1.textContent = 'Plan ' + c.plan.nombre + ' · se renueva cada ' + c.renueva + '. Tu plan determina qué capacidades y aplicaciones tenés habilitadas; la capacidad disponible regula cuánto podés usarlas.';
-  el.cardContent.appendChild(h); el.cardContent.appendChild(p1);
-  const filas = [
-    ['Consulta de comprensión', COSTO.chat],
-    ['Lectura territorial (Urbanismo)', COSTO.lectura],
-    ['Evaluación de campo (Contextos)', COSTO.campo],
-    ['Informe', COSTO.informe],
-    ['Profundizar una dimensión (9 subtítulos)', COSTO.profundizar]
-  ];
-  for(const f of filas){
-    const d = document.createElement('div'); d.className='cr-fila';
-    const a = document.createElement('span'); a.textContent = f[0];
-    const b = document.createElement('b'); b.textContent = f[1] + (f[1]===1?' crédito':' créditos');
-    d.appendChild(a); d.appendChild(b); el.cardContent.appendChild(d);
-  }
+  // CAP-C1G (28/08): la tarjeta deja de exponer contabilidad interna -- se saca la tabla de
+  // costo por operación en créditos (quedó como CAP-C1B/C1C la dejaron, ver historial git) y
+  // la explicación legacy de "tu plan determina qué capacidades y aplicaciones tenés
+  // habilitadas". Ahora sólo dice el plan y, en lenguaje de usuario, qué es la Capacidad
+  // disponible. Nunca se inventa una fecha exacta de renovación -- sólo "cada mes" cuando la
+  // ventana del plan realmente es mensual (c.renueva === 'mes', mismo dato de siempre).
+  p1.textContent = 'Plan ' + c.plan.nombre + (c.renueva === 'mes' ? ' · se renueva cada mes' : '') + '.';
+  const p2 = document.createElement('p');
+  p2.textContent = 'Tu Capacidad disponible indica cuánto podés usar Comprender durante el período actual.';
+  el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(p2);
+  // CAP-C1G: anillo toroidal -- puramente visual, sobre el mismo pct de CAP-C1B (sin segundo
+  // cálculo). Coloreado en dos niveles nada más (normal / crítico a 10% o menos, que ya incluye
+  // 0% agotado): el aviso de 25% ya existe como card aparte (CAP-C1C), no hace falta duplicarlo
+  // con un tercer color acá. Sin latido ni animación permanente -- sólo una transición mínima al
+  // redibujar, y el reset global de prefers-reduced-motion (línea ~647) ya la anula si aplica.
+  const estadoRing = pct <= 10 ? 'critico' : 'normal';
+  const ringHost = document.createElement('div');
+  ringHost.innerHTML = anilloCapacidadHTML(pct, estadoRing);
+  el.cardContent.appendChild(ringHost.firstElementChild);
   const tot = document.createElement('div'); tot.className='cr-tot';
   const ta = document.createElement('span'); ta.textContent = 'Capacidad disponible';
   const tb = document.createElement('b'); tb.textContent = pct + ' %';
