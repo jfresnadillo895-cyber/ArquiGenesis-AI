@@ -629,7 +629,7 @@
         // Core (index.html) sí; en Urbanismo/Contextos no (tienen su propio medidor, sin
         // tocar), así que ahí este botón simplemente no se dibuja.
         cuerpo =
-          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tus créditos') : '') +
+          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tu capacidad') : '') +
           botonSecundario('ccIrClave','Cambiar contraseña') +
           botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
           enlace('ccSalir','Cerrar sesión');

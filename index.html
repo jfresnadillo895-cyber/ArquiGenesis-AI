@@ -83,9 +83,16 @@ header{
 .toro.principio{color:var(--trans);animation:girar 3s linear infinite, latido .6s ease-in-out 4}
 @keyframes girar{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.toro,.toro.busy,.toro.principio,.toro-hero{animation:none}}
-@keyframes latido{0%,100%{opacity:1}50%{opacity:.55}}50%{opacity:.35}}
-  50%{opacity:.5;box-shadow:0 0 0 4px rgba(91,143,212,0)}
-}
+/* LATIDO-01 (28/08): la regla de acá abajo estaba rota -- el primer "}" ya cerraba el
+   @keyframes válido (0%,100%/50%) y lo que seguía (otro "50%{...}" con box-shadow, más una
+   "}" suelta) quedaba fuera de cualquier regla, así que el navegador lo descartaba en
+   silencio. El único fragmento que sobrevivía era un parpadeo de opacidad muy leve (1→.55),
+   y encima el ícono ya está girando rápido en 5s durante .busy -- entre las dos cosas, el
+   latido no se percibía. Se deja una sola regla válida, con una caída de opacidad más
+   profunda (.4) para que se note incluso compitiendo con el giro. Sigue siendo sólo
+   opacity -- si tocara "transform" (p. ej. scale) entraría en conflicto con el "rotate" de
+   @keyframes girar, que corre al mismo tiempo en la misma propiedad. */
+@keyframes latido{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 header .spacer{flex:1}
 .hbtn{
@@ -1557,7 +1564,7 @@ header .spacer{flex:1}
         // Core (index.html) sí; en Urbanismo/Contextos no (tienen su propio medidor, sin
         // tocar), así que ahí este botón simplemente no se dibuja.
         cuerpo =
-          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tus créditos') : '') +
+          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tu capacidad') : '') +
           botonSecundario('ccIrClave','Cambiar contraseña') +
           botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
           enlace('ccSalir','Cerrar sesión');
@@ -11034,19 +11041,36 @@ function avisoUmbralCreditos(){
 }
 function cardAvisoCreditos(umbral, c){
   el.cardContent.innerHTML = '';
+  // CAP-C1C (28/08): lenguaje de Capacidad en vez de créditos, con copy y CTA diferenciados
+  // por plan -- Gratis ofrece pasar a Profesional, planes pagos no ofrecen ningún upgrade
+  // inexistente (con un único plan contratable no hay a qué "ascender").
+  const esGratis = (planActual() === 'gratis');
+  const pctQueda = umbral >= 90 ? 10 : 25;
   const h = document.createElement('h3');
-  h.textContent = umbral >= 90 ? 'Te estás por quedar sin créditos' : 'Vas por el 75% de tus créditos';
+  h.textContent = esGratis
+    ? 'Te queda ' + pctQueda + '% de tu Capacidad de bienvenida'
+    : 'Te queda ' + pctQueda + '% de Capacidad';
   const p1 = document.createElement('p');
-  p1.textContent = 'Te quedan ' + c.resta + ' de ' + c.total + ' créditos de tu plan ' + c.plan.nombre +
-    ', se renuevan cada ' + c.renueva + '.';
+  p1.textContent = esGratis
+    ? 'Podés pasar a Profesional para seguir comprendiendo con Capacidad mensual.'
+    : 'Tu plan ' + c.plan.nombre + ' se renueva cada ' + c.renueva + '.';
   const p2 = document.createElement('p');
   p2.textContent = 'Tus organismos y fichas están intactos -- nada se pierde si se agotan, sólo esperás a que se renueven.';
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(p2);
   const row = document.createElement('div'); row.className='cardrow';
   const b1 = document.createElement('button'); b1.className='btn'; b1.textContent='Entendido'; b1.onclick = cerrarOverlay;
-  const b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Ver planes';
-  b2.onclick = function(){ cerrarOverlay(); window.mostrarPlanes('ampliar'); };
-  row.appendChild(b1); row.appendChild(b2);
+  row.appendChild(b1);
+  if(esGratis){
+    const b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Ver Profesional';
+    b2.onclick = function(){ cerrarOverlay(); window.mostrarPlanes('ampliar'); };
+    row.appendChild(b2);
+  } else if(typeof window.comprenderVerCreditos === 'function'){
+    // "Ver mi plan" sólo si ya existe una pantalla útil (la tarjeta de Capacidad de CAP-C1B) --
+    // nunca "Ver planes", que sugeriría un upgrade que no existe para quien ya paga.
+    const b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Ver mi plan';
+    b2.onclick = function(){ cerrarOverlay(); window.comprenderVerCreditos(); };
+    row.appendChild(b2);
+  }
   el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
 }
@@ -11645,38 +11669,55 @@ function cardCreditos(){
      el de la suscripcion. Cuando haya una recarga real, esto vuelve a tener boton. */
   const row = document.createElement('div'); row.className='cardrow';
   const b1 = document.createElement('button'); b1.className='btn'; b1.textContent='Cerrar'; b1.onclick = cerrarOverlay;
-  const b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Ampliar plan';
-  b2.onclick = function(){ cerrarOverlay(); window.mostrarPlanes('ampliar'); };  /* PAGO: flujo real (Mercado Pago), no el simulacro cardAmpliar */
-  row.appendChild(b1); row.appendChild(b2);
+  row.appendChild(b1);
+  // CAP-C1D (28/08): el CTA permanente de esta tarjeta ya no es "Ampliar plan" para todo el
+  // mundo -- con un único plan contratable (Profesional), ese botón no tenía a dónde llevar a
+  // quien ya paga. Gratis sigue viendo la invitación a pasar a Profesional; Profesional y las
+  // cuentas legacy (Estudio/Magister, que no pueden recontratar ni hacer downgrade) no tienen
+  // ninguna acción útil adicional acá, así que se oculta el botón en vez de inventar una
+  // pantalla nueva sólo para tener algo que mostrar.
+  if(planActual() === 'gratis'){
+    const b2 = document.createElement('button'); b2.className='btn primary'; b2.textContent='Ver Profesional';
+    b2.onclick = function(){ cerrarOverlay(); window.mostrarPlanes('ampliar'); };  /* PAGO: flujo real (Mercado Pago), no el simulacro cardAmpliar */
+    row.appendChild(b2);
+  }
   el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
 }
 
 function cardSinCreditos(tipo){
   const c = credEstado();
-  const nombres = { chat:'esta consulta', lectura:'una lectura territorial', campo:'una evaluación de campo', informe:'un informe', profundizar:'profundizar una dimensión' };
   const esGratis = (planActual() === 'gratis');
   el.cardContent.innerHTML = '';
+  // CAP-C1C (28/08): "Tu Capacidad disponible se agotó" reemplaza cualquier mención de créditos
+  // restantes/costo de la acción (tipo ya no se usa para texto, se conserva por compatibilidad
+  // de firma con los call sites existentes). Gratis ofrece pasar a Profesional; planes pagos ya
+  // no ofrecen "Ver planes" (no hay upgrade real por encima de Profesional).
   const h = document.createElement('h3');
-  h.textContent = esGratis ? 'Usaste el paquete de bienvenida' : 'Se agotaron tus créditos del mes';
+  h.textContent = 'Tu Capacidad disponible se agotó';
   const p1 = document.createElement('p');
-  p1.textContent = 'Te quedan ' + c.resta + ' créditos y ' + nombres[tipo] + ' cuesta ' + (COSTO[tipo]||1) + '.';
-  // PLAN-C2A (26/08): con un único plan contratable, ya no corresponde sugerir "un plan mayor"
-  // a nadie en esta rama (Profesional/Estudio/Magister) -- Estudio y Magister no se pueden
-  // comprar, y no hay nada por encima de Profesional. Se retira la promesa, no el botón "Ver
-  // planes" (sigue siendo válido para quien está en gratis o quiere confirmar su plan actual).
+  p1.textContent = esGratis
+    ? 'Podés pasar a Profesional para continuar comprendiendo.'
+    : 'Esperá a que se renueve cada ' + c.renueva + '.';
   const p2 = document.createElement('p');
   p2.textContent = esGratis
-    ? 'Tus organismos y fichas están intactos — nada se pierde. El paquete de bienvenida se otorga una sola vez: para seguir, elegí un plan.'
-    : 'Tus organismos y fichas están intactos — nada se pierde. Esperá a que el crédito se renueve el mes que viene.';
+    ? 'Tus organismos y fichas están intactos — nada se pierde. El paquete de bienvenida se otorga una sola vez.'
+    : 'Tus organismos y fichas están intactos — nada se pierde.';
   el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(p2);
 
   const row = document.createElement('div'); row.className='cardrow';
   const b1 = document.createElement('button'); b1.className='btn'; b1.textContent = esGratis ? 'Ahora no' : 'Esperar la renovación';
   b1.onclick = cerrarOverlay;
-  const b2 = document.createElement('button'); b2.className='btn'; b2.textContent='Ver planes';
-  b2.onclick = function(){ cerrarOverlay(); window.mostrarPlanes('ampliar'); };  /* PAGO: flujo real (Mercado Pago), no el simulacro cardAmpliar */
-  row.appendChild(b1); row.appendChild(b2);
+  row.appendChild(b1);
+  if(esGratis){
+    const b2 = document.createElement('button'); b2.className='btn'; b2.textContent='Ver Profesional';
+    b2.onclick = function(){ cerrarOverlay(); window.mostrarPlanes('ampliar'); };  /* PAGO: flujo real (Mercado Pago), no el simulacro cardAmpliar */
+    row.appendChild(b2);
+  } else if(typeof window.comprenderVerCreditos === 'function'){
+    const b2 = document.createElement('button'); b2.className='btn'; b2.textContent='Ver mi plan';
+    b2.onclick = function(){ cerrarOverlay(); window.comprenderVerCreditos(); };
+    row.appendChild(b2);
+  }
   el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
 }

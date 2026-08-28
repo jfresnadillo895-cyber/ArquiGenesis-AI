@@ -1181,7 +1181,7 @@ header header .cai-ham{flex-shrink:0}
         // Core (index.html) sí; en Urbanismo/Contextos no (tienen su propio medidor, sin
         // tocar), así que ahí este botón simplemente no se dibuja.
         cuerpo =
-          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tus créditos') : '') +
+          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tu capacidad') : '') +
           botonSecundario('ccIrClave','Cambiar contraseña') +
           botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
           enlace('ccSalir','Cerrar sesión');
@@ -3837,17 +3837,30 @@ var __organismoIdCoreContextos = null;   // 14/08: capturado acá para el handof
 
 function credSinCreditos(tipo){
   const c = credEstado();
-  const nombres = {diagnostico:'un diagnóstico completo', proyectivo:'un abordaje proyectivo', refinamiento:'un refinamiento', campo:'una evaluación de campo'};
+  const esGratis = (credPlan() === 'gratis');
+  // CAP-C1C (28/08): "Tu Capacidad disponible se agotó" reemplaza el conteo de créditos y el
+  // costo de la operación (tipo ya no se usa para texto, se conserva por compatibilidad de
+  // firma). Gratis ofrece pasar a Profesional; planes pagos ya no ofrecen "Ver planes".
   const card = caiOverlay(); card.innerHTML='';
-  const h=document.createElement('h3'); h.textContent = credPlan()==='gratis' ? 'Usaste el paquete de bienvenida' : 'Se agotaron tus créditos del mes';
+  const h=document.createElement('h3'); h.textContent = 'Tu Capacidad disponible se agotó';
   const p1=document.createElement('p');
-  p1.textContent = 'Te quedan ' + c.resta + ' créditos y ' + (nombres[tipo]||'esta operación') + ' cuesta ' + (CRED_COSTO[tipo]||1) + '.';
+  p1.textContent = esGratis
+    ? 'Podés pasar a Profesional para continuar comprendiendo.'
+    : 'Esperá a que se renueve cada ' + c.renueva + '.';
   const p2=document.createElement('p');
-  p2.textContent = 'Tus diagnósticos están intactos — nada se pierde. Esperá la renovación.';
+  p2.textContent = esGratis
+    ? 'Tus diagnósticos están intactos — nada se pierde. El paquete de bienvenida se otorga una sola vez.'
+    : 'Tus diagnósticos están intactos — nada se pierde.';
   const row=document.createElement('div'); row.className='cai-row';
-  const b1=document.createElement('button'); b1.className='cai-btn'; b1.textContent='Esperar'; b1.onclick=caiCerrar;
-  const b2=document.createElement('button'); b2.className='cai-btn pri'; b2.textContent='Ver planes'; b2.onclick=function(){ caiCerrar(); window.mostrarPlanes('ampliar'); };
-  row.appendChild(b1); row.appendChild(b2);
+  const b1=document.createElement('button'); b1.className='cai-btn'; b1.textContent = esGratis ? 'Ahora no' : 'Esperar'; b1.onclick=caiCerrar;
+  row.appendChild(b1);
+  if(esGratis){
+    const b2=document.createElement('button'); b2.className='cai-btn pri'; b2.textContent='Ver Profesional'; b2.onclick=function(){ caiCerrar(); window.mostrarPlanes('ampliar'); };
+    row.appendChild(b2);
+  } else if(typeof window.comprenderVerCreditos === 'function'){
+    const b2=document.createElement('button'); b2.className='cai-btn pri'; b2.textContent='Ver mi plan'; b2.onclick=function(){ caiCerrar(); window.comprenderVerCreditos(); };
+    row.appendChild(b2);
+  }
   card.appendChild(h); card.appendChild(p1); card.appendChild(p2); card.appendChild(row);
   caiAbrir();
 }
@@ -3872,18 +3885,32 @@ function avisoUmbralCreditos(){
 }
 function cardAvisoCreditos(umbral, c){
   const card = caiOverlay(); card.innerHTML = '';
+  // CAP-C1C (28/08): lenguaje de Capacidad, copy y CTA diferenciados por plan -- ver mismo
+  // criterio en index.html.
+  const esGratis = (credPlan() === 'gratis');
+  const pctQueda = umbral >= 90 ? 10 : 25;
   const h = document.createElement('h3');
-  h.textContent = umbral >= 90 ? 'Te estás por quedar sin créditos' : 'Vas por el 75% de tus créditos';
+  h.textContent = esGratis
+    ? 'Te queda ' + pctQueda + '% de tu Capacidad de bienvenida'
+    : 'Te queda ' + pctQueda + '% de Capacidad';
   const p1 = document.createElement('p');
-  p1.textContent = 'Te quedan ' + c.resta + ' de ' + c.total + ' créditos de tu plan ' + c.plan.nombre +
-    ', se renuevan cada ' + c.renueva + '.';
+  p1.textContent = esGratis
+    ? 'Podés pasar a Profesional para seguir comprendiendo con Capacidad mensual.'
+    : 'Tu plan ' + c.plan.nombre + ' se renueva cada ' + c.renueva + '.';
   const p2 = document.createElement('p');
   p2.textContent = 'Tus diagnósticos están intactos -- nada se pierde si se agotan, sólo esperás a que se renueven.';
   const row = document.createElement('div'); row.className = 'cai-row';
   const b1 = document.createElement('button'); b1.className = 'cai-btn'; b1.textContent = 'Entendido'; b1.onclick = caiCerrar;
-  const b2 = document.createElement('button'); b2.className = 'cai-btn pri'; b2.textContent = 'Ver planes';
-  b2.onclick = function(){ caiCerrar(); window.mostrarPlanes('ampliar'); };
-  row.appendChild(b1); row.appendChild(b2);
+  row.appendChild(b1);
+  if(esGratis){
+    const b2 = document.createElement('button'); b2.className = 'cai-btn pri'; b2.textContent = 'Ver Profesional';
+    b2.onclick = function(){ caiCerrar(); window.mostrarPlanes('ampliar'); };
+    row.appendChild(b2);
+  } else if(typeof window.comprenderVerCreditos === 'function'){
+    const b2 = document.createElement('button'); b2.className = 'cai-btn pri'; b2.textContent = 'Ver mi plan';
+    b2.onclick = function(){ caiCerrar(); window.comprenderVerCreditos(); };
+    row.appendChild(b2);
+  }
   card.appendChild(h); card.appendChild(p1); card.appendChild(p2); card.appendChild(row);
   caiAbrir();
 }

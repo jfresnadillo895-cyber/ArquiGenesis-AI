@@ -1365,7 +1365,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
         // Core (index.html) sí; en Urbanismo/Contextos no (tienen su propio medidor, sin
         // tocar), así que ahí este botón simplemente no se dibuja.
         cuerpo =
-          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tus créditos') : '') +
+          (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tu capacidad') : '') +
           botonSecundario('ccIrClave','Cambiar contraseña') +
           botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
           enlace('ccSalir','Cerrar sesión');
@@ -2316,18 +2316,32 @@ function avisoUmbralCreditos(){
 }
 function cardAvisoCreditos(umbral, c){
   var card = caiOverlay(); card.innerHTML = '';
+  // CAP-C1C (28/08): lenguaje de Capacidad, copy y CTA diferenciados por plan -- ver mismo
+  // criterio en index.html. negocios.html no tiene pantalla propia de "Tus créditos"/"Tu
+  // capacidad" (confirmado en CAP-C1B: nunca define window.comprenderVerCreditos), así que
+  // el plan pago no ofrece ningún CTA -- no hay a qué "Ver mi plan" llevar sin construir una
+  // pantalla nueva, fuera del alcance de C1C.
+  var esGratis = (credPlan() === 'gratis');
+  var pctQueda = umbral >= 90 ? 10 : 25;
   var h = document.createElement('h3');
-  h.textContent = umbral >= 90 ? 'Te estás por quedar sin créditos' : 'Vas por el 75% de tus créditos';
+  h.textContent = esGratis
+    ? 'Te queda ' + pctQueda + '% de tu Capacidad de bienvenida'
+    : 'Te queda ' + pctQueda + '% de Capacidad';
   var p1 = document.createElement('p');
-  p1.textContent = 'Te quedan ' + c.resta + ' de ' + c.total + ' créditos de tu plan ' + c.nombre +
-    ', se renuevan cada ' + c.renueva + '.';
+  p1.textContent = esGratis
+    ? 'Podés pasar a Profesional para seguir comprendiendo con Capacidad mensual.'
+    : 'Tu plan ' + c.nombre + ' se renueva cada ' + c.renueva + '.';
   var p2 = document.createElement('p');
   p2.textContent = 'Tus evaluaciones están intactas -- nada se pierde si se agotan, sólo esperás a que se renueven.';
   var row = document.createElement('div'); row.className = 'cai-row';
   var b1 = document.createElement('button'); b1.className = 'cai-btn'; b1.textContent = 'Entendido'; b1.onclick = caiCerrar;
-  var b2 = document.createElement('button'); b2.className = 'cai-btn pri'; b2.textContent = 'Ver planes';
-  b2.onclick = function(){ caiCerrar(); window.mostrarPlanes('ampliar'); };
-  row.appendChild(b1); row.appendChild(b2);
+  row.appendChild(b1);
+  var b2 = null;
+  if(esGratis){
+    b2 = document.createElement('button'); b2.className = 'cai-btn pri'; b2.textContent = 'Ver Profesional';
+    b2.onclick = function(){ caiCerrar(); window.mostrarPlanes('ampliar'); };
+    row.appendChild(b2);
+  }
   card.appendChild(h); card.appendChild(p1); card.appendChild(p2); card.appendChild(row);
   caiAbrir();
 }
