@@ -12093,13 +12093,33 @@ function pintarReferencia(cont){
   cont.appendChild(s2);
 }
 
+/* SUP-01 (28/08): canal único de contacto para el lanzamiento -- sin sistema de tickets, sin
+   chat de soporte, sin WhatsApp, sin direcciones nuevas (pagos@/soporte@). Reusa el mismo
+   contacto@comprenderai.com que ya recibe "Tu opinión" del lado del servidor (api/comm.js) --
+   acá es sólo un mailto: visible, nada nuevo del lado del backend. */
+function pintarContacto(cont){
+  const s = document.createElement('div'); s.className = 'ay-sec';
+  const t = document.createElement('h4'); t.textContent = 'Contacto';
+  const d = document.createElement('p');
+  d.appendChild(document.createTextNode('Para consultas generales, acceso, pagos o suscripción, escribinos a '));
+  const a = document.createElement('a'); a.href = 'mailto:contacto@comprenderai.com';
+  a.textContent = 'contacto@comprenderai.com';
+  a.style.cssText = 'color:var(--espacio)';
+  d.appendChild(a); d.appendChild(document.createTextNode('.'));
+  s.appendChild(t); s.appendChild(d);
+  const d2 = document.createElement('p');
+  d2.textContent = 'No envíes datos completos de tarjetas ni contraseñas.';
+  s.appendChild(d2);
+  cont.appendChild(s);
+}
+
 function mostrarAyuda(){
   el.cardContent.innerHTML = '';
   const h = document.createElement('h3'); h.textContent = 'Ayuda';
   el.cardContent.appendChild(h);
   const tabs = document.createElement('div'); tabs.className = 'ay-tabs';
   const cont = document.createElement('div');
-  const secciones = [['uso','Uso'],['datos','Tus datos'],['ciclo','El ciclo de comprensión'],['referencia','Referencia esencial y enlaces'],['opinion','Tu opinión'],['acerca','Acerca de']];
+  const secciones = [['uso','Uso'],['datos','Tus datos'],['ciclo','El ciclo de comprensión'],['referencia','Referencia esencial y enlaces'],['contacto','Contacto'],['opinion','Tu opinión'],['acerca','Acerca de']];
   function pintar(clave){
     cont.innerHTML = '';
     if(clave === 'ciclo'){
@@ -12109,6 +12129,8 @@ function mostrarAyuda(){
       setTimeout(function(){ ref.ta.focus(); }, 60);
     } else if(clave === 'referencia'){
       pintarReferencia(cont);
+    } else if(clave === 'contacto'){
+      pintarContacto(cont);
     } else if(clave === 'acerca'){
       construirAcercaContenido(cont);
     } else {
