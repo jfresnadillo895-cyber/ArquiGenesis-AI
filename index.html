@@ -15032,6 +15032,23 @@ function construirTuEspacioConfig(){
   bCuenta.appendChild(bCuentaCorreo);
   bCuenta.addEventListener('click', function(){ cerrarTuEspacio(); if(window.mostrarCuentaComprender) window.mostrarCuentaComprender(); });
   cfg.appendChild(bCuenta);
+  // PLAN-CTA-01 (28/08): para cuentas Gratis, "Ver Profesional" pasa a vivir también acá, junto
+  // a la identificación del plan/acceso a Cuenta -- hasta ahora el único camino práctico era
+  // entrar a Mi cuenta > Tu capacidad y encontrar el CTA ahí adentro (CAP-C1D/CAP-C1G), lo que
+  // obligaba a "adivinar" que había que revisar la Capacidad para encontrar cómo contratar.
+  // Reutiliza exactamente el mismo flujo de siempre (window.mostrarPlanes('ampliar'), la
+  // oferta/checkout ya existentes) -- no se crea ningún modal ni tarjeta comercial nueva.
+  // Profesional y legacy (estudio/magister) no ven este botón: no se ofrece downgrade ni
+  // Magister, mismo criterio que CAP-C1D.
+  if(planActual() === 'gratis'){
+    const bVerPro = document.createElement('button');
+    bVerPro.className = 'mitem';
+    bVerPro.textContent = 'Ver Profesional';
+    bVerPro.style.color = 'var(--accent)';
+    bVerPro.style.fontWeight = '600';
+    bVerPro.addEventListener('click', function(){ cerrarTuEspacio(); window.mostrarPlanes('ampliar'); });
+    cfg.appendChild(bVerPro);
+  }
   if(window.obtenerCorreoActivoComprender){
     window.obtenerCorreoActivoComprender().then(function(correo){
       bCuentaCorreo.textContent = correo || '';
