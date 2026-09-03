@@ -1,0 +1,285 @@
+// api/lemonsqueezy.js — Adaptador internacional (Corte B.6), Lemon Squeezy como Merchant of Record
+// ---------------------------------------------------------------------------------------------
+// QUE HACE
+//   Recibe los webhooks de Lemon Squeezy, verifica su firma, y traduce sus eventos a las MISMAS
+//   funciones internas que ya usa Mercado Pago: activar() / cancelar() / marcar_gracia() /
+//   pausar() / reanudar(). Ningun estado ni identificador propio de Lemon Squeezy entra al
+//   dominio interno -- coincide con §7.1/§7.3 del documento maestro: "ninguna regla comercial
+//   central debe depender directamente de nombres, estados o identificadores propios de un
+//   proveedor". Este archivo es el unico lugar que conoce el vocabulario de Lemon Squeezy.
+//
+// POR QUE SE VUELVE A CONSULTAR LA API (igual que pago.js con Mercado Pago)
+//   La firma certifica que el aviso vino de Lemon Squeezy, pero antes de actuar se pide el
+//   objeto actualizado con la API (Bearer token, que solo tenemos nosotros) y se actua sobre
+//   esa respuesta. Cuesta un llamado de red mas; evita actuar sobre un payload que, aunque
+//   firmado, podria quedar desactualizado si dos webhooks llegan fuera de orden.
+//
+// IDENTIDAD: COMO SE SABE DE QUIEN ES LA SUSCRIPCION
+//   Lemon Squeezy no conoce el uuid de perfiles. Por eso el checkout tiene que armarse siempre
+//   con el dato personalizado `checkout[custom][perfil]` = el uuid de la cuenta (ver "Passing
+//   Custom Data" en la documentacion de Lemon Squeezy). Ese dato vuelve en TODOS los webhooks
+//   de Order, Subscription y License Key relacionados, dentro de `meta.custom_data.perfil`.
+//   Sin ese dato en el checkout, el webhook llega sin forma de saber a que cuenta corresponde
+//   -- se registra como huerfano y no se procesa (mismo criterio que "PAGO SIN
+//   external_reference" en pago.js).
+//
+// EVENTOS QUE SE ATIENDEN Y A DONDE VAN
+//   subscription_created            -> activar() -- primera acreditacion del ciclo
+//   subscription_payment_success    -> activar() -- cada renovacion exitosa vuelve a acreditar
+//   subscription_payment_recovered  -> activar() -- se recupero un cobro que habia fallado
+//   subscription_payment_failed     -> marcar_gracia(5) -- mismo plazo que ya usa Mercado Pago
+//   subscription_cancelled          -> cancelar() -- sigue activa hasta ends_at, sin renovar
+//   subscription_paused             -> pausar() -- nuevo (03/08): hace real el estado 'pausada'
+//                                       que reservar() ya reconocia pero que nadie asignaba
+//   subscription_unpaused           -> reanudar()
+//   subscription_resumed            -> reanudar() -- se deshizo una cancelacion antes de ends_at
+//   subscription_expired            -> no se toca nada aca: se deja que caducar() (cron diario)
+//                                       la baje a gratis, igual tolerancia que Mercado Pago hoy
+//   order_refunded, subscription_payment_refunded -> reembolsar() -- baja a gratis de una
+//                                       (03/08). Decision de Javier: no calcular cuanto credito
+//                                       ya se consumio, bajar directo y el se ocupa de avisarle
+//                                       a la persona. Misma funcion que usa pago.js -- un
+//                                       reembolso se trata igual sin importar la pasarela.
+//   subscription_updated, license_key_*
+//                                    -> se registran pero no accionan (informativo, sin regla
+//                                       de negocio que dependa de ellos por ahora)
+//
+// VARIABLES DE ENTORNO EN VERCEL (nuevas)
+//   LEMONSQUEEZY_API_KEY          token de API (Settings -> API en el dashboard de LS)
+//   LEMONSQUEEZY_WEBHOOK_SECRET   el secreto que elijas al crear el webhook en LS
+//   SUPABASE_URL / SUPABASE_SECRET_KEY   (ya cargadas, se reusan)
+//
+// SIEMPRE RESPONDE 200 (salvo firma invalida) -- mismo motivo que pago.js: devolver error hace
+// que Lemon Squeezy reintente en bucle algo que no se va a arreglar solo.
+//
+// FORMATO DE FUNCION: "Web standard" (Request/Response), no (req,res) como el resto de api/*.js
+//   Se probo primero con el (req,res) clasico + `config.api.bodyParser=false`, pensado para leer
+//   el cuerpo crudo a mano (imprescindible para el HMAC: hay que hashear los bytes exactos que
+//   mando Lemon Squeezy, no una version ya interpretada). En la prueba real (03/08) la firma
+//   nunca coincidio -- la documentacion actual de Vercel ya no describe esa via para /api y en
+//   cambio recomienda `await request.text()` sobre un Request estandar para este caso puntual.
+//   Por eso ESTE archivo exporta `POST(request)` en vez de `export default function(req,res)`;
+//   es la unica excepcion en el proyecto, y es asi porque este es el unico endpoint que necesita
+//   el cuerpo crudo byte a byte para verificar una firma.
+
+import crypto from 'crypto';
+import { planPorVariante } from './catalogo.js';
+import { emitirYNotificar } from '../lib/comm-emitir.js';
+
+const LS_API = 'https://api.lemonsqueezy.com/v1';
+
+const registrar = (o) => console.log(JSON.stringify({ evento: 'lemonsqueezy', ...o }));
+
+function firmaValida(crudo, cabecera, secreto) {
+  if (!secreto) return null;               // null = no configurado todavia
+  if (!cabecera) return false;
+  const hmac = crypto.createHmac('sha256', secreto);
+  const digest = Buffer.from(hmac.update(crudo).digest('hex'), 'utf8');
+  const firma = Buffer.from(cabecera, 'utf8');
+  return digest.length === firma.length && crypto.timingSafeEqual(digest, firma);
+}
+
+async function lsGet(ruta, token) {
+  const r = await fetch(LS_API + ruta, {
+    headers: {
+      Accept: 'application/vnd.api+json',
+      Authorization: 'Bearer ' + token,
+    },
+  });
+  if (!r.ok) throw new Error('lemonsqueezy ' + ruta + ' devolvio ' + r.status);
+  return r.json();
+}
+
+async function rpc(nombre, cuerpo) {
+  const base = String(process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+  const clave = process.env.SUPABASE_SECRET_KEY;
+  const r = await fetch(base + '/rest/v1/rpc/' + nombre, {
+    method: 'POST',
+    headers: { apikey: clave, Authorization: 'Bearer ' + clave, 'content-type': 'application/json' },
+    body: JSON.stringify(cuerpo),
+  });
+  if (!r.ok) throw new Error('rpc ' + nombre + ' devolvio ' + r.status + ' ' + (await r.text()).slice(0, 200));
+  const d = await r.json();
+  return Array.isArray(d) ? d[0] : d;
+}
+
+export async function POST(request) {
+  const apiKey = process.env.LEMONSQUEEZY_API_KEY;
+  const secreto = process.env.LEMONSQUEEZY_WEBHOOK_SECRET;
+
+  // request.text() da los bytes exactos del cuerpo -- imprescindible para que el HMAC
+  // calculado aca coincida con el que mando Lemon Squeezy. Ver nota de cabecera del archivo.
+  const crudo = await request.text();
+  const cabeceraFirma = request.headers.get('x-signature') || '';
+
+  const ok = firmaValida(crudo, cabeceraFirma, secreto);
+  if (ok === false) {
+    registrar({ error: 'FIRMA INVALIDA', ip: request.headers.get('x-forwarded-for') || '' });
+    return Response.json({ error: 'Firma invalida.' }, { status: 401 });
+  }
+  if (ok === null) {
+    registrar({ aviso: 'SIN LEMONSQUEEZY_WEBHOOK_SECRET — notificacion sin verificar' });
+  }
+
+  let cuerpo;
+  try { cuerpo = JSON.parse(crudo); } catch (e) {
+    registrar({ error: 'cuerpo no es JSON valido' });
+    return Response.json({ ok: true });
+  }
+
+  const evento = String((cuerpo.meta && cuerpo.meta.event_name) || '');
+  const perfil = (cuerpo.meta && cuerpo.meta.custom_data && cuerpo.meta.custom_data.perfil) || null;
+  const tipoDato = (cuerpo.data && cuerpo.data.type) || '';
+  const idDato = (cuerpo.data && cuerpo.data.id) || '';
+
+  registrar({ accion: 'recibido', evento: evento || '(sin evento)', tipoDato, idDato, tienePerfil: !!perfil });
+
+  if (!evento) { registrar({ aviso: 'sin event_name' }); return Response.json({ ok: true }); }
+
+  if (!perfil) {
+    // Sin custom_data.perfil no hay forma de saber a que cuenta corresponde -- mismo
+    // criterio que "PAGO SIN external_reference" en pago.js: se registra, no se procesa.
+    registrar({ error: 'WEBHOOK SIN perfil (custom_data)', evento, idDato });
+    return Response.json({ ok: true });
+  }
+
+  try {
+    // Eventos de suscripcion: siempre conviene volver a pedir el objeto actual, no fiarse
+    // del payload aunque este firmado (ver comentario de cabecera del archivo).
+    const esEventoSuscripcion = evento.indexOf('subscription_') === 0 && evento !== 'subscription_payment_refunded';
+    const esEventoPago = evento === 'subscription_payment_success'
+                      || evento === 'subscription_payment_failed'
+                      || evento === 'subscription_payment_recovered';
+    const esEventoReembolso = evento === 'order_refunded' || evento === 'subscription_payment_refunded';
+
+    if (esEventoReembolso) {
+      // Mismo criterio que pago.js: bajar a gratis de una, sin intentar calcular cuanto
+      // credito ya se consumio. p_pago_externo es best-effort para marcar el renglon de
+      // pagos que corresponda -- si no encuentra ninguno (por ejemplo, un order_refunded
+      // sobre el pago inicial, que quedo registrado bajo la suscripcion y no bajo la orden)
+      // no pasa nada grave: lo que importa de verdad es que la cuenta baje, y eso no depende
+      // de encontrar ese renglon.
+      const r = await rpc('reembolsar', {
+        p_perfil: perfil,
+        p_pago_externo: 'ls_' + tipoDato + '_' + idDato,
+        p_bruto: cuerpo,
+      });
+      registrar({
+        accion: 'reembolsado', perfil: String(perfil).slice(0, 8), evento,
+        plan_previo: r?.plan_previo, saldo_previo: r?.saldo_previo,
+      });
+      return Response.json({ ok: true });
+    }
+
+    if (esEventoPago) {
+      // Estos webhooks traen un Subscription Invoice, no la Subscription en si -- hay que
+      // volver a pedir la Subscription con su subscription_id para saber la variante/plan.
+      const invoiceId = idDato;
+      const subId = cuerpo.data && cuerpo.data.attributes && cuerpo.data.attributes.subscription_id;
+      if (!apiKey) throw new Error('falta LEMONSQUEEZY_API_KEY');
+      const subResp = await lsGet('/subscriptions/' + subId, apiKey);
+      const sub = subResp.data.attributes;
+      const plan = planPorVariante(sub.variant_id);
+
+      if (evento === 'subscription_payment_failed') {
+        const r = await rpc('marcar_gracia', { p_perfil: perfil, p_dias: 5 });
+        registrar({ accion: 'gracia', perfil: String(perfil).slice(0, 8), vence: r?.vence, subId });
+
+      } else if (cuerpo.data.attributes.billing_reason === 'initial') {
+        // El alta manda subscription_created Y subscription_payment_success juntos para el
+        // mismo primer pago (confirmado en prueba real, 03/08). subscription_created ya
+        // acredita ese primer ciclo -- si tambien se acredita aca se duplica el movimiento
+        // en el libro mayor (sin duplicar credito real, porque activar() reemplaza el saldo,
+        // pero es ruido que no corresponde). Se distingue con billing_reason, que Lemon
+        // Squeezy manda en la propia factura: 'initial' es el alta, cualquier otro valor
+        // ('renewal', etc.) es un ciclo nuevo de verdad.
+        registrar({ accion: 'pago_inicial_ya_cubierto_por_subscription_created', perfil: String(perfil).slice(0, 8), subId });
+
+      } else {
+        // payment_success o payment_recovered de una renovacion real: se acredita el ciclo.
+        if (!plan) {
+          registrar({ error: 'VARIANTE NO RECONOCIDA', variant_id: sub.variant_id, perfil: String(perfil).slice(0, 8) });
+          return Response.json({ ok: true });
+        }
+        const r = await rpc('activar', {
+          p_perfil: perfil, p_plan: plan,
+          p_suscripcion: String(subId), p_pago_externo: 'ls_inv_' + invoiceId,
+          p_monto: null, p_moneda: 'USD', p_dias: 30, p_bruto: cuerpo,
+        });
+        registrar({
+          accion: r?.repetido ? 'repetido' : 'activado', perfil: String(perfil).slice(0, 8),
+          plan, saldo: r?.saldo, invoiceId, evento,
+        });
+
+        // Corte F: mismo aviso que Mercado Pago, misma finalidad -- 'plan_activado' no
+        // depende de la pasarela. Aislado y esperado (await) antes de responder, ver
+        // la nota en api/pago.js sobre por que no se deja como "fire and forget".
+        await emitirYNotificar({
+          SB_URL: process.env.SUPABASE_URL, SERVICE_KEY: process.env.SUPABASE_SECRET_KEY,
+          organizationId: perfil, purposeId: 'plan_activado', type: 'plan.activado',
+          producer: 'pago_lemonsqueezy', payload: { plan, dias: 30 },
+          titulo: 'Tu plan quedó activo', resumen: `Tu plan ${plan} está activo.`,
+        });
+      }
+      return Response.json({ ok: true });
+    }
+
+    if (esEventoSuscripcion) {
+      if (!apiKey) throw new Error('falta LEMONSQUEEZY_API_KEY');
+      const subResp = await lsGet('/subscriptions/' + idDato, apiKey);
+      const sub = subResp.data.attributes;
+      const plan = planPorVariante(sub.variant_id);
+
+      if (evento === 'subscription_created') {
+        if (!plan) {
+          registrar({ error: 'VARIANTE NO RECONOCIDA', variant_id: sub.variant_id, perfil: String(perfil).slice(0, 8) });
+          return Response.json({ ok: true });
+        }
+        const r = await rpc('activar', {
+          p_perfil: perfil, p_plan: plan,
+          p_suscripcion: String(idDato), p_pago_externo: 'ls_sub_' + idDato,
+          p_monto: null, p_moneda: 'USD', p_dias: 30, p_bruto: cuerpo,
+        });
+        registrar({ accion: r?.repetido ? 'repetido' : 'activado', perfil: String(perfil).slice(0, 8), plan, saldo: r?.saldo });
+
+        await emitirYNotificar({
+          SB_URL: process.env.SUPABASE_URL, SERVICE_KEY: process.env.SUPABASE_SECRET_KEY,
+          organizationId: perfil, purposeId: 'plan_activado', type: 'plan.activado',
+          producer: 'pago_lemonsqueezy', payload: { plan, dias: 30 },
+          titulo: 'Tu plan quedó activo', resumen: `Tu plan ${plan} está activo.`,
+        });
+
+      } else if (evento === 'subscription_cancelled') {
+        const r = await rpc('cancelar', { p_perfil: perfil });
+        registrar({ accion: 'cancelada', perfil: String(perfil).slice(0, 8), estado: r?.estado });
+
+      } else if (evento === 'subscription_paused') {
+        const r = await rpc('pausar', { p_perfil: perfil });
+        registrar({ accion: 'pausada', perfil: String(perfil).slice(0, 8), estado: r?.estado });
+
+      } else if (evento === 'subscription_unpaused' || evento === 'subscription_resumed') {
+        const r = await rpc('reanudar', { p_perfil: perfil });
+        registrar({ accion: 'reanudada', perfil: String(perfil).slice(0, 8), estado: r?.estado });
+
+      } else if (evento === 'subscription_expired') {
+        // No se toca nada: caducar() (cron diario) la baja a gratis cuando corresponda,
+        // misma tolerancia que Mercado Pago hoy. Se registra para tener el rastro.
+        registrar({ accion: 'expirada_sin_accion_inmediata', perfil: String(perfil).slice(0, 8) });
+
+      } else {
+        // subscription_updated y cualquier otro: catch-all informativo, sin accion.
+        registrar({ accion: 'suscripcion_estado_sin_accion', evento, estado: sub.status, perfil: String(perfil).slice(0, 8) });
+      }
+      return Response.json({ ok: true });
+    }
+
+    // license_key_* y cualquier otro evento no listado arriba: informativo, sin regla de
+    // negocio que dependa de ellos por ahora.
+    registrar({ aviso: 'evento sin manejo automatico todavia', evento, perfil: String(perfil).slice(0, 8) });
+    return Response.json({ ok: true });
+
+  } catch (e) {
+    registrar({ error: 'FALLO PROCESANDO', evento, detalle: String((e && e.message) || e) });
+    return Response.json({ ok: false });
+  }
+}
