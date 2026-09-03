@@ -4665,11 +4665,26 @@ function fragmentosEspecializadosDelOrganismo(o){
   var dpros = Array.isArray(o.diagnosticos_pro) ? o.diagnosticos_pro : [];
   dpros.forEach(function(entry){
     if(!entry || !entry.datos || typeof entry.datos !== 'object') return;
+    // MIG-URB-01 (02/09): o.diagnosticos_pro es compartido entre Urbanismo (entry.origen ===
+    // 'urban_pro') y Contextos standalone (entry.origen === 'context_pro'). Se excluye acá
+    // EXCLUSIVAMENTE la porción Urbanismo, y sólo cuando su política ya migró a
+    // specialty_return -- Contextos nunca se toca, sea cual sea el valor de
+    // RETP601_POLITICA_PRODUCTOR.urbanism (Contextos no tiene entrada propia en ese mapa, no
+    // tiene legacy propio que migrar en este corte). Guard defensivo con typeof, mismo patrón
+    // que el gate de MIG-BIZ-01 más abajo -- si la función todavía no existe por algún motivo,
+    // se conserva el comportamiento histórico (legacy) en vez de perder datos.
+    if(entry.origen === 'urban_pro' && typeof retp601FuenteActivaParaProductor === 'function' && retp601FuenteActivaParaProductor('urbanism') === 'specialty_return') return;
     var meta = { source: entry.origen || 'diagnostico_pro', version: entry.version || null, date: entry.fecha || null };
     var propios = [];
     p6RecorrerFragmentos(entry.datos, 'raíz', meta, propios, 0);
     fragmentos = fragmentos.concat(propios);
   });
+  // MIG-BIZ-01 (02/09): este bloque legacy (o.evaluaciones_negocio_pro) solo debe seguir
+  // aportando fragmentos mientras la politica de productor de business siga en 'legacy' (p.ej.
+  // si se revierte el switch de RETP601_POLITICA_PRODUCTOR). Guard defensivo con typeof, mismo
+  // patron que el de retp601AntecedentesGobernados mas abajo -- si la funcion todavia no existe
+  // por algun motivo, se conserva el comportamiento historico (legacy) en vez de perder datos.
+  if(typeof retp601FuenteActivaParaProductor !== 'function' || retp601FuenteActivaParaProductor('business') !== 'specialty_return'){
   var enpros = Array.isArray(o.evaluaciones_negocio_pro) ? o.evaluaciones_negocio_pro : [];
   enpros.forEach(function(entry){
     if(!entry || !entry.datos || typeof entry.datos !== 'object') return;
@@ -4678,6 +4693,15 @@ function fragmentosEspecializadosDelOrganismo(o){
     p6RecorrerFragmentos(entry.datos, 'raíz', meta, propios, 0);
     fragmentos = fragmentos.concat(propios);
   });
+  }
+  // RET-P6-01 (01/09): segunda familia de antecedentes -- retornos gobernados de RET-GOV-01
+  // ya aceptados como referencia. No reemplaza nada de arriba, sólo se suma. Ver
+  // RETP601_POLITICA_PRODUCTOR (más abajo en el archivo) para el criterio de inclusión por
+  // productor -- por defecto, business/urbanism siguen sólo con lo de arriba (legacy), para
+  // no duplicar lo que ya aportan diagnosticos_pro/evaluaciones_negocio_pro.
+  if(typeof retp601AntecedentesGobernados === 'function'){
+    fragmentos = fragmentos.concat(retp601AntecedentesGobernados(o));
+  }
   return fragmentos;
 }
 
@@ -4929,6 +4953,207 @@ function C1A1_missingCapabilities(o){
     'resumen_plano_de_lecturas_urban_y_negocio'
   ];
 }
+
+/* ============================================================================
+   I0 (28/08) — Contrato Universal de Especialidades: infraestructura declarativa
+   -----------------------------------------------------------------------------
+   Fuente autoritativa: paquete CLAUDE_CIRUGIA_UNIFICADA_ESPECIALIDADES_CONTEXTOS_V1,
+   corte I0, puerto directo de 01_FROZEN_REFERENCES/CLAUDE_CORE_ESPECIALIDADES_I0_I2.zip
+   -> 02_CONTRATO/src/contract.js + 02_CONTRATO/descriptors/*.json.
+
+   Este bloque agrega SÓLO estructuras declarativas y un validador puro. Nada de
+   acá se llama todavía desde ningún punto del Core (abrirModulo, imports,
+   navegación, persistencia) -- eso es I1/I2, no I0. Cero cambio de
+   comportamiento observable: si se borrara este bloque entero, la app se
+   comportaría exactamente igual que antes de I0.
+
+   Especialidades canónicas (4): Urbanismo, Negocios, Sustentabilidad,
+   Tecnología. Contextos Universal NO es una especialidad -- es Core basal
+   (invariante 6 del paquete) y por eso, a propósito, no tiene entrada en
+   SPECIALTY_IDS ni en SPECIALTY_DESCRIPTORS. */
+
+const SPECIALTY_CONTRACT_ID = 'comprender.specialty-contract';
+const SPECIALTY_CONTRACT_VERSION = '1.0.0';
+
+const SPECIALTY_IDS = Object.freeze(['sustainability','technology','urbanism','business']);
+
+const SPECIALTY_RETURN_CLASSES = Object.freeze([
+  'specialized_interpretation',
+  'relevant_tension_candidate',
+  'relevant_capability_or_gap',
+  'structural_risk_or_dependency',
+  'next_step_candidate',
+  'longitudinal_memory_candidate',
+  'principle_candidate',
+  'human_decision_reference',
+  'learning_candidate',
+  'cross_specialty_request'
+]);
+
+/* Targets del Core que ninguna especialidad puede escribir directamente jamás
+   (invariante 2 del paquete: "Especialidad nunca escribe directamente Core"). */
+const PROTECTED_CORE_TARGETS = Object.freeze([
+  'organism.identity',
+  'organism.id',
+  'ficha.funcion',
+  'coreUniversalFunction',
+  'coreUniversalTensions',
+  'ficha.tensiones',
+  'memory.general',
+  'principles',
+  'ficha.proximo',
+  'ficha.proximos',
+  'permissions',
+  'governance',
+  'core.contracts'
+]);
+
+const SPECIALTY_ERROR_CODES = Object.freeze({
+  CONTRACT_MISMATCH: 'CONTRACT_MISMATCH',
+  SPECIALTY_NOT_ALLOWED: 'SPECIALTY_NOT_ALLOWED',
+  DESCRIPTOR_INVALID: 'DESCRIPTOR_INVALID',
+  ORGANISM_REQUIRED: 'ORGANISM_REQUIRED',
+  SCOPE_REQUIRED: 'SCOPE_REQUIRED',
+  VERSION_REQUIRED: 'VERSION_REQUIRED',
+  CORE_UNIVERSAL_FUNCTION_INVALID: 'CORE_UNIVERSAL_FUNCTION_INVALID',
+  INPUT_ENVELOPE_INVALID: 'INPUT_ENVELOPE_INVALID',
+  RETURN_CLASS_INVALID: 'RETURN_CLASS_INVALID',
+  RETURN_ENVELOPE_INVALID: 'RETURN_ENVELOPE_INVALID',
+  PROTECTED_CORE_TARGET: 'PROTECTED_CORE_TARGET',
+  HUMAN_REVIEW_REQUIRED: 'HUMAN_REVIEW_REQUIRED',
+  HUMAN_DECISION_REQUIRED: 'HUMAN_DECISION_REQUIRED',
+  PROVENANCE_REQUIRED: 'PROVENANCE_REQUIRED',
+  AUTOMATIC_WEIGHT_FORBIDDEN: 'AUTOMATIC_WEIGHT_FORBIDDEN',
+  AUTOMATIC_WINNER_FORBIDDEN: 'AUTOMATIC_WINNER_FORBIDDEN',
+  EVIDENCE_FABRICATION_FORBIDDEN: 'EVIDENCE_FABRICATION_FORBIDDEN'
+});
+
+/* Los 4 descriptors, puerto verbatim de los .json congelados del paquete
+   (02_CONTRATO/descriptors/*.descriptor.json) -- ningún campo agregado ni
+   quitado acá respecto de la fuente. */
+const SPECIALTY_DESCRIPTORS = Object.freeze({
+  urbanism: Object.freeze({
+    contractId: 'comprender.specialty-contract',
+    contractVersion: '1.0.0',
+    specialtyId: 'urbanism',
+    displayName: 'Urbanismo',
+    engineType: 'specialized_domain_engine',
+    capabilities: Object.freeze({
+      readCoreSnapshot: true,
+      receiveSpecializedAntecedents: true,
+      emitGovernedReturns: true,
+      relationalGeometry: true,
+      humanLocalKnowledge: true
+    }),
+    boundary: Object.freeze({ directCoreWrites: false, ownsCoreIdentity: false, ownsUniversalFunction: false }),
+    specializedObjects: Object.freeze([
+      'urban_geometry','territorial_dimension','territorial_indicator','temporal_persistence',
+      'population_reach','urban_324_resolution','territorial_diagnosis','urban_projective'
+    ])
+  }),
+  business: Object.freeze({
+    contractId: 'comprender.specialty-contract',
+    contractVersion: '1.0.0',
+    specialtyId: 'business',
+    displayName: 'Negocios',
+    engineType: 'specialized_domain_engine',
+    capabilities: Object.freeze({
+      readCoreSnapshot: true,
+      receiveSpecializedAntecedents: true,
+      emitGovernedReturns: true,
+      humanDecisionField: true,
+      executionFollowup: true
+    }),
+    boundary: Object.freeze({ directCoreWrites: false, ownsCoreIdentity: false, ownsUniversalFunction: false }),
+    specializedObjects: Object.freeze([
+      'business_dimension','systemic_business_tension','business_relation','business_projective',
+      'business_scenario','business_decision_context','business_execution_observation'
+    ])
+  }),
+  sustainability: Object.freeze({
+    contractId: 'comprender.specialty-contract',
+    contractVersion: '1.0.0',
+    specialtyId: 'sustainability',
+    displayName: 'Sustentabilidad',
+    engineType: 'specialized_domain_engine',
+    capabilities: Object.freeze({
+      readCoreSnapshot: true,
+      receiveSpecializedAntecedents: true,
+      emitGovernedReturns: true,
+      longitudinalMemory: true,
+      observedReturn: true
+    }),
+    boundary: Object.freeze({ directCoreWrites: false, ownsCoreIdentity: false, ownsUniversalFunction: false }),
+    specializedObjects: Object.freeze([
+      'sustainability_diagnosis','functional_continuity','severity','dependency_threshold',
+      'transformation_hypothesis','observed_return'
+    ])
+  }),
+  technology: Object.freeze({
+    contractId: 'comprender.specialty-contract',
+    contractVersion: '1.0.0',
+    specialtyId: 'technology',
+    displayName: 'Tecnología',
+    engineType: 'specialized_domain_engine',
+    capabilities: Object.freeze({
+      readCoreSnapshot: true,
+      receiveSpecializedAntecedents: true,
+      emitGovernedReturns: true,
+      longitudinalMemory: true,
+      humanDecisionField: true
+    }),
+    boundary: Object.freeze({ directCoreWrites: false, ownsCoreIdentity: false, ownsUniversalFunction: false }),
+    specializedObjects: Object.freeze([
+      'technology_configuration','technology_dependency','technology_sufficiency','technology_profile',
+      'ai_case','delegation_level','ai_readiness','technology_governance'
+    ])
+  })
+});
+
+/* validarSpecialtyDescriptor: puerto directo de validateDescriptor() en
+   contract.js -- misma secuencia de checks, mismos códigos de error. Función
+   pura, sin efectos: no lee ni escribe estado del Core. No la llama nadie
+   todavía (eso es I1/I2); existe para que el validator sea real y probable
+   desde ya, tal como pide el acceptance de I0 ("validator mínimo operativo"). */
+function validarSpecialtyDescriptor(descriptor){
+  function limpio(v){ return typeof v === 'string' && v.trim() ? v.trim() : null; }
+  function falla(error, details){ return { ok:false, error:error, details: details || null }; }
+  if(!descriptor || typeof descriptor !== 'object') return falla(SPECIALTY_ERROR_CODES.DESCRIPTOR_INVALID, 'descriptor_required');
+  if(descriptor.contractId !== SPECIALTY_CONTRACT_ID || descriptor.contractVersion !== SPECIALTY_CONTRACT_VERSION){
+    return falla(SPECIALTY_ERROR_CODES.CONTRACT_MISMATCH);
+  }
+  if(!SPECIALTY_IDS.includes(descriptor.specialtyId)) return falla(SPECIALTY_ERROR_CODES.SPECIALTY_NOT_ALLOWED);
+  if(!limpio(descriptor.displayName) || !limpio(descriptor.engineType)) return falla(SPECIALTY_ERROR_CODES.DESCRIPTOR_INVALID, 'name_or_engine_missing');
+  if(descriptor.engineType !== 'specialized_domain_engine') return falla(SPECIALTY_ERROR_CODES.DESCRIPTOR_INVALID, 'invalid_engine_type');
+  var requiredCaps = ['readCoreSnapshot','receiveSpecializedAntecedents','emitGovernedReturns'];
+  var caps = descriptor.capabilities || {};
+  for(var i=0;i<requiredCaps.length;i++){
+    if(caps[requiredCaps[i]] !== true) return falla(SPECIALTY_ERROR_CODES.DESCRIPTOR_INVALID, 'capability_missing:' + requiredCaps[i]);
+  }
+  if(!descriptor.boundary || descriptor.boundary.directCoreWrites !== false){
+    return falla(SPECIALTY_ERROR_CODES.DESCRIPTOR_INVALID, 'direct_core_writes_must_be_false');
+  }
+  if(descriptor.boundary.ownsCoreIdentity !== false){
+    return falla(SPECIALTY_ERROR_CODES.DESCRIPTOR_INVALID, 'owns_core_identity_must_be_false');
+  }
+  if(!Array.isArray(descriptor.specializedObjects) || !descriptor.specializedObjects.length){
+    return falla(SPECIALTY_ERROR_CODES.DESCRIPTOR_INVALID, 'specialized_objects_required');
+  }
+  return { ok:true, value: JSON.parse(JSON.stringify(descriptor)) };
+}
+
+/* Debug/verificación manual -- mismo patrón que window.debugOrganismSnapshot y
+   el resto de los debugX de C1 (costo 0, no toca red ni estado, sólo corre el
+   validador sobre los 4 descriptors reales y sobre 'contextos_universal' para
+   confirmar que ese último es rechazado por no ser una specialty). */
+window.debugValidarSpecialtyDescriptors = function(){
+  var out = {};
+  SPECIALTY_IDS.forEach(function(id){
+    out[id] = validarSpecialtyDescriptor(SPECIALTY_DESCRIPTORS[id]);
+  });
+  out.contextos_universal_excluido = !SPECIALTY_IDS.includes('contextos_universal') && !SPECIALTY_DESCRIPTORS.contextos_universal;
+  return out;
+};
 
 /* ---- OrganismSnapshotAdapter: punto de entrada único de C1-A1 ---- */
 function OrganismSnapshotAdapter(o){
@@ -5372,12 +5597,37 @@ var C1B1_MAX_CANDIDATOS = 4;
 var C1B1_EPISTEMIC_STATES = ['relacion_declarada','memoria_gobernada','recuerdo_historico',
   'inferencia_contextos','evidencia_existente','hipotesis'];
 
+// CX2 (28/08): límite defensivo para liveSpecialtyWindow (CX0/CX1) -- "pequeña fotografía
+// efímera", nunca el estado completo del estudio. Mismo orden de magnitud que P6_MAX_CHARS_BLOQUE
+// (1200). Si la ventana serializada excede este límite se OMITE por completo (nunca se trunca a
+// ciegas una estructura opaca que no conocemos, y nunca se amplía el prompt con el estudio
+// completo) -- cae al camino Core normal como si no hubiera llegado ninguna ventana.
+var C1B1_LIVE_WINDOW_MAX_CHARS = 1200;
+
+// Prepara (valida + limita) una liveSpecialtyWindow de un context-request.v0.7 (CX0) para su uso
+// exclusivo dentro del OPEN de C1-B1. Pura, de sólo lectura, no conoce la metodología de ninguna
+// especialidad -- sólo transporta la ventana ya construida por el adapter especializado
+// (contract.js/adapters congelados), con límites defensivos genéricos. Devuelve null (== camino
+// Core normal, sin bloque nuevo) si: no viene, no es objeto, declara un epistemicRole distinto de
+// 'specialty_live_context_not_evidence' (nunca promovido con otra etiqueta), o excede el límite de
+// tamaño. Nunca resume con IA, nunca fusiona con antecedentes/interpretaciones especializadas
+// persistidas (Punto 6/7/9) -- son estructuras conceptualmente distintas y viajan por separado.
+function C1B1_prepararVentanaEspecializadaViva(liveSpecialtyWindow){
+  if(!liveSpecialtyWindow || typeof liveSpecialtyWindow !== 'object') return null;
+  if(liveSpecialtyWindow.epistemicRole !== CONTEXT_LIVE_WINDOW_EPISTEMIC_ROLE) return null;
+  var copia;
+  try{ copia = JSON.parse(JSON.stringify(liveSpecialtyWindow)); }catch(e){ return null; }
+  var serializada = JSON.stringify(copia);
+  if(!serializada || serializada.length > C1B1_LIVE_WINDOW_MAX_CHARS) return null;
+  return copia;
+}
+
 /* Ventana cognitiva mínima (regla 10): NO se manda el Organismo/Snapshot entero. Se apoya en lo
    que C1-A2 YA determinó como pertinente (assessment.relevantMemoryRefs/relevantTensionRefs/
    relevantOpenQuestionRefs/relevantMemoryEventRefs/criticalUnknowns) -- si el Origen no marcó
    ningún campo de memoria como pertinente, cae a un mínimo razonable (función/tensiones/
    diagnóstico) para no dejar al motor completamente a ciegas. */
-function C1B1_ventanaCognitiva(snapshot, opening, assessment, recuerdosPertinentes, interpretacionesEspecializadasPertinentes, camposExcluidos){
+function C1B1_ventanaCognitiva(snapshot, opening, assessment, recuerdosPertinentes, interpretacionesEspecializadasPertinentes, camposExcluidos, liveSpecialtyWindow){
   var CAMPOS_MEMORIA = ['function','tensions','diagnosis','next','nextPending','principles'];
   var refs = (Array.isArray(assessment.relevantMemoryRefs) && assessment.relevantMemoryRefs.length)
     ? assessment.relevantMemoryRefs : ['function','tensions','diagnosis'];
@@ -5412,7 +5662,12 @@ function C1B1_ventanaCognitiva(snapshot, opening, assessment, recuerdosPertinent
     // yaCerradosPorFaltaDeEvidencia de C1-C1: nunca se manda el estado operacional interno).
     camposExcluidos: (camposExcluidos || []).map(function(c){
       return { target: (c && c.target) || null, manifestation: (c && c.manifestation) || null };
-    })
+    }),
+    // CX2 (28/08): fotografía efímera de la especialidad que solicitó abrir este Campo AHORA
+    // (context-request.v0.7 de CX0/CX1) -- conceptualmente distinta de interpretacionesEspecializadasPertinentes
+    // (lecturas especializadas ya persistidas del organismo, Punto 6/9). Nunca se fusionan. null si
+    // no vino, si su epistemicRole no es el esperado, o si excede el límite defensivo de tamaño.
+    ventanaEspecializadaViva: C1B1_prepararVentanaEspecializadaViva(liveSpecialtyWindow)
   };
 }
 
@@ -5464,6 +5719,20 @@ function C1B1_PROMPT_OPEN_FIELD(ventana){
            (f.date ? (' · ' + f.date) : '') + '\n' + f.text;
        }).join('\n---\n'))
     : '';
+  // CX2 (28/08): bloque separado, SÓLO si llegó una liveSpecialtyWindow válida (nunca en el
+  // camino Core normal -- ventana.ventanaEspecializadaViva es null en ese caso). No se mezcla con
+  // antecedentesTxt/especialidadesTxt (lecturas ya persistidas del organismo): esto es una
+  // fotografía efímera del estudio que está ocurriendo ahora mismo del lado de la especialidad
+  // que pidió abrir Contextos. Declara epistemicRole explícito y las prohibiciones de uso.
+  var ventanaVivaTxt = ventana.ventanaEspecializadaViva
+    ? ('\n\nCONTEXTO ESPECIALIZADO VIVO — NO EVIDENCIA (epistemicRole: "' + CONTEXT_LIVE_WINDOW_EPISTEMIC_ROLE +
+       '". Fotografía efímera de la especialidad que solicitó abrir este Campo ahora mismo -- NO es ' +
+       'Memoria, NO es Recuerdo, NO es evidencia actual, NO es diagnóstico especializado confirmado, ' +
+       'NO es verdad canónica del organismo. Podés usarla sólo para orientar qué relaciones del Campo ' +
+       'conviene explorar primero -- nunca como sustento suficiente por sí sola de una candidata; si una ' +
+       'candidata depende sólo de esta ventana, marcala como "hipotesis" o "inferencia_contextos", nunca ' +
+       'como "evidencia_existente" ni "memoria_gobernada"):\n' + JSON.stringify(ventana.ventanaEspecializadaViva, null, 2))
+    : '';
   // OMV-F8.1 (24/08): mismo patrón que "ya cerrados" de C1-C1 -- Campos externos que ya se
   // exploraron en esta misma conversación y no dejaron ningún Frente útil. No se prohíbe volver a
   // esa zona del Organismo entera, sólo repetir la MISMA relación con otra formulación.
@@ -5494,7 +5763,7 @@ function C1B1_PROMPT_OPEN_FIELD(ventana){
     'dimensiones. Esto vale igual para una organización humana, un sistema biológico o un sistema ' +
     'abstracto (una metodología, una tecnología, un concepto) -- no ajustes el criterio por tipo.\n\n' +
     'VENTANA COGNITIVA (ya seleccionada, no es todo el Organismo):\n' + ventanaTxt + '\n' +
-    ventana.aperturaTexto + antecedentesTxt + especialidadesTxt + camposExcluidosTxt + '\n\n' +
+    ventana.aperturaTexto + antecedentesTxt + especialidadesTxt + ventanaVivaTxt + camposExcluidosTxt + '\n\n' +
     'REGLAS:\n' +
     '1. Una relación candidata vincula algo perteneciente o funcionalmente asociado al Organismo ' +
     'con algo situado más allá de su delimitación actual (ej.: "estudio <-> red de ejecutores ' +
@@ -5571,7 +5840,7 @@ function C1B1_situacionParaEspecialidades(opening, assessment){
   return partes.join(' ').trim();
 }
 
-function C1B1_prepararLlamada(snapshot, opening, assessment, camposExcluidos){
+function C1B1_prepararLlamada(snapshot, opening, assessment, camposExcluidos, liveSpecialtyWindow){
   if(!snapshot || !opening || !assessment) return null;
   var o = cargarOrganismos().find(function(x){ return x.id === snapshot.organismId; });   // solo lectura
   var candIds = Array.isArray(assessment.relevantMemoryEventRefs) ? assessment.relevantMemoryEventRefs : [];
@@ -5625,7 +5894,7 @@ function C1B1_prepararLlamada(snapshot, opening, assessment, camposExcluidos){
       }
     }
   }
-  var ventana = C1B1_ventanaCognitiva(snapshot, opening, assessment, recuerdosPertinentes, interpretacionesEspecializadasPertinentes, camposExcluidos);
+  var ventana = C1B1_ventanaCognitiva(snapshot, opening, assessment, recuerdosPertinentes, interpretacionesEspecializadasPertinentes, camposExcluidos, liveSpecialtyWindow);
   return {
     systemPrompt: C1B1_PROMPT_OPEN_FIELD(ventana),
     mensajes: [{ role:'user', content:'(descubrí relaciones candidatas que atraviesan la delimitación de este Organismo, si las hay)' }],
@@ -5732,7 +6001,18 @@ async function openField(snapshot, opening, assessment, camposExcluidos){
   if(!assessment || assessment.status !== 'continue'){
     return { ok:false, motivo:'openField() requiere un OriginAssessment con status "continue"' };
   }
-  var prep = C1B1_prepararLlamada(snapshot, opening, assessment, camposExcluidos);
+  // CX3 (28/08): si esta apertura está ligada a una invocación specialty (bind hecho en
+  // C1G1_iniciarConversacion), su context-request.v0.7 ya trae el liveSpecialtyWindow validado en
+  // CX2 -- se lo pasamos a C1B1_prepararLlamada como 5º argumento opcional. C1B1_prepararVentanaEspecializadaViva
+  // (CX2) ya es defensiva ante objetos inválidos/vacíos, así que no hace falta validar acá de nuevo.
+  // Sin invocación asociada (todo el resto del Core, todos los debug*, todo el banco histórico):
+  // liveSpecialtyWindow queda null y el comportamiento es idéntico al de antes de CX3.
+  var liveSpecialtyWindow = null;
+  var cx3OpLink = (opening && opening.openingId) ? CONTEXT_OPENING_INVOCATION_REGISTRY.get(opening.openingId) : { ok:false };
+  if(cx3OpLink.ok && cx3OpLink.value.request && cx3OpLink.value.request.liveSpecialtyWindow){
+    liveSpecialtyWindow = cx3OpLink.value.request.liveSpecialtyWindow;
+  }
+  var prep = C1B1_prepararLlamada(snapshot, opening, assessment, camposExcluidos, liveSpecialtyWindow);
   if(!prep) return { ok:false, motivo:'snapshot, opening o assessment ausente' };
   var res;
   try{
@@ -9604,12 +9884,19 @@ async function C1G1_abrirCampoYSeleccionarFrente(snapshot, opening, assessment, 
   return { ok:false, camposExcluidos: camposExcluidos };
 }
 
-async function C1G1_iniciarConversacion(organismoId, question, intention, onFase){
+async function C1G1_iniciarConversacion(organismoId, question, intention, onFase, invocacionMeta){
   var o = cargarOrganismos().find(function(x){ return x.id === organismoId; });
   if(!o) return { ok:true, vista: C1G1_vistaCierre('No encontramos ese organismo.'), estado:null };
   registrarSenalVital('comprension_iniciada', o.id);   // SV1: best effort, no bloquea lo que sigue
   var snap = OrganismSnapshotAdapter(o);
   var opening = crearContextOpening(o.id, { basedOnVersion: snap.organismVersion, question: question, intention: intention });
+  // CX3 (28/08): único punto donde el openingId real ya existe y una invocación specialty (si la
+  // hay) puede ligarse a él -- ver CONTEXT_OPENING_INVOCATION_REGISTRY. invocacionMeta es el 5º
+  // parámetro OPCIONAL: si nadie lo pasa (todo el resto del Core, todos los debug*, todo el banco de
+  // pruebas histórico), este bloque no hace nada y el comportamiento es exactamente el de siempre.
+  if(invocacionMeta && invocacionMeta.returnTarget === 'specialty'){
+    CONTEXT_OPENING_INVOCATION_REGISTRY.bind(opening.openingId, invocacionMeta);
+  }
 
   C1G1_avisarFase(onFase, 'origen');
   var r1 = await reconstructOrigin(snap, opening);
@@ -9632,7 +9919,17 @@ async function C1G1_iniciarConversacion(organismoId, question, intention, onFase
   var estadoBase = { snapshot: snap, opening: r1.opening, assessment: r1.assessment, graphState: apertura.graphState,
     front: front, camposExcluidos: apertura.camposExcluidos };
   var siguiente = await C1G1_continuarCiclo(estadoBase, null, onFase);
-  return { ok:true, vista: { apertura: vistaApertura, siguiente: siguiente.vista }, estado: siguiente.estado };
+  // CX3-R1 (28/08): fix de traspaso -- este return reconstruye un objeto nuevo (vista.apertura +
+  // vista.siguiente) en vez de devolver "siguiente" tal cual, y por eso perdía en silencio el campo
+  // "specialty" que la bifurcación de C1G1_construirComprension (CX3) agrega cuando corresponde. Sin
+  // este fix, abrirContextoDesdeEspecialidadReal() nunca podía ver specialty:{stillOpen:true} en el
+  // primer INTERPRET de una conversación (sólo en los siguientes, vía C1G1_responderPregunta, que sí
+  // retorna "siguiente" sin reconstruir). No cambia nada del camino Core: cuando no hay bifurcación
+  // specialty, "siguiente.specialty" es simplemente undefined y la línea de abajo no agrega la
+  // propiedad (comportamiento anterior intacto, mismas claves de siempre).
+  var salida = { ok:true, vista: { apertura: vistaApertura, siguiente: siguiente.vista }, estado: siguiente.estado };
+  if(siguiente.specialty) salida.specialty = siguiente.specialty;
+  return salida;
 }
 
 /* OMV-F8.2 (24/08): cierre humano cuando la escalada de Campo se agota de verdad (ningún Campo
@@ -9848,15 +10145,97 @@ async function C1G1_construirComprension(snapshot, opening, graphState, front, i
     focusResult: focusRes.result, sufficiencyResult: sufRes.ok ? sufRes.result : null,
     assessment: assessment || null, camposExcluidos: camposExcluidos || [] };
 
-  if(sufRes.ok){
-    var retornoRes = await executeReturnProposal(snapshot, opening, graphState, frenteFinal, focusRes.result, sufRes.result);
-    if(retornoRes.ok && retornoRes.result.hasMeaningfulReturn){
-      vista.retorno = C1G1_vistaRetorno(retornoRes.result);
-      estadoFinal.returnProposal = retornoRes.result;
-      estadoFinal.gobernanzaPreparacion = C1F2_prepararGobernanza(retornoRes.result, snapshot);   // sólo lectura
+  // CX3 (28/08): bifurcación de retorno Core/Especialidad -- punto exacto pedido por el brief:
+  // después de executeSufficiencyAssessment(), antes de executeReturnProposal(). Si esta apertura NO
+  // está ligada a ninguna invocación specialty (CONTEXT_OPENING_INVOCATION_REGISTRY vacío para este
+  // openingId -- el caso de TODO el Core normal hoy, de los 4 software especializados todavía no
+  // conectados, y de los debug*/bancos históricos) el camino es EXACTAMENTE el de siempre: llama
+  // executeReturnProposal()/F1 con la misma condición de antes, sin ningún chequeo nuevo de por
+  // medio. Los contadores CX3_SPY_COUNTERS sólo instrumentan, nunca alteran el resultado.
+  var cx3Invocacion = (opening && opening.openingId) ? CONTEXT_OPENING_INVOCATION_REGISTRY.get(opening.openingId) : { ok:false };
+  var cx3EsSpecialty = !!(cx3Invocacion.ok && cx3Invocacion.value && cx3Invocacion.value.returnTarget === 'specialty');
+
+  if(!cx3EsSpecialty){
+    CX3_SPY_COUNTERS.corePathCalls++;
+    if(sufRes.ok){
+      CX3_SPY_COUNTERS.f1Calls++;
+      var retornoRes = await executeReturnProposal(snapshot, opening, graphState, frenteFinal, focusRes.result, sufRes.result);
+      if(retornoRes.ok && retornoRes.result.hasMeaningfulReturn){
+        vista.retorno = C1G1_vistaRetorno(retornoRes.result);
+        estadoFinal.returnProposal = retornoRes.result;
+        CX3_SPY_COUNTERS.f2Calls++;
+        estadoFinal.gobernanzaPreparacion = C1F2_prepararGobernanza(retornoRes.result, snapshot);   // sólo lectura
+      }
     }
+    return { vista: vista, estado: estadoFinal };
   }
-  return { vista: vista, estado: estadoFinal };
+
+  // ---- Camino Specialty (CX3) -- NUNCA llama executeReturnProposal (F1) ni C1F2_prepararGobernanza (F2). ----
+  CX3_SPY_COUNTERS.specialtyPathCalls++;
+  var cx3Invoc = cx3Invocacion.value;
+
+  // Paso 5 del brief -- gate de suficiencia E2, regla certificada del runtime congelado
+  // (contextual-specialty-runtime.js: "sufficient!==true && recommendation!=='close' -> todavía
+  // abierto"). Si sufRes.ok es false tampoco hay suficiencia declarada -- cae en "todavía abierto"
+  // por la misma razón. En ningún caso de esta rama se llama executeReturnProposal: estadoFinal (ya
+  // armado arriba, idéntico al que usaría el camino Core) alcanza para retomar el mismo ciclo
+  // (C1G1_continuarCiclo/C1G1_responderPregunta) en un turno siguiente, con la misma invocación, el
+  // mismo resumeToken (todavía sin consumir acá) y el mismo opening.
+  var cx3Suficiente = sufRes.ok && (sufRes.result.sufficient === true || sufRes.result.recommendation === 'close');
+  if(!cx3Suficiente){
+    return { vista: vista, estado: estadoFinal, specialty: { stillOpen:true, invocationId: cx3Invoc.invocationId } };
+  }
+
+  // Pasos 6-9: comprensión alcanzada -- traducir (nunca reinterpretar) el bundle C1 ya calculado a
+  // "understanding" (CX3_bundleC1AComprension, puerto real de c1-shape-adapter.js) y construir el
+  // context-envelope.v0.7 (CX0) a partir de él. Cero llamadas IA nuevas acá.
+  var cx3Bundle = { opening: opening, graphState: graphState, front: frenteFinal, focusResult: focusRes.result,
+    sufficiencyResult: sufRes.result,
+    externalActors: (cx3Invoc.request.liveSpecialtyWindow && cx3Invoc.request.liveSpecialtyWindow.externalActors) || [] };
+  var cx3Comprension = CX3_bundleC1AComprension(cx3Bundle);
+  if(!cx3Comprension.ok){
+    return { vista: vista, estado: estadoFinal, specialty: { stillOpen:true, invocationId: cx3Invoc.invocationId, motivo: cx3Comprension.motivo } };
+  }
+  var cx3EnvResult = construirContextEnvelope(cx3Invoc.request, cx3Comprension.value);
+  if(!cx3EnvResult.ok){
+    return { vista: vista, estado: estadoFinal, specialty: { stillOpen:true, invocationId: cx3Invoc.invocationId, motivo: cx3EnvResult.error } };
+  }
+  var cx3Envelope = cx3EnvResult.value;
+
+  // Paso 10: consumir el resumeToken -- one-shot, recién ACÁ (ASK/insuficiencia nunca lo tocan). Si
+  // el token no existe / ya fue consumido / pertenece a otra identidad, se detiene el retorno sin
+  // inventar ni reconstruir ningún punto de retorno (fail-closed).
+  var cx3ResumeResult = CONTEXT_RESUME_REGISTRY.consume(cx3Invoc.resumeToken);
+  if(!cx3ResumeResult.ok){
+    return { vista: vista, estado: estadoFinal, specialty: { stillOpen:true, invocationId: cx3Invoc.invocationId, resumeError: cx3ResumeResult.error } };
+  }
+
+  // Paso 11: SpecialtyReassessmentFrame -- status 'pending', nunca reevaluado ni decidido acá.
+  var cx3ReassessResult = CONTEXT_REASSESSMENT_REGISTRY.create({ request: cx3Invoc.request, envelope: cx3Envelope, resume: cx3ResumeResult.value, policy: null });
+  if(!cx3ReassessResult.ok){
+    return { vista: vista, estado: estadoFinal, specialty: { stillOpen:false, invocationId: cx3Invoc.invocationId, envelope: cx3Envelope, reassessError: cx3ReassessResult.error } };
+  }
+  var cx3ReassessmentFrame = cx3ReassessResult.value;
+
+  // Pasos 12-13: ContextLedger longitudinal -- append-only, separado de o.genealogia_contextos/Memoria.
+  var cx3LedgerResult = CONTEXT_LEDGER.append({ request: cx3Invoc.request, envelope: cx3Envelope, reassessmentFrame: cx3ReassessmentFrame });
+  var cx3LedgerEntry = cx3LedgerResult.ok ? cx3LedgerResult.value : null;
+  var cx3PreviousContextRefs = CONTEXT_LEDGER.refs(cx3Invoc.origin, cx3Invoc.organismId, cx3Invoc.specialtyStudyRef, 24);
+
+  CONTEXT_OPENING_INVOCATION_REGISTRY.unbind(opening.openingId);
+
+  return {
+    vista: vista,
+    estado: estadoFinal,
+    specialty: {
+      stillOpen: false,
+      invocationId: cx3Invoc.invocationId,
+      envelope: cx3Envelope,
+      reassessmentFrame: cx3ReassessmentFrame,
+      ledgerEntry: cx3LedgerEntry,
+      previousContextRefs: cx3PreviousContextRefs
+    }
+  };
 }
 
 /* Retoma tras la única pregunta que la interfaz muestra: aplica la respuesta (applyUserAnswer, ya
@@ -11285,8 +11664,8 @@ var ACCESO_MODULOS = {
                      desc:'Lectura hexaédrica del territorio: 36 indicadores, diagnóstico y proyectivo.' },
   contextos:       { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Contextos',  archivo:'contextos.html',
                      desc:'Campo de fuerzas externas: 6 sistemas, 54 cualidades y deriva del campo.' },
-  tecnologias:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Tecnologías' },
-  sustentabilidad: { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Sustentabilidad' },
+  tecnologias:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Tecnologías', archivo:'tecnologia.html' },
+  sustentabilidad: { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Sustentabilidad', archivo:'sustentabilidad.html' },
   negocios:        { plan_minimo:'profesional', prueba_en_gratis:true,  nombre:'Negocios', archivo:'negocios.html',
                      desc:'Evaluación estructurada del negocio como organismo: dimensiones, estados y síntesis.' },
   capacidades:     { plan_minimo:'estudio', prueba_en_gratis:true,  nombre:'Integración de capacidades' },
@@ -11331,6 +11710,1807 @@ function entitlementsDeCuenta(){
   }
   return e;
 }
+/* ============================================================================
+   I1 (28/08) — Core → Specialty Envelope
+   -----------------------------------------------------------------------------
+   Fuente autoritativa: paquete CLAUDE_CIRUGIA_UNIFICADES_ESPECIALIDADES_CONTEXTOS_V1,
+   corte I1, sobre la infraestructura declarativa de I0 (SPECIALTY_IDS, SPECIALTY_
+   ERROR_CODES, etc., ver bloque I0 más arriba). Construye el envelope universal
+   `comprender.specialty-input.v1` (puerto de buildCoreInputEnvelope() en contract.js)
+   a partir de un organismo real, para viajar Core -> Especialidad.
+
+   Esto NO reemplaza el mecanismo legacy de Urbanismo/Negocios (construirMarcoCore() +
+   localStorage.ag_marco_pendiente + window.open, todo intacto más abajo en abrirModulo()).
+   El envelope se construye EN PARALELO, se guarda sólo en memoria (window, nunca storage)
+   para que sea inspeccionable, y no condiciona en absoluto si el módulo abre o no. */
+
+/* Sólo mapea los módulos que son specialty canónica de I0. 'contextos' queda afuera a
+   propósito: Contextos Universal es Core basal (invariante 6), no una specialty. Los demás
+   ids de ACCESO_MODULOS ('capacidades','trayectoria') tampoco son specialties. */
+var MODULO_A_SPECIALTY_ID = Object.freeze({
+  urbanismo: 'urbanism',
+  negocios: 'business',
+  tecnologias: 'technology',
+  sustentabilidad: 'sustainability'
+});
+
+/* ============================================================================
+   PF-01 (31/08) — Fuente canónica gobernada de organismPurposeFunction
+   -----------------------------------------------------------------------------
+   Fuente autoritativa: paquete CLAUDE_CIRUGIA_UNIFICADA_ESPECIALIDADES_CONTEXTOS_V1,
+   corte PF-01 (03_CUTS/PF01_GATE.md), categoría 1 explícitamente autorizada por Javier:
+   "nueva fuente canónica gobernada por humano". organismPurposeFunction pasa a vivir como
+   propiedad PROPIA del organismo (o.proposito_funcional) -- nunca dentro de o.ficha, nunca
+   dentro de FUNCIONES_14, nunca derivada de ficha.funcion/nombre/tipo/diagnóstico/síntesis/
+   Memoria/IA/heurística (invariante 6 y 7 del paquete). Sigue distinta de:
+     - coreUniversalFunction  (función universal del motor -- ficha.funcion, ya vigente);
+     - specialtyStudyFunction (función particular de un estudio especializado -- PF-01 NO
+       crea ni resuelve esto; queda intacta como categoría separada, sin tocar).
+
+   Gobernanza: propuesta ≠ confirmación. La IA puede ayudar a *formular* una propuesta (rol
+   'ia_asistida'), pero jamás confirmarla ni promoverla en silencio. Sólo un acto humano
+   explícito (confirmarPropositoFuncionalOrganismo) vuelve canónico un texto -- y sólo ese
+   texto canónico satisface el gate de Sustentabilidad/Tecnología (evaluarActivacionEspecialidad
+   más abajo no cambia: sigue leyendo organismPurposeFunctionCanonico(o) tal como en I1; ahora
+   simplemente puede dejar de ser null cuando exista confirmación real).
+
+   Forma persistida en el organismo (versionada, historial append-only -- nunca se borra la
+   genealogía; una corrección posterior es sólo un nuevo ciclo proponer→confirmar):
+     o.proposito_funcional = {
+       estado: 'ninguno' | 'propuesto' | 'confirmado',
+       texto: null | string,                 // valor canónico -- sólo con contenido si 'confirmado'
+       propuesta: null | { texto, origen: 'humano'|'ia_asistida', creado },
+       version: number,                      // incrementa sólo en cada confirmación
+       historial: [ { accion:'confirmada'|'rechazada', texto, version, creado } ]  // append-only
+     }
+
+   PF-01 no agrega UI: sólo el mecanismo de datos + gobernanza. El momento/disparador de UX
+   (p.ej. al abrir Sustentabilidad/Tecnología y detectar que falta) queda para CX4-S/CX4-T,
+   que no se implementan en este corte. Tampoco toca Contextos (CX0-CX3-R1), E1/E2/F1/F2,
+   Urbanismo/Negocios, ni el catálogo FUNCIONES_14. */
+var PF01_ERROR_CODES = Object.freeze({
+  ORGANISMO_REQUERIDO: 'PF01_ORGANISMO_REQUERIDO',
+  TEXTO_REQUERIDO: 'PF01_TEXTO_REQUERIDO',
+  ORIGEN_INVALIDO: 'PF01_ORIGEN_INVALIDO',
+  ACCION_INVALIDA: 'PF01_ACCION_INVALIDA'
+});
+var PF01_ORIGENES_PROPUESTA = Object.freeze(['humano', 'ia_asistida']);
+
+function PF01_limpioTexto(v){ return (typeof v === 'string' && v.trim()) ? v.trim() : null; }
+
+function PF01_inicializarPropositoSiFalta(o){
+  if(!o.proposito_funcional || typeof o.proposito_funcional !== 'object'){
+    o.proposito_funcional = { estado: 'ninguno', texto: null, propuesta: null, version: 0, historial: [] };
+  }
+  return o.proposito_funcional;
+}
+
+/* proponerPropositoFuncionalOrganismo: única función que puede dejar una propuesta pendiente.
+   NUNCA toca .texto (el valor canónico) ni .historial -- una propuesta no es una confirmación.
+   origen debe declararse explícitamente ('humano' o 'ia_asistida'); no hay default silencioso. */
+function proponerPropositoFuncionalOrganismo(o, texto, origen){
+  if(!o || typeof o !== 'object' || !PF01_limpioTexto(o.id)){
+    return { ok:false, error: PF01_ERROR_CODES.ORGANISMO_REQUERIDO };
+  }
+  var textoLimpio = PF01_limpioTexto(texto);
+  if(!textoLimpio) return { ok:false, error: PF01_ERROR_CODES.TEXTO_REQUERIDO };
+  if(PF01_ORIGENES_PROPUESTA.indexOf(origen) === -1){
+    return { ok:false, error: PF01_ERROR_CODES.ORIGEN_INVALIDO };
+  }
+  var pf = PF01_inicializarPropositoSiFalta(o);
+  pf.propuesta = { texto: textoLimpio, origen: origen, creado: new Date().toISOString() };
+  pf.estado = 'propuesto';
+  o.actualizado = new Date().toISOString();
+  guardarOrganismo(o);
+  return { ok:true, estado: pf.estado, propuesta: pf.propuesta };
+}
+
+/* confirmarPropositoFuncionalOrganismo: única función que puede escribir el valor canónico
+   (.texto). accion:'rechazar' descarta la propuesta pendiente sin tocar ni borrar un canónico
+   previamente confirmado ni su historial. accion:'confirmar' exige un texto -- de la propuesta
+   pendiente o, si el humano corrige en el momento de confirmar, el texto provisto en decision.texto
+   (mismo criterio que aplicarPropuesta con Principios: la corrección humana prevalece). Cada
+   confirmación incrementa version y agrega una entrada nueva al historial -- nunca reemplaza ni
+   elimina entradas previas (genealogía intacta ante correcciones futuras). */
+function confirmarPropositoFuncionalOrganismo(o, decision){
+  if(!o || typeof o !== 'object' || !PF01_limpioTexto(o.id)){
+    return { ok:false, error: PF01_ERROR_CODES.ORGANISMO_REQUERIDO };
+  }
+  var pf = PF01_inicializarPropositoSiFalta(o);
+  var accion = decision && decision.accion;
+  if(accion !== 'confirmar' && accion !== 'rechazar'){
+    return { ok:false, error: PF01_ERROR_CODES.ACCION_INVALIDA };
+  }
+  if(accion === 'rechazar'){
+    var textoRechazado = pf.propuesta ? pf.propuesta.texto : null;
+    pf.historial.push({ accion:'rechazada', texto: textoRechazado, version: pf.version, creado: new Date().toISOString() });
+    pf.propuesta = null;
+    // El estado resultante se deriva de si YA existe un canónico confirmado (pf.texto), nunca del
+    // último valor de pf.estado -- una propuesta pendiente pudo haber pisado 'estado' a 'propuesto'
+    // sin tocar pf.texto, y rechazarla nunca debe borrar un canónico previamente confirmado.
+    pf.estado = PF01_limpioTexto(pf.texto) ? 'confirmado' : 'ninguno';
+    o.actualizado = new Date().toISOString();
+    guardarOrganismo(o);
+    return { ok:true, estado: pf.estado };
+  }
+  var textoOverride = PF01_limpioTexto(decision && decision.texto);
+  var textoFinal = textoOverride || (pf.propuesta ? pf.propuesta.texto : null);
+  if(!textoFinal) return { ok:false, error: PF01_ERROR_CODES.TEXTO_REQUERIDO };
+  pf.version = (typeof pf.version === 'number' ? pf.version : 0) + 1;
+  pf.historial.push({ accion:'confirmada', texto: textoFinal, version: pf.version, creado: new Date().toISOString() });
+  pf.texto = textoFinal;
+  pf.estado = 'confirmado';
+  pf.propuesta = null;
+  o.actualizado = new Date().toISOString();
+  guardarOrganismo(o);
+  return { ok:true, estado: pf.estado, texto: pf.texto, version: pf.version };
+}
+
+/* organismPurposeFunctionCanonico: lectura gobernada -- devuelve pf.texto directamente, porque
+   pf.texto es escrito EXCLUSIVAMENTE por confirmarPropositoFuncionalOrganismo() (nunca por
+   proponerPropositoFuncionalOrganismo()); su sola presencia ya certifica una confirmación humana
+   explícita. Deliberadamente NO se filtra por pf.estado acá: una propuesta nueva sobre un
+   canónico ya confirmado pisa pf.estado a 'propuesto' (hay algo pendiente de revisión) sin
+   pisar pf.texto -- el canónico debe seguir siendo el último confirmado hasta que una NUEVA
+   confirmación lo reemplace explícitamente. Sigue sin leer ficha.funcion, nombre, tipo,
+   diagnóstico, síntesis, Memoria ni IA -- exactamente la misma firma y el mismo llamador que en
+   I1 (construirCoreSpecialtyEnvelope más abajo no cambia una línea). */
+function organismPurposeFunctionCanonico(o){
+  var pf = o && o.proposito_funcional;
+  if(!pf) return null;
+  return PF01_limpioTexto(pf.texto);
+}
+
+/* Debug/verificación manual -- mismo patrón que window.debugCoreSpecialtyEnvelope y el resto de
+   los debugX del motor (costo 0, sólo lectura salvo que se pidan explícitamente las mutaciones). */
+window.debugPF01_propositoFuncional = function(organismoId){
+  var org = cargarOrganismos().find(function(x){ return x.id === organismoId; }) || null;
+  if(!org) return { ok:false, error: PF01_ERROR_CODES.ORGANISMO_REQUERIDO };
+  return { proposito_funcional: org.proposito_funcional || null, canonico: organismPurposeFunctionCanonico(org) };
+};
+
+/* construirCoreSpecialtyEnvelope: puerto directo de buildCoreInputEnvelope() en contract.js,
+   adaptado a los datos reales del organismo tal como existen hoy (o.ficha, o.principios,
+   antecedentesEspecializadosParaMarco(), construirMarcoCore()). Función pura de lectura: no
+   escribe nada en o, en localStorage ni en ningún lado -- sólo arma y devuelve el envelope. */
+function construirCoreSpecialtyEnvelope(o, specialtyId){
+  function limpio(v){ return typeof v === 'string' && v.trim() ? v.trim() : null; }
+  if(!o || typeof o !== 'object' || !limpio(o.id)) return { ok:false, error: SPECIALTY_ERROR_CODES.ORGANISM_REQUIRED };
+  if(!SPECIALTY_IDS.includes(specialtyId)) return { ok:false, error: SPECIALTY_ERROR_CODES.SPECIALTY_NOT_ALLOWED };
+
+  var f = o.ficha || {};
+  /* coreUniversalFunction: SÓLO desde ficha.funcion, y sólo si es una de las 14 funciones
+     universales reales del motor (FUNCIONES_14, ya vigente desde antes de I1). Un valor legacy
+     fuera de ese vocabulario se descarta -- nunca se fuerza ni se inventa uno. */
+  var coreUniversalFunction = (f.funcion && FUNCIONES_14.indexOf(f.funcion) > -1) ? f.funcion : null;
+
+  var marcoCompleto = construirMarcoCore(o);
+  var marcoObj = (marcoCompleto && marcoCompleto.marco) || { ideas:[], correspondencias:[], abierto:[] };
+
+  var specializedAntecedents = antecedentesEspecializadosParaMarco(o).map(function(a){
+    return {
+      source: a.source,
+      version: (a.version != null ? a.version : null),
+      date: a.date || null,
+      scope: null,
+      summary: a.summary,
+      epistemicRole: 'context_not_evidence'   // invariante 3: antecedente ≠ evidencia, siempre.
+    };
+  });
+
+  var envelope = {
+    schema: 'comprender.specialty-input.v1',
+    contractId: SPECIALTY_CONTRACT_ID,
+    contractVersion: SPECIALTY_CONTRACT_VERSION,
+    specialtyId: specialtyId,
+    issuedAt: new Date().toISOString(),
+    organismRef: { id: o.id, name: o.nombre || null },
+    coreSnapshot: { nombre: o.nombre || null, tipo: o.tipo || null, marco: marcoObj },
+    coreUniversalFunction: coreUniversalFunction,
+    organismPurposeFunction: organismPurposeFunctionCanonico(o),   // I1: siempre null, ver función.
+    scope: { kind: 'organism', tipo: o.tipo || null },
+    currentSituation: null,
+    activeSynthesis: null,
+    relevantMemory: [],
+    relevantEvidenceRefs: [],
+    openTensions: f.tensiones ? [f.tensiones] : [],
+    specializedAntecedents: specializedAntecedents,
+    permissions: {},
+    version: (typeof fichaVersion === 'function' ? fichaVersion(o) : 1),
+    derivationReason: null,
+    contextEnvelope: null,
+    guarantees: {
+      readOnlyCoreSnapshot: true,
+      antecedentsAreNotEvidence: true,
+      specialtyMayReinterpret: true,
+      directCoreMutationAuthorized: false
+    }
+  };
+  return { ok:true, value: envelope };
+}
+
+/* evaluarActivacionEspecialidad: gate explícito para especialidades NATIVAS (Sustentabilidad,
+   Tecnología) -- Urbanismo/Negocios son legacy y su mecanismo actual sigue siendo autoritativo
+   sin pasar por este gate (siguen abriendo exactamente igual que siempre). Sustentabilidad y
+   Tecnología no deben activarse todavía si falta organismPurposeFunction canónico: acá quedan
+   bloqueadas de forma explícita y segura -- nunca silenciosa, nunca inferida. */
+var SPECIALTIES_NATIVAS_REQUIEREN_PROPOSITO = Object.freeze(['sustainability','technology']);
+function evaluarActivacionEspecialidad(envelope){
+  if(!envelope || envelope.schema !== 'comprender.specialty-input.v1'){
+    return { ok:false, estado:'bloqueado', motivo:'ENVELOPE_INVALIDO' };
+  }
+  if(SPECIALTIES_NATIVAS_REQUIEREN_PROPOSITO.indexOf(envelope.specialtyId) === -1){
+    return { ok:true, estado:'legacy_activo' };   // Urbanismo/Negocios: mecanismo legacy manda.
+  }
+  if(!envelope.organismPurposeFunction){
+    return { ok:false, estado:'bloqueado', motivo:'ORGANISM_PURPOSE_FUNCTION_REQUIRED' };
+  }
+  return { ok:true, estado:'activable' };
+}
+
+/* Debug/verificación manual -- mismo patrón que el resto de los debugX del motor C1 y de I0
+   (costo 0, sólo lectura, no toca red ni storage). */
+window.debugCoreSpecialtyEnvelope = function(organismoId, specialtyId){
+  var org = cargarOrganismos().find(function(x){ return x.id === organismoId; }) || null;
+  if(!org) return { ok:false, error:'ORGANISM_REQUIRED' };
+  var env = construirCoreSpecialtyEnvelope(org, specialtyId);
+  return { envelope: env, activacion: env.ok ? evaluarActivacionEspecialidad(env.value) : null };
+};
+
+/* ============================================================================
+   I1-R1 (28/08) — Cierre de compatibilidad legacy: Core -> specialty-input.v1 ->
+   adapter legacy -> marco_de_comprension -> Urbanismo/Negocios
+   -----------------------------------------------------------------------------
+   Puerto de la lógica de marcoFromEnvelope() (01_FROZEN_REFERENCES/.../adapters/shared.js)
+   y de fromCoreInput() (urbanism.adapter.js / business.adapter.js), adaptado a la forma real
+   del envelope tal como lo arma construirCoreSpecialtyEnvelope() en este mismo Core -- no a la
+   forma hipotética genérica del paquete (por eso 'investigacion' sale de coreSnapshot.nombre/
+   tipo, no de un derivationReason que acá nunca se llena).
+
+   Sólo aplica a Urbanismo/Negocios (invariante: mecanismo legacy sigue siendo autoritativo).
+   Sustentabilidad/Tecnología nunca pasan por este adapter -- ni siquiera podrían, ya que hoy
+   son inalcanzables desde abrirModulo() (sin 'archivo' en ACCESO_MODULOS). */
+function adaptarEnvelopeAMarcoLegacy(envelope){
+  if(!envelope || envelope.schema !== 'comprender.specialty-input.v1'){
+    return { ok:false, error:'ENVELOPE_INVALIDO' };
+  }
+  if(envelope.contractId !== SPECIALTY_CONTRACT_ID || envelope.contractVersion !== SPECIALTY_CONTRACT_VERSION){
+    return { ok:false, error: SPECIALTY_ERROR_CODES.CONTRACT_MISMATCH };
+  }
+  if(envelope.specialtyId !== 'urbanism' && envelope.specialtyId !== 'business'){
+    return { ok:false, error:'ADAPTER_LEGACY_NO_APLICA' };   // sólo U/B tienen adapter legacy en I1-R1.
+  }
+  if(!envelope.organismRef || !envelope.organismRef.id) return { ok:false, error: SPECIALTY_ERROR_CODES.ORGANISM_REQUIRED };
+  var cs = envelope.coreSnapshot || {};
+  // coreSnapshot.marco YA es el mismo objeto {ideas,correspondencias,abierto,antecedentes_especializados?}
+  // que construirMarcoCore(o) produce hoy -- no se reconstruye desde cero, se transporta tal cual, así
+  // que "antecedentes_especializados" nunca pierde su forma legacy {source,version,date,summary} ni gana
+  // el epistemicRole del contrato universal (ese campo es del envelope, no del marco legacy).
+  var marcoObj = cs.marco || { ideas:[], correspondencias:[], abierto:[] };
+  var nombre = cs.nombre || envelope.organismRef.name || '';
+  var tipo = cs.tipo || '';
+  var marcoLegacy = sellarContrato({
+    producto: 'Comprender AI',
+    tipo: 'marco_de_comprension',
+    generado: envelope.issuedAt || new Date().toISOString(),
+    organismo_id: envelope.organismRef.id,
+    investigacion: nombre + ' (' + tipo + ')',
+    marco: marcoObj
+  });
+  return { ok:true, value: marcoLegacy };
+}
+
+/* resolverMarcoParaTransporte: decide qué marco viaja por ag_marco_pendiente. Para Urbanismo/
+   Negocios intenta el camino nuevo (envelope -> adapter -> validarContrato ya existente); si
+   CUALQUIER paso no da ok, cae al camino de siempre -- fallback legacy explícito, nunca abre en
+   blanco. Para cualquier otro caso (incluidas Sustentabilidad/Tecnología, si alguna vez llegaran
+   a tener 'archivo') usa directamente el camino de siempre, sin pasar por el adapter. */
+function resolverMarcoParaTransporte(org, idSpecialty, envelopeResult){
+  if(idSpecialty === 'urbanism' || idSpecialty === 'business'){
+    if(envelopeResult && envelopeResult.ok){
+      var adaptado = adaptarEnvelopeAMarcoLegacy(envelopeResult.value);
+      if(adaptado.ok && validarContrato(adaptado.value).ok) return adaptado.value;
+    }
+  }
+  return construirMarcoCore(org);   // fallback legacy de siempre -- idéntico a antes de I1-R1.
+}
+
+window.debugAdaptarEnvelopeAMarcoLegacy = function(organismoId, specialtyId){
+  var org = cargarOrganismos().find(function(x){ return x.id === organismoId; }) || null;
+  if(!org) return { ok:false, error:'ORGANISM_REQUIRED' };
+  var env = construirCoreSpecialtyEnvelope(org, specialtyId);
+  if(!env.ok) return { envelope: env, adaptado: null };
+  return { envelope: env, adaptado: adaptarEnvelopeAMarcoLegacy(env.value) };
+};
+
+/* ============================================================================
+   I2 (28/08) — Universal Specialty Return Receiver, SHADOW MODE
+   -----------------------------------------------------------------------------
+   Fuente autoritativa: 01_FROZEN_REFERENCES/CLAUDE_CORE_ESPECIALIDADES_I0_I2.zip,
+   02_CONTRATO/src/contract.js (validateSpecialtyReturnEnvelope, validateDecisionPayload,
+   validateHumanPreferences) + 03_ADAPTERS/../fake-core.js (route()) + schemas/specialty-return.v1.
+
+   Este receptor SÓLO valida y CLASIFICA un specialty-return.v1 -- nunca lo persiste, nunca
+   muta el organismo, nunca escribe ficha/recuerdos/principios/próximos, nunca llama
+   guardarOrganismo()/persistirOrganismos(), nunca toca localStorage/Supabase. "Clasificar" acá
+   es un veredicto puro sobre qué haría el Core con esto MÁS ADELANTE (fuera de I2) -- no es una
+   acción. El import legacy de diagnosticos_pro/evaluaciones_negocio_pro sigue siendo el único
+   camino autoritativo real; este receiver no está conectado a él todavía. */
+
+/* Etiqueta de clasificación por returnClass -- puramente descriptiva, no dispara ninguna cola
+   real. specialized_interpretation es la única de sólo lectura; las 9 restantes son candidatos
+   que requieren aceptación del lado del Core más adelante (clasificar ≠ aceptar). */
+var SPECIALTY_RETURN_CLASIFICACION = Object.freeze({
+  specialized_interpretation: 'interpretacion_externa_read_only',
+  relevant_tension_candidate: 'candidato_tension',
+  relevant_capability_or_gap: 'candidato_capacidad_o_gap',
+  structural_risk_or_dependency: 'candidato_riesgo_o_dependencia',
+  next_step_candidate: 'candidato_proximo_paso',
+  longitudinal_memory_candidate: 'candidato_longitudinal',
+  principle_candidate: 'candidato_principio',
+  human_decision_reference: 'referencia_decision_humana',
+  learning_candidate: 'candidato_aprendizaje',
+  cross_specialty_request: 'candidato_circulacion_entre_especialidades'
+});
+
+/* Puerto de validateHumanPreferences()/validateDecisionPayload() de contract.js -- ninguna
+   especialidad puede traer un peso puesto por IA, un peso oculto, un "ganador automático" ni una
+   decisión no atribuida a un actor humano. Sin esto, human_decision_reference sería sólo un
+   nombre sin la garantía real que promete. */
+function validarPreferenciasHumanas(preferences){
+  var lista = Array.isArray(preferences) ? preferences : [];
+  for(var i=0;i<lista.length;i++){
+    var p = lista[i];
+    if(p && p.source === 'ai' && p.weight != null) return { ok:false, error: SPECIALTY_ERROR_CODES.AUTOMATIC_WEIGHT_FORBIDDEN };
+    if(p && p.hidden === true) return { ok:false, error: SPECIALTY_ERROR_CODES.AUTOMATIC_WEIGHT_FORBIDDEN };
+  }
+  return { ok:true };
+}
+function validarDecisionHumana(payload){
+  payload = payload || {};
+  if(payload.automaticWinner === true || payload.systemSelected === true){
+    return { ok:false, error: SPECIALTY_ERROR_CODES.AUTOMATIC_WINNER_FORBIDDEN };
+  }
+  if(payload.decision && payload.decision.actorType !== 'human'){
+    return { ok:false, error: SPECIALTY_ERROR_CODES.HUMAN_DECISION_REQUIRED };
+  }
+  return validarPreferenciasHumanas(payload.preferences || payload.criteria || []);
+}
+
+/* receiveSpecialtyReturnEnvelope: puerto directo de validateSpecialtyReturnEnvelope() + route()
+   (fake-core.js), pero SIN persistencia -- acá "route" es sólo una etiqueta en el resultado
+   shadow, no un push a ninguna cola real. organismoDestino es el organismo real sobre el que el
+   Core está recibiendo el retorno (nunca se adapta un retorno de otro organismo en silencio). */
+function receiveSpecialtyReturnEnvelope(envelope, organismoDestino){
+  function limpio(v){ return typeof v === 'string' && v.trim() ? v.trim() : null; }
+  function falla(error, details){ return { ok:false, error:error, details: details||null, coreWritePerformed:false, coreMutationPerformed:false }; }
+
+  if(!envelope || typeof envelope !== 'object') return falla(SPECIALTY_ERROR_CODES.RETURN_ENVELOPE_INVALID, 'envelope_required');
+  // MUY IMPORTANTE (invariante de canal): ContextEnvelope usa comprender.context-envelope.v1,
+  // un canal contractual distinto -- nunca se trata acá como specialty-return.v1, ni siquiera si
+  // alguien lo pasara por error a esta función.
+  if(envelope.schema === 'comprender.context-envelope.v1'){
+    return falla('CONTEXT_ENVELOPE_WRONG_CHANNEL', 'ContextEnvelope no pasa por receiveSpecialtyReturnEnvelope()');
+  }
+  if(envelope.schema !== 'comprender.specialty-return.v1') return falla(SPECIALTY_ERROR_CODES.RETURN_ENVELOPE_INVALID, 'schema');
+  if(envelope.contractId !== SPECIALTY_CONTRACT_ID || envelope.contractVersion !== SPECIALTY_CONTRACT_VERSION){
+    return falla(SPECIALTY_ERROR_CODES.CONTRACT_MISMATCH);
+  }
+  if(!SPECIALTY_IDS.includes(envelope.specialtyId)) return falla(SPECIALTY_ERROR_CODES.SPECIALTY_NOT_ALLOWED);
+  if(!SPECIALTY_RETURN_CLASSES.includes(envelope.returnClass)) return falla(SPECIALTY_ERROR_CODES.RETURN_CLASS_INVALID);
+  if(!envelope.organismRef || !limpio(envelope.organismRef.id)) return falla(SPECIALTY_ERROR_CODES.ORGANISM_REQUIRED);
+  if(!organismoDestino || !limpio(organismoDestino.id)) return falla(SPECIALTY_ERROR_CODES.ORGANISM_REQUIRED, 'organismo_destino_requerido');
+  if(organismoDestino.id !== envelope.organismRef.id){
+    return falla('ORGANISM_MISMATCH');   // nunca se adapta en silencio un retorno de otro organismo.
+  }
+  if(envelope.targetHint && PROTECTED_CORE_TARGETS.indexOf(envelope.targetHint) > -1){
+    return falla(SPECIALTY_ERROR_CODES.PROTECTED_CORE_TARGET, envelope.targetHint);
+  }
+  if(!envelope.provenance || typeof envelope.provenance !== 'object') return falla(SPECIALTY_ERROR_CODES.PROVENANCE_REQUIRED);
+  if(!envelope.guarantees || envelope.guarantees.directCoreWritePerformed !== false || envelope.guarantees.directCoreMutationAuthorized !== false){
+    return falla(SPECIALTY_ERROR_CODES.RETURN_ENVELOPE_INVALID, 'guarantees');
+  }
+  var review = envelope.humanReview || {};
+  if(review.required && !(review.reviewed === true && limpio(review.actorId))){
+    return falla(SPECIALTY_ERROR_CODES.HUMAN_REVIEW_REQUIRED);
+  }
+  if(envelope.returnClass === 'human_decision_reference'){
+    var dv = validarDecisionHumana(envelope.payload);
+    if(!dv.ok) return falla(dv.error);
+  }
+  if(envelope.payload && envelope.payload.evidenceCreatedBy === 'ai'){
+    return falla(SPECIALTY_ERROR_CODES.EVIDENCE_FABRICATION_FORBIDDEN);
+  }
+
+  // A partir de acá el envelope es válido. Lo único que sigue es CLASIFICAR -- ninguna rama
+  // de abajo escribe ficha/recuerdos/principios/próximos/colas reales, ni llama
+  // guardarOrganismo()/persistirOrganismos(), ni toca storage. specialized_interpretation sigue
+  // siendo sólo eso: una interpretación externa, nunca evidencia/Memoria/principio/tensión
+  // canónica/diagnóstico Core. Los demás candidatos tampoco se vuelven automáticamente lo que
+  // proponen -- clasificar ≠ aceptar.
+  var esInterpretacion = envelope.returnClass === 'specialized_interpretation';
+  return {
+    ok: true,
+    schema: 'comprender.specialty-return-shadow.v1',
+    at: new Date().toISOString(),
+    specialtyId: envelope.specialtyId,
+    returnClass: envelope.returnClass,
+    clasificacion: SPECIALTY_RETURN_CLASIFICACION[envelope.returnClass],
+    ruta: esInterpretacion ? 'read_only_external_interpretation' : ('shadow_only_no_real_queue:' + SPECIALTY_RETURN_CLASIFICACION[envelope.returnClass]),
+    organismRef: { id: envelope.organismRef.id },
+    coreWritePerformed: false,
+    coreMutationPerformed: false,
+    persisted: false
+  };
+}
+
+window.debugReceiveSpecialtyReturnEnvelope = function(organismoId, envelope){
+  var org = cargarOrganismos().find(function(x){ return x.id === organismoId; }) || null;
+  if(!org) return { ok:false, error:'ORGANISM_REQUIRED' };
+  var antes = JSON.stringify(org);
+  var resultado = receiveSpecialtyReturnEnvelope(envelope, org);
+  var mutado = antes !== JSON.stringify(org);
+  return { resultado: resultado, organismoMutado: mutado };   // organismoMutado debe ser siempre false.
+};
+
+/* ============================================================================
+   RET-GOV-01 (01/09) — Bandeja gobernada de retornos especializados
+   -----------------------------------------------------------------------------
+   RET-GOV-00 (preflight, read-only) determinó: receiveSpecialtyReturnEnvelope() (I2, arriba)
+   permanece intacto como única fuente de verdad de validación/clasificación -- este bloque NO
+   reimplementa ni duplica ninguno de sus chequeos, sólo lo LLAMA. De las 10 returnClass, sólo 3
+   (relevant_tension_candidate, next_step_candidate, principle_candidate) mapean de forma
+   inequívoca al lazo real ya existente proponerFicha()->resolverPropuesta()->aplicarPropuesta()
+   (mismo lazo que ya reutiliza C1F2_resolverGobernanzaRetorno() para Contextos Universal -- ese
+   es el precedente directo de este diseño: "Aceptar" en la bandeja ES la confirmación humana
+   explícita, exactamente igual que la decisionHumana de C1F2, así que crear+resolver la propuesta
+   en el mismo gesto no salta ningún gate -- resolverPropuesta()/aplicarPropuesta() se ejecutan
+   íntegros, con su misma validación de versión optimista y su mismo validarCandidatoFicha()). Las
+   otras 7 clases no tienen destino Core canónico hoy (confirmado en el preflight) y su aceptación
+   sólo puede terminar en accepted_as_reference -- cero mutación de organismo.
+   Persistencia nueva y separada (ag_core_specialty_inbox), mismo patrón que ag_core_propuestas:
+   NO vive dentro de `o` (los arrays o.* existentes sólo reciben contenido ya CONFIRMADO). No se
+   toca legacy (ag_export_pendiente_incorporar) ni ningún writer legacy. No se agrega transporte
+   cross-page de ningún tipo (BroadcastChannel/postMessage/backend/polling) -- el envelope se
+   entrega directo a retgov01RecibirEnvelope(), igual que hoy se pega un JSON en
+   importarProParaOrganismo() para el legacy; RET-TRANSPORT-01 (futuro, no este corte) resolverá
+   el transporte real. */
+
+/* ---- identidad técnica del registro vs. huella determinística del contenido -- dos conceptos
+   DISTINTOS a propósito (brief RET-GOV-01, punto 2): receivedId lo acuña el Core al recibir
+   (mismo patrón que nuevoIdPropuesta()/C1F2_nuevoIdGenealogiaContextual() -- prefijo + timestamp +
+   random), nunca la especialidad; fingerprint es la huella del CONTENIDO canónico del envelope
+   completo (serialización con claves ordenadas, para que el orden de construcción del objeto no
+   cambie la huella), y es lo único que se usa para deduplicar -- nunca receivedId, nunca
+   únicamente un timestamp. */
+var RETGOV01_STORAGE_LLAVE = 'ag_core_specialty_inbox';
+var RETGOV01_INBOX_VERSION = 1;
+var RETGOV01_INBOX_MAX = 200;
+var RETGOV01_GOBERNABLES = Object.freeze(['relevant_tension_candidate', 'next_step_candidate', 'principle_candidate']);
+
+function retgov01Clean(v){ return typeof v === 'string' && v.trim() ? v.trim() : null; }
+function retgov01Clonar(v){ return v == null ? v : JSON.parse(JSON.stringify(v)); }
+
+function retgov01NuevoReceivedId(){
+  return 'sri_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+/* Canonicaliza: mismas claves en el mismo objeto quedan siempre en el mismo orden alfabético
+   antes de serializar (los arrays SÍ preservan orden -- el orden ahí es semántico, p.ej.
+   sourceObjectRefs/tensiones[]). No es una huella criptográfica -- FNV-1a corrido dos veces con
+   semillas distintas, sólo necesita ser determinística y estable para detectar duplicados
+   exactos, no resistir ataques. */
+function retgov01Canonicalizar(valor){
+  if(Array.isArray(valor)) return valor.map(retgov01Canonicalizar);
+  if(valor && typeof valor === 'object'){
+    var claves = Object.keys(valor).sort(), out = {};
+    claves.forEach(function(k){ out[k] = retgov01Canonicalizar(valor[k]); });
+    return out;
+  }
+  return valor;
+}
+function retgov01FnvA(str, seed){
+  var h = seed >>> 0;
+  for(var i=0;i<str.length;i++){
+    h ^= str.charCodeAt(i);
+    h = (h + ((h<<1) + (h<<4) + (h<<7) + (h<<8) + (h<<24))) >>> 0;
+  }
+  return h >>> 0;
+}
+function retgov01HashTexto(s){
+  var a = retgov01FnvA(s, 0x811c9dc5);
+  var b = retgov01FnvA(s, 0x01000193);
+  return a.toString(16).padStart(8,'0') + b.toString(16).padStart(8,'0');
+}
+/* Huella del envelope COMPLETO (todo su contenido canónico), no de un subconjunto curado de
+   campos -- así: (a) el mismo envelope exacto reenviado siempre da la misma huella; (b) un
+   reload + reenvío del mismo JSON ya recibido antes da la misma huella (es literalmente el mismo
+   contenido); (c) cualquier campo distinto (incluido un createdAt distinto de una construcción
+   nueva del builder) da una huella distinta. Nunca depende SÓLO de un timestamp. */
+function retgov01Fingerprint(envelope){
+  return retgov01HashTexto(JSON.stringify(retgov01Canonicalizar(envelope)));
+}
+
+/* El contrato comprender.specialty-return.v1 -- confirmado leyendo los 4 builders reales
+   (urbanismo.html/negocios.html/sustentabilidad.html/tecnologia.html) -- NO trae hoy un campo
+   propio `specialtyStudyRef` dentro del envelope transportado (existe sólo como concepto interno
+   de cada especialidad, para su propia persistencia local). Se preserva acá si en algún momento
+   viaja dentro de provenance/scope (algunas especialidades podrían empezar a incluirlo); si no
+   está en ningún lado reconocido, queda null -- honesto, no se inventa un valor. */
+function retgov01ExtraerSpecialtyStudyRef(envelope){
+  if(!envelope) return null;
+  if(typeof envelope.specialtyStudyRef === 'string' && envelope.specialtyStudyRef.trim()) return envelope.specialtyStudyRef.trim();
+  if(envelope.provenance && typeof envelope.provenance.specialtyStudyRef === 'string' && envelope.provenance.specialtyStudyRef.trim()) return envelope.provenance.specialtyStudyRef.trim();
+  if(envelope.scope && typeof envelope.scope.specialtyStudyRef === 'string' && envelope.scope.specialtyStudyRef.trim()) return envelope.scope.specialtyStudyRef.trim();
+  return null;
+}
+
+/* ---- persistencia de la bandeja: espejo exacto de cargarPropuestas()/persistirPropuestas()/
+   purgarCola() (línea ~3369) -- clave propia y nueva, NUNCA dentro de `o`. ---- */
+function retgov01CargarInbox(){
+  try{
+    var c = JSON.parse(localStorage.getItem(RETGOV01_STORAGE_LLAVE) || 'null');
+    if(!c || !Array.isArray(c.registros)) return { version_inbox: RETGOV01_INBOX_VERSION, registros: [] };
+    return c;
+  }catch(e){ return { version_inbox: RETGOV01_INBOX_VERSION, registros: [] }; }
+}
+function retgov01GuardarInbox(c){
+  try{ localStorage.setItem(RETGOV01_STORAGE_LLAVE, JSON.stringify(c)); return true; }catch(e){ return false; }
+}
+function retgov01PurgarInbox(c){
+  if(c.registros.length <= RETGOV01_INBOX_MAX) return c;
+  var pend = c.registros.filter(function(r){ return r.estado === 'pending_human_review'; });
+  var res  = c.registros.filter(function(r){ return r.estado !== 'pending_human_review'; });
+  res = res.slice(Math.max(0, res.length - (RETGOV01_INBOX_MAX - pend.length)));
+  c.registros = res.concat(pend);   // nunca se descarta un pendiente
+  return c;
+}
+function retgov01ListarTodos(){ return retgov01CargarInbox().registros; }
+function retgov01ListarPendientes(organismoId){
+  return retgov01ListarTodos().filter(function(r){ return r.organismId === organismoId && r.estado === 'pending_human_review'; });
+}
+function retgov01BuscarPorId(receivedId){
+  return retgov01ListarTodos().find(function(r){ return r.receivedId === receivedId; }) || null;
+}
+
+/* Señal blanda de posible doble incorporación (brief RET-GOV-01, punto 9): NUNCA afirma
+   duplicación si no puede derivarse con datos reales -- default false. Sustentabilidad/Tecnología
+   confirmado en RET-UNIV-00 que nunca tuvieron Sistema A, así que para ellas siempre es false. No
+   deduplica contra legacy -- sólo señaliza para que el humano revise antes de aceptar. */
+function retgov01DetectarPosibleLegacy(organismo, envelope){
+  try{
+    if(!organismo || !envelope) return false;
+    var VENTANA_MS = 24 * 60 * 60 * 1000;
+    var ahora = Date.now();
+    var candidatos = [];
+    if(envelope.specialtyId === 'business'){
+      candidatos = Array.isArray(organismo.evaluaciones_negocio_pro) ? organismo.evaluaciones_negocio_pro : [];
+    } else if(envelope.specialtyId === 'urbanism'){
+      candidatos = (Array.isArray(organismo.diagnosticos_pro) ? organismo.diagnosticos_pro : []).filter(function(e){ return e && e.origen === 'urban_pro'; });
+    } else {
+      return false;
+    }
+    return candidatos.some(function(e){
+      if(!e || !e.fecha) return false;
+      var dt = new Date(e.fecha).getTime();
+      return isFinite(dt) && Math.abs(ahora - dt) <= VENTANA_MS;
+    });
+  }catch(e){ return false; }
+}
+
+/* ---- Recepción productiva (brief RET-GOV-01, punto 1): validar mediante el receiver existente
+   -> calcular fingerprint -> deduplicar -> crear registro. Nunca muta organismoDestino -- sólo lo
+   LEE (id/nombre/arrays legacy para la señal blanda). ---- */
+function retgov01RecibirEnvelope(envelopeCandidato, organismoDestino){
+  var clasif = receiveSpecialtyReturnEnvelope(envelopeCandidato, organismoDestino);   // única fuente de verdad -- no se reimplementa
+  if(!clasif.ok){
+    return { ok:false, error: clasif.error, details: clasif.details || null, receivedId:null, duplicado:false };
+  }
+  var huella = retgov01Fingerprint(envelopeCandidato);
+  var inbox = retgov01CargarInbox();
+  var existente = inbox.registros.find(function(r){ return r.fingerprint === huella && r.organismId === organismoDestino.id; });
+  if(existente){
+    return { ok:true, duplicado:true, receivedId: existente.receivedId, registro: retgov01Clonar(existente) };
+  }
+  var registro = {
+    receivedId: retgov01NuevoReceivedId(),
+    fingerprint: huella,
+    envelope: retgov01Clonar(envelopeCandidato),
+    organismId: organismoDestino.id,
+    specialtyId: envelopeCandidato.specialtyId,
+    specialtyStudyRef: retgov01ExtraerSpecialtyStudyRef(envelopeCandidato),
+    returnClass: envelopeCandidato.returnClass,
+    provenance: retgov01Clonar(envelopeCandidato.provenance || null),
+    clasificacion: clasif.clasificacion,
+    estado: 'pending_human_review',
+    recibidoEn: new Date().toISOString(),
+    decisionHumana: null,
+    resultadoAplicacion: null,
+    possible_legacy_duplication: retgov01DetectarPosibleLegacy(organismoDestino, envelopeCandidato)
+  };
+  inbox.registros.push(registro);
+  inbox = retgov01PurgarInbox(inbox);
+  retgov01GuardarInbox(inbox);
+  return { ok:true, duplicado:false, receivedId: registro.receivedId, registro: retgov01Clonar(registro) };
+}
+
+/* ---- Matriz de incorporación (brief RET-GOV-01, punto 4): extractor de contenido real, nunca
+   inventa texto -- si ninguna de las formas reales ya auditadas (urbanismo.html/negocios.html:
+   arrays con texto plano u objetos {tension|transformacion|texto|nombre}; sustentabilidad.html:
+   payload.statement) está presente, la traducción falla explícito y el registro queda pendiente
+   para revisión manual -- nunca se adivina contenido. ---- */
+function retgov01ExtraerTexto(v){
+  if(typeof v === 'string' && v.trim()) return v.trim();
+  if(v && typeof v === 'object'){
+    if(typeof v.tension === 'string' && v.tension.trim()) return v.tension.trim();
+    if(typeof v.transformacion === 'string' && v.transformacion.trim()) return v.transformacion.trim();
+    if(typeof v.texto === 'string' && v.texto.trim()) return v.texto.trim();
+    if(typeof v.titulo === 'string' && v.titulo.trim()) return v.titulo.trim();
+    if(typeof v.nombre === 'string' && v.nombre.trim()) return v.nombre.trim();
+  }
+  return null;
+}
+function retgov01TraducirAFichaCandidata(envelope){
+  var payload = (envelope && envelope.payload) || {};
+  var statement = retgov01Clean(payload.statement);
+  if(envelope.returnClass === 'relevant_tension_candidate'){
+    var textosT = [];
+    (Array.isArray(payload.tensiones) ? payload.tensiones : []).forEach(function(it){ var t = retgov01ExtraerTexto(it); if(t) textosT.push(t); });
+    if(statement) textosT.push(statement);
+    if(!textosT.length) return { ok:false, error:'RETGOV01_SIN_CONTENIDO_MAPEABLE' };
+    return { ok:true, fichaNueva: { tensiones: textosT.join('; ') }, principiosCandidatos: [] };
+  }
+  if(envelope.returnClass === 'next_step_candidate'){
+    var itemsP = Array.isArray(payload.transformaciones) ? payload.transformaciones : (Array.isArray(payload.acciones) ? payload.acciones : []);
+    var textosP = [];
+    itemsP.forEach(function(it){ var t = retgov01ExtraerTexto(it); if(t) textosP.push(t); });
+    if(statement) textosP.push(statement);
+    if(!textosP.length) return { ok:false, error:'RETGOV01_SIN_CONTENIDO_MAPEABLE' };
+    return { ok:true, fichaNueva: { proximos: textosP.join(';;') }, principiosCandidatos: [] };
+  }
+  if(envelope.returnClass === 'principle_candidate'){
+    var textoPrin = statement || retgov01Clean(payload.texto);
+    if(!textoPrin) return { ok:false, error:'RETGOV01_SIN_CONTENIDO_MAPEABLE' };
+    return { ok:true, fichaNueva: {}, principiosCandidatos: [{ texto: textoPrin, fam: null }] };
+  }
+  return { ok:false, error:'RETGOV01_RETURN_CLASS_NO_GOBERNABLE' };
+}
+
+/* ---- Resolución humana (brief RET-GOV-01, puntos 6-8): rechazar sólo marca estado (cero Core
+   write); aceptar en las 3 clases gobernables delega ÍNTEGRO en proponerFicha()->
+   resolverPropuesta() (mismo lazo real, con su misma validación de versión optimista) -- nunca
+   escribe ficha.tensiones/ficha.proximos/principios[] por su cuenta. Idempotencia: el guard
+   `estado !== 'pending_human_review'` (idéntico al de resolverPropuesta() sobre p.estado) hace
+   imposible aceptar/rechazar dos veces, reaplicar tras reload, o doble-click -- JS de un solo hilo
+   garantiza que esta función corre a completar antes de que un segundo click pueda leer el mismo
+   estado ya persistido. */
+function retgov01ResolverRegistro(receivedId, accion, opciones){
+  opciones = opciones || {};
+  var inbox = retgov01CargarInbox();
+  var registro = inbox.registros.find(function(r){ return r.receivedId === receivedId; });
+  if(!registro) return { ok:false, motivo:'registro inexistente' };
+  if(registro.estado !== 'pending_human_review') return { ok:false, motivo:'el registro ya fue resuelto' };
+
+  if(accion === 'rechazar'){
+    registro.decisionHumana = { accion:'rechazar', actorId: retgov01Clean(opciones.actorId), en: new Date().toISOString(), correccion: null };
+    registro.estado = 'rejected';
+    retgov01GuardarInbox(inbox);
+    return { ok:true, estado:'rejected' };
+  }
+  if(accion !== 'aceptar') return { ok:false, motivo:'acción inválida' };
+
+  if(RETGOV01_GOBERNABLES.indexOf(registro.returnClass) === -1){
+    registro.decisionHumana = { accion:'aceptar', actorId: retgov01Clean(opciones.actorId), en: new Date().toISOString(), correccion: null };
+    registro.estado = 'accepted_as_reference';
+    registro.resultadoAplicacion = { tipo:'accepted_as_reference' };
+    retgov01GuardarInbox(inbox);
+    return { ok:true, estado:'accepted_as_reference' };
+  }
+
+  var traduccion = retgov01TraducirAFichaCandidata(registro.envelope);
+  if(!traduccion.ok) return { ok:false, motivo: traduccion.error };   // registro sigue pending -- no se inventa contenido
+
+  var prop = proponerFicha(traduccion.fichaNueva || {}, null, null, null, traduccion.principiosCandidatos || []);
+  if(!prop) return { ok:false, motivo:'proponerFicha() no generó una propuesta (sin cambios reales o candidato inválido)' };
+
+  var correccion = opciones.correccion || null;
+  var r = resolverPropuesta(prop.id, correccion ? 'corregir' : 'confirmar', correccion);
+  if(!r.ok) return { ok:false, motivo: r.motivo, propuestaId: prop.id };   // registro sigue pending -- el gate real todavía no confirmó
+
+  registro.decisionHumana = { accion:'aceptar', actorId: retgov01Clean(opciones.actorId), en: new Date().toISOString(), correccion: correccion };
+  registro.estado = 'accepted';
+  registro.resultadoAplicacion = { tipo:'core_proposal', propuestaId: prop.id, estadoPropuesta: r.estado, aplicado: r.aplicado || null };
+  retgov01GuardarInbox(inbox);
+  return { ok:true, estado:'accepted', propuestaId: prop.id, aplicado: r.aplicado || null };
+}
+
+/* ---- UI mínima (brief RET-GOV-01, punto 6): "Retornos especializados pendientes", sección
+   discreta dentro de Memoria (mostrarFicha()), mismo patrón visual que "Principios incorporados"/
+   "Lecturas especializadas" -- invisible si no hay nada pendiente para este organismo. ---- */
+var RETGOV01_ESPECIALIDAD_LABEL = { sustainability:'Sustentabilidad', technology:'Tecnología', urbanism:'Urbanismo', business:'Negocios' };
+var RETGOV01_CLASE_LABEL = {
+  specialized_interpretation:'Interpretación especializada', relevant_tension_candidate:'Candidato de tensión',
+  relevant_capability_or_gap:'Capacidad o brecha', structural_risk_or_dependency:'Riesgo o dependencia estructural',
+  next_step_candidate:'Candidato de próximo paso', longitudinal_memory_candidate:'Candidato de memoria longitudinal',
+  principle_candidate:'Candidato de principio', human_decision_reference:'Referencia de decisión humana',
+  learning_candidate:'Candidato de aprendizaje', cross_specialty_request:'Pedido entre especialidades'
+};
+function retgov01EtiquetaEspecialidad(id){ return RETGOV01_ESPECIALIDAD_LABEL[id] || id; }
+function retgov01EtiquetaClase(rc){ return RETGOV01_CLASE_LABEL[rc] || rc; }
+function retgov01ResumenContenido(envelope){
+  var p = (envelope && envelope.payload) || {};
+  if(typeof p.statement === 'string' && p.statement.trim()) return p.statement.trim();
+  if(typeof p.sintesis === 'string' && p.sintesis.trim()) return p.sintesis.trim();
+  if(Array.isArray(p.tensiones) && p.tensiones.length) return p.tensiones.map(retgov01ExtraerTexto).filter(Boolean).join('; ');
+  if(Array.isArray(p.transformaciones) && p.transformaciones.length) return p.transformaciones.map(retgov01ExtraerTexto).filter(Boolean).join('; ');
+  if(Array.isArray(p.acciones) && p.acciones.length) return p.acciones.map(retgov01ExtraerTexto).filter(Boolean).join('; ');
+  try{ return JSON.stringify(p).slice(0,200); }catch(e){ return '(contenido no legible)'; }
+}
+function retgov01RenderBandeja(o){
+  var cont = document.createElement('div');
+  var pendientes = o ? retgov01ListarPendientes(o.id) : [];
+  if(!pendientes.length) return cont;
+  cont.style.marginTop = '14px';
+  var t = document.createElement('div'); t.style.cssText = 'font-size:12px;opacity:.65;letter-spacing:.04em;margin-bottom:6px';
+  t.textContent = 'Retornos especializados pendientes';
+  cont.appendChild(t);
+  pendientes.forEach(function(reg){
+    var card = document.createElement('div'); card.className = 'card'; card.style.marginTop = '8px';
+    var linea1 = document.createElement('div'); linea1.style.cssText = 'font-size:13px;font-weight:600';
+    linea1.textContent = retgov01EtiquetaEspecialidad(reg.specialtyId) + ' · ' + retgov01EtiquetaClase(reg.returnClass);
+    var linea2 = document.createElement('div'); linea2.style.cssText = 'font-size:12.5px;opacity:.8;margin-top:4px;white-space:pre-wrap';
+    linea2.textContent = retgov01ResumenContenido(reg.envelope);
+    var provTxt = reg.provenance ? [reg.provenance.generatedBy, reg.provenance.metodo].filter(Boolean).join(' · ') : '';
+    var linea3 = document.createElement('div'); linea3.style.cssText = 'font-size:11.5px;opacity:.6;margin-top:4px';
+    linea3.textContent = 'Procedencia: ' + (provTxt || 'sin detalle') + ' · recibido ' + new Date(reg.recibidoEn).toLocaleString();
+    card.appendChild(linea1); card.appendChild(linea2); card.appendChild(linea3);
+    if(reg.possible_legacy_duplication){
+      var avisoDup = document.createElement('div'); avisoDup.style.cssText = 'font-size:11.5px;color:#b5793a;margin-top:4px';
+      avisoDup.textContent = 'Aviso: ya existe una importación reciente de esta especialidad para este organismo -- revisar antes de aceptar.';
+      card.appendChild(avisoDup);
+    }
+    var rowBtns = document.createElement('div'); rowBtns.className = 'cardrow'; rowBtns.style.marginTop = '6px';
+    var bAceptar = document.createElement('button'); bAceptar.className = 'btn'; bAceptar.textContent = 'Aceptar';
+    bAceptar.onclick = function(){ retgov01OnClickAceptar(reg.receivedId); };
+    var bRechazar = document.createElement('button'); bRechazar.className = 'btn'; bRechazar.textContent = 'Rechazar';
+    bRechazar.onclick = function(){ retgov01OnClickRechazar(reg.receivedId); };
+    rowBtns.appendChild(bAceptar); rowBtns.appendChild(bRechazar);
+    card.appendChild(rowBtns);
+    cont.appendChild(card);
+  });
+  return cont;
+}
+async function retgov01OnClickAceptar(receivedId){
+  var actorId = '';
+  try{ if(typeof window.obtenerCorreoActivoComprender === 'function') actorId = await window.obtenerCorreoActivoComprender(); }catch(e){ actorId = ''; }
+  var r = retgov01ResolverRegistro(receivedId, 'aceptar', { actorId: actorId });
+  if(!r.ok){ cardMensaje('No se pudo aceptar el retorno', r.motivo || 'No se pudo preparar una propuesta a partir de este contenido.'); return; }
+  mostrarFicha();
+}
+async function retgov01OnClickRechazar(receivedId){
+  var actorId = '';
+  try{ if(typeof window.obtenerCorreoActivoComprender === 'function') actorId = await window.obtenerCorreoActivoComprender(); }catch(e){ actorId = ''; }
+  retgov01ResolverRegistro(receivedId, 'rechazar', { actorId: actorId });
+  mostrarFicha();
+}
+
+window.retgov01RecibirEnvelope = retgov01RecibirEnvelope;
+window.retgov01ResolverRegistro = retgov01ResolverRegistro;
+window.retgov01ListarPendientes = retgov01ListarPendientes;
+window.retgov01ListarTodos = retgov01ListarTodos;
+window.retgov01BuscarPorId = retgov01BuscarPorId;
+window.retgov01Fingerprint = retgov01Fingerprint;
+window.retgov01RenderBandeja = retgov01RenderBandeja;
+/* ============ fin RET-GOV-01 ============ */
+
+/* ============================================================================
+   RET-P6-01 (01/09) — Reader transicional de antecedentes especializados
+   -----------------------------------------------------------------------------
+   RET-P6-00 (preflight, read-only) determinó: P6 (fragmentosEspecializadosDelOrganismo,
+   línea ~4662) y Studio (construirInsumosInforme/renderInforme, línea ~14676/14756) hoy
+   sólo leen o.diagnosticos_pro[]/o.evaluaciones_negocio_pro[] (legacy). Este bloque agrega
+   una SEGUNDA familia de antecedentes -- los retornos gobernados de RET-GOV-01 en estado
+   accepted_as_reference -- sin tocar ni reemplazar la primera, y sin escribir jamás al
+   organismo (sólo lee `ag_core_specialty_inbox` vía retgov01ListarTodos(), ya existente).
+   Nunca lee pending_human_review/rejected -- retgov01ListarTodos() ya trae todos los
+   estados, el filtro de abajo es la única puerta. Nunca lee las 3 clases gobernables
+   (relevant_tension_candidate/next_step_candidate/principle_candidate) aunque estuvieran
+   accepted -- ese contenido ya circula, aplicado, por ficha.tensiones/ficha.proximos/
+   o.principios[] (RET-GOV-01 punto 6 / RET-P6-00 punto 3); volver a mostrarlo acá
+   duplicaría el mismo hecho con dos redacciones distintas. En la práctica esto no hace
+   falta filtrarlo aparte: un registro `accepted` (no `accepted_as_reference`) ya queda
+   afuera por el propio filtro de estado.
+   Política por productor (brief punto 7): mapa en memoria, sin persistencia nueva, que
+   decide -- por specialtyId -- si ese productor sigue circulando por legacy (default hoy:
+   business/urbanism, los dos únicos productores con legacy real) o ya migró a
+   specialty_return (ningún productor está ahí todavía -- migrar es tarea de MIG-BIZ/
+   MIG-URB, fuera de este corte). specialtyId sin entrada en el mapa (sustainability/
+   technology, que RET-UNIV-00/RET-LEGACY-00 confirmaron que nunca tuvieron legacy) se
+   consideran 'specialty_return' por defecto -- no hay nada legacy que proteger para ellos,
+   así que sus accepted_as_reference sí circulan desde hoy. Mientras business/urbanism
+   sigan en 'legacy', SUS accepted_as_reference quedan afuera a propósito -- si se sumaran
+   ya, ese contenido conviviría con lo que sus propios diagnosticos_pro/evaluaciones_negocio_pro
+   ya aportan hoy (mismos hechos, dos redacciones), que es precisamente la duplicación que
+   el brief pide evitar ("no aumentar silenciosamente el volumen de antecedentes").
+   Shape: se adapta el fragmento YA existente de P6 ({id,source,version,date,path,text}),
+   sumándole specialtyId/specialtyStudyRef/returnClass/receivedId/epistemicStatus -- no se
+   inventa una ontología nueva (brief punto 4); P6/Informe siguen leyendo `f.text` como
+   siempre, el resto de campos es provenance adicional que no rompe nada existente. */
+
+// MIG-BIZ-01 (02/09): Negocios (business) migra su productor a specialty_return -- Negocios ya
+// no escribe o.evaluaciones_negocio_pro para resultados nuevos (ver dejarListoParaIncorporarEnCore()
+// apagado en negocios.html); P6/Informe deben leer de aca en adelante los retornos gobernados de
+// RET-GOV-01 para business.
+// MIG-URB-01 (02/09): Urbanismo (urbanism) migra su productor a specialty_return -- Urbanismo ya
+// no escribe ag_export_pendiente_incorporar para resultados nuevos (ver exportarHistorial()
+// apagado en urbanismo.html); P6/Informe deben leer de aca en adelante los retornos gobernados de
+// RET-GOV-01 para urbanism. o.diagnosticos_pro[] sigue siendo compartido con Contextos standalone
+// (entry.origen === 'context_pro') -- ver el filtro exclusivo entry.origen === 'urban_pro' dentro
+// de fragmentosEspecializadosDelOrganismo() más arriba; Contextos no tiene entrada propia en este
+// mapa y no se ve afectado por este switch.
+var RETP601_POLITICA_PRODUCTOR = { business: 'specialty_return', urbanism: 'specialty_return' };
+function retp601FuenteActivaParaProductor(specialtyId){
+  return Object.prototype.hasOwnProperty.call(RETP601_POLITICA_PRODUCTOR, specialtyId)
+    ? RETP601_POLITICA_PRODUCTOR[specialtyId] : 'specialty_return';
+}
+
+/* Único estatuto epistemológico posible para lo que sale de acá (brief punto 3):
+   referencia especializada aceptada ≠ evidencia ≠ memoria Core ≠ diagnóstico Core ≠
+   decisión activa. No se reinterpreta returnClass -- este string es siempre el mismo,
+   nunca se deriva de la clase real del retorno. */
+var RETP601_EPISTEMIC_STATUS = 'referencia_especializada_aceptada';
+
+/* RET-P6-01-R1 (01/09): exclusión semántica de cross_specialty_request. No es contenido de
+   comprensión para P6/Informe -- es una señal de ruteo hacia otra especialidad, y su eventual
+   circulación se resuelve en un mecanismo específico posterior (no P6). Se excluye SOLO de la
+   elegibilidad acá: sigue íntegra en el inbox de RET-GOV como accepted_as_reference (no se
+   toca retgov01ResolverRegistro ni su estado), sigue en SPECIALTY_RETURN_CLASSES (no se retira
+   del contrato universal), y esta exclusión nunca la convierte en acción ni abre ninguna
+   especialidad de forma automática (P6/Informe nunca hicieron eso -- acá simplemente se le deja
+   de mostrar el fragmento). longitudinal_memory_candidate se mantiene elegible a propósito:
+   su estatuto explícito (RETP601_EPISTEMIC_STATUS, fijo, nunca derivado de returnClass) ya la
+   distingue de memoria Core real -- candidate/reference, nunca o.recuerdos. */
+var RETP601_CLASES_EXCLUIDAS = Object.freeze(['cross_specialty_request']);
+
+/* Elegibilidad (brief punto 2 de RET-P6-01 + exclusión de R1): sólo accepted_as_reference,
+   sólo del organismo pedido, sólo de productores cuya política ya sea 'specialty_return', y
+   nunca una clase en RETP601_CLASES_EXCLUIDAS. Nunca pending/rejected, nunca accepted (esas 3
+   clases ya se filtran solas: nunca llegan a accepted_as_reference, ver
+   retgov01ResolverRegistro). Read-only total: retgov01ListarTodos() ya es sólo-lectura. */
+function retp601RegistrosElegibles(organismoId){
+  if(!organismoId || typeof retgov01ListarTodos !== 'function') return [];
+  return retgov01ListarTodos().filter(function(r){
+    return r && r.organismId === organismoId && r.estado === 'accepted_as_reference'
+      && retp601FuenteActivaParaProductor(r.specialtyId) === 'specialty_return'
+      && RETP601_CLASES_EXCLUIDAS.indexOf(r.returnClass) === -1;
+  });
+}
+
+/* Un registro del inbox -> N fragmentos, reutilizando p6RecorrerFragmentos() TAL CUAL (ya
+   es genérica -- no está atada a diagnosticos_pro, sólo recibe un valor+meta) sobre
+   envelope.payload. No se reimplementa ninguna lógica de extracción; mismos topes
+   (P6_MAX_FRAGMENTOS_POR_ENTRADA/P6_MAX_PROFUNDIDAD) que ya rigen para legacy, un
+   presupuesto propio por registro igual que hoy es por entrada de diagnosticos_pro. */
+function retp601FragmentosDeRegistro(registro){
+  var fragmentos = [];
+  if(!registro || !registro.envelope || !registro.envelope.payload || typeof registro.envelope.payload !== 'object') return fragmentos;
+  var meta = { source: registro.specialtyId, version: null, date: registro.recibidoEn || null };
+  p6RecorrerFragmentos(registro.envelope.payload, 'raíz', meta, fragmentos, 0);
+  return fragmentos.map(function(f){
+    return Object.assign({}, f, {
+      specialtyId: registro.specialtyId,
+      specialtyStudyRef: registro.specialtyStudyRef || null,
+      returnClass: registro.returnClass,
+      receivedId: registro.receivedId,
+      epistemicStatus: RETP601_EPISTEMIC_STATUS
+    });
+  });
+}
+
+/* Reader común (brief punto 4): entrega antecedentes especializados gobernados de un
+   organismo, con provenance explícita, sin persistir nada -- puro, read-only, sin IA.
+   Punto de entrada único para P6 y Studio (ver los dos call sites nuevos más abajo en el
+   archivo: fragmentosEspecializadosDelOrganismo() y construirInsumosInforme()/
+   renderInforme()) -- misma función para los tres, ninguna duplica su propia lógica de
+   filtrado/extracción. */
+function retp601AntecedentesGobernados(o){
+  if(!o || !o.id) return [];
+  var registros = retp601RegistrosElegibles(o.id);
+  var fragmentos = [];
+  registros.forEach(function(r){ fragmentos = fragmentos.concat(retp601FragmentosDeRegistro(r)); });
+  return fragmentos;
+}
+
+window.retp601AntecedentesGobernados = retp601AntecedentesGobernados;
+window.retp601FuenteActivaParaProductor = retp601FuenteActivaParaProductor;
+window.retp601RegistrosElegibles = retp601RegistrosElegibles;
+window.RETP601_CLASES_EXCLUIDAS = RETP601_CLASES_EXCLUIDAS;
+/* ============ fin RET-P6-01 (incluye RET-P6-01-R1) ============ */
+
+/* ============================================================================
+   RET-TRANSPORT-01 (02/09) — Transporte durable inicial Especialidad -> Core
+   -----------------------------------------------------------------------------
+   Arquitectura autorizada en RET-TRANSPORT-00: SpecialtyReturnEnvelope -> localStorage durable
+   outbox -> Core -> retgov01RecibirEnvelope() -> RET-GOV inbox -> ack/cleanup. BroadcastChannel
+   puro queda descartado (RET-TRANSPORT-00, punto 3: muere con la pestaña de Core). Este bloque es
+   EXCLUSIVAMENTE el consumidor productivo del lado Core -- la escritura de la outbox
+   (rtp01Encolar, copia verbatim más abajo en sustentabilidad.html/tecnologia.html, mismo storage
+   key y mismo algoritmo de fingerprint) vive en cada especialidad. Core JAMÁS escribe en la
+   outbox, sólo la lee/consume/purga; la especialidad NUNCA llama a retgov01RecibirEnvelope() ni
+   escribe organismo (invariante ya vigente desde I2/RET-GOV-00).
+   Alcance de este corte (brief RET-TRANSPORT-01): sender productivo activado únicamente para
+   sustainability/technology. Negocios/Urbanismo NO escriben esta outbox todavía -- eso es
+   MIG-BIZ/MIG-URB. Este consumidor es agnóstico de specialtyId a propósito (no discrimina, no
+   mantiene una lista blanca): mientras Negocios/Urbanismo no tengan sender, nunca habrá items
+   suyos acá para consumir -- no hace falta un gate extra de este lado para que el alcance quede
+   respetado.
+   Actualización MIG-BIZ-01/MIG-URB-01 (02/09): Negocios y Urbanismo YA tienen sender productivo
+   propio (rtp01Encolar() en negocios.html/urbanismo.html, mismo código verbatim que
+   sustentabilidad.html/tecnologia.html) y por lo tanto ya escriben esta outbox. El párrafo de
+   arriba queda como registro histórico del alcance original de este bloque; el punto que sigue
+   siendo cierto y no cambió es que este consumidor sigue siendo agnóstico de specialtyId a
+   propósito -- no necesitó ningún cambio para empezar a atender a las cinco especialidades.
+   Storage nuevo y separado, versionado, distinto de ag_export_pendiente_incorporar (legacy) y de
+   ag_core_specialty_inbox (RET-GOV-01) -- tres capas independientes que no se pisan entre sí.
+   Único punto de entrada hacia RET-GOV: retgov01RecibirEnvelope() (ya existente, RET-GOV-01) --
+   cero bypass, cero escritura directa de organismo, cero reimplementación de su validación/
+   fingerprint/dedup. Recibir ≠ aceptar ≠ incorporar: el resultado de una entrega válida es
+   siempre 'pending_human_review' en el inbox de RET-GOV (ver retgov01RecibirEnvelope) -- este
+   bloque nunca llama a retgov01ResolverRegistro().
+   Lifecycle de consumo (brief, "Entrega"): se cuelga del MISMO hook de render que ya usa el
+   legacy (construirTuEspacioOrganismos(), con la lista de organismos ya cargada por
+   cargarOrganismos()) -- cubre carga inicial y "retorno a Core" (ambos son la misma recarga de
+   página) sin inventar un segundo lifecycle. No se agrega un listener de 'storage' como
+   acelerador en este corte: el hook de render ya cubre el lifecycle real exigido y evita tocar el
+   arranque de la página fuera de lo estrictamente necesario -- el mecanismo durable
+   (localStorage, mismo origin, sobrevive reload/cierre de cualquiera de las dos pestañas) sigue
+   siendo la única fuente de verdad, tal como exige el brief; agregar el acelerador más adelante
+   no cambiaría la corrección de nada de lo de acá. */
+var RETTRANSPORT01_STORAGE_LLAVE = 'ret_transport01_outbox_v1';
+var RETTRANSPORT01_OUTBOX_MAX = 200;
+
+function rettransport01CargarOutbox(){
+  try{
+    var c = JSON.parse(localStorage.getItem(RETTRANSPORT01_STORAGE_LLAVE) || 'null');
+    if(!c || !Array.isArray(c.items)) return { version: 1, items: [] };
+    return c;
+  }catch(e){ return { version: 1, items: [] }; }
+}
+function rettransport01GuardarOutbox(c){
+  try{ localStorage.setItem(RETTRANSPORT01_STORAGE_LLAVE, JSON.stringify(c)); return true; }catch(e){ return false; }
+}
+/* Espejo exacto de retgov01PurgarInbox(): nunca descarta un item 'pending' -- sólo poda, cuando
+   hace falta, los items ya terminales ('delivered'/'invalid') más viejos. La entrega real ya
+   quedó durablemente registrada en ag_core_specialty_inbox (RET-GOV-01) antes de llegar a este
+   punto -- podar acá nunca pierde la incorporación, sólo el rastro local de auditoría. */
+function rettransport01PurgarOutbox(c){
+  if(c.items.length <= RETTRANSPORT01_OUTBOX_MAX) return c;
+  var pend = c.items.filter(function(it){ return it.estadoEntrega === 'pending'; });
+  var resto = c.items.filter(function(it){ return it.estadoEntrega !== 'pending'; });
+  resto = resto.slice(Math.max(0, resto.length - (RETTRANSPORT01_OUTBOX_MAX - pend.length)));
+  c.items = resto.concat(pend);
+  return c;
+}
+function rettransport01ResolverOrganismo(organismId, listaOrganismos){
+  if(!organismId || !Array.isArray(listaOrganismos)) return null;
+  return listaOrganismos.find(function(o){ return o && o.id === organismId; }) || null;
+}
+/* Consumo productivo: recorre SOLO los items 'pending' de la outbox compartida, resuelve el
+   organismo real desde la lista YA cargada por el llamador (nunca inventa ni adivina un
+   organismo -- si no está en la lista recibida, el item queda 'pending' intacto para el próximo
+   lifecycle, nunca se pierde), y entrega exclusivamente vía retgov01RecibirEnvelope(). Idempotente
+   por construcción: 'delivered'/'invalid' nunca se reprocesan, así que "retry no duplica" es
+   gratis -- sólo se reintenta lo que sigue 'pending'. Si Core está cerrado, el item ni siquiera se
+   toca (esta función no corre); si hay reload, se reintenta en el próximo render. ACK
+   (estadoEntrega:'delivered' + receivedId) sólo se escribe después de que
+   retgov01RecibirEnvelope() confirma ok:true (incluido el caso duplicado:true -- RET-GOV ya
+   deduplicó por fingerprint, así que ese item también queda resuelto). Un envelope que
+   retgov01RecibirEnvelope() rechaza (contrato inválido, clase no reconocida, organismo
+   incorrecto, etc.) es un rechazo determinístico que nunca cambiaría con más reintentos: queda
+   'invalid' (terminal, nunca se borra, motivo visible en ultimoError) en vez de reintentarse para
+   siempre. Nunca muta el organismo -- sólo lo lee para pasarlo a retgov01RecibirEnvelope(), que
+   tampoco lo muta. */
+function rettransport01ConsumirPendientes(listaOrganismos){
+  var c = rettransport01CargarOutbox();
+  var cambios = false;
+  var resultados = [];
+  c.items.forEach(function(item){
+    if(!item || item.estadoEntrega !== 'pending') return;
+    var organismoDestino = rettransport01ResolverOrganismo(item.organismId, listaOrganismos);
+    if(!organismoDestino){
+      resultados.push({ outboxId: item.outboxId, ok:false, motivo:'ORGANISMO_NO_DISPONIBLE' });
+      return;
+    }
+    item.intentosTecnicos = (item.intentosTecnicos || 0) + 1;
+    item.ultimoIntentoEn = new Date().toISOString();
+    cambios = true;
+    var r = (typeof retgov01RecibirEnvelope === 'function')
+      ? retgov01RecibirEnvelope(item.envelope, organismoDestino)
+      : { ok:false, error:'RETGOV01_NO_DISPONIBLE' };
+    if(!r.ok){
+      item.estadoEntrega = 'invalid';
+      item.ultimoError = r.error || 'RECHAZADO';
+      resultados.push({ outboxId: item.outboxId, ok:false, motivo:item.ultimoError });
+      return;
+    }
+    item.estadoEntrega = 'delivered';
+    item.entregadoEn = new Date().toISOString();
+    item.receivedId = r.receivedId;
+    item.ultimoError = null;
+    resultados.push({ outboxId: item.outboxId, ok:true, receivedId:r.receivedId, duplicado: !!r.duplicado });
+  });
+  if(cambios){
+    c = rettransport01PurgarOutbox(c);
+    rettransport01GuardarOutbox(c);
+  }
+  return resultados;
+}
+function rettransport01ListarOutbox(){ return rettransport01CargarOutbox().items; }
+
+window.rettransport01CargarOutbox = rettransport01CargarOutbox;
+window.rettransport01GuardarOutbox = rettransport01GuardarOutbox;
+window.rettransport01PurgarOutbox = rettransport01PurgarOutbox;
+window.rettransport01ConsumirPendientes = rettransport01ConsumirPendientes;
+window.rettransport01ListarOutbox = rettransport01ListarOutbox;
+window.RETTRANSPORT01_STORAGE_LLAVE = RETTRANSPORT01_STORAGE_LLAVE;
+/* ============ fin RET-TRANSPORT-01 ============ */
+
+// CX0 (28/08): Contrato Contextual Universal -- forma congelada context-request.v0.7 /
+// context-envelope.v0.7 (runtime Contextos Especialidades Pre-Core v1 / v0.7), portada tal
+// cual sin llamar a C1 ni tocar UX/persistencia. Contextos Universal sigue siendo Core basal:
+// NO es una quinta especialidad (no entra en SPECIALTY_IDS), no escribe Core, no convierte
+// antecedente contextual en evidencia, no diagnostica ni decide, y no conoce el significado
+// interno de resumeToken (permanece opaco). Cero llamadas reales en este corte: sólo formas,
+// validadores puros y la clave lógica de sesión.
+var CONTEXT_REQUEST_TYPE = 'context-request.v0.7';
+var CONTEXT_ENVELOPE_TYPE = 'context-envelope.v0.7';
+var CONTEXT_EPISTEMIC_NOTICE = 'contextual_antecedent_not_current_evidence';
+var CONTEXT_LIVE_WINDOW_EPISTEMIC_ROLE = 'specialty_live_context_not_evidence';
+var CONTEXT_ERROR_CODES = Object.freeze({
+  REQUEST_REQUIRED: 'REQUEST_REQUIRED',
+  REQUEST_TYPE_INVALID: 'REQUEST_TYPE_INVALID',
+  ORGANISM_REQUIRED: 'ORGANISM_REQUIRED',
+  CONTEXTOS_NOT_A_SPECIALTY_ORIGIN: 'CONTEXTOS_NOT_A_SPECIALTY_ORIGIN',
+  SPECIALTY_ORIGIN_REQUIRED: 'SPECIALTY_ORIGIN_REQUIRED',
+  SPECIALTY_RETURN_TARGET_REQUIRED: 'SPECIALTY_RETURN_TARGET_REQUIRED',
+  SPECIALTY_STUDY_REF_REQUIRED: 'SPECIALTY_STUDY_REF_REQUIRED',
+  CONTEXT_CYCLE_REF_REQUIRED: 'CONTEXT_CYCLE_REF_REQUIRED',
+  RESUME_TOKEN_REQUIRED: 'RESUME_TOKEN_REQUIRED',
+  QUESTION_REQUIRED: 'QUESTION_REQUIRED',
+  INTENTION_REQUIRED: 'INTENTION_REQUIRED',
+  HUMAN_APPROVAL_REQUIRED: 'HUMAN_APPROVAL_REQUIRED',
+  DIRECT_CORE_WRITE_MUST_BE_FALSE: 'DIRECT_CORE_WRITE_MUST_BE_FALSE',
+  LIVE_WINDOW_EPISTEMIC_ROLE_REQUIRED: 'LIVE_WINDOW_EPISTEMIC_ROLE_REQUIRED',
+  ENVELOPE_TYPE_INVALID: 'ENVELOPE_TYPE_INVALID',
+  UNDERSTANDING_REQUIRED: 'UNDERSTANDING_REQUIRED',
+  CONTEXT_REFS_REQUIRED: 'CONTEXT_REFS_REQUIRED',
+  CONTEXT_SUMMARY_REQUIRED: 'CONTEXT_SUMMARY_REQUIRED',
+  ORGANISM_MISMATCH: 'ORGANISM_MISMATCH',
+  ORIGIN_MISMATCH: 'ORIGIN_MISMATCH',
+  STUDY_REF_MISMATCH: 'STUDY_REF_MISMATCH',
+  CYCLE_REF_MISMATCH: 'CYCLE_REF_MISMATCH',
+  RESUME_TOKEN_MUTATED: 'RESUME_TOKEN_MUTATED',
+  EPISTEMIC_NOTICE_REQUIRED: 'EPISTEMIC_NOTICE_REQUIRED',
+  DIRECT_CORE_WRITE_FORBIDDEN: 'DIRECT_CORE_WRITE_FORBIDDEN',
+  RETURN_TARGET_MUTATED: 'RETURN_TARGET_MUTATED',
+  SPECIALTY_AUTO_MUTATION_FORBIDDEN: 'SPECIALTY_AUTO_MUTATION_FORBIDDEN',
+  SCALE_HINT_MUTATED: 'SCALE_HINT_MUTATED'
+});
+
+function contextLimpio(v){ return typeof v === 'string' ? v.trim() : ''; }
+function contextClone(v){ return v == null ? v : JSON.parse(JSON.stringify(v)); }
+
+// Identidad lógica de sesión contextual: organismo + especialidad(origin) + estudio + ciclo.
+// Pura -- no persiste, no toca state.c1g3Sesiones ni ningún resumeRegistry real (eso es CX1+).
+function contextSessionKey(request){
+  return [
+    (request && request.organismRef) ? request.organismRef.id : null,
+    request ? request.origin : null,
+    (request && request.specialtyStudyRef) || 'study:null',
+    (request && request.contextCycleRef) || 'cycle:null'
+  ].join('::');
+}
+
+function validarContextRequest(r){
+  if(!r || typeof r !== 'object') return { ok:false, error: CONTEXT_ERROR_CODES.REQUEST_REQUIRED };
+  if(r.type !== CONTEXT_REQUEST_TYPE) return { ok:false, error: CONTEXT_ERROR_CODES.REQUEST_TYPE_INVALID };
+  if(!r.organismRef || !contextLimpio(r.organismRef.id)) return { ok:false, error: CONTEXT_ERROR_CODES.ORGANISM_REQUIRED };
+  if(r.origin === 'contextos_universal') return { ok:false, error: CONTEXT_ERROR_CODES.CONTEXTOS_NOT_A_SPECIALTY_ORIGIN };
+  if(!SPECIALTY_IDS.includes(r.origin)) return { ok:false, error: CONTEXT_ERROR_CODES.SPECIALTY_ORIGIN_REQUIRED };
+  if(r.returnTarget !== 'specialty') return { ok:false, error: CONTEXT_ERROR_CODES.SPECIALTY_RETURN_TARGET_REQUIRED };
+  if(!contextLimpio(r.specialtyStudyRef)) return { ok:false, error: CONTEXT_ERROR_CODES.SPECIALTY_STUDY_REF_REQUIRED };
+  if(!contextLimpio(r.contextCycleRef)) return { ok:false, error: CONTEXT_ERROR_CODES.CONTEXT_CYCLE_REF_REQUIRED };
+  if(!contextLimpio(r.resumeToken)) return { ok:false, error: CONTEXT_ERROR_CODES.RESUME_TOKEN_REQUIRED };
+  if(!contextLimpio(r.question)) return { ok:false, error: CONTEXT_ERROR_CODES.QUESTION_REQUIRED };
+  if(!contextLimpio(r.intention)) return { ok:false, error: CONTEXT_ERROR_CODES.INTENTION_REQUIRED };
+  if(r.humanApproved !== true) return { ok:false, error: CONTEXT_ERROR_CODES.HUMAN_APPROVAL_REQUIRED };
+  if(r.directCoreWriteAllowed !== false) return { ok:false, error: CONTEXT_ERROR_CODES.DIRECT_CORE_WRITE_MUST_BE_FALSE };
+  if(r.liveSpecialtyWindow && r.liveSpecialtyWindow.epistemicRole !== CONTEXT_LIVE_WINDOW_EPISTEMIC_ROLE) return { ok:false, error: CONTEXT_ERROR_CODES.LIVE_WINDOW_EPISTEMIC_ROLE_REQUIRED };
+  return { ok:true, value:r };
+}
+
+function construirContextRequest(input){
+  input = input || {};
+  var w = contextClone(input.liveSpecialtyWindow || {});
+  w.epistemicRole = CONTEXT_LIVE_WINDOW_EPISTEMIC_ROLE;
+  var r = {
+    type: CONTEXT_REQUEST_TYPE,
+    organismRef: contextClone(input.organismRef || {}),
+    origin: input.origin,
+    specialtyStudyRef: input.specialtyStudyRef || null,
+    contextCycleRef: input.contextCycleRef || null,
+    returnTarget: 'specialty',
+    resumeToken: input.resumeToken,
+    question: contextLimpio(input.question),
+    intention: contextLimpio(input.intention),
+    trigger: contextClone(input.trigger || null),
+    scaleHint: contextLimpio(input.scaleHint) || null,
+    liveSpecialtyWindow: w,
+    previousContextRefs: Array.isArray(input.previousContextRefs) ? input.previousContextRefs.slice(0,12) : [],
+    humanApproved: input.humanApproved === true,
+    directCoreWriteAllowed: false
+  };
+  var v = validarContextRequest(r);
+  return v.ok ? { ok:true, value:r } : v;
+}
+
+function construirContextEnvelope(request, understanding){
+  var v = validarContextRequest(request);
+  if(!v.ok) return v;
+  var u = understanding;
+  if(!u || typeof u !== 'object') return { ok:false, error: CONTEXT_ERROR_CODES.UNDERSTANDING_REQUIRED };
+  if(!contextLimpio(u.openingRef) || !contextLimpio(u.frontRef)) return { ok:false, error: CONTEXT_ERROR_CODES.CONTEXT_REFS_REQUIRED };
+  if(!contextLimpio(u.contextSummary)) return { ok:false, error: CONTEXT_ERROR_CODES.CONTEXT_SUMMARY_REQUIRED };
+  var e = {
+    type: CONTEXT_ENVELOPE_TYPE,
+    organismRef: contextClone(request.organismRef),
+    origin: request.origin,
+    specialtyStudyRef: request.specialtyStudyRef || null,
+    contextCycleRef: request.contextCycleRef || null,
+    resumeToken: request.resumeToken,
+    scaleHint: request.scaleHint || null,
+    openingRef: u.openingRef,
+    frontRef: u.frontRef,
+    contextSummary: contextLimpio(u.contextSummary),
+    relevantRelations: contextClone(u.relevantRelations || []),
+    propagationPaths: contextClone(u.propagationPaths || []),
+    supports: contextClone(u.supports || []),
+    pressures: contextClone(u.pressures || []),
+    externalDependencies: contextClone(u.externalDependencies || []),
+    externalActors: contextClone(u.externalActors || []),
+    uncertainties: contextClone(u.uncertainties || []),
+    evidenceRefs: contextClone(u.evidenceRefs || []),
+    limits: contextClone(u.limits || []),
+    c1Meta: contextClone(u.c1Meta || {}),
+    epistemicNotice: CONTEXT_EPISTEMIC_NOTICE,
+    directCoreWritePerformed: false,
+    requiresSpecialtyReassessment: true,
+    autoDiagnosisUpdate: false,
+    autoDecision: false,
+    returnTarget: 'specialty'
+  };
+  return { ok:true, value:e };
+}
+
+function validarContextEnvelope(e, r){
+  if(!e || e.type !== CONTEXT_ENVELOPE_TYPE) return { ok:false, error: CONTEXT_ERROR_CODES.ENVELOPE_TYPE_INVALID };
+  if(!r || !e.organismRef || e.organismRef.id !== r.organismRef.id) return { ok:false, error: CONTEXT_ERROR_CODES.ORGANISM_MISMATCH };
+  if(e.origin !== r.origin) return { ok:false, error: CONTEXT_ERROR_CODES.ORIGIN_MISMATCH };
+  if(e.specialtyStudyRef !== r.specialtyStudyRef) return { ok:false, error: CONTEXT_ERROR_CODES.STUDY_REF_MISMATCH };
+  if(e.contextCycleRef !== r.contextCycleRef) return { ok:false, error: CONTEXT_ERROR_CODES.CYCLE_REF_MISMATCH };
+  if(e.resumeToken !== r.resumeToken) return { ok:false, error: CONTEXT_ERROR_CODES.RESUME_TOKEN_MUTATED };
+  if(e.epistemicNotice !== CONTEXT_EPISTEMIC_NOTICE) return { ok:false, error: CONTEXT_ERROR_CODES.EPISTEMIC_NOTICE_REQUIRED };
+  if(e.directCoreWritePerformed !== false) return { ok:false, error: CONTEXT_ERROR_CODES.DIRECT_CORE_WRITE_FORBIDDEN };
+  if(e.returnTarget !== 'specialty') return { ok:false, error: CONTEXT_ERROR_CODES.RETURN_TARGET_MUTATED };
+  if(e.autoDiagnosisUpdate !== false || e.autoDecision !== false) return { ok:false, error: CONTEXT_ERROR_CODES.SPECIALTY_AUTO_MUTATION_FORBIDDEN };
+  if((e.scaleHint||null) !== (r.scaleHint||null)) return { ok:false, error: CONTEXT_ERROR_CODES.SCALE_HINT_MUTATED };
+  return { ok:true, value:e };
+}
+
+window.debugContextContractCX0 = function(input, understanding){
+  var reqResult = construirContextRequest(input);
+  if(!reqResult.ok) return { etapa:'request', resultado: reqResult };
+  var key = contextSessionKey(reqResult.value);
+  var envResult = construirContextEnvelope(reqResult.value, understanding || {});
+  var envValidacion = envResult.ok ? validarContextEnvelope(envResult.value, reqResult.value) : envResult;
+  return { etapa:'completo', request: reqResult, sessionKey: key, envelope: envResult, envelopeValidacion: envValidacion };
+};
+
+// CX1 (28/08): Resume Registry + fachada shadow. Infraestructura efímera (sólo memoria del
+// proceso, nunca localStorage/Supabase/organismo) para preparar una futura apertura de
+// Contextos desde una especialidad. Cero llamadas C1 en este corte -- ver
+// abrirContextoDesdeEspecialidadShadow() más abajo, que se detiene ANTES de invocar cualquier
+// función del motor C1 y devuelve sólo un resultado shadow/preview. Porta la semántica congelada
+// de runtime/src/resume-registry.js (createResumeRegistry) y el patrón de "live map" efímero de
+// runtime/src/context-bridge.js, adaptados a los datos reales del Core (SPECIALTY_IDS de I0,
+// construirContextRequest/validarContextRequest de CX0). resumePoint es del dominio de la
+// especialidad y NUNCA viaja dentro del context-request; Contextos sólo ve el resumeToken opaco.
+var CONTEXT_RESUME_ERROR_CODES = Object.freeze({
+  ORIGIN_INVALID: 'ORIGIN_INVALID',
+  RESUME_META_INCOMPLETE: 'RESUME_META_INCOMPLETE',
+  RESUME_TOKEN_UNKNOWN: 'RESUME_TOKEN_UNKNOWN'
+});
+
+// ContextResumeRegistry: token opaco, one-shot, exclusivamente en memoria. register() exige
+// origin/organismId/specialtyStudyRef/contextCycleRef como mínimo; resumePoint es opcional y
+// puede llevar el punto de retorno completo de la especialidad, pero esa metadata nunca sale
+// hacia el Context Request -- sólo el token la referencia indirectamente. resolve() siempre
+// devuelve una copia (JSON clone), nunca la referencia mutable interna. consume() resuelve y
+// borra el token de una sola vez (one-shot): un segundo resolve()/consume() sobre el mismo
+// token debe fallar con RESUME_TOKEN_UNKNOWN.
+function createContextResumeRegistry(){
+  var m = new Map();
+  var seq = 0;
+  function register(meta){
+    meta = meta || {};
+    if(!SPECIALTY_IDS.includes(meta.origin)) return { ok:false, error: CONTEXT_RESUME_ERROR_CODES.ORIGIN_INVALID };
+    if(!meta.organismId || !meta.specialtyStudyRef || !meta.contextCycleRef) return { ok:false, error: CONTEXT_RESUME_ERROR_CODES.RESUME_META_INCOMPLETE };
+    seq++;
+    var token = 'rsm_' + seq.toString(36) + '_' + Math.random().toString(36).slice(2,8);
+    m.set(token, contextClone(meta));
+    return { ok:true, value: token };
+  }
+  function resolve(token){
+    return m.has(token) ? { ok:true, value: contextClone(m.get(token)) } : { ok:false, error: CONTEXT_RESUME_ERROR_CODES.RESUME_TOKEN_UNKNOWN };
+  }
+  function consume(token){
+    var r = resolve(token);
+    if(!r.ok) return r;
+    m.delete(token);
+    return r;
+  }
+  function count(){ return m.size; }
+  return { register: register, resolve: resolve, consume: consume, count: count };
+}
+
+// ContextInvocationRegistry: estructura efímera mínima para la metadata de una futura invocación
+// contextual (todavía no un opening C1 real -- eso es de un corte posterior). Keyed por una
+// identidad de invocación propia (invocationId) minteada acá; cuando exista un openingId real de
+// C1 podrá asociarse a él, pero CX1 no inventa ni ejecuta ningún opening. Conserva únicamente
+// metadata operativa (request, session key lógica de CX0, estado 'shadow', timestamps) -- nunca
+// evidencia, nunca Memoria, nunca diagnóstico.
+function createContextInvocationRegistry(){
+  var m = new Map();
+  var seq = 0;
+  function register(meta){
+    meta = meta || {};
+    seq++;
+    var invocationId = 'ctxinv_' + seq.toString(36);
+    var record = {
+      invocationId: invocationId,
+      request: contextClone(meta.request || null),
+      sessionKey: meta.sessionKey || null,
+      status: 'shadow',
+      createdAt: new Date().toISOString()
+    };
+    m.set(invocationId, record);
+    return { ok:true, value: contextClone(record) };
+  }
+  function get(invocationId){
+    return m.has(invocationId) ? { ok:true, value: contextClone(m.get(invocationId)) } : { ok:false, error:'INVOCATION_NOT_FOUND' };
+  }
+  function remove(invocationId){
+    var r = get(invocationId);
+    if(!r.ok) return r;
+    m.delete(invocationId);
+    return r;
+  }
+  function count(){ return m.size; }
+  return { register: register, get: get, remove: remove, count: count };
+}
+
+// Instancias efímeras a nivel de módulo -- viven sólo en memoria del proceso/pestaña, se pierden
+// al recargar. No son localStorage ni Supabase ni el organismo: son exactamente el "registry
+// efímero" que pide CX1, disponibles para que una futura fachada real (CX2+) las use.
+var CONTEXT_RESUME_REGISTRY = createContextResumeRegistry();
+var CONTEXT_INVOCATION_REGISTRY = createContextInvocationRegistry();
+
+// Fachada shadow: valida especialidad/organismo/identidad/aprobación humana, registra el
+// resumePoint en ContextResumeRegistry (recibiendo el token opaco), construye y valida el
+// context-request.v0.7 (CX0) usando SOLO el token -- nunca el resumePoint -- y registra la
+// futura invocación en ContextInvocationRegistry. Se detiene ahí: no llama a ninguna función del
+// motor C1 (C1G1_iniciarConversacion, reconstructOrigin, openField, propagateField,
+// selectContextFronts, executeInterpret/Focus/SufficiencyAssessment/ReturnProposal, etc.),
+// no persiste nada, no muta el organismo. humanApproved!==true corta el flujo ANTES de tocar
+// cualquier registry (cero resume token, cero invocación registrada).
+function abrirContextoDesdeEspecialidadShadow(input){
+  input = input || {};
+  var organismRef = input.organismRef || {};
+  // 1. especialidad válida (reutiliza el mismo universo de 4 orígenes canónicos que CX0/I0;
+  //    Contextos jamás es un origin válido).
+  if(input.origin === 'contextos_universal') return { ok:false, error: CONTEXT_ERROR_CODES.CONTEXTOS_NOT_A_SPECIALTY_ORIGIN };
+  if(!SPECIALTY_IDS.includes(input.origin)) return { ok:false, error: CONTEXT_ERROR_CODES.SPECIALTY_ORIGIN_REQUIRED };
+  // 2. organismo
+  if(!contextLimpio(organismRef.id)) return { ok:false, error: CONTEXT_ERROR_CODES.ORGANISM_REQUIRED };
+  // 3. specialtyStudyRef
+  if(!contextLimpio(input.specialtyStudyRef)) return { ok:false, error: CONTEXT_ERROR_CODES.SPECIALTY_STUDY_REF_REQUIRED };
+  // 4. contextCycleRef
+  if(!contextLimpio(input.contextCycleRef)) return { ok:false, error: CONTEXT_ERROR_CODES.CONTEXT_CYCLE_REF_REQUIRED };
+  // 5. aprobación humana explícita -- si falta, corta ACÁ: cero resume token, cero invocación.
+  if(input.humanApproved !== true) return { ok:false, error: CONTEXT_ERROR_CODES.HUMAN_APPROVAL_REQUIRED };
+
+  // 6-7. registrar el resumePoint especializado en ContextResumeRegistry y recibir el token
+  //      opaco. resumePoint (si viene) queda SÓLO acá adentro -- nunca en el request.
+  var rr = CONTEXT_RESUME_REGISTRY.register({
+    origin: input.origin,
+    organismId: organismRef.id,
+    specialtyStudyRef: input.specialtyStudyRef,
+    contextCycleRef: input.contextCycleRef,
+    resumePoint: contextClone(input.resumePoint || null)
+  });
+  if(!rr.ok) return rr;
+  var resumeToken = rr.value;
+
+  // 8-9. construir y validar context-request.v0.7 (CX0) usando el token opaco -- jamás
+  //      resumePoint. construirContextRequest ya valida internamente (delega en
+  //      validarContextRequest); si falla, el token ya registrado en 6-7 no se auto-consume acá
+  //      (mismo comportamiento que iteration-coordinator.open() del runtime congelado, que
+  //      tampoco revierte el resume registry si buildRequest falla después de registrar).
+  var reqResult = construirContextRequest({
+    organismRef: organismRef,
+    origin: input.origin,
+    specialtyStudyRef: input.specialtyStudyRef,
+    contextCycleRef: input.contextCycleRef,
+    resumeToken: resumeToken,
+    question: input.question,
+    intention: input.intention,
+    trigger: input.trigger || null,
+    scaleHint: input.scaleHint || null,
+    liveSpecialtyWindow: input.liveSpecialtyWindow || {},
+    previousContextRefs: input.previousContextRefs || [],
+    humanApproved: true,
+    directCoreWriteAllowed: false
+  });
+  if(!reqResult.ok) return reqResult;
+
+  var sessionKey = contextSessionKey(reqResult.value);
+
+  // 10. registrar la futura invocación en el registry efímero (todavía no es un opening C1).
+  var invResult = CONTEXT_INVOCATION_REGISTRY.register({ request: reqResult.value, sessionKey: sessionKey });
+
+  // 11. resultado shadow -- cero llamadas C1, cero writes al Core.
+  return {
+    ok: true,
+    mode: 'shadow',
+    request: reqResult.value,
+    resumeToken: resumeToken,
+    sessionKey: sessionKey,
+    invocationId: invResult.ok ? invResult.value.invocationId : null,
+    coreWritePerformed: false,
+    c1Called: false
+  };
+}
+
+// CX3 (28/08): Bifurcación de retorno Core/Especialidad. Todo lo que sigue hasta la fachada real
+// abrirContextoDesdeEspecialidadReal() es infraestructura efímera nueva -- ningún registry/función
+// de CX0/CX1/CX2 se modifica ni se reemplaza acá (CONTEXT_RESUME_REGISTRY, CONTEXT_INVOCATION_REGISTRY,
+// abrirContextoDesdeEspecialidadShadow, construirContextRequest/Envelope, C1B1_prepararVentanaEspecializadaViva
+// siguen exactamente igual). Nada de esto se persiste (ni localStorage ni Supabase ni el organismo):
+// vive y muere con el proceso/pestaña, igual que los registries de CX1.
+
+// Instrumentación mínima (paso 7-8 del brief CX3): contadores de invocación real de C1-F1
+// (executeReturnProposal) y C1-F2 (C1F2_prepararGobernanza), y de cuántas veces se recorrió cada
+// camino (Core vs Specialty) dentro de C1G1_construirComprension. Sólo lectura externa -- nunca se
+// usan para decidir nada dentro del propio ciclo.
+var CX3_SPY_COUNTERS = { corePathCalls:0, specialtyPathCalls:0, f1Calls:0, f2Calls:0 };
+window.debugCX3SpyCounters = function(){ return JSON.parse(JSON.stringify(CX3_SPY_COUNTERS)); };
+window.debugCX3ResetSpyCounters = function(){
+  CX3_SPY_COUNTERS.corePathCalls = 0; CX3_SPY_COUNTERS.specialtyPathCalls = 0;
+  CX3_SPY_COUNTERS.f1Calls = 0; CX3_SPY_COUNTERS.f2Calls = 0;
+};
+
+// ContextOpeningInvocationRegistry: única tabla lateral que asocia un opening.openingId real
+// (recién creado dentro de C1G1_iniciarConversacion) con la metadata efímera de la invocación
+// specialty que lo originó (paso 2 del brief). Este es el mecanismo elegido para NO agregar
+// parámetros especializados a C1G1_continuarCiclo/C1G1_construirComprension/C1G1_responderPregunta/
+// openField: todas esas funciones ya reciben "opening" (o algo que lo contiene) tal cual hoy: alcanza
+// con que cada una consulte esta tabla por opening.openingId cuando le haga falta. Sobrevive al
+// ciclo ASK/respuesta porque responderContextOpening()/applyUserAnswer() clonan el Opening pero
+// preservan el mismo openingId (ver crearContextOpening, regla 12) -- la key nunca cambia aunque el
+// objeto Opening sí se clone en el camino.
+function createContextOpeningInvocationRegistry(){
+  var m = new Map();
+  function bind(openingId, invocacionMeta){
+    if(!openingId || !invocacionMeta) return { ok:false, error:'OPENING_O_META_AUSENTE' };
+    m.set(openingId, contextClone(invocacionMeta));
+    return { ok:true, value: contextClone(invocacionMeta) };
+  }
+  function get(openingId){
+    return m.has(openingId) ? { ok:true, value: contextClone(m.get(openingId)) } : { ok:false, error:'OPENING_SIN_INVOCACION' };
+  }
+  function unbind(openingId){
+    var r = get(openingId);
+    if(r.ok) m.delete(openingId);
+    return r;
+  }
+  function count(){ return m.size; }
+  return { bind: bind, get: get, unbind: unbind, count: count };
+}
+var CONTEXT_OPENING_INVOCATION_REGISTRY = createContextOpeningInvocationRegistry();
+
+// CX3_bundleC1AComprension: puerto fiel de runtime/src/runtime/c1-shape-adapter.js (toUnderstanding),
+// adaptado a los nombres de campo REALES del Core (auditados en C1-E1/C1-E2/graphState reales -- no
+// los hipotéticos del paquete congelado). Pura y síncrona: nunca llama IA, nunca reinterpreta C1,
+// sólo traduce las formas que executeFocus/executeSufficiencyAssessment/graphState/opening/front ya
+// calcularon en el "understanding" que construirContextEnvelope() (CX0) espera recibir. bundle =
+// { opening, graphState, front, focusResult, sufficiencyResult, externalActors }.
+function CX3_validarBundleC1(bundle){
+  if(!bundle || typeof bundle !== 'object') return { ok:false, motivo:'bundle ausente' };
+  if(!bundle.opening || !bundle.opening.openingId) return { ok:false, motivo:'opening.openingId ausente' };
+  if(!bundle.graphState || !Array.isArray(bundle.graphState.relations) || !Array.isArray(bundle.graphState.nodes)){
+    return { ok:false, motivo:'graphState.relations/nodes ausente' };
+  }
+  if(!bundle.front || !bundle.front.id) return { ok:false, motivo:'front.id ausente' };
+  if(!bundle.focusResult || !bundle.focusResult.statement) return { ok:false, motivo:'focusResult.statement ausente' };
+  if(!bundle.sufficiencyResult || typeof bundle.sufficiencyResult.sufficient !== 'boolean'){
+    return { ok:false, motivo:'sufficiencyResult.sufficient ausente' };
+  }
+  return { ok:true };
+}
+function CX3_bundleC1AComprension(bundle){
+  var chk = CX3_validarBundleC1(bundle);
+  if(!chk.ok) return chk;
+  var opening = bundle.opening, graphState = bundle.graphState, front = bundle.front;
+  var focusResult = bundle.focusResult, sufficiencyResult = bundle.sufficiencyResult;
+  var nodePorId = {};
+  (graphState.nodes || []).forEach(function(n){ if(n && n.id) nodePorId[n.id] = n; });
+  var relPorId = {};
+  (graphState.relations || []).forEach(function(r){ if(r && r.id) relPorId[r.id] = r; });
+
+  var supportIds = Array.isArray(focusResult.supportRefs) ? focusResult.supportRefs.slice() : [];
+  var relevantRelations = supportIds.map(function(id){ return relPorId[id]; }).filter(Boolean).map(function(r){
+    return {
+      id: r.id,
+      from: nodePorId[r.sourceNodeId] ? nodePorId[r.sourceNodeId].label : null,
+      to: nodePorId[r.targetNodeId] ? nodePorId[r.targetNodeId].label : null,
+      manifestation: r.manifestation || null,
+      possibleIncidence: r.possibleIncidence || null,
+      epistemicState: r.epistemicState || null,
+      supportRefs: (r.supportRefs || []).slice(),
+      provenanceRefs: (r.provenanceRefs || []).slice(),
+      uncertainty: Array.isArray(r.uncertainty) ? r.uncertainty.slice() : (r.uncertainty ? [r.uncertainty] : [])
+    };
+  });
+
+  var propagationPaths = (graphState.routes || []).filter(function(rt){
+    return rt && Array.isArray(rt.nodeIds) && rt.nodeIds.some(function(nid){
+      return relevantRelations.some(function(rv){
+        var rel = relPorId[rv.id];
+        return rel && (rel.sourceNodeId === nid || rel.targetNodeId === nid);
+      });
+    });
+  }).map(function(rt){
+    return { id: rt.id || null, nodeIds: rt.nodeIds.slice(), status: rt.status || null,
+      depth: (typeof rt.depth === 'number') ? rt.depth : null };
+  });
+
+  var PRESION_RX = /tension|limita|presi[oó]n|riesgo|depend/i;
+  var SOPORTE_RX = /favore|soport|habilita|potencia|facilita|sost/i;
+  var supports = [], pressures = [], externalDependencies = [];
+  relevantRelations.forEach(function(rv){
+    var texto = [rv.possibleIncidence, rv.manifestation].filter(Boolean).join(' ');
+    if(PRESION_RX.test(texto)) pressures.push(rv.id);
+    if(SOPORTE_RX.test(texto)) supports.push(rv.id);
+    if(/depend/i.test(texto)) externalDependencies.push(rv.id);
+  });
+
+  var externalActors = Array.isArray(bundle.externalActors) ? bundle.externalActors.slice(0, 12) : [];
+
+  var uncertainties = [].concat(
+    Array.isArray(focusResult.uncertainties) ? focusResult.uncertainties : [],
+    Array.isArray(sufficiencyResult.criticalOpenIssues) ? sufficiencyResult.criticalOpenIssues : []
+  ).filter(function(u, i, arr){ return u && arr.indexOf(u) === i; });
+
+  var evidenceRefs = [];
+  relevantRelations.forEach(function(rv){
+    (rv.supportRefs || []).concat(rv.provenanceRefs || []).forEach(function(ref){
+      if(ref && evidenceRefs.indexOf(ref) === -1) evidenceRefs.push(ref);
+    });
+  });
+  evidenceRefs = evidenceRefs.slice(0, 24);
+
+  var limits = ['lectura contextual; la especialidad debe reevaluar con su propio método'];
+  if(sufficiencyResult.sufficient === true){
+    limits.push('comprensión declarada suficiente por Contextos, pero sigue siendo antecedente, no evidencia de la especialidad');
+  }
+
+  var understanding = {
+    openingRef: opening.openingId,
+    frontRef: front.id,
+    contextSummary: focusResult.statement,
+    relevantRelations: relevantRelations,
+    propagationPaths: propagationPaths,
+    supports: supports,
+    pressures: pressures,
+    externalDependencies: externalDependencies,
+    externalActors: externalActors,
+    uncertainties: uncertainties,
+    evidenceRefs: evidenceRefs,
+    limits: limits,
+    c1Meta: {
+      focusStability: focusResult.stability || null,
+      interpretationShift: focusResult.interpretationShift || null,
+      functionRef: focusResult.functionRef || null,
+      sufficient: sufficiencyResult.sufficient,
+      expectedMarginalGain: sufficiencyResult.expectedMarginalGain || null,
+      epistemicRisk: sufficiencyResult.epistemicRisk || null,
+      recommendation: sufficiencyResult.recommendation || null
+    }
+  };
+  return { ok:true, value: understanding };
+}
+
+// SpecialtyReassessmentRegistry: puerto fiel de runtime/src/runtime/reassessment-registry.js
+// (createReassessmentRegistry), adaptado a validarContextEnvelope/contextClone reales de CX0. Sólo
+// crea el frame en estado 'pending' -- nunca lo reevalúa, nunca cambia diagnóstico, nunca decide
+// nada (paso 11 del brief).
+var CONTEXT_REASSESSMENT_ERROR_CODES = Object.freeze({
+  REASSESSMENT_FRAME_NOT_FOUND: 'REASSESSMENT_FRAME_NOT_FOUND',
+  REASSESSMENT_FRAME_ALREADY_RESOLVED: 'REASSESSMENT_FRAME_ALREADY_RESOLVED',
+  REASSESSMENT_RESOLUTION_INVALID: 'REASSESSMENT_RESOLUTION_INVALID'
+});
+function createSpecialtyReassessmentRegistry(){
+  var m = new Map();
+  var seq = 0;
+  function create(args){
+    args = args || {};
+    var request = args.request, envelope = args.envelope, resume = args.resume, policy = args.policy;
+    var ve = validarContextEnvelope(envelope, request);
+    if(!ve.ok) return ve;
+    seq++;
+    var frame = {
+      type: 'specialty-reassessment-frame.v0.7',
+      id: 'srf_' + seq.toString(36) + '_' + Math.random().toString(36).slice(2,6),
+      status: 'pending',
+      organismRef: contextClone(request.organismRef),
+      origin: request.origin,
+      specialtyStudyRef: request.specialtyStudyRef,
+      contextCycleRef: request.contextCycleRef,
+      resumePoint: contextClone((resume && resume.resumePoint) || null),
+      openingRef: envelope.openingRef,
+      frontRef: envelope.frontRef,
+      contextSummary: envelope.contextSummary,
+      scaleHint: request.scaleHint || null,
+      epistemicRole: CONTEXT_EPISTEMIC_NOTICE,
+      requiresSpecialtyReassessment: true,
+      policy: contextClone(policy || {}),
+      createdAt: new Date().toISOString(),
+      resolvedAt: null,
+      resolution: null,
+      directCoreWritePerformed: false,
+      autoDiagnosisUpdate: false,
+      autoDecision: false
+    };
+    m.set(frame.id, contextClone(frame));
+    return { ok:true, value: contextClone(frame) };
+  }
+  function get(id){
+    return m.has(id) ? { ok:true, value: contextClone(m.get(id)) } : { ok:false, error: CONTEXT_REASSESSMENT_ERROR_CODES.REASSESSMENT_FRAME_NOT_FOUND };
+  }
+  function count(){ return m.size; }
+  function snapshot(){
+    var out = [];
+    m.forEach(function(v){ out.push(contextClone(v)); });
+    return out;
+  }
+  return { create: create, get: get, count: count, snapshot: snapshot };
+}
+var CONTEXT_REASSESSMENT_REGISTRY = createSpecialtyReassessmentRegistry();
+
+// ContextLedger: puerto fiel de runtime/src/runtime/context-ledger.js (createContextLedger),
+// separado de la Memoria del Core (memoryRole:'not_core_memory') y de evidencia actual
+// (evidenceRole:'not_current_evidence'). Append-only, efímero (paso 12 del brief) -- nunca se
+// persiste. Key = origin+organismId+specialtyStudyRef (SIN contextCycleRef): así el mismo estudio
+// acumula sequence 1,2,3... a través de sucesivos ciclos, que es justo lo que pide el paso 13
+// (previousContextRefs de una futura segunda apertura del MISMO estudio).
+function createContextLedger(){
+  var byStudy = new Map();
+  var seq = 0;
+  function key(origin, organismId, studyRef){ return [origin, organismId, studyRef].join('::'); }
+  function append(args){
+    args = args || {};
+    var request = args.request, envelope = args.envelope, reassessmentFrame = args.reassessmentFrame;
+    var ve = validarContextEnvelope(envelope, request);
+    if(!ve.ok) return ve;
+    var k = key(request.origin, request.organismRef.id, request.specialtyStudyRef);
+    var list = byStudy.get(k) || [];
+    seq++;
+    var entry = {
+      type: 'specialty-context-ledger-entry.v0.7',
+      id: 'ctxle_' + seq.toString(36),
+      sequence: list.length + 1,
+      organismRef: contextClone(request.organismRef),
+      origin: request.origin,
+      specialtyStudyRef: request.specialtyStudyRef,
+      contextCycleRef: request.contextCycleRef,
+      question: request.question,
+      intention: request.intention,
+      scaleHint: request.scaleHint || null,
+      openingRef: envelope.openingRef,
+      frontRef: envelope.frontRef,
+      contextSummary: envelope.contextSummary,
+      relationRefs: (envelope.relevantRelations || []).map(function(x){ return x && x.id; }).filter(Boolean),
+      evidenceRefs: (envelope.evidenceRefs || []).slice(),
+      uncertainties: (envelope.uncertainties || []).slice(),
+      previousContextRefs: (request.previousContextRefs || []).slice(),
+      epistemicRole: CONTEXT_EPISTEMIC_NOTICE,
+      memoryRole: 'not_core_memory',
+      evidenceRole: 'not_current_evidence',
+      directCoreWritePerformed: false,
+      reassessmentFrameRef: (reassessmentFrame && reassessmentFrame.id) || null,
+      createdAt: new Date().toISOString()
+    };
+    list.push(contextClone(entry));
+    byStudy.set(k, list);
+    return { ok:true, value: contextClone(entry) };
+  }
+  function list(origin, organismId, studyRef){ return contextClone(byStudy.get(key(origin, organismId, studyRef)) || []); }
+  function refs(origin, organismId, studyRef, limit){
+    var out = [];
+    list(origin, organismId, studyRef).forEach(function(e){
+      [e.openingRef, e.frontRef].forEach(function(r){ if(r && out.indexOf(r) === -1) out.push(r); });
+    });
+    var n = (typeof limit === 'number' && limit >= 0) ? limit : 24;
+    return out.slice(-n);
+  }
+  function count(origin, organismId, studyRef){ return list(origin, organismId, studyRef).length; }
+  return { append: append, list: list, refs: refs, count: count };
+}
+var CONTEXT_LEDGER = createContextLedger();
+
+// Fachada real (CX3): evolución de abrirContextoDesdeEspecialidadShadow(), que queda intacta y
+// sigue disponible tal cual (tests/lab), sin ningún cambio de comportamiento. Pasos 1-9 acá abajo
+// son EXACTAMENTE los mismos (misma validación, mismo registro de resumeToken, misma construcción y
+// validación de context-request.v0.7). A partir del paso 10 esta fachada SÍ entra al motor C1 real:
+// arma la metadata efímera de invocación (paso 2 del brief) y llama exactamente a
+// C1G1_iniciarConversacion -- el mismo, sin duplicar Contextos/graph engine/OPEN/E1/E2 (paso 3) --
+// pasándole esa metadata como 5º parámetro OPCIONAL (única extensión de firma permitida en todo C1:
+// evita agregar parámetros especializados a continuarCiclo/construirComprension/responderPregunta/
+// openField, que sólo necesitan consultar CONTEXT_OPENING_INVOCATION_REGISTRY por opening.openingId).
+async function abrirContextoDesdeEspecialidadReal(input, onFase){
+  input = input || {};
+  var organismRef = input.organismRef || {};
+  // 1-5: idéntico a abrirContextoDesdeEspecialidadShadow.
+  if(input.origin === 'contextos_universal') return { ok:false, error: CONTEXT_ERROR_CODES.CONTEXTOS_NOT_A_SPECIALTY_ORIGIN };
+  if(!SPECIALTY_IDS.includes(input.origin)) return { ok:false, error: CONTEXT_ERROR_CODES.SPECIALTY_ORIGIN_REQUIRED };
+  if(!contextLimpio(organismRef.id)) return { ok:false, error: CONTEXT_ERROR_CODES.ORGANISM_REQUIRED };
+  if(!contextLimpio(input.specialtyStudyRef)) return { ok:false, error: CONTEXT_ERROR_CODES.SPECIALTY_STUDY_REF_REQUIRED };
+  if(!contextLimpio(input.contextCycleRef)) return { ok:false, error: CONTEXT_ERROR_CODES.CONTEXT_CYCLE_REF_REQUIRED };
+  if(input.humanApproved !== true) return { ok:false, error: CONTEXT_ERROR_CODES.HUMAN_APPROVAL_REQUIRED };
+
+  // 6-7: idéntico a la fachada shadow -- resumePoint sólo vive acá adentro, nunca en el request.
+  var rr = CONTEXT_RESUME_REGISTRY.register({
+    origin: input.origin,
+    organismId: organismRef.id,
+    specialtyStudyRef: input.specialtyStudyRef,
+    contextCycleRef: input.contextCycleRef,
+    resumePoint: contextClone(input.resumePoint || null)
+  });
+  if(!rr.ok) return rr;
+  var resumeToken = rr.value;
+
+  // 8-9: idéntico a la fachada shadow.
+  var reqResult = construirContextRequest({
+    organismRef: organismRef,
+    origin: input.origin,
+    specialtyStudyRef: input.specialtyStudyRef,
+    contextCycleRef: input.contextCycleRef,
+    resumeToken: resumeToken,
+    question: input.question,
+    intention: input.intention,
+    trigger: input.trigger || null,
+    scaleHint: input.scaleHint || null,
+    liveSpecialtyWindow: input.liveSpecialtyWindow || {},
+    previousContextRefs: input.previousContextRefs || [],
+    humanApproved: true,
+    directCoreWriteAllowed: false
+  });
+  if(!reqResult.ok) return reqResult;
+  var request = reqResult.value;
+  var sessionKey = contextSessionKey(request);
+
+  // 10. registrar la invocación real (mismo registry de CX1, status:'real' en vez de 'shadow').
+  var invResult = CONTEXT_INVOCATION_REGISTRY.register({ request: request, sessionKey: sessionKey, status: 'real' });
+  var invocationId = invResult.ok ? invResult.value.invocationId : null;
+
+  // Paso 2 del brief: metadata efímera de invocación -- nunca se persiste. Se liga a un openingId
+  // real recién dentro de C1G1_iniciarConversacion (ver hook agregado ahí).
+  var invocacionMeta = {
+    invocationId: invocationId,
+    origin: input.origin,
+    organismId: organismRef.id,
+    specialtyStudyRef: input.specialtyStudyRef,
+    contextCycleRef: input.contextCycleRef,
+    returnTarget: 'specialty',
+    resumeToken: resumeToken,
+    request: request,
+    sessionKey: sessionKey
+  };
+
+  // 3-4: entra al pipeline C1 real -- el mismo y único C1G1_iniciarConversacion.
+  var resultado = await C1G1_iniciarConversacion(organismRef.id, request.question, request.intention, onFase, invocacionMeta);
+
+  return {
+    ok: true,
+    mode: 'real',
+    request: request,
+    resumeToken: resumeToken,
+    sessionKey: sessionKey,
+    invocationId: invocationId,
+    coreWritePerformed: false,
+    c1Called: true,
+    resultado: resultado
+  };
+}
+
+// CX3-R1 (28/08): driver mínimo de continuidad. Objetivo exclusivo: convertir un
+// `specialty:{stillOpen:true}` (E2 insuficiente, ver bifurcación de C1G1_construirComprension más
+// arriba) en una reentrada explícita al MISMO C1G1_continuarCiclo -- el mismo, real, sin crear otro
+// ciclo/arquitectura. No construye context-request nuevo, no registra resumeToken nuevo, no crea
+// invocación nueva, no vuelve a construir ContextEnvelope/consumir token/crear reassessment o ledger
+// (eso sigue siendo exclusivo de la bifurcación ya construida en CX3 -- esta fachada sólo reingresa a
+// C1; si esa reentrada alcanza el gate de retorno, es la bifurcación existente la que actúa, sin
+// duplicación). El driver continúa C1; nunca decide cuándo cerrar Contextos -- esa decisión sigue
+// siendo de E2/la bifurcación existente.
+var CX3_CONTINUATION_ERROR_CODES = Object.freeze({
+  ESTADO_AUSENTE: 'CX3R1_ESTADO_AUSENTE',
+  OPENING_AUSENTE: 'CX3R1_OPENING_AUSENTE',
+  INVOCACION_NO_LIGADA: 'CX3R1_INVOCACION_NO_LIGADA',
+  RETURN_TARGET_INVALIDO: 'CX3R1_RETURN_TARGET_INVALIDO',
+  RESUME_TOKEN_DESCONOCIDO: 'CX3R1_RESUME_TOKEN_DESCONOCIDO',
+  IDENTIDAD_NO_COINCIDE: 'CX3R1_IDENTIDAD_NO_COINCIDE'
+});
+
+async function continuarContextoDesdeEspecialidadReal(estado, onFase){
+  // 1-2. existe estado / existe estado.opening.openingId.
+  if(!estado || typeof estado !== 'object'){
+    return { ok:false, error: CX3_CONTINUATION_ERROR_CODES.ESTADO_AUSENTE };
+  }
+  if(!estado.opening || !estado.opening.openingId){
+    return { ok:false, error: CX3_CONTINUATION_ERROR_CODES.OPENING_AUSENTE };
+  }
+  var openingId = estado.opening.openingId;
+
+  // 3. ese opening sigue ligado en CONTEXT_OPENING_INVOCATION_REGISTRY (nunca se reconstruye si no
+  //    está: rechazo explícito, sin inventar ni adaptar silenciosamente).
+  var invLink = CONTEXT_OPENING_INVOCATION_REGISTRY.get(openingId);
+  if(!invLink.ok){
+    return { ok:false, error: CX3_CONTINUATION_ERROR_CODES.INVOCACION_NO_LIGADA };
+  }
+  var invocacion = invLink.value;
+
+  // 4. la invocación tiene returnTarget:'specialty' (nunca opera sobre el camino Core).
+  if(invocacion.returnTarget !== 'specialty'){
+    return { ok:false, error: CX3_CONTINUATION_ERROR_CODES.RETURN_TARGET_INVALIDO };
+  }
+
+  // 5. el resumeToken sigue existiendo -- resolve() de sólo lectura, NUNCA consume acá (consumirlo
+  //    sigue siendo exclusivo de la bifurcación cuando E2 alcanza el gate de retorno).
+  var tokenCheck = CONTEXT_RESUME_REGISTRY.resolve(invocacion.resumeToken);
+  if(!tokenCheck.ok){
+    return { ok:false, error: CX3_CONTINUATION_ERROR_CODES.RESUME_TOKEN_DESCONOCIDO };
+  }
+
+  // 6. identidad del token/invocación coincide: organismo, origin, specialtyStudyRef, contextCycleRef.
+  //    Cualquier discrepancia corta acá -- nunca se reconstruye ni se adapta silenciosamente.
+  var metaToken = tokenCheck.value;
+  if(metaToken.organismId !== invocacion.organismId ||
+     metaToken.origin !== invocacion.origin ||
+     metaToken.specialtyStudyRef !== invocacion.specialtyStudyRef ||
+     metaToken.contextCycleRef !== invocacion.contextCycleRef){
+    return { ok:false, error: CX3_CONTINUATION_ERROR_CODES.IDENTIDAD_NO_COINCIDE };
+  }
+
+  // Todo válido: reentrada directa al mismo C1G1_continuarCiclo, reutilizando exactamente el estado
+  // recibido (mismo opening/graphState/front/assessment/camposExcluidos -- nada se reconstruye). La
+  // metadata specialty ligada por openingId permanece intacta (no se toca acá); si esta pasada vuelve
+  // a INTERPRET y E2 sigue insuficiente, la bifurcación existente devuelve otra vez
+  // specialty:{stillOpen:true} sobre la MISMA invocación, lista para otra continuación. Si alcanza el
+  // gate de retorno, la bifurcación ya construida en CX3 hace ContextEnvelope→consume→reassessment→
+  // ledger sin que este driver intervenga. Se devuelve la salida de C1 tal cual, sin reinterpretarla.
+  return await C1G1_continuarCiclo(estado, null, onFase);
+}
+
 // OMV-F3 (22/08): orgId opcional -- cuando lo manda un llamador con organismo capturado por
 // clausura (mostrarDerivacion/ofrecerContinuidadUrban), el marco se construye buscando ESE
 // organismo por id en cargarOrganismos(), nunca leyendo state.organismo (que puede haber
@@ -11342,17 +13522,81 @@ function abrirModulo(id, orgId){
   if(!m || !m.archivo) return;
   if(!moduloHabilitado(id)){ cardModuloBloqueado(id); return; }
   var org = orgId ? (cargarOrganismos().find(function(x){ return x.id === orgId; }) || null) : state.organismo;
-  /* Si hay organismo (activo o capturado), se deja el marco a mano para no copiar y pegar. */
+  /* I1 (28/08): construir el Core -> Specialty Envelope en paralelo, sólo en memoria (window),
+     nunca en localStorage/sessionStorage -- no reemplaza ni condiciona nada de lo que sigue.
+     Este bloque no puede alcanzar a Sustentabilidad/Tecnología desde acá: ambas ids no tienen
+     'archivo' en ACCESO_MODULOS todavía, así que la función ya retornó arriba para ellas. */
+  var idSpecialty = org ? MODULO_A_SPECIALTY_ID[id] : null;
+  var envelopeResult = idSpecialty ? construirCoreSpecialtyEnvelope(org, idSpecialty) : null;
+  if(idSpecialty) window.__ultimoCoreSpecialtyEnvelope = envelopeResult;
+  /* ACT-ESP-01 (03/09): conecta al flujo real de apertura la función ya existente
+     evaluarActivacionEspecialidad() (I1, hasta este corte sin ningún caller productivo -- sólo
+     invocada por window.debugCoreSpecialtyEnvelope). No rediseña el gate ni decide a mano qué
+     especialidades lo requieren: evaluarActivacionEspecialidad() ya lo sabe
+     (SPECIALTIES_NATIVAS_REQUIEREN_PROPOSITO) -- Urbanismo/Negocios (legacy) siguen abriendo
+     exactamente igual (resuelve 'legacy_activo'), y Contextos no tiene entrada en
+     MODULO_A_SPECIALTY_ID, así que idSpecialty queda null y este bloque ni se ejecuta para él.
+     Bloquea ANTES de cualquier escritura de marco/localStorage y antes de window.open -- nunca
+     navega si el gate no lo permite. No muta el organismo, no crea ni confirma ningún propósito:
+     sólo lee organismPurposeFunction ya resuelto por el envelope construido arriba (que a su vez
+     lo toma exclusivamente de organismPurposeFunctionCanonico(org), nunca de ficha.funcion). */
+  if(idSpecialty && envelopeResult && envelopeResult.ok){
+    var activacionEspecialidad = evaluarActivacionEspecialidad(envelopeResult.value);
+    if(!activacionEspecialidad.ok){
+      cardModuloRequierePropositoFuncional(id, org, activacionEspecialidad);
+      return;
+    }
+  }
+  /* Si hay organismo (activo o capturado), se deja el marco a mano para no copiar y pegar.
+     I1-R1 (28/08): para Urbanismo/Negocios, resolverMarcoParaTransporte() intenta primero el
+     camino envelope -> adapter legacy -> marco_de_comprension validado; si cualquier paso falla,
+     cae exactamente al camino de siempre (construirMarcoCore(org)) -- fallback explícito, jamás
+     abre en blanco. Para cualquier otro caso, resolverMarcoParaTransporte() usa directamente el
+     camino de siempre, sin pasar por el adapter. */
   try{
     if(org){
       localStorage.setItem('ag_marco_pendiente', JSON.stringify({
         generado: new Date().toISOString(),
         organismo: org.nombre,
-        marco: construirMarcoCore(org)
+        marco: resolverMarcoParaTransporte(org, idSpecialty, envelopeResult)
       }));
     }
   }catch(e){}
   try{ window.open(m.archivo, '_blank'); }catch(e){ location.href = m.archivo; }
+}
+/* ACT-ESP-01 (03/09): tarjeta de bloqueo por falta de propósito funcional confirmado -- mismo
+   patrón visual/estructural que cardModuloBloqueado (el bloqueo por plan, ya existente), pero sin
+   inventar un segundo editor de propósito: el botón "Ir a definir propósito" conduce al único
+   mecanismo ya previsto para eso (PF-01-UI, ya vive dentro de mostrarFicha()), vía
+   mostrarFichaDe(org) -- exactamente la función ya existente para mostrar la ficha de un
+   organismo sin alterar permanentemente cuál es el organismo activo (restaura state.organismo
+   al volver). No cierra el overlay antes de llamar a mostrarFichaDe: el propio cardContent que
+   esta tarjeta ya dejó visible dentro de #overlay simplemente se vuelve a pintar con la ficha. */
+function cardModuloRequierePropositoFuncional(id, org, activacion){
+  var m = ACCESO_MODULOS[id] || {};
+  el.cardContent.innerHTML = '';
+  var h = document.createElement('h3');
+  h.textContent = (m.nombre || id) + ' requiere un propósito funcional confirmado';
+  var pf = org && org.proposito_funcional;
+  var estadoPf = pf && pf.estado;
+  var p1 = document.createElement('p');
+  p1.textContent = 'Antes de abrir ' + (m.nombre || id) + ', ' + (org && org.nombre ? org.nombre : 'este organismo') + ' necesita tener confirmado qué necesita seguir haciendo para seguir siendo él mismo.';
+  var p2 = document.createElement('p');
+  p2.textContent = (estadoPf === 'propuesto')
+    ? 'Hay una propuesta de propósito todavía sin confirmar.'
+    : 'Todavía no se definió ningún propósito funcional para este organismo.';
+  el.cardContent.appendChild(h); el.cardContent.appendChild(p1); el.cardContent.appendChild(p2);
+  var row = document.createElement('div'); row.className = 'cardrow';
+  var b1 = document.createElement('button'); b1.className = 'btn'; b1.textContent = 'Ahora no';
+  b1.onclick = cerrarOverlay;
+  row.appendChild(b1);
+  if(org){
+    var b2 = document.createElement('button'); b2.className = 'btn primary'; b2.textContent = 'Ir a definir propósito';
+    b2.onclick = function(){ mostrarFichaDe(org); };
+    row.appendChild(b2);
+  }
+  el.cardContent.appendChild(row);
+  el.overlay.classList.add('open');
 }
 function cardModuloBloqueado(id){
   var m = ACCESO_MODULOS[id];
@@ -11383,6 +13627,575 @@ function cardModuloBloqueado(id){
   }
   el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
+}
+
+/* ============================================================================================
+   TR-01 (31/08) — Live Specialty <-> Core Transport Bridge
+   -----------------------------------------------------------------------------
+   Infraestructura universal de mensajería en vivo entre este documento (Core, index.html) y
+   cualquier página de especialidad (negocios.html, urbanismo.html, y a futuro sustentabilidad/
+   tecnología), que hoy corren en pestañas separadas del mismo origen sin ningún canal vivo entre
+   sí (auditado para CX4-B: window.open('_blank') sin handle, sin window.opener, único transporte
+   existente es un handoff de un solo uso vía localStorage al abrir el módulo). Este bloque NO
+   resuelve CX4-B -- sólo construye el puente reutilizable que CX4-B (y después CX4-S/CX4-T/CX5-U)
+   usarán para wiring de UI, en un corte aparte.
+
+   Regla decisiva (autorizada explícitamente, corrige el diseño original de TR-01): el `estado`
+   cognitivo real de C1 NUNCA viaja por el canal. Permanece exclusivamente en memoria de Core,
+   indexado por bridgeSessionId en CX_BRIDGE_SESSION_REGISTRY. La especialidad sólo conoce
+   bridgeSessionId + correlationId + la vista/pregunta/progreso estrictamente necesaria -- nunca
+   el objeto estado, nunca graphState/opening/front/historial. El bridge transporta mensajes, no
+   estado canónico: no reimplementa sufficiency/gate/envelope (eso sigue siendo exclusivo de las
+   fachadas reales abrirContextoDesdeEspecialidadReal/continuarContextoDesdeEspecialidadReal/
+   C1G1_responderPregunta de CX3/CX3-R1, invocadas acá sin cambiar una línea de ellas), no persiste
+   nada (ni localStorage, ni Supabase, ni Memoria, ni ContextLedger), y no es una segunda Contextos.
+
+   Tres identificadores con responsabilidades distintas, nunca colapsados en uno solo:
+     - bridgeSessionId: identidad de TODA la conversación contextual (constante mientras dure,
+       incluso a través de múltiples ASK y múltiples E2 insuficientes).
+     - correlationId: correlación de UNA solicitud/respuesta concreta (nuevo en cada mensaje que
+       la especialidad inicia; Core lo repite tal cual en su respuesta directa a ese mensaje).
+     - messageId: deduplicación de UN mensaje individual (nuevo siempre, incluso para reintentos).
+
+   BroadcastChannel es transporte same-origin -- da aislamiento de origen gratis, pero NUNCA
+   reemplaza las validaciones de identidad del contrato (organismId/specialtyId/specialtyStudyRef/
+   contextCycleRef/bridgeSessionId/correlationId/messageId siguen validándose en cada mensaje). */
+
+var CX_BRIDGE_PROTOCOL_VERSION = 'v1';
+var CX_BRIDGE_CHANNEL_NAME = 'comprender-live-bridge-v1';
+var CX_BRIDGE_MESSAGE_TYPES = Object.freeze([
+  'OPEN_CONTEXT_REQUEST', 'CONTEXT_CONTINUE', 'CONTEXT_CANCEL',
+  'CONTEXT_ASK', 'CONTEXT_PROGRESS', 'CONTEXT_RETURN', 'CONTEXT_ERROR', 'CONTEXT_CANCEL_ACK'
+]);
+// Tipos que sólo una especialidad puede originar (viajan hacia Core, to:'core'). El resto son
+// de origen exclusivo de Core (from:'core').
+var CX_BRIDGE_TIPOS_ENTRANTES_CORE = Object.freeze(['OPEN_CONTEXT_REQUEST', 'CONTEXT_CONTINUE', 'CONTEXT_CANCEL']);
+// Denylist absoluta: ningún tipo de mensaje, en ninguna dirección, puede llevar estos campos en
+// payload. Es la garantía estructural (no sólo de disciplina) de que el estado C1 nunca sale de
+// Core -- validarEstructura() la aplica tanto al recibir como al enviar (ver CX_BRIDGE_enviarSobre).
+var CX_BRIDGE_CAMPOS_PROHIBIDOS_PAYLOAD = Object.freeze([
+  'estado', 'estadoC1', 'graphState', 'opening', 'front', 'assessment', 'camposExcluidos',
+  'snapshot', 'historial', 'history', 'ledger', 'registry', 'resumeToken'
+]);
+// Allowlist positiva por tipo -- cualquier clave de payload fuera de esta lista (o dentro del
+// denylist de arriba) se rechaza. Mensajes pequeños y contractuales, nunca blobs arbitrarios.
+var CX_BRIDGE_PAYLOAD_PERMITIDO = Object.freeze({
+  OPEN_CONTEXT_REQUEST: ['question', 'intention', 'humanApproved', 'liveSpecialtyWindow'],
+  CONTEXT_CONTINUE: ['respuestaHumana'],
+  CONTEXT_CANCEL: [],
+  CONTEXT_ASK: ['pregunta', 'porQue'],
+  CONTEXT_PROGRESS: [],
+  CONTEXT_RETURN: ['envelope', 'reassessmentFrame', 'ledgerEntry', 'reassessError'],
+  CONTEXT_ERROR: ['code'],
+  CONTEXT_CANCEL_ACK: []
+});
+var CX_BRIDGE_MAX_MENSAJE_CHARS = 8000;
+/* TR-01-R1 (31/08): dos TTL distintos según esperaRespuesta -- CX_BRIDGE_CORE_despacharNormalizado
+   ya guarda esperaRespuesta:true exactamente cuando Core está en medio de un CONTEXT_ASK
+   (esperando que un humano lea la pregunta y decida qué contestar) y esperaRespuesta:false para
+   el resto (progreso mecánico, sin pregunta puntual pendiente). 15 minutos es corto para alguien
+   pensando una respuesta real -- se sube a 60 minutos sólo para ese caso; el resto conserva el
+   valor original sin cambios. */
+var CX_BRIDGE_SESSION_TTL_PROGRESO_MS = 15 * 60 * 1000;
+var CX_BRIDGE_SESSION_TTL_ESPERA_RESPUESTA_MS = 60 * 60 * 1000;
+// Sweeper autónomo: recorrido de un Map en memoria, sin I/O -- barato. 60s da como máximo un
+// minuto de margen sobre cualquiera de los dos TTL de arriba, y garantiza el barrido aunque
+// ninguna especialidad vuelva a escribirle a Core (el barrido oportunista de manejarMensaje ya
+// no es la única vía).
+var CX_BRIDGE_SWEEPER_INTERVAL_MS = 60 * 1000;
+
+var CX_BRIDGE_ERROR_CODES = Object.freeze({
+  PROTOCOLO_INVALIDO: 'BRIDGE_PROTOCOLO_INVALIDO',
+  TYPE_NO_PERMITIDO: 'BRIDGE_TYPE_NO_PERMITIDO',
+  DESTINO_INVALIDO: 'BRIDGE_DESTINO_INVALIDO',
+  SPECIALTY_INVALIDA: 'BRIDGE_SPECIALTY_INVALIDA',
+  IDENTIDAD_INCOMPLETA: 'BRIDGE_IDENTIDAD_INCOMPLETA',
+  BRIDGE_SESSION_REQUERIDA: 'BRIDGE_SESSION_REQUERIDA',
+  BRIDGE_SESSION_NO_ESPERADA: 'BRIDGE_SESSION_NO_ESPERADA',
+  BRIDGE_SESSION_DESCONOCIDA: 'BRIDGE_SESSION_DESCONOCIDA',
+  IDENTIDAD_NO_COINCIDE: 'BRIDGE_IDENTIDAD_NO_COINCIDE',
+  MENSAJE_DEMASIADO_GRANDE: 'BRIDGE_MENSAJE_DEMASIADO_GRANDE',
+  CAMPO_NO_PERMITIDO: 'BRIDGE_CAMPO_NO_PERMITIDO',
+  C1_RECHAZO: 'BRIDGE_C1_RECHAZO',
+  BRIDGE_UNSUPPORTED: 'BRIDGE_UNSUPPORTED',
+  CORE_UNREACHABLE: 'BRIDGE_CORE_UNREACHABLE'
+});
+
+// IDs con estilo idéntico al resto del código (rsm_/ctxop_/gc_: prefijo + contador o timestamp
+// base36 + slice random base36) -- nunca UUIDs importados, nada nuevo que aprender.
+var CX_BRIDGE_SEQ = { session: 0, correlation: 0, message: 0 };
+function nuevoBridgeSessionId(){ CX_BRIDGE_SEQ.session++; return 'bsx_' + CX_BRIDGE_SEQ.session.toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
+function nuevoBridgeCorrelationId(){ CX_BRIDGE_SEQ.correlation++; return 'corr_' + CX_BRIDGE_SEQ.correlation.toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
+function nuevoBridgeMessageId(){ CX_BRIDGE_SEQ.message++; return 'msg_' + CX_BRIDGE_SEQ.message.toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
+
+/* TR-01-R1: única excepción contractual a CX_BRIDGE_CAMPOS_PROHIBIDOS_PAYLOAD. resumeToken es
+   parte legítima del ContextEnvelope certificado (I0/I1/I2, construirContextEnvelope) y ya fue
+   dado de baja del registro de resumeTokens de un solo uso (ver "Paso 10" real de
+   continuarContextoDesdeEspecialidadReal, anterior a este corte y sin modificar) para el momento
+   en que CONTEXT_RETURN lo transporta: no habilita reabrir ni reanudar nada por sí mismo, sólo
+   documenta cuál fue el token ya gastado. La excepción es de RUTA EXACTA, no de nombre de campo:
+   sólo resumeToken anidado directamente bajo payload.envelope, y sólo en un mensaje
+   CONTEXT_RETURN, está permitido. Cualquier otro resumeToken -- suelto en el payload, aportado
+   por una especialidad, o anidado en cualquier otro campo u otro tipo de mensaje -- sigue
+   prohibido igual que el resto de la denylist. */
+function CX_BRIDGE_esRutaPermitidaCampoProhibido(campo, rutaContenedor, tipoMensaje){
+  return campo === 'resumeToken' && tipoMensaje === 'CONTEXT_RETURN' && rutaContenedor === 'envelope';
+}
+// Escaneo recursivo (no sólo de primer nivel) de CX_BRIDGE_CAMPOS_PROHIBIDOS_PAYLOAD dentro de
+// TODO el payload, con la única excepción de ruta exacta de arriba. Reemplaza el chequeo shallow
+// original -- el denylist de un solo nivel dejaba pasar sin detectar un resumeToken anidado
+// dentro de envelope (en los hechos inofensivo, pero el denylist no lo reflejaba). Auditado
+// contra las formas reales de envelope/reassessmentFrame/ledgerEntry/c1Meta
+// (construirContextEnvelope, createSpecialtyReassessmentRegistry, createContextLedger): ninguna
+// de esas formas usa como nombre de campo literal ninguno de los términos de la denylist.
+function CX_BRIDGE_buscarCampoProhibido(obj, tipoMensaje, rutaContenedor){
+  if(!obj || typeof obj !== 'object') return null;
+  var claves = Object.keys(obj);
+  for(var i = 0; i < claves.length; i++){
+    var k = claves[i];
+    if(CX_BRIDGE_CAMPOS_PROHIBIDOS_PAYLOAD.indexOf(k) > -1 && !CX_BRIDGE_esRutaPermitidaCampoProhibido(k, rutaContenedor, tipoMensaje)){
+      return (rutaContenedor ? rutaContenedor + '.' : '') + k;
+    }
+    var sub = CX_BRIDGE_buscarCampoProhibido(obj[k], tipoMensaje, (rutaContenedor ? rutaContenedor + '.' : '') + k);
+    if(sub) return sub;
+  }
+  return null;
+}
+
+/* CX_BRIDGE_validarEstructura: validación role-agnóstica de UN sobre -- protocolVersion, type
+   permitido, autoconsistencia from/to derivada del propio type (nunca confiada al remitente),
+   specialtyId dentro del contrato universal, identidad completa (organismId/specialtyStudyRef/
+   contextCycleRef/correlationId/messageId), reglas de presencia de bridgeSessionId, payload
+   dentro de la allowlist y fuera del denylist (ahora recursivo -- ver
+   CX_BRIDGE_buscarCampoProhibido -- con la única excepción de ruta exacta de resumeToken en
+   CONTEXT_RETURN.payload.envelope), y tamaño máximo. Se aplica IGUAL al recibir y al enviar (ver
+   CX_BRIDGE_enviarSobre) -- ninguna identidad incompatible se adapta en silencio, se rechaza. */
+function CX_BRIDGE_validarEstructura(msg){
+  if(!msg || typeof msg !== 'object') return { ok:false, error: CX_BRIDGE_ERROR_CODES.PROTOCOLO_INVALIDO };
+  if(msg.protocolVersion !== CX_BRIDGE_PROTOCOL_VERSION) return { ok:false, error: CX_BRIDGE_ERROR_CODES.PROTOCOLO_INVALIDO };
+  if(CX_BRIDGE_MESSAGE_TYPES.indexOf(msg.type) === -1) return { ok:false, error: CX_BRIDGE_ERROR_CODES.TYPE_NO_PERMITIDO };
+  var esEntranteCore = CX_BRIDGE_TIPOS_ENTRANTES_CORE.indexOf(msg.type) > -1;
+  if(SPECIALTY_IDS.indexOf(msg.specialtyId) === -1) return { ok:false, error: CX_BRIDGE_ERROR_CODES.SPECIALTY_INVALIDA };
+  if(esEntranteCore){
+    if(msg.to !== 'core' || msg.from !== msg.specialtyId) return { ok:false, error: CX_BRIDGE_ERROR_CODES.DESTINO_INVALIDO };
+  } else {
+    if(msg.from !== 'core' || msg.to !== msg.specialtyId) return { ok:false, error: CX_BRIDGE_ERROR_CODES.DESTINO_INVALIDO };
+  }
+  if(typeof msg.organismId !== 'string' || !msg.organismId.trim()) return { ok:false, error: CX_BRIDGE_ERROR_CODES.IDENTIDAD_INCOMPLETA };
+  if(typeof msg.specialtyStudyRef !== 'string' || !msg.specialtyStudyRef.trim()) return { ok:false, error: CX_BRIDGE_ERROR_CODES.IDENTIDAD_INCOMPLETA };
+  if(typeof msg.contextCycleRef !== 'string' || !msg.contextCycleRef.trim()) return { ok:false, error: CX_BRIDGE_ERROR_CODES.IDENTIDAD_INCOMPLETA };
+  if(typeof msg.correlationId !== 'string' || !msg.correlationId.trim()) return { ok:false, error: CX_BRIDGE_ERROR_CODES.IDENTIDAD_INCOMPLETA };
+  if(typeof msg.messageId !== 'string' || !msg.messageId.trim()) return { ok:false, error: CX_BRIDGE_ERROR_CODES.IDENTIDAD_INCOMPLETA };
+  if(msg.type === 'OPEN_CONTEXT_REQUEST' && msg.bridgeSessionId){
+    return { ok:false, error: CX_BRIDGE_ERROR_CODES.BRIDGE_SESSION_NO_ESPERADA };
+  }
+  if((msg.type === 'CONTEXT_CONTINUE' || msg.type === 'CONTEXT_CANCEL') &&
+     (typeof msg.bridgeSessionId !== 'string' || !msg.bridgeSessionId.trim())){
+    return { ok:false, error: CX_BRIDGE_ERROR_CODES.BRIDGE_SESSION_REQUERIDA };
+  }
+  var payload = (msg.payload === undefined) ? {} : msg.payload;
+  if(!payload || typeof payload !== 'object') return { ok:false, error: CX_BRIDGE_ERROR_CODES.CAMPO_NO_PERMITIDO };
+  if(CX_BRIDGE_buscarCampoProhibido(payload, msg.type, '')) return { ok:false, error: CX_BRIDGE_ERROR_CODES.CAMPO_NO_PERMITIDO };
+  var permitido = CX_BRIDGE_PAYLOAD_PERMITIDO[msg.type] || [];
+  var claves = Object.keys(payload);
+  for(var i = 0; i < claves.length; i++){
+    if(permitido.indexOf(claves[i]) === -1) return { ok:false, error: CX_BRIDGE_ERROR_CODES.CAMPO_NO_PERMITIDO };
+  }
+  var tamano;
+  try{ tamano = JSON.stringify(msg).length; }catch(e){ return { ok:false, error: CX_BRIDGE_ERROR_CODES.PROTOCOLO_INVALIDO }; }
+  if(tamano > CX_BRIDGE_MAX_MENSAJE_CHARS) return { ok:false, error: CX_BRIDGE_ERROR_CODES.MENSAJE_DEMASIADO_GRANDE };
+  return { ok:true };
+}
+
+/* CX_BRIDGE_enviarSobre: único punto de salida al canal, en ambos roles (Core y cliente). Vuelve
+   a correr CX_BRIDGE_validarEstructura sobre el propio mensaje saliente antes de postearlo -- si
+   alguna vez un bug intentara adjuntar "estado" u otro campo prohibido, esto lo bloquea acá,
+   estructuralmente, no por disciplina de quien escribe el código. */
+function CX_BRIDGE_enviarSobre(canal, sobre){
+  var val = CX_BRIDGE_validarEstructura(sobre);
+  if(!val.ok){
+    CX_BRIDGE_SPY.bloqueadosAlEnviar++;
+    return { ok:false, error: val.error };
+  }
+  canal.postMessage(sobre);
+  return { ok:true };
+}
+
+var CX_BRIDGE_SPY = { rechazosCore:0, duplicadosDescartadosCore:0, bloqueadosAlEnviar:0 };
+window.debugCxBridgeResetSpy = function(){ CX_BRIDGE_SPY.rechazosCore = 0; CX_BRIDGE_SPY.duplicadosDescartadosCore = 0; CX_BRIDGE_SPY.bloqueadosAlEnviar = 0; };
+window.debugCxBridgeSpy = function(){
+  return { rechazosCore: CX_BRIDGE_SPY.rechazosCore, duplicadosDescartadosCore: CX_BRIDGE_SPY.duplicadosDescartadosCore,
+    bloqueadosAlEnviar: CX_BRIDGE_SPY.bloqueadosAlEnviar, sesionesActivas: CX_BRIDGE_SESSION_REGISTRY.count() };
+};
+// TR-01-R1, sólo para banco dirigido: fabrica antigüedad en una sesión sin esperar el TTL real.
+window.debugCxBridgeForzarAntiguedad = function(bridgeSessionId, msAtras){ return CX_BRIDGE_SESSION_REGISTRY.debugForzarAntiguedad(bridgeSessionId, msAtras); };
+
+/* createCxBridgeDedupSet: set acotado (FIFO) de messageId ya vistos -- descarta duplicados y
+   mensajes tardíos sin necesitar ningún caso especial (si no hay pendiente para su correlationId,
+   ya se descartan solos aguas abajo). Reutilizado igual en Core y en cada cliente. */
+function createCxBridgeDedupSet(maxEntradas){
+  var orden = [];
+  var set = new Set();
+  return {
+    visto: function(id){ return set.has(id); },
+    marcar: function(id){
+      if(set.has(id)) return;
+      orden.push(id); set.add(id);
+      if(orden.length > maxEntradas){ var viejo = orden.shift(); set.delete(viejo); }
+    },
+    count: function(){ return orden.length; }
+  };
+}
+
+/* createCxBridgeSessionRegistry: registry efímero del lado Core -- única pieza de estado que
+   sobrevive entre mensajes de una misma conversación contextual. Nunca se serializa, nunca se
+   expone tal cual por el canal (ver CX_BRIDGE_normalizarResultadoC1 + los despachadores, que sólo
+   toman de acá lo estrictamente necesario para decidir el siguiente paso). Vive y muere con la
+   pestaña de Core -- si Core se cierra, esto desaparece con él; TR-01 v1 no reconstruye nada. */
+function createCxBridgeSessionRegistry(){
+  var m = new Map();
+  return {
+    crear: function(meta){
+      var id = nuevoBridgeSessionId();
+      m.set(id, {
+        organismId: meta.organismId, specialtyId: meta.specialtyId,
+        specialtyStudyRef: meta.specialtyStudyRef, contextCycleRef: meta.contextCycleRef,
+        openingId: meta.openingId || null, correlationId: meta.correlationId,
+        estado: meta.estado, esperaRespuesta: !!meta.esperaRespuesta,
+        creadaEn: new Date().toISOString(), actualizadaEn: new Date().toISOString()
+      });
+      return { ok:true, value:id };
+    },
+    obtener: function(id){
+      return m.has(id) ? { ok:true, value:m.get(id) } : { ok:false, error: CX_BRIDGE_ERROR_CODES.BRIDGE_SESSION_DESCONOCIDA };
+    },
+    actualizar: function(id, cambios){
+      if(!m.has(id)) return { ok:false, error: CX_BRIDGE_ERROR_CODES.BRIDGE_SESSION_DESCONOCIDA };
+      var s = m.get(id);
+      if(cambios.correlationId !== undefined) s.correlationId = cambios.correlationId;
+      if(cambios.estado !== undefined) s.estado = cambios.estado;
+      if(cambios.esperaRespuesta !== undefined) s.esperaRespuesta = !!cambios.esperaRespuesta;
+      if(cambios.openingId !== undefined) s.openingId = cambios.openingId;
+      s.actualizadaEn = new Date().toISOString();
+      return { ok:true, value:s };
+    },
+    eliminar: function(id){ return { ok: m.delete(id) }; },
+    /* purgarInactivas (TR-01-R1): TTL distinto según esperaRespuesta -- una sesión esperando una
+       respuesta humana puntual (CONTEXT_ASK todavía sin CONTEXT_CONTINUE) usa
+       ttlEsperaRespuestaMs; el resto usa ttlProgresoMs. Se invoca oportunistamente (manejarMensaje,
+       en cada mensaje entrante) Y de forma autónoma (ver CX_BRIDGE_CORE_iniciarSweeper). */
+    purgarInactivas: function(ttlProgresoMs, ttlEsperaRespuestaMs){
+      var ahora = Date.now(); var eliminadas = 0;
+      m.forEach(function(s, id){
+        var t = Date.parse(s.actualizadaEn);
+        var ttl = s.esperaRespuesta ? ttlEsperaRespuestaMs : ttlProgresoMs;
+        if(!isFinite(t) || (ahora - t) > ttl){ m.delete(id); eliminadas++; }
+      });
+      return eliminadas;
+    },
+    count: function(){ return m.size; },
+    // Sólo para banco dirigido: fabrica antigüedad sin esperar el TTL real, para poder probar el
+    // sweeper de forma determinística. Nunca se llama desde ningún camino de producción.
+    debugForzarAntiguedad: function(id, msAtras){
+      if(!m.has(id)) return false;
+      m.get(id).actualizadaEn = new Date(Date.now() - msAtras).toISOString();
+      return true;
+    }
+  };
+}
+var CX_BRIDGE_SESSION_REGISTRY = createCxBridgeSessionRegistry();
+var CX_BRIDGE_DEDUP_CORE = createCxBridgeDedupSet(500);
+
+/* CX_BRIDGE_normalizarResultadoC1: traduce la forma real (y con dos shapes distintas -- ver nota)
+   de abrirContextoDesdeEspecialidadReal()/continuarContextoDesdeEspecialidadReal()/
+   C1G1_responderPregunta() a un resultado interno uniforme para decidir el despacho. Puramente
+   interno a Core -- nunca se expone tal cual. La primera llamada (abrirContextoDesdeEspecialidadReal)
+   envuelve la vista en {apertura, siguiente}; las siguientes (continuar/responderPregunta) devuelven
+   la vista plana directamente -- de ahí el parámetro esPrimeraLlamada. */
+function CX_BRIDGE_normalizarResultadoC1(resultado, esPrimeraLlamada){
+  if(!resultado) return { tipo:'cierre', vista:null };
+  var vista = esPrimeraLlamada ? (resultado.vista && resultado.vista.siguiente) : resultado.vista;
+  var esAsk = !resultado.specialty && vista && vista.phase === 'pregunta';
+  if(esAsk){
+    return { tipo:'ask', pregunta: vista.pregunta || null, porQue: vista.porQue || null, estado: resultado.estado };
+  }
+  if(resultado.specialty && resultado.specialty.stillOpen === true){
+    return { tipo:'progreso', estado: resultado.estado };
+  }
+  if(resultado.specialty && resultado.specialty.stillOpen === false){
+    return {
+      tipo:'retorno',
+      envelope: resultado.specialty.envelope || null,
+      reassessmentFrame: resultado.specialty.reassessmentFrame || null,
+      ledgerEntry: resultado.specialty.ledgerEntry || null,
+      reassessError: resultado.specialty.reassessError || null
+    };
+  }
+  return { tipo:'cierre', vista: vista || null };
+}
+
+function CX_BRIDGE_construirRequestApertura(msg){
+  var payload = msg.payload || {};
+  return {
+    organismRef: { id: msg.organismId }, origin: msg.specialtyId,
+    specialtyStudyRef: msg.specialtyStudyRef, contextCycleRef: msg.contextCycleRef,
+    question: payload.question, intention: payload.intention,
+    humanApproved: !!payload.humanApproved, liveSpecialtyWindow: payload.liveSpecialtyWindow || null,
+    // TR-01-R2: el runtime certificado (iteration-coordinator.js) hace esto del lado del
+    // orquestador, no del adapter de especialidad -- el ledger vive en Core y es Core quien
+    // debe consultarlo antes de construir el request. Sin esto, toda apertura por bridge
+    // (cualquier especialidad) llegaba siempre con previousContextRefs:[] a
+    // abrirContextoDesdeEspecialidadReal, aunque el mismo estudio ya tuviera ciclos previos.
+    previousContextRefs: CONTEXT_LEDGER.refs(msg.specialtyId, msg.organismId, msg.specialtyStudyRef, 24)
+  };
+}
+
+function CX_BRIDGE_construirSobreRespuesta(tipo, msgOriginal, payload, bridgeSessionId){
+  var out = {
+    protocolVersion: CX_BRIDGE_PROTOCOL_VERSION, type: tipo, from: 'core', to: msgOriginal.specialtyId,
+    specialtyId: msgOriginal.specialtyId, organismId: msgOriginal.organismId,
+    specialtyStudyRef: msgOriginal.specialtyStudyRef, contextCycleRef: msgOriginal.contextCycleRef,
+    correlationId: msgOriginal.correlationId, messageId: nuevoBridgeMessageId(),
+    sentAt: new Date().toISOString(), payload: payload || {}
+  };
+  if(bridgeSessionId) out.bridgeSessionId = bridgeSessionId;
+  return out;
+}
+function CX_BRIDGE_puedeResponder(msg){
+  return !!(msg && typeof msg.specialtyId === 'string' && SPECIALTY_IDS.indexOf(msg.specialtyId) > -1 &&
+    typeof msg.correlationId === 'string' && typeof msg.organismId === 'string' &&
+    typeof msg.specialtyStudyRef === 'string' && typeof msg.contextCycleRef === 'string');
+}
+function CX_BRIDGE_responder(canal, tipo, msgOriginal, payload, bridgeSessionId){
+  return CX_BRIDGE_enviarSobre(canal, CX_BRIDGE_construirSobreRespuesta(tipo, msgOriginal, payload, bridgeSessionId));
+}
+
+/* CX_BRIDGE_CORE_despacharNormalizado: único lugar donde se decide qué responder y cómo tocar el
+   registry, a partir de un resultado ya normalizado -- no importa si vino de OPEN o de CONTINUE. */
+function CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, openingId, bridgeSessionIdExistente){
+  if(norm.tipo === 'ask' || norm.tipo === 'progreso'){
+    var esperaRespuesta = (norm.tipo === 'ask');
+    var id = bridgeSessionIdExistente;
+    if(id){
+      CX_BRIDGE_SESSION_REGISTRY.actualizar(id, { correlationId: msg.correlationId, estado: norm.estado, esperaRespuesta: esperaRespuesta, openingId: openingId });
+    } else {
+      id = CX_BRIDGE_SESSION_REGISTRY.crear({
+        organismId: msg.organismId, specialtyId: msg.specialtyId, specialtyStudyRef: msg.specialtyStudyRef,
+        contextCycleRef: msg.contextCycleRef, openingId: openingId, correlationId: msg.correlationId,
+        estado: norm.estado, esperaRespuesta: esperaRespuesta
+      }).value;
+    }
+    if(esperaRespuesta) CX_BRIDGE_responder(canal, 'CONTEXT_ASK', msg, { pregunta: norm.pregunta, porQue: norm.porQue }, id);
+    else CX_BRIDGE_responder(canal, 'CONTEXT_PROGRESS', msg, {}, id);
+    return { ok:true, tipo:norm.tipo, bridgeSessionId:id };
+  }
+  if(norm.tipo === 'retorno'){
+    if(bridgeSessionIdExistente) CX_BRIDGE_SESSION_REGISTRY.eliminar(bridgeSessionIdExistente);
+    CX_BRIDGE_responder(canal, 'CONTEXT_RETURN', msg, {
+      envelope: norm.envelope, reassessmentFrame: norm.reassessmentFrame,
+      ledgerEntry: norm.ledgerEntry, reassessError: norm.reassessError
+    });
+    return { ok:true, tipo:'retorno' };
+  }
+  if(bridgeSessionIdExistente) CX_BRIDGE_SESSION_REGISTRY.eliminar(bridgeSessionIdExistente);
+  CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
+  return { ok:false, tipo:'cierre' };
+}
+
+async function CX_BRIDGE_CORE_manejarOpen(canal, msg, onFase){
+  var request = CX_BRIDGE_construirRequestApertura(msg);
+  var resultado;
+  try{ resultado = await abrirContextoDesdeEspecialidadReal(request, onFase); }
+  catch(e){ CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.C1_RECHAZO }); return { ok:false }; }
+  if(!resultado || resultado.ok !== true){
+    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: (resultado && resultado.error) || CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
+    return { ok:false };
+  }
+  var openingId = (resultado.resultado && resultado.resultado.estado && resultado.resultado.estado.opening && resultado.resultado.estado.opening.openingId) || null;
+  var norm = CX_BRIDGE_normalizarResultadoC1(resultado.resultado, true);
+  return CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, openingId, null);
+}
+
+async function CX_BRIDGE_CORE_manejarContinue(canal, msg, onFase){
+  var sres = CX_BRIDGE_SESSION_REGISTRY.obtener(msg.bridgeSessionId);
+  if(!sres.ok){ CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.BRIDGE_SESSION_DESCONOCIDA }); return { ok:false }; }
+  var s = sres.value;
+  if(s.organismId !== msg.organismId || s.specialtyId !== msg.specialtyId ||
+     s.specialtyStudyRef !== msg.specialtyStudyRef || s.contextCycleRef !== msg.contextCycleRef){
+    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.IDENTIDAD_NO_COINCIDE });
+    return { ok:false };
+  }
+  var payload = msg.payload || {};
+  var resultado;
+  try{
+    resultado = s.esperaRespuesta
+      ? await C1G1_responderPregunta(s.estado, payload.respuestaHumana, onFase)
+      : await continuarContextoDesdeEspecialidadReal(s.estado, onFase);
+  }catch(e){
+    CX_BRIDGE_SESSION_REGISTRY.eliminar(msg.bridgeSessionId);
+    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
+    return { ok:false };
+  }
+  if(resultado && resultado.ok === false){
+    CX_BRIDGE_SESSION_REGISTRY.eliminar(msg.bridgeSessionId);
+    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: resultado.error || CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
+    return { ok:false };
+  }
+  var norm = CX_BRIDGE_normalizarResultadoC1(resultado, false);
+  return CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, s.openingId, msg.bridgeSessionId);
+}
+
+function CX_BRIDGE_CORE_manejarCancel(canal, msg){
+  var sres = CX_BRIDGE_SESSION_REGISTRY.obtener(msg.bridgeSessionId);
+  if(sres.ok){
+    var s = sres.value;
+    if(s.organismId === msg.organismId && s.specialtyId === msg.specialtyId &&
+       s.specialtyStudyRef === msg.specialtyStudyRef && s.contextCycleRef === msg.contextCycleRef){
+      CX_BRIDGE_SESSION_REGISTRY.eliminar(msg.bridgeSessionId);
+    }
+  }
+  CX_BRIDGE_responder(canal, 'CONTEXT_CANCEL_ACK', msg, {}, msg.bridgeSessionId);
+  return { ok:true };
+}
+
+async function CX_BRIDGE_CORE_manejarMensaje(canal, msg, onFase){
+  if(!msg || msg.to !== 'core') return { ok:true, ignorado:true };   // no es para Core: otro receptor del mismo canal.
+  CX_BRIDGE_SESSION_REGISTRY.purgarInactivas(CX_BRIDGE_SESSION_TTL_PROGRESO_MS, CX_BRIDGE_SESSION_TTL_ESPERA_RESPUESTA_MS);
+  var val = CX_BRIDGE_validarEstructura(msg);
+  if(!val.ok){
+    CX_BRIDGE_SPY.rechazosCore++;
+    if(CX_BRIDGE_puedeResponder(msg)) CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: val.error });
+    return { ok:false, error: val.error };
+  }
+  if(CX_BRIDGE_DEDUP_CORE.visto(msg.messageId)){ CX_BRIDGE_SPY.duplicadosDescartadosCore++; return { ok:true, descartadoPorDuplicado:true }; }
+  CX_BRIDGE_DEDUP_CORE.marcar(msg.messageId);
+  if(msg.type === 'OPEN_CONTEXT_REQUEST') return await CX_BRIDGE_CORE_manejarOpen(canal, msg, onFase);
+  if(msg.type === 'CONTEXT_CONTINUE') return await CX_BRIDGE_CORE_manejarContinue(canal, msg, onFase);
+  if(msg.type === 'CONTEXT_CANCEL') return CX_BRIDGE_CORE_manejarCancel(canal, msg);
+  CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.TYPE_NO_PERMITIDO });
+  return { ok:false, error: CX_BRIDGE_ERROR_CODES.TYPE_NO_PERMITIDO };
+}
+
+var CX_BRIDGE_CORE_CANAL = null;
+function CX_BRIDGE_CORE_iniciar(){
+  if(CX_BRIDGE_CORE_CANAL) return CX_BRIDGE_CORE_CANAL;
+  if(typeof BroadcastChannel === 'undefined') return null;
+  var canal = new BroadcastChannel(CX_BRIDGE_CHANNEL_NAME);
+  canal.onmessage = function(ev){ CX_BRIDGE_CORE_manejarMensaje(canal, ev.data, null); };
+  CX_BRIDGE_CORE_CANAL = canal;
+  return canal;
+}
+try{ CX_BRIDGE_CORE_iniciar(); }catch(e){}
+
+/* TR-01-R1: sweeper autónomo -- se ejecuta solo, sin depender de que llegue ningún mensaje al
+   bridge. No agrega heartbeat de especialidades ni persistencia: sólo repite, cada
+   CX_BRIDGE_SWEEPER_INTERVAL_MS, el mismo purgarInactivas que ya corría oportunistamente dentro
+   de manejarMensaje (esa vía sigue existiendo, no se retira -- purga un poco más seguido cuando
+   hay tráfico real, y el sweeper cubre el resto del tiempo). */
+var CX_BRIDGE_SWEEPER_HANDLE = null;
+function CX_BRIDGE_CORE_iniciarSweeper(){
+  if(CX_BRIDGE_SWEEPER_HANDLE) return CX_BRIDGE_SWEEPER_HANDLE;
+  if(typeof setInterval === 'undefined') return null;
+  CX_BRIDGE_SWEEPER_HANDLE = setInterval(function(){
+    CX_BRIDGE_SESSION_REGISTRY.purgarInactivas(CX_BRIDGE_SESSION_TTL_PROGRESO_MS, CX_BRIDGE_SESSION_TTL_ESPERA_RESPUESTA_MS);
+  }, CX_BRIDGE_SWEEPER_INTERVAL_MS);
+  // .unref() sólo existe en Node -- evita que este timer mantenga vivo un proceso de test; en el
+  // navegador setInterval no devuelve un objeto con unref y esta línea no hace nada.
+  if(CX_BRIDGE_SWEEPER_HANDLE && typeof CX_BRIDGE_SWEEPER_HANDLE.unref === 'function') CX_BRIDGE_SWEEPER_HANDLE.unref();
+  return CX_BRIDGE_SWEEPER_HANDLE;
+}
+try{ CX_BRIDGE_CORE_iniciarSweeper(); }catch(e){}
+// Sólo para banco dirigido: ejecuta el barrido ya mismo, sin esperar CX_BRIDGE_SWEEPER_INTERVAL_MS.
+window.debugCxBridgeEjecutarSweepAhora = function(){ return CX_BRIDGE_SESSION_REGISTRY.purgarInactivas(CX_BRIDGE_SESSION_TTL_PROGRESO_MS, CX_BRIDGE_SESSION_TTL_ESPERA_RESPUESTA_MS); };
+
+/* createCxBridgeClient: helper genérico y reutilizable -- se autoriza para las 4 especialidades
+   (Urbanismo/Negocios/Sustentabilidad/Tecnología) instanciándolo con su propio specialtyId; hoy
+   vive acá (probado por el banco dirigido) para copiarse verbatim dentro de cada página de
+   especialidad en su propio corte de wiring (CX4-B retomará esto para negocios.html, sin tocar
+   esta función). Nunca guarda ni interpreta "estado" -- sólo bridgeSessionId + correlationId +
+   lo que cada evento (onAsk/onProgress/onReturn/onError) trae en su payload contractual. */
+function createCxBridgeClient(specialtyId, opciones){
+  opciones = opciones || {};
+  var timeoutMs = (typeof opciones.timeoutMs === 'number') ? opciones.timeoutMs : 15000;
+  var canal = (typeof BroadcastChannel === 'undefined') ? null : new BroadcastChannel(CX_BRIDGE_CHANNEL_NAME);
+  var pendientes = new Map();
+  var dedup = createCxBridgeDedupSet(200);
+  var bridgeSessionActual = null;
+
+  if(canal){
+    canal.onmessage = function(ev){
+      var msg = ev.data;
+      if(!msg || msg.to !== specialtyId) return;   // no es para esta especialidad.
+      var val = CX_BRIDGE_validarEstructura(msg);
+      if(!val.ok) return;   // Core nunca debería mandar algo inválido; por las dudas, se descarta.
+      if(dedup.visto(msg.messageId)) return;
+      dedup.marcar(msg.messageId);
+      var p = pendientes.get(msg.correlationId);
+      if(!p) return;   // tardío o desconocido: se descarta, nunca se reconstruye nada.
+      pendientes.delete(msg.correlationId);
+      clearTimeout(p.timeoutHandle);
+      if(msg.type === 'CONTEXT_ASK'){ bridgeSessionActual = msg.bridgeSessionId || bridgeSessionActual; p.onAsk && p.onAsk(msg.payload, msg.bridgeSessionId); }
+      else if(msg.type === 'CONTEXT_PROGRESS'){ bridgeSessionActual = msg.bridgeSessionId || bridgeSessionActual; p.onProgress && p.onProgress(msg.payload, msg.bridgeSessionId); }
+      else if(msg.type === 'CONTEXT_RETURN'){ bridgeSessionActual = null; p.onReturn && p.onReturn(msg.payload); }
+      else if(msg.type === 'CONTEXT_ERROR'){ p.onError && p.onError((msg.payload && msg.payload.code) || CX_BRIDGE_ERROR_CODES.C1_RECHAZO); }
+      else if(msg.type === 'CONTEXT_CANCEL_ACK'){ bridgeSessionActual = null; p.onCancelAck && p.onCancelAck(); }
+    };
+  }
+
+  function enviar(tipo, camposExtra, callbacks){
+    callbacks = callbacks || {};
+    if(!canal){ callbacks.onError && callbacks.onError(CX_BRIDGE_ERROR_CODES.BRIDGE_UNSUPPORTED); return null; }
+    var correlationId = nuevoBridgeCorrelationId();
+    var base = {
+      protocolVersion: CX_BRIDGE_PROTOCOL_VERSION, type: tipo, from: specialtyId, to: 'core',
+      specialtyId: specialtyId, correlationId: correlationId, messageId: nuevoBridgeMessageId(),
+      sentAt: new Date().toISOString(), payload: {}
+    };
+    for(var k in camposExtra){ if(Object.prototype.hasOwnProperty.call(camposExtra, k)) base[k] = camposExtra[k]; }
+    var envio = CX_BRIDGE_enviarSobre(canal, base);
+    if(!envio.ok){ callbacks.onError && callbacks.onError(envio.error); return null; }
+    pendientes.set(correlationId, {
+      onAsk: callbacks.onAsk, onProgress: callbacks.onProgress, onReturn: callbacks.onReturn,
+      onError: callbacks.onError, onCancelAck: callbacks.onCancelAck,
+      /* TR-01-R1, semántica explícita autorizada: al expirar, el cliente sólo deja de esperar
+         ESTA correlación y avisa CORE_UNREACHABLE localmente. No manda nada a Core y no intenta
+         tocar la sesión de Core de forma sincrónica (evitaría una carrera contra un ASK/PROGRESS
+         que ya estuviera en tránsito en ese instante). Si la sesión de Core existe, queda
+         temporalmente viva y es el sweeper autónomo (CX_BRIDGE_CORE_iniciarSweeper) el que
+         eventualmente la elimina por TTL. Cancelación explícita humana sigue teniendo su camino
+         inmediato: CONTEXT_CANCEL. */
+      timeoutHandle: setTimeout(function(){
+        pendientes.delete(correlationId);
+        callbacks.onError && callbacks.onError(CX_BRIDGE_ERROR_CODES.CORE_UNREACHABLE);
+      }, timeoutMs)
+    });
+    return correlationId;
+  }
+
+  return {
+    abrirContexto: function(datos, callbacks){
+      return enviar('OPEN_CONTEXT_REQUEST', {
+        organismId: datos.organismId, specialtyStudyRef: datos.specialtyStudyRef, contextCycleRef: datos.contextCycleRef,
+        payload: { question: datos.question, intention: datos.intention, humanApproved: !!datos.humanApproved, liveSpecialtyWindow: datos.liveSpecialtyWindow || null }
+      }, callbacks);
+    },
+    continuar: function(datos, bridgeSessionId, respuestaHumana, callbacks){
+      var payload = (respuestaHumana !== undefined && respuestaHumana !== null) ? { respuestaHumana: respuestaHumana } : {};
+      return enviar('CONTEXT_CONTINUE', {
+        organismId: datos.organismId, specialtyStudyRef: datos.specialtyStudyRef, contextCycleRef: datos.contextCycleRef,
+        bridgeSessionId: bridgeSessionId, payload: payload
+      }, callbacks);
+    },
+    cancelar: function(datos, bridgeSessionId, callbacks){
+      return enviar('CONTEXT_CANCEL', {
+        organismId: datos.organismId, specialtyStudyRef: datos.specialtyStudyRef, contextCycleRef: datos.contextCycleRef,
+        bridgeSessionId: bridgeSessionId, payload: {}
+      }, callbacks);
+    },
+    sessionActual: function(){ return bridgeSessionActual; },
+    soportado: function(){ return !!canal; },
+    cerrar: function(){ if(canal){ try{ canal.close(); }catch(e){} } }
+  };
 }
 
 /* ============ C-02 · REGISTRO DE CONSUMO REAL ============
@@ -12224,6 +15037,23 @@ function construirInsumosInforme(o){
       insumos += 'Evaluación de Negocios Pro' + (enp.version != null ? (' v' + enp.version) : '') + ': ' + enp.resumen + '\n';
     }
   }
+  // RET-P6-01 (01/09): antecedentes gobernados (accepted_as_reference) -- selección por
+  // PERTINENCIA, reutilizando seleccionarFragmentosEspecializados() (mismo selector de P6),
+  // no "última entrada" como el resto de esta función -- el brief pide explícitamente no
+  // repetir esa política si existe un selector reutilizable. Query sintética: lo único
+  // estable disponible acá sin un historial de chat es la propia ficha vigente -- no se
+  // rediseña Studio para esto (ver deuda documentada en el informe de cierre de RET-P6-01).
+  if(typeof retp601AntecedentesGobernados === 'function'){
+    var p601Frags = retp601AntecedentesGobernados(o);
+    if(p601Frags.length){
+      var p601Query = [f.diagnostico, f.tensiones, f.proximo].filter(Boolean).join(' ');
+      var p601Sel = seleccionarFragmentosEspecializados({ organismo:o, situacionActual:p601Query, fragmentos:p601Frags, limite:P6_MAX_CANDIDATOS });
+      if(p601Sel.candidates.length){
+        insumos += 'Antecedentes especializados de referencia (no son memoria ni diagnóstico Core, ni evidencia ni decisión activa): ' +
+          p601Sel.candidates.map(function(c){ return c.text; }).join(' · ') + '\n';
+      }
+    }
+  }
   return insumos;
 }
 
@@ -12344,6 +15174,22 @@ function renderInforme(o, red){
     o.principios.forEach(function(p, i){
       const pp = document.createElement('p'); pp.textContent = String(i+1).padStart(2,'0') + ' · ' + p.texto; lista2.appendChild(pp);
     });
+  }
+  // RET-P6-01 (01/09): misma fuente y mismo criterio de selección por pertinencia que en
+  // construirInsumosInforme() -- ver comentario ahí. Sección propia, aparte, para que quede
+  // visualmente distinguible de "Diagnóstico profesional incorporado"/"Evaluación de
+  // Negocios Pro" (legacy) -- nunca se mezclan en el mismo bloque de texto.
+  if(typeof retp601AntecedentesGobernados === 'function'){
+    const p601FragsRI = retp601AntecedentesGobernados(o);
+    if(p601FragsRI.length){
+      const p601QueryRI = [f.diagnostico, f.tensiones, f.proximo].filter(Boolean).join(' ');
+      const p601SelRI = seleccionarFragmentosEspecializados({ organismo:o, situacionActual:p601QueryRI, fragmentos:p601FragsRI, limite:P6_MAX_CANDIDATOS });
+      if(p601SelRI.candidates.length){
+        sec('Antecedentes especializados de referencia');
+        parr('Fragmentos de retornos especializados ya aceptados como referencia -- no son memoria ni diagnóstico Core, ni evidencia ni decisión activa.');
+        p601SelRI.candidates.forEach(function(c){ dato(c.specialtyId + ' · ' + c.returnClass, c.text); });
+      }
+    }
   }
   const pie = document.createElement('div'); pie.className='id-pie';
   pie.textContent = 'Comprender AI · Producto de Arquigénesis · Este informe comunica la comprensión construida con el usuario y es insumo para su criterio profesional: no constituye dictamen técnico ni asesoramiento legal, financiero o de ingeniería. La responsabilidad de las decisiones es de quien las toma.';
@@ -13864,6 +16710,15 @@ function intentarAbrirOrganismoDesdeURL(){
     if(org){
       _orgDesdeURLIntentado = true;
       abrirOrganismo(org);
+      // PF-01-UI (31/08): parámetro nuevo, mínimo y explícito, estrictamente opt-in --
+      // ?organismo=<id>&abrir=ficha. Reutiliza la MISMA convención de deep-link del Corte I (no
+      // se inventó una ruta/query nueva para esto), y sirve para el recorrido real
+      // "especialidad -> Core" de PF-01-UI/SUST-PROD-01: una especialidad que detecta propósito
+      // ausente puede mandar de vuelta acá con este parámetro y el usuario cae directo en
+      // Memoria/Ficha, donde vive la gobernanza de PF-01, en vez de tener que buscarla. Sin este
+      // parámetro (el caso preexistente del link de correo diferido) el comportamiento es
+      // exactamente el de siempre: sólo abre el organismo, nunca fuerza la Ficha.
+      if(params.get('abrir') === 'ficha'){ try{ mostrarFicha(); }catch(e){} }
       try{ history.replaceState(null, '', location.pathname); }catch(e){}
     }
   }catch(e){}
@@ -14083,6 +16938,126 @@ function construirFilaFicha(label, valor){
   it.appendChild(lb); it.appendChild(vl);
   return it;
 }
+/* ============================================================================
+   PF-01-UI (31/08) — Gobernanza humana del propósito funcional en Core
+   -----------------------------------------------------------------------------
+   Membrana de UI sobre las funciones ya certificadas de PF-01 -- no las rediseña, no agrega
+   persistencia nueva. Única fuente de verdad: o.proposito_funcional, leída y mutada
+   exclusivamente por organismPurposeFunctionCanonico() (lectura) y
+   proponerPropositoFuncionalOrganismo()/confirmarPropositoFuncionalOrganismo() (escritura),
+   las tres ya definidas antes de este corte. Este bloque no llama nada nuevo: sólo las invoca
+   desde botones y refleja pf.estado ('ninguno'|'propuesto'|'confirmado') como tres pantallas.
+
+   Deliberadamente en su propio bloque dentro de mostrarFicha(), separado de "Función vigente"
+   (ficha.funcion / coreUniversalFunction, ya mostrado en gridEstado más arriba) -- son dos
+   conceptos distintos por invariante de PF-01
+   (coreUniversalFunction != organismPurposeFunction != specialtyStudyFunction) y no deben
+   confundirse visualmente ni compartir fila. */
+function pf01UI_estado(o){
+  var pf = o && o.proposito_funcional;
+  var e = pf && pf.estado;
+  if(e === 'propuesto') return 'PROPUESTA_PENDIENTE';
+  if(e === 'confirmado') return 'CONFIRMADA';
+  return 'AUSENTE';
+}
+function pf01UI_renderBloque(o){
+  var wrap = document.createElement('div');
+  var modoCorreccion = false;
+
+  function actualizar(){
+    // La forma más simple y segura de reflejar cualquier transición de estado sin mantener dos
+    // árboles DOM sincronizados a mano: mostrarFicha() ya relee o.ficha/o.proposito_funcional
+    // desde cero en cada llamada, y o es la misma referencia state.organismo que las funciones
+    // de PF-01 acaban de mutar y persistir.
+    mostrarFicha();
+  }
+
+  function pintar(){
+    wrap.innerHTML = '';
+    var estado = pf01UI_estado(o);
+    var pf = o.proposito_funcional || null;
+
+    if(modoCorreccion){
+      var textoBase = (estado === 'PROPUESTA_PENDIENTE' && pf.propuesta) ? pf.propuesta.texto : (pf ? pf.texto : '');
+      var pCorr = document.createElement('p'); pCorr.style.cssText = 'opacity:.8;font-size:13px;margin-bottom:8px';
+      pCorr.textContent = '¿Qué necesita seguir haciendo este organismo para seguir siendo él mismo?';
+      var taCorr = document.createElement('textarea');
+      taCorr.value = textoBase || '';
+      taCorr.style.cssText = 'width:100%;min-height:70px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);font-size:13px;padding:10px;resize:vertical;margin-bottom:8px';
+      var rowCorr = document.createElement('div'); rowCorr.className = 'cardrow';
+      var bCancelar = document.createElement('button'); bCancelar.className = 'btn'; bCancelar.textContent = 'Cancelar';
+      bCancelar.onclick = function(){ modoCorreccion = false; pintar(); };
+      var bGuardarCorr = document.createElement('button'); bGuardarCorr.className = 'btn primary';
+      // CONFIRMADA: corregir un canónico ya confirmado pasa SIEMPRE por una propuesta nueva
+      // (recorrido gobernado ya previsto por PF-01) -- nunca se pisa .texto directo. Sobre una
+      // PROPUESTA_PENDIENTE, corregir y confirmar en el mismo paso es el mismo criterio que ya
+      // usa confirmarPropositoFuncionalOrganismo con decision.texto (corrección humana prevalece).
+      bGuardarCorr.textContent = (estado === 'CONFIRMADA') ? 'Proponer corrección' : 'Confirmar corrección';
+      bGuardarCorr.onclick = function(){
+        var nuevo = taCorr.value.trim();
+        if(!nuevo) return;
+        if(estado === 'CONFIRMADA'){
+          proponerPropositoFuncionalOrganismo(o, nuevo, 'humano');
+        }else{
+          confirmarPropositoFuncionalOrganismo(o, { accion:'confirmar', texto: nuevo });
+        }
+        modoCorreccion = false;
+        actualizar();
+      };
+      rowCorr.appendChild(bCancelar); rowCorr.appendChild(bGuardarCorr);
+      wrap.appendChild(pCorr); wrap.appendChild(taCorr); wrap.appendChild(rowCorr);
+      return;
+    }
+
+    if(estado === 'AUSENTE'){
+      var pAus = document.createElement('p'); pAus.style.cssText = 'opacity:.8;font-size:13px;margin-bottom:8px';
+      pAus.textContent = '¿Qué necesita seguir haciendo este organismo para seguir siendo él mismo?';
+      var taAus = document.createElement('textarea');
+      taAus.placeholder = 'Escribí el propósito funcional de este organismo…';
+      taAus.style.cssText = 'width:100%;min-height:70px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);font-size:13px;padding:10px;resize:vertical;margin-bottom:8px';
+      var rowAus = document.createElement('div'); rowAus.className = 'cardrow';
+      var bProponer = document.createElement('button'); bProponer.className = 'btn primary'; bProponer.textContent = 'Proponer función';
+      bProponer.onclick = function(){
+        var texto = taAus.value.trim();
+        if(!texto) return;
+        proponerPropositoFuncionalOrganismo(o, texto, 'humano');
+        actualizar();
+      };
+      rowAus.appendChild(bProponer);
+      wrap.appendChild(pAus); wrap.appendChild(taAus); wrap.appendChild(rowAus);
+      return;
+    }
+
+    if(estado === 'PROPUESTA_PENDIENTE'){
+      var gridProp = document.createElement('div'); gridProp.className = 'fichagrid';
+      gridProp.appendChild(construirFilaFicha('Propuesta pendiente', pf.propuesta ? pf.propuesta.texto : ''));
+      wrap.appendChild(gridProp);
+      var rowProp = document.createElement('div'); rowProp.className = 'cardrow'; rowProp.style.marginTop = '8px';
+      var bConfirmar = document.createElement('button'); bConfirmar.className = 'btn primary'; bConfirmar.textContent = 'Confirmar';
+      bConfirmar.onclick = function(){ confirmarPropositoFuncionalOrganismo(o, { accion:'confirmar' }); actualizar(); };
+      var bCorregir = document.createElement('button'); bCorregir.className = 'btn'; bCorregir.textContent = 'Corregir';
+      bCorregir.onclick = function(){ modoCorreccion = true; pintar(); };
+      var bRechazar = document.createElement('button'); bRechazar.className = 'btn'; bRechazar.textContent = 'Rechazar';
+      bRechazar.onclick = function(){ confirmarPropositoFuncionalOrganismo(o, { accion:'rechazar' }); actualizar(); };
+      rowProp.appendChild(bConfirmar); rowProp.appendChild(bCorregir); rowProp.appendChild(bRechazar);
+      wrap.appendChild(rowProp);
+      return;
+    }
+
+    // CONFIRMADA
+    var gridConf = document.createElement('div'); gridConf.className = 'fichagrid';
+    gridConf.appendChild(construirFilaFicha('Propósito confirmado', pf.texto || ''));
+    wrap.appendChild(gridConf);
+    var rowConf = document.createElement('div'); rowConf.className = 'cardrow'; rowConf.style.marginTop = '8px';
+    var bCorregirConf = document.createElement('button'); bCorregirConf.className = 'btn'; bCorregirConf.textContent = 'Corregir';
+    bCorregirConf.onclick = function(){ modoCorreccion = true; pintar(); };
+    rowConf.appendChild(bCorregirConf);
+    wrap.appendChild(rowConf);
+  }
+
+  pintar();
+  return wrap;
+}
 function mostrarFicha(){
   if(!state.organismo) return;
   state.c1g3Epoch++;   // C1-G3: volver a Memoria invalida cualquier tarjeta de Contextos Universal en vuelo
@@ -14111,6 +17086,13 @@ function mostrarFicha(){
     if(itemsProx.length) gridEstado.appendChild(construirFilaFicha('Próximos pendientes', itemsProx.join(' · ')));
   }
   el.cardContent.appendChild(gridEstado);
+
+  // ---- PF-01-UI (31/08): bloque propio, siempre visible, para no dejar el propósito funcional
+  // enterrado en un menú -- es requisito real de activación de Sustentabilidad/Tecnología. ----
+  var tPF01 = document.createElement('div'); tPF01.style.cssText = 'font-size:12px;opacity:.65;letter-spacing:.04em;margin:14px 0 6px';
+  tPF01.textContent = 'Propósito funcional';
+  el.cardContent.appendChild(tPF01);
+  el.cardContent.appendChild(pf01UI_renderBloque(o));
 
   // ---- UX-P2A · 3. Continuidad cognitiva -- bloque propio, sólo si existe. Antes vivían como
   // dos filas más dentro de la misma grilla de "estado actual" (Punto 11/T2); acá se separan con
@@ -14330,6 +17312,7 @@ function mostrarFicha(){
   gridHist.appendChild(construirFilaFicha('Recuerdos', nRec ? (nRec + (nRec === 1 ? ' recuerdo guardado' : ' recuerdos guardados')) : 'ninguno todavía'));
   secHist.appendChild(gridHist);
   el.cardContent.appendChild(secHist);
+  if(typeof retgov01RenderBandeja === 'function') el.cardContent.appendChild(retgov01RenderBandeja(o));
   el.cardContent.appendChild(row);
   el.overlay.classList.add('open');
 }
@@ -14675,6 +17658,10 @@ function construirTuEspacioOrganismos(){
   // window.innerWidth adentro de cada ítem.
   const esMobileTuOrg = window.innerWidth <= 840;
   const list = cargarOrganismos();
+  // RET-TRANSPORT-01 (02/09): consumo de la outbox durable compartida (sustainability/technology)
+  // en el mismo lifecycle de carga/retorno a Core que ya usa el aviso legacy de abajo -- ver
+  // rettransport01ConsumirPendientes() más arriba para el detalle completo del contrato.
+  if(typeof rettransport01ConsumirPendientes === 'function') rettransport01ConsumirPendientes(list);
   renderAvisoImportarNegocioProPendiente(list, cont);
   if(!list.length){
     vacio.style.display = '';
@@ -14808,7 +17795,36 @@ function construirTuEspacioOrganismos(){
         okb.textContent = 'Importar acá';
         okb.addEventListener('click', function(e){
           e.stopPropagation();
-          importarProParaOrganismo(org, ta.value);
+          var textoManual = ta.value;
+          /* CX6-LEGACY-GUARD-01 (02/09): guard minimo, EXCLUSIVAMENTE en este ingreso MANUAL
+             ("Pegar evaluacion Pro") -- el banner automatico (mas abajo,
+             renderAvisoImportarNegocioProPendiente()/leerExportPendienteUnificado()) no se toca,
+             sigue resolviendo pendientes legacy anteriores a la migracion exactamente igual que
+             antes. Usa los mismos discriminadores reales ya existentes -- esProductoUrbanismo()/
+             esProductoNegociosPro() (forma del payload) + retp601FuenteActivaParaProductor()
+             (RETP601_POLITICA_PRODUCTOR, ya certificada por MIG-BIZ-01/MIG-URB-01) -- no se
+             inventa ninguna heuristica nueva, no se infiere por contenido textual. Contextos
+             standalone (esProductoContextos) no tiene entrada en esa politica: nunca queda
+             alcanzado por este guard, su camino legacy legitimo sigue intacto. Rechazo ANTES de
+             llamar a importarProParaOrganismo() -- cero mutacion de organismo en la rama
+             rechazada. JSON invalido (no parsea) cae en null acá y sigue de largo hacia
+             importarProParaOrganismo(), que ya maneja ese caso exactamente igual que siempre
+             ("No se pudo leer el texto"). */
+          var datosManual = null;
+          try{ datosManual = JSON.parse(textoManual); }catch(_e){ datosManual = null; }
+          if(datosManual && typeof retp601FuenteActivaParaProductor === 'function'){
+            if(esProductoUrbanismo(datosManual) && retp601FuenteActivaParaProductor('urbanism') === 'specialty_return'){
+              cerrarTuEspacio();
+              cardMensaje('Urbanismo ya usa el retorno gobernado', 'Urbanismo ya se incorpora mediante "Enviar a Comprender" y la revision gobernada de Comprender (RET-GOV). Este ingreso manual quedo cerrado para resultados nuevos de Urbanismo.');
+              return;
+            }
+            if(esProductoNegociosPro(datosManual) && retp601FuenteActivaParaProductor('business') === 'specialty_return'){
+              cerrarTuEspacio();
+              cardMensaje('Negocios ya usa el retorno gobernado', 'Negocios ya se incorpora mediante "Enviar a Comprender" y la revision gobernada de Comprender (RET-GOV). Este ingreso manual quedo cerrado para resultados nuevos de Negocios.');
+              return;
+            }
+          }
+          importarProParaOrganismo(org, textoManual);
         });
         cont.appendChild(hint); cont.appendChild(ta); cont.appendChild(okb);
         panel.appendChild(cont);

@@ -2726,6 +2726,25 @@ canvas{animation:none !important}
           <div class="ctitle">Síntesis diagnóstica</div>
           <p style="font-size:13px;color:var(--texto2);line-height:1.8" id="r-sint"></p>
         </div>
+        <!-- CX5-U (01/09): caja mínima de Contextos Universal -- vive DENTRO de la pantalla de
+             diagnóstico, nunca una pestaña/módulo/navegación nueva. Independiente y coexistente
+             con la capa de contexto legado (m-contexto/ctx-file/aplicarContextoPegado, más abajo
+             en este mismo documento) -- CX5-U nunca la reemplaza ni la escribe. Contenido armado
+             dinámicamente por cx5uRender(), llamado al final de renderDiag(). Oculta por defecto:
+             sólo aparece cuando el trigger territorial certificado (items+tensión) Y un
+             organismo Core están presentes. -->
+        <div id="cx5uCaja" style="display:none;"></div>
+        <!-- URB-RET-01 (01/09): caja mínima de retorno universal hacia el Core
+             (comprender.specialty-return.v1) -- contrato DISTINTO del ContextEnvelope de CX5-U:
+             no usa BroadcastChannel, no usa CX_BRIDGE_CLIENT, no toca el registro de contexto de
+             Core, no lee ni escribe ag_urb_cx5u_identidad_activa_v2. Vive en la MISMA pantalla de diagnóstico,
+             ninguna pestaña/navegación nueva. Contenido armado por urbRet01Render(), llamado al
+             final de renderDiag() (mismo punto donde ya se llama cx5uRender(), sin tocarlo). Oculta
+             por defecto: sólo aparece con diagnóstico completo (items+tensiones) Y una identidad
+             urbanctx_* real ya sincronizada por CX5-U (se LEE esa identidad como proveniencia, no
+             se genera ni se muta ninguna). El envelope preparado acá es exportable/copiable, nunca
+             se envía a receiveSpecialtyReturnEnvelope() ni se escribe en ningún lado del Core. -->
+        <div id="urbRet01Caja" style="display:none;"></div>
         <button class="btn-proyectivo" onclick="abrirValidacion()">Validar diagnóstico y continuar al Abordaje Proyectivo →</button>
         <button id="btn-ir-proy" style="display:none;width:100%;padding:10px;background:transparent;border:1px solid var(--azul);border-radius:10px;font-size:13px;font-weight:600;color:var(--azul);cursor:pointer;margin-top:.5rem" onclick="irDirectoProyectivo()">Ver Abordaje Proyectivo ya generado →</button>
         <button class="btn-pdf no-print" onclick="exportarPDF()">📄 Exportar diagnóstico en PDF</button>
@@ -3303,6 +3322,11 @@ function back(){
   // "análisis nuevo explícito" que el brief pidió que pudiera descartar el checkpoint anterior
   // (validación 6). Sin firma: borra lo que haya, sea de la ciudad que sea.
   limpiarCheckpointUrbanismo();
+  // CX5-U (01/09): misma salida explícita de análisis -- limpia el puntero de identidad CX
+  // "actual" (no la metadata persistida por firma, que sigue disponible si se reabre esa misma
+  // firma más adelante) y cierra cualquier caja/ciclo de Contextos que hubiera quedado abierto.
+  if(typeof cx5uLimpiarIdentidadActual === 'function') cx5uLimpiarIdentidadActual();
+  if(typeof cx5uReiniciar === 'function') cx5uReiniciar();
 }
 
 /* URB-PRELAUNCH 01.3 (26/08): clasifica el error real capturado por ejecutar()/nuevaCiudad()
@@ -3882,6 +3906,16 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   const organismoIdCap = (typeof __organismoIdCoreUrbanismo!=='undefined' && __organismoIdCoreUrbanismo) || null;
   const firmaCap = firmaCheckpointUrbanismo(ciudad, organismoIdCap, pasivo, c2, ref);
   const fasesPrevias = fasesResumiblesDeCheckpoint(firmaCap);
+
+  // CX5-U (01/09): sincroniza la identidad técnica CX de este análisis -- get-or-create, keyed
+  // por la MISMA 'firma' que ya distingue "mismo análisis" de "análisis nuevo" para el checkpoint
+  // (ver guardarFaseCheckpointUrbanismo, unas líneas más abajo: "Firma nueva -- primer intento...
+  // o cambiaron insumos/organismo"). No se inventa un lifecycle nuevo -- se reusa exactamente
+  // ese, la única señal inequívoca disponible. No sintetiza organismo: si organismoIdCap es null
+  // (uso standalone, sin Core), cx5uSincronizarIdentidad() es un no-op y CX5U simplemente no
+  // tendrá identidad -- el gate de apertura (cx5uPuedeAbrir()) ya exige organismId presente, así
+  // que esto es sólo la mitad "de dónde sale el ref", no el gate en sí.
+  if(typeof cx5uSincronizarIdentidad === 'function') cx5uSincronizarIdentidad(organismoIdCap, firmaCap);
 
   // URB-ROBUST 03A (26/08): "reanudación conocida" -- capturado UNA VEZ acá, con el estado del
   // checkpoint tal como estaba al ARRANCAR esta llamada (antes de que cualquiera de las tres
@@ -4762,6 +4796,18 @@ function renderDiag(d){
       <span style="width:185px;font-weight:700;color:var(--azul);flex-shrink:0">${dm.n}</span>
       <span style="color:var(--texto2)">${dm.d}</span>
     </div>`).join('');
+
+  // CX5-U (01/09): re-sincroniza la caja de Contextos Universal en cada re-render del
+  // diagnóstico (fresh, refinamiento, recálculo de ponderación, o al descartarse tras
+  // cargarHistorial()/back() -- ver esos call sites). cx5uRender() se define más abajo en este
+  // MISMO <script>, así que para cuando renderDiag() se INVOCA en runtime (siempre después de
+  // DOMContentLoaded) la función ya existe; la guarda es sólo defensiva.
+  if(typeof cx5uRender === 'function') cx5uRender();
+  // URB-RET-01 (01/09): re-sincroniza la caja de retorno universal en cada re-render del
+  // diagnóstico -- mismo punto y mismo criterio que cx5uRender() arriba, pero contrato
+  // independiente (ver comentario del <div id="urbRet01Caja">). urbRet01Render() se define más
+  // abajo en este MISMO <script>.
+  if(typeof urbRet01Render === 'function') urbRet01Render();
 }
 
 // ══════════════════════════════════════════
@@ -5994,6 +6040,16 @@ function cargarHistorial(idx){
   if(!h || !h.diagData) return;
   // Guardar actual en historial si hay uno
   if(diagData) guardarEnHistorial();
+  // CX5-U (01/09): las entradas de 'historial' (guardarEnHistorial(), más abajo) no conservan
+  // organismoId/pasivo/c2/ref -- sólo {ciudad,diagData,ponderados,intencion,sintesis,fecha,
+  // contexto} -- así que la 'firma' exacta del análisis que se está por mostrar NO puede
+  // reconstruirse acá con garantía. En vez de adivinar una firma (que podría coincidir por
+  // accidente con la de otro análisis y filtrar su specialtyStudyRef), se limpia el puntero de
+  // identidad CX actual: el gate de Contextos queda cerrado para este diagData reabierto desde
+  // historial hasta que el usuario corra un llamarAPI() real (fresh o refinamiento) sobre él, que
+  // es lo único que re-sincroniza la identidad de forma confiable.
+  if(typeof cx5uLimpiarIdentidadActual === 'function') cx5uLimpiarIdentidadActual();
+  if(typeof cx5uReiniciar === 'function') cx5uReiniciar();
   diagData = h.diagData;
   ponderados = {...h.ponderados};
   intencionSeleccionada = h.intencion||'';
@@ -6459,7 +6515,17 @@ function exportarHistorial(){
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   console.log('Historial exportado: ' + filename);
-  dejarListoParaIncorporarEnCoreUrbanismo(exportData);
+  // MIG-URB-01 (02/09): productor legacy Urbanismo hacia ag_export_pendiente_incorporar
+  // APAGADO a propósito -- Urbanismo migró al canal durable RET-TRANSPORT-01/RET-GOV (ver
+  // rtp01Encolar()/urbRet01Enviar() más abajo, misma acción humana explícita "Enviar a
+  // Comprender" ya certificada en Sustentabilidad/Tecnología). Un payload legacy Urbanismo
+  // preexistente a este corte sigue resoluble una última vez por el banner legacy de
+  // index.html (no se borra ni se toca acá); ningún resultado Urbanismo nuevo vuelve a
+  // generar otro. Contextos standalone NO se toca: dejarListoParaIncorporarEnCoreContextos()
+  // en contextos.html sigue escribiendo la misma clave compartida exactamente igual que
+  // antes de este corte. La función dejarListoParaIncorporarEnCoreUrbanismo() queda sin
+  // llamar, no se borra (documentación viva de lo que existía antes de este corte -- mismo
+  // criterio que MIG-BIZ-01 aplicó en negocios.html).
 }
 /* Handoff automático Urbanismo -> Core (14/08), mismo mecanismo unificado que ya usan Negocios
    Pro y Contextos (ag_export_pendiente_incorporar). Antes exportarHistorial() no tenía ningún
@@ -7032,6 +7098,1144 @@ verificarModoLectura();
   }
   dibujarEstatico();
 })();
+
+/* ============ CX5-U (01/09) · Urbanismo -> Contextos Universal, vía Live Bridge ============
+   Todo lo que sigue hasta createCxBridgeClient es una copia VERBATIM (mismos nombres, misma
+   lógica, ni una línea reescrita) de la porción cliente de index.html (bloque CX_BRIDGE_*
+   congelado por TR-01/TR-01-R1/TR-01-R2), exactamente la misma copia ya certificada en
+   negocios.html (CX4-B), sustentabilidad.html (CX4-S) y tecnologia.html (CX4-T). Se excluye a
+   propósito todo lo que es exclusivo del lado Core (CX_BRIDGE_SESSION_REGISTRY, el sweeper, los
+   TTL, nuevoBridgeSessionId, y los dos window.debugCxBridge* que leen ese registry): Urbanismo
+   nunca corre Core, sólo abre/continúa/cancela un ciclo de Contextos Universal que corre en la
+   pestaña de index.html, comunicándose exclusivamente por el mismo BroadcastChannel same-origin.
+   No modificar este bloque sin re-auditar primero el original real en index.html -- ver
+   invariantes de TR-01/TR-01-R1/TR-01-R2, que este corte no reabre. */
+var SPECIALTY_IDS = Object.freeze(['sustainability', 'technology', 'urbanism', 'business']);
+var CX_BRIDGE_PROTOCOL_VERSION = 'v1';
+var CX_BRIDGE_CHANNEL_NAME = 'comprender-live-bridge-v1';
+var CX_BRIDGE_MESSAGE_TYPES = Object.freeze([
+  'OPEN_CONTEXT_REQUEST', 'CONTEXT_CONTINUE', 'CONTEXT_CANCEL',
+  'CONTEXT_ASK', 'CONTEXT_PROGRESS', 'CONTEXT_RETURN', 'CONTEXT_ERROR', 'CONTEXT_CANCEL_ACK'
+]);
+var CX_BRIDGE_TIPOS_ENTRANTES_CORE = Object.freeze(['OPEN_CONTEXT_REQUEST', 'CONTEXT_CONTINUE', 'CONTEXT_CANCEL']);
+var CX_BRIDGE_CAMPOS_PROHIBIDOS_PAYLOAD = Object.freeze([
+  'estado', 'estadoC1', 'graphState', 'opening', 'front', 'assessment', 'camposExcluidos',
+  'snapshot', 'historial', 'history', 'ledger', 'registry', 'resumeToken'
+]);
+var CX_BRIDGE_PAYLOAD_PERMITIDO = Object.freeze({
+  OPEN_CONTEXT_REQUEST: ['question', 'intention', 'humanApproved', 'liveSpecialtyWindow'],
+  CONTEXT_CONTINUE: ['respuestaHumana'],
+  CONTEXT_CANCEL: [],
+  CONTEXT_ASK: ['pregunta', 'porQue'],
+  CONTEXT_PROGRESS: [],
+  CONTEXT_RETURN: ['envelope', 'reassessmentFrame', 'ledgerEntry', 'reassessError'],
+  CONTEXT_ERROR: ['code'],
+  CONTEXT_CANCEL_ACK: []
+});
+var CX_BRIDGE_MAX_MENSAJE_CHARS = 8000;
+
+var CX_BRIDGE_ERROR_CODES = Object.freeze({
+  PROTOCOLO_INVALIDO: 'BRIDGE_PROTOCOLO_INVALIDO',
+  TYPE_NO_PERMITIDO: 'BRIDGE_TYPE_NO_PERMITIDO',
+  DESTINO_INVALIDO: 'BRIDGE_DESTINO_INVALIDO',
+  SPECIALTY_INVALIDA: 'BRIDGE_SPECIALTY_INVALIDA',
+  IDENTIDAD_INCOMPLETA: 'BRIDGE_IDENTIDAD_INCOMPLETA',
+  BRIDGE_SESSION_REQUERIDA: 'BRIDGE_SESSION_REQUERIDA',
+  BRIDGE_SESSION_NO_ESPERADA: 'BRIDGE_SESSION_NO_ESPERADA',
+  BRIDGE_SESSION_DESCONOCIDA: 'BRIDGE_SESSION_DESCONOCIDA',
+  IDENTIDAD_NO_COINCIDE: 'BRIDGE_IDENTIDAD_NO_COINCIDE',
+  MENSAJE_DEMASIADO_GRANDE: 'BRIDGE_MENSAJE_DEMASIADO_GRANDE',
+  CAMPO_NO_PERMITIDO: 'BRIDGE_CAMPO_NO_PERMITIDO',
+  C1_RECHAZO: 'BRIDGE_C1_RECHAZO',
+  BRIDGE_UNSUPPORTED: 'BRIDGE_UNSUPPORTED',
+  CORE_UNREACHABLE: 'BRIDGE_CORE_UNREACHABLE'
+});
+
+var CX_BRIDGE_SEQ = { session: 0, correlation: 0, message: 0 };
+function nuevoBridgeCorrelationId(){ CX_BRIDGE_SEQ.correlation++; return 'corr_' + CX_BRIDGE_SEQ.correlation.toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
+function nuevoBridgeMessageId(){ CX_BRIDGE_SEQ.message++; return 'msg_' + CX_BRIDGE_SEQ.message.toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
+
+function CX_BRIDGE_esRutaPermitidaCampoProhibido(campo, rutaContenedor, tipoMensaje){
+  return campo === 'resumeToken' && tipoMensaje === 'CONTEXT_RETURN' && rutaContenedor === 'envelope';
+}
+function CX_BRIDGE_buscarCampoProhibido(obj, tipoMensaje, rutaContenedor){
+  if(!obj || typeof obj !== 'object') return null;
+  var claves = Object.keys(obj);
+  for(var i = 0; i < claves.length; i++){
+    var k = claves[i];
+    if(CX_BRIDGE_CAMPOS_PROHIBIDOS_PAYLOAD.indexOf(k) > -1 && !CX_BRIDGE_esRutaPermitidaCampoProhibido(k, rutaContenedor, tipoMensaje)){
+      return (rutaContenedor ? rutaContenedor + '.' : '') + k;
+    }
+    var sub = CX_BRIDGE_buscarCampoProhibido(obj[k], tipoMensaje, (rutaContenedor ? rutaContenedor + '.' : '') + k);
+    if(sub) return sub;
+  }
+  return null;
+}
+
+function CX_BRIDGE_validarEstructura(msg){
+  if(!msg || typeof msg !== 'object') return { ok:false, error: CX_BRIDGE_ERROR_CODES.PROTOCOLO_INVALIDO };
+  if(msg.protocolVersion !== CX_BRIDGE_PROTOCOL_VERSION) return { ok:false, error: CX_BRIDGE_ERROR_CODES.PROTOCOLO_INVALIDO };
+  if(CX_BRIDGE_MESSAGE_TYPES.indexOf(msg.type) === -1) return { ok:false, error: CX_BRIDGE_ERROR_CODES.TYPE_NO_PERMITIDO };
+  var esEntranteCore = CX_BRIDGE_TIPOS_ENTRANTES_CORE.indexOf(msg.type) > -1;
+  if(SPECIALTY_IDS.indexOf(msg.specialtyId) === -1) return { ok:false, error: CX_BRIDGE_ERROR_CODES.SPECIALTY_INVALIDA };
+  if(esEntranteCore){
+    if(msg.to !== 'core' || msg.from !== msg.specialtyId) return { ok:false, error: CX_BRIDGE_ERROR_CODES.DESTINO_INVALIDO };
+  } else {
+    if(msg.from !== 'core' || msg.to !== msg.specialtyId) return { ok:false, error: CX_BRIDGE_ERROR_CODES.DESTINO_INVALIDO };
+  }
+  if(typeof msg.organismId !== 'string' || !msg.organismId.trim()) return { ok:false, error: CX_BRIDGE_ERROR_CODES.IDENTIDAD_INCOMPLETA };
+  if(typeof msg.specialtyStudyRef !== 'string' || !msg.specialtyStudyRef.trim()) return { ok:false, error: CX_BRIDGE_ERROR_CODES.IDENTIDAD_INCOMPLETA };
+  if(typeof msg.contextCycleRef !== 'string' || !msg.contextCycleRef.trim()) return { ok:false, error: CX_BRIDGE_ERROR_CODES.IDENTIDAD_INCOMPLETA };
+  if(typeof msg.correlationId !== 'string' || !msg.correlationId.trim()) return { ok:false, error: CX_BRIDGE_ERROR_CODES.IDENTIDAD_INCOMPLETA };
+  if(typeof msg.messageId !== 'string' || !msg.messageId.trim()) return { ok:false, error: CX_BRIDGE_ERROR_CODES.IDENTIDAD_INCOMPLETA };
+  if(msg.type === 'OPEN_CONTEXT_REQUEST' && msg.bridgeSessionId){
+    return { ok:false, error: CX_BRIDGE_ERROR_CODES.BRIDGE_SESSION_NO_ESPERADA };
+  }
+  if((msg.type === 'CONTEXT_CONTINUE' || msg.type === 'CONTEXT_CANCEL') &&
+     (typeof msg.bridgeSessionId !== 'string' || !msg.bridgeSessionId.trim())){
+    return { ok:false, error: CX_BRIDGE_ERROR_CODES.BRIDGE_SESSION_REQUERIDA };
+  }
+  var payload = (msg.payload === undefined) ? {} : msg.payload;
+  if(!payload || typeof payload !== 'object') return { ok:false, error: CX_BRIDGE_ERROR_CODES.CAMPO_NO_PERMITIDO };
+  if(CX_BRIDGE_buscarCampoProhibido(payload, msg.type, '')) return { ok:false, error: CX_BRIDGE_ERROR_CODES.CAMPO_NO_PERMITIDO };
+  var permitido = CX_BRIDGE_PAYLOAD_PERMITIDO[msg.type] || [];
+  var claves = Object.keys(payload);
+  for(var i = 0; i < claves.length; i++){
+    if(permitido.indexOf(claves[i]) === -1) return { ok:false, error: CX_BRIDGE_ERROR_CODES.CAMPO_NO_PERMITIDO };
+  }
+  var tamano;
+  try{ tamano = JSON.stringify(msg).length; }catch(e){ return { ok:false, error: CX_BRIDGE_ERROR_CODES.PROTOCOLO_INVALIDO }; }
+  if(tamano > CX_BRIDGE_MAX_MENSAJE_CHARS) return { ok:false, error: CX_BRIDGE_ERROR_CODES.MENSAJE_DEMASIADO_GRANDE };
+  return { ok:true };
+}
+
+function CX_BRIDGE_enviarSobre(canal, sobre){
+  var val = CX_BRIDGE_validarEstructura(sobre);
+  if(!val.ok){
+    CX_BRIDGE_SPY.bloqueadosAlEnviar++;
+    return { ok:false, error: val.error };
+  }
+  canal.postMessage(sobre);
+  return { ok:true };
+}
+
+// CX5-U: SPY recortado -- sólo el contador que tiene sentido del lado cliente (mensajes propios
+// bloqueados antes de salir por estructura inválida), igual que en CX4-B/CX4-S/CX4-T.
+var CX_BRIDGE_SPY = { bloqueadosAlEnviar: 0 };
+
+function createCxBridgeDedupSet(maxEntradas){
+  var orden = [];
+  var set = new Set();
+  return {
+    visto: function(id){ return set.has(id); },
+    marcar: function(id){
+      if(set.has(id)) return;
+      orden.push(id); set.add(id);
+      if(orden.length > maxEntradas){ var viejo = orden.shift(); set.delete(viejo); }
+    },
+    count: function(){ return orden.length; }
+  };
+}
+
+/* createCxBridgeClient: copiado verbatim de index.html/negocios.html/sustentabilidad.html/
+   tecnologia.html. Nunca guarda ni interpreta "estado" -- sólo bridgeSessionId + correlationId +
+   lo que cada evento trae en su payload contractual. */
+function createCxBridgeClient(specialtyId, opciones){
+  opciones = opciones || {};
+  var timeoutMs = (typeof opciones.timeoutMs === 'number') ? opciones.timeoutMs : 15000;
+  var canal = (typeof BroadcastChannel === 'undefined') ? null : new BroadcastChannel(CX_BRIDGE_CHANNEL_NAME);
+  var pendientes = new Map();
+  var dedup = createCxBridgeDedupSet(200);
+  var bridgeSessionActual = null;
+
+  if(canal){
+    canal.onmessage = function(ev){
+      var msg = ev.data;
+      if(!msg || msg.to !== specialtyId) return;   // no es para esta especialidad.
+      var val = CX_BRIDGE_validarEstructura(msg);
+      if(!val.ok) return;   // Core nunca debería mandar algo inválido; por las dudas, se descarta.
+      if(dedup.visto(msg.messageId)) return;
+      dedup.marcar(msg.messageId);
+      var p = pendientes.get(msg.correlationId);
+      if(!p) return;   // tardío o desconocido: se descarta, nunca se reconstruye nada.
+      pendientes.delete(msg.correlationId);
+      clearTimeout(p.timeoutHandle);
+      if(msg.type === 'CONTEXT_ASK'){ bridgeSessionActual = msg.bridgeSessionId || bridgeSessionActual; p.onAsk && p.onAsk(msg.payload, msg.bridgeSessionId); }
+      else if(msg.type === 'CONTEXT_PROGRESS'){ bridgeSessionActual = msg.bridgeSessionId || bridgeSessionActual; p.onProgress && p.onProgress(msg.payload, msg.bridgeSessionId); }
+      else if(msg.type === 'CONTEXT_RETURN'){ bridgeSessionActual = null; p.onReturn && p.onReturn(msg.payload); }
+      else if(msg.type === 'CONTEXT_ERROR'){ p.onError && p.onError((msg.payload && msg.payload.code) || CX_BRIDGE_ERROR_CODES.C1_RECHAZO); }
+      else if(msg.type === 'CONTEXT_CANCEL_ACK'){ bridgeSessionActual = null; p.onCancelAck && p.onCancelAck(); }
+    };
+  }
+
+  function enviar(tipo, camposExtra, callbacks){
+    callbacks = callbacks || {};
+    if(!canal){ callbacks.onError && callbacks.onError(CX_BRIDGE_ERROR_CODES.BRIDGE_UNSUPPORTED); return null; }
+    var correlationId = nuevoBridgeCorrelationId();
+    var base = {
+      protocolVersion: CX_BRIDGE_PROTOCOL_VERSION, type: tipo, from: specialtyId, to: 'core',
+      specialtyId: specialtyId, correlationId: correlationId, messageId: nuevoBridgeMessageId(),
+      sentAt: new Date().toISOString(), payload: {}
+    };
+    for(var k in camposExtra){ if(Object.prototype.hasOwnProperty.call(camposExtra, k)) base[k] = camposExtra[k]; }
+    var envio = CX_BRIDGE_enviarSobre(canal, base);
+    if(!envio.ok){ callbacks.onError && callbacks.onError(envio.error); return null; }
+    pendientes.set(correlationId, {
+      onAsk: callbacks.onAsk, onProgress: callbacks.onProgress, onReturn: callbacks.onReturn,
+      onError: callbacks.onError, onCancelAck: callbacks.onCancelAck,
+      timeoutHandle: setTimeout(function(){
+        pendientes.delete(correlationId);
+        callbacks.onError && callbacks.onError(CX_BRIDGE_ERROR_CODES.CORE_UNREACHABLE);
+      }, timeoutMs)
+    });
+    return correlationId;
+  }
+
+  return {
+    abrirContexto: function(datos, callbacks){
+      return enviar('OPEN_CONTEXT_REQUEST', {
+        organismId: datos.organismId, specialtyStudyRef: datos.specialtyStudyRef, contextCycleRef: datos.contextCycleRef,
+        payload: { question: datos.question, intention: datos.intention, humanApproved: !!datos.humanApproved, liveSpecialtyWindow: datos.liveSpecialtyWindow || null }
+      }, callbacks);
+    },
+    continuar: function(datos, bridgeSessionId, respuestaHumana, callbacks){
+      var payload = (respuestaHumana !== undefined && respuestaHumana !== null) ? { respuestaHumana: respuestaHumana } : {};
+      return enviar('CONTEXT_CONTINUE', {
+        organismId: datos.organismId, specialtyStudyRef: datos.specialtyStudyRef, contextCycleRef: datos.contextCycleRef,
+        bridgeSessionId: bridgeSessionId, payload: payload
+      }, callbacks);
+    },
+    cancelar: function(datos, bridgeSessionId, callbacks){
+      return enviar('CONTEXT_CANCEL', {
+        organismId: datos.organismId, specialtyStudyRef: datos.specialtyStudyRef, contextCycleRef: datos.contextCycleRef,
+        bridgeSessionId: bridgeSessionId, payload: {}
+      }, callbacks);
+    },
+    sessionActual: function(){ return bridgeSessionActual; },
+    soportado: function(){ return !!canal; },
+    cerrar: function(){ if(canal){ try{ canal.close(); }catch(e){} } }
+  };
+}
+/* ============ fin del bloque copiado verbatim de index.html/negocios.html/sustentabilidad.html/tecnologia.html ============ */
+
+
+/* ============ CX5-U · puerto fiel del adapter certificado + identidad sintética + human gate ============
+   Puerto manual (no require()) de runtime/src/adapters/urbanism.context.adapter.js, certificado
+   en el paquete de cirugía (auditado en CX5-U0, incluyendo sus tests certificados
+   tests/urbanism-real-adapter.test.js y tests/runtime-urban-protection.test.js). Reproduce las
+   MISMAS responsabilidades (inspectRuntime -> buildRequest -> liveSpecialtyWindow), leyendo
+   directamente diagData/ponderados/__organismoIdCoreUrbanismo reales de ESTE documento, nunca
+   escribiéndolos -- salvo el propio estado efímero CX5U y la metadata de identidad separada (ver
+   más abajo). Nada de lo que sigue llama a CONTEXT_LEDGER, arma resumeToken, ni construye
+   ContextEnvelope -- eso es exclusivamente de Core (index.html), congelado por
+   TR-01/TR-01-R1/TR-01-R2. Esta sección sólo habla con Core a través de CX_BRIDGE_CLIENT (bloque
+   copiado verbatim arriba).
+
+   Trigger real encontrado en el adapter certificado (inspectRuntime), confirmado también por sus
+   dos tests certificados: diagData.items.length>0 (URBAN_INITIAL_READING_MUST_REMAIN_FIRST) Y
+   diagData.tensiones.length>0 (URBAN_ROOT_TENSION_REQUIRED). Coincide exactamente con el criterio
+   canónico verificado en CX5-U0 -- no se reinterpretó a partir de Negocios/Sustentabilidad/
+   Tecnología.
+
+   Identidad: Urbanismo legacy no tiene study.id. specialtyStudyRef es una identidad técnica CX
+   SINTÉTICA ("urbanctx_..."), scoped al CICLO real de un análisis -- ver CX5-U-R1 (01/09) más
+   abajo para el modelo vigente. La firma metodológica (fingerprint de insumos, usada por el
+   checkpoint para decidir qué reusar) y la identidad CX del ciclo de análisis son cosas
+   DISTINTAS: una firma repetida no implica el mismo análisis. Persistida en localStorage,
+   SEPARADA del checkpoint metodológico (ag_urb_checkpoint), del historial en memoria, de Core
+   Memory, de evidencia y de diagData -- ver CX5UR1_IDENTIDAD_ACTIVA_LLAVE.
+
+   Organismo requerido: Contextos Universal exige organismo canónico. Si __organismoIdCoreUrbanismo
+   es null (uso standalone de Urbanismo, sin Core), CX5U nunca sintetiza uno ni ofrece una apertura
+   funcional -- cx5uPuedeAbrir() exige organismId presente, y cx5uRender() oculta la caja entera en
+   ese caso (no sólo deshabilita un botón).
+
+   Estado propio del gate: vive en CX5U, variable global de este documento, nunca dentro de
+   diagData/ponderados/checkpoint/historial -- exactamente la misma razón que CX4S/CX4T: no puede
+   filtrarse a ningún mecanismo de persistencia existente por estar estructuralmente afuera de
+   todos ellos. */
+
+/* ============ CX5-U-R1 (01/09) · identidad real del ciclo urbano ============
+   CX5-U original (más arriba en este comentario, texto ya corregido) usaba un catálogo
+   get-or-create keyed por 'firma' (localStorage['ag_urb_cx5u_identidades']): cualquier análisis
+   -- pasado o presente -- con la misma firma exacta recuperaba el mismo specialtyStudyRef.
+   Auditoría CX5-U (post-cierre) demostró en vivo el defecto: análisis 1 completo/abandonado con
+   organismo A + firma X -> urbanctx_1; análisis 2 GENUINAMENTE NUEVO, mismo organismo A, mismos
+   insumos (misma firma X) -> el get-or-create encontraba la entrada vieja y devolvía OTRA VEZ
+   urbanctx_1, en vez de una identidad nueva. Confirmado ejecutando el <script> real (ver
+   auditoria_urbanctx_demo.mjs): back() limpiaba el puntero "actual" pero nunca la entrada
+   persistida en el catálogo, así que esa entrada sobrevivía indefinidamente y contaminaba
+   cualquier análisis futuro que compartiera firma con uno ya cerrado.
+
+   Corrección: se elimina el modelo de catálogo histórico. En su lugar, se persiste EXCLUSIVAMENTE
+   una identidad CX activa (no un catálogo): a lo sumo un {organismId, firma, specialtyStudyRef}
+   vigente para el análisis urbano actual. La clave vieja 'ag_urb_cx5u_identidades' NO se borra
+   destructivamente (queda como dato legacy ignorado, nunca más leída) y sus asociaciones NO se
+   migran al nuevo modelo -- exactamente como se indicó: ninguna herencia de la identidad vieja.
+
+   Creación: cuando cx5uSincronizarIdentidad(organismId, firma) corre y NO hay una identidad activa
+   persistida que coincida en organismId+firma, se considera que empieza (o continúa, ver
+   reanudación abajo) un ciclo de análisis y se mint un specialtyStudyRef nuevo (urbanctx_<opaco>,
+   con entropía real vía cx5uOpaqueId() -- el timestamp puede formar parte del ID opaco, pero
+   JAMÁS se usa como heurística para decidir si el análisis es nuevo). Esa identidad se persiste
+   como la única activa, reemplazando cualquier identidad activa previa (si la había).
+
+   Reanudación: si la identidad activa persistida coincide exactamente en organismId Y firma con
+   la que se está sincronizando -- reload de la misma pestaña, segunda apertura de Contextos sobre
+   el mismo análisis todavía no cerrado, etc. -- se reutiliza el MISMO specialtyStudyRef. La
+   identidad activa vive en localStorage, no depende de diagData en memoria: sobrevive un reload
+   real del navegador.
+
+   Cierre/reset: back() y cargarHistorial() (los dos lifecycle reales ya auditados en CX5-U, sus
+   call sites no cambian) siguen llamando cx5uLimpiarIdentidadActual() -- pero esa función ahora
+   ADEMÁS borra la identidad activa PERSISTIDA (antes sólo limpiaba el puntero CX5U.organismId/
+   specialtyStudyRef en memoria). Efecto: cualquier análisis que arranque después de un back()/
+   reset -- aunque comparta organismId, firma, ciudad e insumos con el anterior -- no encuentra
+   identidad activa que coincida (porque ya no hay ninguna) y por lo tanto mint una identidad
+   NUEVA. No se toca CONTEXT_LEDGER del análisis anterior ni se reutiliza su specialtyStudyRef.
+
+   cargarHistorial(): mantiene el mismo criterio fail-closed ya adoptado en CX5-U -- limpia la
+   identidad activa (persistida y puntero) porque las entradas de 'historial' no traen
+   organismId/pasivo/c2/ref y su firma no es reconstruible con garantía. No se inventa un
+   urbanctx para esa reapertura, no se recupera ninguno por firma, y el gate de Contextos
+   permanece cerrado hasta que un llamarAPI() real (fresh o refinamiento) resincronice. */
+var CX5UR1_IDENTIDAD_ACTIVA_LLAVE = 'ag_urb_cx5u_identidad_activa_v2';
+function cx5uOpaqueId(){ return 'urbanctx_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10); }
+function cx5uCargarIdentidadActivaPersistida(){
+  try{
+    var raw = JSON.parse(localStorage.getItem(CX5UR1_IDENTIDAD_ACTIVA_LLAVE) || 'null');
+    if(!raw || typeof raw !== 'object' || !raw.organismId || !raw.firma || !raw.specialtyStudyRef) return null;
+    return raw;
+  }catch(e){ return null; }
+}
+function cx5uGuardarIdentidadActivaPersistida(identidad){
+  try{ localStorage.setItem(CX5UR1_IDENTIDAD_ACTIVA_LLAVE, JSON.stringify(identidad)); }
+  catch(e){ /* si falla el guardado, la próxima sincronización simplemente vuelve a mint una
+    identidad nueva -- no hay nada más grave en juego que perder continuidad de
+    previousContextRefs de ESTE ciclo puntual, nunca una identidad incorrecta. */ }
+}
+function cx5uLimpiarIdentidadActivaPersistida(){
+  try{ localStorage.removeItem(CX5UR1_IDENTIDAD_ACTIVA_LLAVE); }catch(e){}
+}
+
+// ---- Estado efímero "actual": qué identidad corresponde al diagData que se está mostrando AHORA
+// mismo. Se llena en cada llamarAPI() real (fresh o refinamiento) y se limpia explícitamente en
+// back()/cargarHistorial() -- ver esos call sites. Nunca se recalcula por adivinanza.
+var CX5U = {
+  fase: 'colapsado',        // 'colapsado' | 'expandido' | 'cargando' | 'pregunta' | 'retorno' | 'error'
+  organismId: null,         // organismoId Core vigente para el análisis actualmente mostrado
+  specialtyStudyRef: null,  // identidad técnica CX del análisis actualmente mostrado (o null)
+  contextCycleRef: null,    // efímero: uno nuevo por apertura autorizada, nunca persistido
+  bridgeSessionId: null,    // el que Core asigna al abrir; mismo valor durante todo ASK/CONTINUE
+  pregunta: '',             // texto editable por el humano antes de autorizar
+  respuestaHumanaActual: '',// respuesta en curso a un CONTEXT_ASK
+  askPayload: null,         // {pregunta,porQue} del último CONTEXT_ASK recibido
+  retorno: null,            // {envelope,reassessmentFrame,ledgerEntry,reassessError} del CONTEXT_RETURN
+  errorCode: null
+};
+window.CX5U = CX5U; // expuesto para banco dirigido / debug, nunca para escritura externa real
+var CX5U_CLIENTE = null;
+function cx5uObtenerCliente(){
+  if(!CX5U_CLIENTE) CX5U_CLIENTE = createCxBridgeClient('urbanism');
+  return CX5U_CLIENTE;
+}
+
+// ---- Sincroniza CX5U.organismId/specialtyStudyRef con el análisis que llamarAPI() está corriendo
+// AHORA. Se llama desde dentro de llamarAPI(), inmediatamente después de computar firmaCap/
+// organismoIdCap -- ANTES de que exista diagData siquiera, así que cuando el diagnóstico termine
+// de generarse la identidad ya está lista. No-op si no hay organismo (no sintetiza nada).
+// CX5-U-R1: ya no es un get-or-create histórico -- lee la ÚNICA identidad activa persistida; si
+// coincide en organismId+firma, la reutiliza (reanudación real: reload, segunda apertura de
+// Contextos sobre el MISMO análisis); si no coincide (o no hay ninguna activa, típicamente porque
+// back()/cargarHistorial() ya la limpiaron), mint una identidad nueva y la persiste como la única
+// activa, descartando cualquier activa anterior.
+function cx5uSincronizarIdentidad(organismId, firma){
+  if(!organismId){ CX5U.organismId = null; CX5U.specialtyStudyRef = null; return; }
+  var activa = cx5uCargarIdentidadActivaPersistida();
+  var ref;
+  if(activa && activa.organismId === organismId && activa.firma === firma){
+    ref = activa.specialtyStudyRef;
+  } else {
+    var nueva = { organismId: organismId, firma: firma, specialtyStudyRef: cx5uOpaqueId(), creado: new Date().toISOString() };
+    cx5uGuardarIdentidadActivaPersistida(nueva);
+    ref = nueva.specialtyStudyRef;
+  }
+  CX5U.organismId = organismId;
+  CX5U.specialtyStudyRef = ref;
+}
+// ---- Limpia tanto el puntero "actual" en memoria como la identidad activa PERSISTIDA. Ver
+// back()/cargarHistorial() para los dos call sites reales -- ninguno cambia con CX5-U-R1: la
+// corrección vive enteramente en QUÉ borra esta función, no en cuándo se llama. Efecto: el
+// próximo cx5uSincronizarIdentidad(), aunque reciba el MISMO organismId+firma que el análisis que
+// se acaba de cerrar, no encontrará identidad activa que coincida -- porque ya no hay ninguna -- y
+// mint una identidad genuinamente nueva. No toca CONTEXT_LEDGER ni ningún specialtyStudyRef ya
+// usado en ciclos de Contextos anteriores (esos quedan intactos del lado de Core).
+function cx5uLimpiarIdentidadActual(){
+  CX5U.organismId = null; CX5U.specialtyStudyRef = null;
+  cx5uLimpiarIdentidadActivaPersistida();
+}
+
+function cx5uNuevoContextCycleRef(){ return 'ctxcyc_urb_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
+function cx5uClean(v){ return (typeof v === 'string' && v.trim()) ? v.trim() : null; }
+
+// ---- Inspect: puerto EXACTO de inspectRuntime(runtime) del adapter certificado -- items no vacío
+// Y tensiones no vacío. Único gate metodológico real; el requisito de organismo es ajeno al
+// adapter (que no conoce Core) y se agrega acá tal como pide el punto 2 del brief de CX5-U.
+function cx5uInspeccionar(){
+  if(!diagData || typeof diagData !== 'object') return { ok:false, error:'URBAN_INITIAL_READING_MUST_REMAIN_FIRST' };
+  var items = Array.isArray(diagData.items) ? diagData.items : [];
+  if(!items.length) return { ok:false, error:'URBAN_INITIAL_READING_MUST_REMAIN_FIRST' };
+  var tensiones = Array.isArray(diagData.tensiones) ? diagData.tensiones.filter(Boolean) : [];
+  if(!tensiones.length) return { ok:false, error:'URBAN_ROOT_TENSION_REQUIRED' };
+  if(!CX5U.organismId) return { ok:false, error:'CX5U_ORGANISMO_REQUERIDO' };
+  if(!CX5U.specialtyStudyRef) return { ok:false, error:'CX5U_IDENTIDAD_NO_SINCRONIZADA' };
+  return { ok:true, value:{ items:items, tensiones:tensiones } };
+}
+function cx5uPuedeAbrir(){ return cx5uInspeccionar().ok === true; }
+function cx5uSpecialtyStudyRef(){ return CX5U.specialtyStudyRef; }
+
+// ---- BuildRequest, puerto fiel: reproduce exactamente la forma de liveSpecialtyWindow del
+// adapter certificado (runtimeSchema, city, firstTerritorialReadingProduced, rootTensions,
+// synthesis, weightedAxes, lowConfidenceItems, methodGuards -- 8 claves). Antes de que exista
+// diagData/gate, devuelve un shape defensivo (campos null/vacíos) para que la UI pueda invocarla
+// sin excepción incluso cuando el gate está cerrado -- nunca se llega a ENVIAR ese shape
+// defensivo porque cx5uAutorizarApertura() exige cx5uPuedeAbrir() antes. Sólo lee
+// diagData/ponderados, nunca los modifica; nunca manda diagData completo, los 324 puntos
+// completos, todos los indicadores, historial, checkpoint, proyectivo ni el organismo completo.
+function cx5uConstruirLiveSpecialtyWindow(){
+  var v = cx5uInspeccionar();
+  if(!v.ok){
+    return {
+      runtimeSchema: 'urbanismo.html/diagData',
+      city: cx5uClean(diagData && diagData.ciudad),
+      firstTerritorialReadingProduced: false,
+      rootTensions: [],
+      synthesis: null,
+      weightedAxes: {},
+      lowConfidenceItems: [],
+      methodGuards: { geometryUrban:true, PTAP:true, resolution324:true, automaticInitialReadingRemainsFirst:true }
+    };
+  }
+  var items = v.value.items, tensiones = v.value.tensiones;
+  var lowConfidence = items.filter(function(x){ return ((x && x.conf) || 'M') === 'B'; }).slice(0, 3).map(function(x){
+    return { eje: x.eje || null, nombre: x.nombre || null, valor: (x.valor == null ? null : x.valor), PT: x.PT || null, AP: x.AP || null };
+  });
+  return {
+    runtimeSchema: 'urbanismo.html/diagData',
+    city: cx5uClean(diagData.ciudad),
+    firstTerritorialReadingProduced: true,
+    rootTensions: tensiones.slice(0, 3).map(function(t){ return typeof t === 'string' ? t : JSON.stringify(t); }),
+    synthesis: cx5uClean(diagData.sintesis),
+    weightedAxes: Object.assign({}, ponderados || {}),
+    lowConfidenceItems: lowConfidence,
+    methodGuards: { geometryUrban:true, PTAP:true, resolution324:true, automaticInitialReadingRemainsFirst:true }
+  };
+}
+
+// ---- Acciones del gate. Ninguna de estas funciones toca diagData/ponderados/checkpoint/
+// historial/PT/AP/324/proyectivo -- ese es el invariante decisivo del retorno contextual.
+function cx5uExpandir(){
+  if(!cx5uPuedeAbrir()) return;
+  CX5U.fase = 'expandido';
+  cx5uRender();
+}
+
+// ---- Callbacks compartidos de un ciclo de bridge (mismo patrón que CX4-B/CX4-S/CX4-T): onProgress
+// reencadena cx5uContinuar(undefined) sin intervención humana. "miCiclo" fija el contextCycleRef
+// vigente al crear estos callbacks -- si el humano cancela/cambia de análisis mientras una
+// respuesta de Core todavía viaja, vigente() la descarta en silencio.
+function cx5uCallbacksCiclo(){
+  var miCiclo = CX5U.contextCycleRef;
+  function vigente(){ return CX5U.contextCycleRef === miCiclo; }
+  return {
+    onAsk: function(payload, bridgeSessionId){ if(!vigente()) return; CX5U.bridgeSessionId = bridgeSessionId; CX5U.askPayload = payload; CX5U.respuestaHumanaActual = ''; CX5U.fase = 'pregunta'; cx5uRender(); },
+    onProgress: function(payload, bridgeSessionId){ if(!vigente()) return; CX5U.bridgeSessionId = bridgeSessionId || CX5U.bridgeSessionId; CX5U.fase = 'cargando'; cx5uRender(); cx5uContinuar(undefined); },
+    onReturn: function(payload){ if(!vigente()) return; CX5U.retorno = payload; CX5U.bridgeSessionId = null; CX5U.fase = 'retorno'; cx5uRender(); },
+    onError: function(code){ if(!vigente()) return; CX5U.errorCode = code; CX5U.fase = 'error'; cx5uRender(); }
+  };
+}
+
+function cx5uAutorizarApertura(){
+  if(!cx5uPuedeAbrir()) return;
+  var cliente = cx5uObtenerCliente();
+  if(!cliente.soportado()){ CX5U.errorCode = CX_BRIDGE_ERROR_CODES.BRIDGE_UNSUPPORTED; CX5U.fase = 'error'; cx5uRender(); return; }
+  CX5U.contextCycleRef = cx5uNuevoContextCycleRef();
+  CX5U.fase = 'cargando';
+  cx5uRender();
+  var datos = {
+    organismId: CX5U.organismId,
+    specialtyStudyRef: cx5uSpecialtyStudyRef(),
+    contextCycleRef: CX5U.contextCycleRef,
+    question: cx5uClean(CX5U.pregunta) || 'Comprender qué condiciones externas pueden estar amplificando o reorientando la tensión territorial ya detectada.',
+    intention: 'Detectar si un proveedor, infraestructura, estándar o regulación externos pueden condicionar la incidencia, PT o AP de la lectura territorial, antes de reinterpretar la tensión raíz.',
+    humanApproved: true,
+    liveSpecialtyWindow: cx5uConstruirLiveSpecialtyWindow()
+  };
+  cliente.abrirContexto(datos, cx5uCallbacksCiclo());
+}
+
+// ---- continúa un ciclo YA abierto (misma bridgeSession), con o sin respuesta humana concreta.
+function cx5uContinuar(respuestaHumana){
+  if(!CX5U.bridgeSessionId) return;
+  var cliente = cx5uObtenerCliente();
+  var datos = { organismId: CX5U.organismId, specialtyStudyRef: cx5uSpecialtyStudyRef(), contextCycleRef: CX5U.contextCycleRef };
+  cliente.continuar(datos, CX5U.bridgeSessionId, respuestaHumana, cx5uCallbacksCiclo());
+}
+
+function cx5uResponderPregunta(){
+  if(!CX5U.bridgeSessionId) return;
+  var respuesta = CX5U.respuestaHumanaActual || '';
+  CX5U.fase = 'cargando';
+  cx5uRender();
+  cx5uContinuar(respuesta);
+}
+
+function cx5uCancelar(){
+  if(CX5U.bridgeSessionId){
+    var cliente = cx5uObtenerCliente();
+    var datos = { organismId: CX5U.organismId, specialtyStudyRef: cx5uSpecialtyStudyRef(), contextCycleRef: CX5U.contextCycleRef };
+    cliente.cancelar(datos, CX5U.bridgeSessionId, { onCancelAck: function(){ cx5uReiniciar(); }, onError: function(){ cx5uReiniciar(); } });
+  } else {
+    cx5uReiniciar();
+  }
+}
+
+function cx5uReiniciar(){
+  CX5U.fase = 'colapsado'; CX5U.contextCycleRef = null; CX5U.bridgeSessionId = null;
+  CX5U.pregunta = ''; CX5U.respuestaHumanaActual = ''; CX5U.askPayload = null; CX5U.errorCode = null;
+  if(typeof cx5uRender === 'function') cx5uRender();
+}
+
+// ---- Resume/Reassess-plan (equivalente a receiveEnvelope del adapter certificado): sólo muestra
+// el antecedente y exige revisión humana -- jamás toca diagData/ponderados/PT/AP/324/síntesis/
+// diagnóstico/proyectivo/checkpoint/historial/conocimiento humano incorporado, jamás convierte el
+// antecedente en evidencia, y jamás escribe 'ag_capa_contexto_pendiente_urbanismo' -- esa clave es
+// EXCLUSIVA del camino legado contextos.html -> aplicarContextoPegado()/procesarContextoJSON(); un
+// ContextEnvelope de CX5-U nunca se convierte automáticamente en esa capa legado. "Entendido" es
+// la ÚNICA acción posible acá, y sólo limpia CX5U -- nunca llama a ninguna función que mute el
+// análisis mostrado. Eso es lo que hace que "exact resume" sea trivial: seguimos con el mismo
+// diagData, el mismo ponderados, el mismo checkpoint (si lo hubiera), el mismo historial, la misma
+// pantalla -- sin haber navegado nunca a ningún otro lado. Contextos comprende el Campo; Urbanismo
+// es quien decide, después y humanamente, qué implica ese Campo para la incidencia/PT/AP/
+// interpretación de la tensión raíz -- este bloque no reinterpreta nada por sí mismo.
+function cx5uEntendidoRetorno(){
+  CX5U.retorno = null; CX5U.contextCycleRef = null; CX5U.fase = 'colapsado';
+  cx5uRender();
+}
+
+function cx5uEsc(s){ var d = document.createElement('div'); d.textContent = (s == null ? '' : String(s)); return d.innerHTML; }
+
+function cx5uTextoError(code){
+  var M = {
+    BRIDGE_UNSUPPORTED: 'Este navegador no admite el canal de Contextos Universal en esta pestaña.',
+    BRIDGE_CORE_UNREACHABLE: 'No hubo respuesta desde Contextos Universal. Revisá que esté abierto en otra pestaña e intentá de nuevo.',
+    BRIDGE_C1_RECHAZO: 'Contextos Universal no pudo procesar la solicitud.'
+  };
+  return M[code] || ('No se pudo abrir Contextos Universal (' + (code || 'error desconocido') + ').');
+}
+
+// ---- Render: usa las clases CSS PROPIAS de urbanismo.html (.card/.ctitle/.btn-pri/.btn-sec/
+// .btn-sml), no las de Tecnología/Sustentabilidad (.form-card/.btn/.campo/.acciones no existen
+// en este documento). Caja oculta por defecto -- sólo aparece con el gate satisfecho.
+var CX5U_CAJA_EL = null;
+function cx5uRender(){
+  var caja = CX5U_CAJA_EL || (CX5U_CAJA_EL = document.getElementById('cx5uCaja'));
+  if(!caja) return;
+  if(!cx5uPuedeAbrir()){ caja.style.display = 'none'; caja.innerHTML = ''; return; }
+  caja.style.display = '';
+  var html = '';
+  if(CX5U.fase === 'colapsado'){
+    html = '<button type="button" class="btn-sml" onclick="cx5uExpandir()">¿Algo externo podría estar condicionando esta tensión? Comprender el campo externo</button>';
+  } else if(CX5U.fase === 'expandido'){
+    html = '<div class="card" style="margin-top:10px">'
+      + '<div class="ctitle">Comprender el campo externo</div>'
+      + '<p style="font-size:12px;color:var(--texto2);line-height:1.6;margin-bottom:10px">Esto abre Contextos Universal para traer antecedentes externos (proveedores, infraestructura, estándares, regulación) que puedan condicionar la tensión territorial ya detectada. No confirma ni cambia incidencia, PT, AP, la tensión raíz, la síntesis, el diagnóstico ni el proyectivo por sí mismo -- vas a tener que volver a interpretar el análisis después con esto en cuenta.</p>'
+      + '<textarea style="width:100%;padding:8px;font-size:12px;border:1px solid var(--borde);border-radius:7px;resize:vertical;height:70px" oninput="CX5U.pregunta=this.value">' + cx5uEsc(CX5U.pregunta) + '</textarea>'
+      + '<div style="display:flex;gap:8px;margin-top:10px">'
+      + '<button type="button" class="btn-sec" onclick="cx5uCancelar()">Cancelar</button>'
+      + '<button type="button" class="btn-pri" onclick="cx5uAutorizarApertura()">Autorizar y abrir Contextos</button>'
+      + '</div></div>';
+  } else if(CX5U.fase === 'cargando'){
+    html = '<div class="card" style="margin-top:10px"><p style="font-size:12px;color:var(--texto2)">Comprendiendo el campo externo…</p></div>';
+  } else if(CX5U.fase === 'pregunta'){
+    var pregunta = (CX5U.askPayload && CX5U.askPayload.pregunta) || '';
+    var porQue = (CX5U.askPayload && CX5U.askPayload.porQue) || '';
+    html = '<div class="card" style="margin-top:10px">'
+      + '<div class="ctitle">Contextos Universal pregunta</div>'
+      + (porQue ? '<p style="font-size:11px;color:var(--texto3);margin-bottom:8px">' + cx5uEsc(porQue) + '</p>' : '')
+      + '<p style="font-size:13px;margin-bottom:10px">' + cx5uEsc(pregunta) + '</p>'
+      + '<textarea style="width:100%;padding:8px;font-size:12px;border:1px solid var(--borde);border-radius:7px;resize:vertical;height:70px" oninput="CX5U.respuestaHumanaActual=this.value">' + cx5uEsc(CX5U.respuestaHumanaActual) + '</textarea>'
+      + '<div style="display:flex;gap:8px;margin-top:10px">'
+      + '<button type="button" class="btn-sec" onclick="cx5uCancelar()">Cancelar</button>'
+      + '<button type="button" class="btn-pri" onclick="cx5uResponderPregunta()">Responder</button>'
+      + '</div></div>';
+  } else if(CX5U.fase === 'retorno'){
+    var envelope = CX5U.retorno && CX5U.retorno.envelope;
+    var resumen = (envelope && envelope.contextSummary) || 'Contextos no devolvió una síntesis.';
+    var exigeReevaluacion = !!(envelope && envelope.requiresSpecialtyReassessment === true);
+    html = '<div class="card" style="margin-top:10px">'
+      + '<div class="ctitle">Antecedente contextual</div>'
+      + '<p style="font-size:13px;margin-bottom:10px">' + cx5uEsc(resumen) + '</p>'
+      + '<p style="font-size:11px;color:var(--texto3);margin-bottom:10px">' + (exigeReevaluacion
+          ? 'Esto es un antecedente contextual externo, no evidencia del análisis ni un diagnóstico: revisalo y, si corresponde, volvé a interpretar qué implica para la incidencia, PT/AP o la lectura de la tensión raíz.'
+          : 'Esto es un antecedente contextual externo, no evidencia del análisis.')
+      + '</p>'
+      + '<button type="button" class="btn-pri" onclick="cx5uEntendidoRetorno()">Entendido</button>'
+      + '</div>';
+  } else if(CX5U.fase === 'error'){
+    html = '<div class="card" style="margin-top:10px">'
+      + '<p style="font-size:12px;color:var(--texto2);margin-bottom:10px">' + cx5uEsc(cx5uTextoError(CX5U.errorCode)) + '</p>'
+      + '<button type="button" class="btn-sec" onclick="cx5uReiniciar()">Cerrar</button>'
+      + '</div>';
+  }
+  caja.innerHTML = html;
+}
+
+// Los onclick="..."/oninput="..." de cx5uRender() son atributos HTML inline: se ejecutan en el
+// scope GLOBAL del documento. CX5U ya es global (window.CX5U, arriba); las funciones que esos
+// atributos invocan también necesitan existir en window explícitamente (mismo criterio que CX4-T).
+window.cx5uExpandir = cx5uExpandir;
+window.cx5uAutorizarApertura = cx5uAutorizarApertura;
+window.cx5uResponderPregunta = cx5uResponderPregunta;
+window.cx5uCancelar = cx5uCancelar;
+window.cx5uReiniciar = cx5uReiniciar;
+window.cx5uEntendidoRetorno = cx5uEntendidoRetorno;
+// Sólo lectura/diagnóstico + los dos hooks de lifecycle usados por llamarAPI()/back()/
+// cargarHistorial() -- también usado por el banco dirigido cx5u_dirigido.mjs para inspeccionar el
+// gate y el shape de liveSpecialtyWindow sin reimplementarlos en el test.
+window.cx5uPuedeAbrir = cx5uPuedeAbrir;
+window.cx5uSpecialtyStudyRef = cx5uSpecialtyStudyRef;
+window.cx5uConstruirLiveSpecialtyWindow = cx5uConstruirLiveSpecialtyWindow;
+window.cx5uSincronizarIdentidad = cx5uSincronizarIdentidad;
+window.cx5uLimpiarIdentidadActual = cx5uLimpiarIdentidadActual;
+window.cx5uRender = cx5uRender;
+/* ============ fin CX5-U ============ */
+
+/* ============ URB-RET-01 (01/09) · Urbanismo -> SpecialtyReturnEnvelope ============
+   Preflight URB-RET-00 (read-only) estableció que:
+   - cerrarLecturaUrban()/o.lecturas_urban NO pertenecen a este producto standalone -- son el
+     lente-chat legacy de index.html (state.modoUrban). No se tocan, no hay superposición real.
+   - receiveSpecialtyReturnEnvelope() (I2, index.html) es shadow-mode: valida/clasifica, nunca
+     persiste ni muta el organismo. No existe transporte cross-page real para este contrato, ni
+     siquiera en Sustentabilidad/Tecnología (las únicas dos que ya lo implementan) -- el patrón
+     certificado en ambas es: construir el envelope LOCALMENTE y mostrarlo como JSON exportable
+     (botón "Copiar"), sin ningún canal en vivo hacia el Core. Éste bloque replica ese mismo
+     patrón para Urbanismo. SPECIALTY_IDS de index.html ya incluye 'urbanism' -- no hace falta
+     tocar Core para habilitarlo.
+   - Contrato DISTINTO y separado del ContextEnvelope de CX5-U/R1: cero BroadcastChannel, cero
+     CX_BRIDGE_CLIENT, cero lectura/escritura de CONTEXT_LEDGER, cero lectura/escritura de
+     ag_urb_cx5u_identidad_activa_v2 (sólo se LEE CX5U.organismId/CX5U.specialtyStudyRef, ya
+     sincronizados por CX5-U, como proveniencia -- nunca se sincroniza ni limpia esa identidad
+     desde acá). Un antecedente recibido de Contextos nunca se convierte automáticamente en un
+     SpecialtyReturnEnvelope.
+   Constantes/validaciones/shape de abajo son un PUERTO VERBATIM del mismo
+   'comprender.specialty-contract'/'comprender.specialty-return.v1' ya certificado y vigente en
+   index.html (receiveSpecialtyReturnEnvelope) y portado 1:1 en tecnologia.html
+   (buildSpecialtyReturnEnvelope/validateSpecialtyReturnEnvelope) -- mismos valores exactos, sin
+   inventar campos ni una variante propia de Urbanismo. Prefijo urbRet01/URBRET01 en todo para no
+   colisionar con ningún identificador ya existente en este script y para que el corte quede
+   100% delimitado y auditable por separado del resto del archivo. */
+
+var URBRET01_CONTRACT_ID = 'comprender.specialty-contract';
+var URBRET01_CONTRACT_VERSION = '1.0.0';
+var URBRET01_SPECIALTY_IDS = Object.freeze(['sustainability', 'technology', 'urbanism', 'business']);
+var URBRET01_RETURN_CLASSES = Object.freeze([
+  'specialized_interpretation',
+  'relevant_tension_candidate',
+  'relevant_capability_or_gap',
+  'structural_risk_or_dependency',
+  'next_step_candidate',
+  'longitudinal_memory_candidate',
+  'principle_candidate',
+  'human_decision_reference',
+  'learning_candidate',
+  'cross_specialty_request'
+]);
+var URBRET01_PROTECTED_CORE_TARGETS = Object.freeze([
+  'organism.identity', 'organism.id', 'ficha.funcion', 'coreUniversalFunction',
+  'coreUniversalTensions', 'ficha.tensiones', 'memory.general', 'principles',
+  'ficha.proximo', 'ficha.proximos', 'permissions', 'governance', 'core.contracts'
+]);
+var URBRET01_ERROR_CODES = Object.freeze({
+  CONTRACT_MISMATCH: 'CONTRACT_MISMATCH',
+  SPECIALTY_NOT_ALLOWED: 'SPECIALTY_NOT_ALLOWED',
+  DESCRIPTOR_INVALID: 'DESCRIPTOR_INVALID',
+  ORGANISM_REQUIRED: 'ORGANISM_REQUIRED',
+  SCOPE_REQUIRED: 'SCOPE_REQUIRED',
+  VERSION_REQUIRED: 'VERSION_REQUIRED',
+  CORE_UNIVERSAL_FUNCTION_INVALID: 'CORE_UNIVERSAL_FUNCTION_INVALID',
+  INPUT_ENVELOPE_INVALID: 'INPUT_ENVELOPE_INVALID',
+  RETURN_CLASS_INVALID: 'RETURN_CLASS_INVALID',
+  RETURN_ENVELOPE_INVALID: 'RETURN_ENVELOPE_INVALID',
+  PROTECTED_CORE_TARGET: 'PROTECTED_CORE_TARGET',
+  HUMAN_REVIEW_REQUIRED: 'HUMAN_REVIEW_REQUIRED',
+  HUMAN_DECISION_REQUIRED: 'HUMAN_DECISION_REQUIRED',
+  PROVENANCE_REQUIRED: 'PROVENANCE_REQUIRED',
+  AUTOMATIC_WEIGHT_FORBIDDEN: 'AUTOMATIC_WEIGHT_FORBIDDEN',
+  AUTOMATIC_WINNER_FORBIDDEN: 'AUTOMATIC_WINNER_FORBIDDEN',
+  EVIDENCE_FABRICATION_FORBIDDEN: 'EVIDENCE_FABRICATION_FORBIDDEN'
+});
+
+function urbRet01Clone(v){ return v == null ? v : JSON.parse(JSON.stringify(v)); }
+function urbRet01Clean(v){ return typeof v === 'string' && v.trim() ? v.trim() : null; }
+function urbRet01Arr(v){ return Array.isArray(v) ? v : []; }
+function urbRet01Now(){ return new Date().toISOString(); }
+function urbRet01Ok(value){ return { ok:true, value:value }; }
+function urbRet01Fail(error, details){ return { ok:false, error:error, details: details || null }; }
+
+function urbRet01EsCoreTargetProtegido(target){
+  var t = urbRet01Clean(target);
+  if(!t) return false;
+  return URBRET01_PROTECTED_CORE_TARGETS.indexOf(t) > -1;
+}
+
+/* Puerto verbatim de validateHumanPreferences()/validateDecisionPayload() -- ninguna clase puede
+   traer un peso puesto por IA, un peso oculto, un "ganador automático" ni una decisión no
+   atribuida a un actor humano. */
+function urbRet01ValidarPreferenciasHumanas(preferences){
+  var lista = urbRet01Arr(preferences);
+  for(var i=0;i<lista.length;i++){
+    var p = lista[i];
+    if(p && p.source === 'ai' && p.weight != null) return urbRet01Fail(URBRET01_ERROR_CODES.AUTOMATIC_WEIGHT_FORBIDDEN);
+    if(p && p.hidden === true) return urbRet01Fail(URBRET01_ERROR_CODES.AUTOMATIC_WEIGHT_FORBIDDEN);
+  }
+  return urbRet01Ok(urbRet01Clone(lista));
+}
+function urbRet01ValidarDecisionHumana(payload){
+  payload = payload || {};
+  if(payload.automaticWinner === true || payload.systemSelected === true){
+    return urbRet01Fail(URBRET01_ERROR_CODES.AUTOMATIC_WINNER_FORBIDDEN);
+  }
+  if(payload.decision && payload.decision.actorType !== 'human'){
+    return urbRet01Fail(URBRET01_ERROR_CODES.HUMAN_DECISION_REQUIRED);
+  }
+  return urbRet01ValidarPreferenciasHumanas(payload.preferences || payload.criteria || []);
+}
+
+/* Puerto verbatim de buildSpecialtyReturnEnvelope() (index.html/tecnologia.html) -- misma forma,
+   mismas validaciones, mismo orden de chequeos. No agrega campos, no relaja ninguna garantía. */
+function urbRet01ConstruirEnvelope(input){
+  input = input || {};
+  var specialtyId = urbRet01Clean(input.specialtyId);
+  if(URBRET01_SPECIALTY_IDS.indexOf(specialtyId) === -1) return urbRet01Fail(URBRET01_ERROR_CODES.SPECIALTY_NOT_ALLOWED);
+  var returnClass = urbRet01Clean(input.returnClass);
+  if(URBRET01_RETURN_CLASSES.indexOf(returnClass) === -1) return urbRet01Fail(URBRET01_ERROR_CODES.RETURN_CLASS_INVALID);
+  if(!input.organismRef || !urbRet01Clean(input.organismRef.id)) return urbRet01Fail(URBRET01_ERROR_CODES.ORGANISM_REQUIRED);
+  if(!input.scope || typeof input.scope !== 'object') return urbRet01Fail(URBRET01_ERROR_CODES.SCOPE_REQUIRED);
+  if(input.version == null) return urbRet01Fail(URBRET01_ERROR_CODES.VERSION_REQUIRED);
+  if(!input.provenance || typeof input.provenance !== 'object') return urbRet01Fail(URBRET01_ERROR_CODES.PROVENANCE_REQUIRED);
+  if(input.targetHint && urbRet01EsCoreTargetProtegido(input.targetHint)) return urbRet01Fail(URBRET01_ERROR_CODES.PROTECTED_CORE_TARGET, input.targetHint);
+
+  if(returnClass === 'human_decision_reference'){
+    var dv = urbRet01ValidarDecisionHumana(input.payload);
+    if(!dv.ok) return dv;
+  }
+  if(input.payload && input.payload.evidenceCreatedBy === 'ai'){
+    return urbRet01Fail(URBRET01_ERROR_CODES.EVIDENCE_FABRICATION_FORBIDDEN);
+  }
+
+  var review = input.humanReview || {};
+  var requiresReview = returnClass !== 'specialized_interpretation' || input.requireHumanReview === true;
+  if(requiresReview && !(review.reviewed === true && urbRet01Clean(review.actorId))){
+    return urbRet01Fail(URBRET01_ERROR_CODES.HUMAN_REVIEW_REQUIRED);
+  }
+
+  var env = {
+    schema: 'comprender.specialty-return.v1',
+    contractId: URBRET01_CONTRACT_ID,
+    contractVersion: URBRET01_CONTRACT_VERSION,
+    specialtyId: specialtyId,
+    returnClass: returnClass,
+    createdAt: urbRet01Now(),
+    organismRef: urbRet01Clone(input.organismRef),
+    scope: urbRet01Clone(input.scope),
+    version: input.version,
+    sourceObjectRefs: urbRet01Arr(input.sourceObjectRefs).map(urbRet01Clone),
+    payload: urbRet01Clone(input.payload || {}),
+    targetHint: urbRet01Clean(input.targetHint),
+    provenance: urbRet01Clone(input.provenance),
+    confidence: urbRet01Clone(input.confidence || null),
+    limits: urbRet01Arr(input.limits).map(String),
+    humanReview: {
+      required: requiresReview,
+      reviewed: review.reviewed === true,
+      actorId: urbRet01Clean(review.actorId),
+      reviewedAt: urbRet01Clean(review.reviewedAt),
+      decision: urbRet01Clean(review.decision)
+    },
+    guarantees: {
+      proposalOnly: true,
+      directCoreWritePerformed: false,
+      directCoreMutationAuthorized: false,
+      antecedentDoesNotBecomeEvidence: true,
+      interpretationDoesNotBecomeCoreTruth: true,
+      requiresCoreSideAcceptance: true
+    }
+  };
+  return urbRet01Ok(env);
+}
+
+/* Puerto verbatim de validateSpecialtyReturnEnvelope() -- usado por el banco dirigido para
+   confirmar que cada envelope que arma este bloque es válido contra el contrato real, sin
+   reimplementar el chequeo en el test. */
+function urbRet01ValidarEnvelope(env){
+  if(!env || env.schema !== 'comprender.specialty-return.v1') return urbRet01Fail(URBRET01_ERROR_CODES.RETURN_ENVELOPE_INVALID, 'schema');
+  if(env.contractId !== URBRET01_CONTRACT_ID || env.contractVersion !== URBRET01_CONTRACT_VERSION) return urbRet01Fail(URBRET01_ERROR_CODES.CONTRACT_MISMATCH);
+  if(URBRET01_SPECIALTY_IDS.indexOf(env.specialtyId) === -1) return urbRet01Fail(URBRET01_ERROR_CODES.SPECIALTY_NOT_ALLOWED);
+  if(URBRET01_RETURN_CLASSES.indexOf(env.returnClass) === -1) return urbRet01Fail(URBRET01_ERROR_CODES.RETURN_CLASS_INVALID);
+  if(!env.organismRef || !urbRet01Clean(env.organismRef.id)) return urbRet01Fail(URBRET01_ERROR_CODES.ORGANISM_REQUIRED);
+  if(env.targetHint && urbRet01EsCoreTargetProtegido(env.targetHint)) return urbRet01Fail(URBRET01_ERROR_CODES.PROTECTED_CORE_TARGET, env.targetHint);
+  if(!env.provenance || typeof env.provenance !== 'object') return urbRet01Fail(URBRET01_ERROR_CODES.PROVENANCE_REQUIRED);
+  if(!env.guarantees || env.guarantees.directCoreWritePerformed !== false || env.guarantees.directCoreMutationAuthorized !== false){
+    return urbRet01Fail(URBRET01_ERROR_CODES.RETURN_ENVELOPE_INVALID, 'guarantees');
+  }
+  if(env.humanReview && env.humanReview.required && !(env.humanReview.reviewed && urbRet01Clean(env.humanReview.actorId))){
+    return urbRet01Fail(URBRET01_ERROR_CODES.HUMAN_REVIEW_REQUIRED);
+  }
+  if(env.returnClass === 'human_decision_reference'){
+    var dv = urbRet01ValidarDecisionHumana(env.payload);
+    if(!dv.ok) return dv;
+  }
+  if(env.payload && env.payload.evidenceCreatedBy === 'ai'){
+    return urbRet01Fail(URBRET01_ERROR_CODES.EVIDENCE_FABRICATION_FORBIDDEN);
+  }
+  return urbRet01Ok(urbRet01Clone(env));
+}
+
+/* ---- Identidad/proveniencia: SÓLO LECTURA de lo que CX5-U ya sincronizó. Nunca se fabrica un
+   organismo ni un urbanctx_* acá -- si no hay uno real y ya sincronizado, no hay retorno. ---- */
+function urbRet01IdentidadDisponible(){
+  return !!(typeof CX5U !== 'undefined' && CX5U && CX5U.organismId &&
+    typeof CX5U.specialtyStudyRef === 'string' && CX5U.specialtyStudyRef.indexOf('urbanctx_') === 0);
+}
+function urbRet01PuedePreparar(){
+  if(!diagData || typeof diagData !== 'object') return false;
+  var items = Array.isArray(diagData.items) ? diagData.items : [];
+  if(!items.length) return false;
+  var tensiones = Array.isArray(diagData.tensiones) ? diagData.tensiones.filter(Boolean) : [];
+  if(!tensiones.length) return false;
+  return urbRet01IdentidadDisponible();
+}
+
+/* ---- Contenido por clase: funciones PURAS, sólo leen diagData (nunca lo mutan, nunca mandan
+   diagData completo ni los 324 puntos). Cada una devuelve null si no hay material real que la
+   justifique -- "candidate ≠ Core Memory", "propuesta ≠ decisión ≠ implementación". ---- */
+function urbRet01TieneProyectivo(){
+  var r = diagData && diagData.receptivos;
+  var tieneReceptivos = !!(r && (
+    (r.nivel1 && urbRet01Arr(r.nivel1.acciones).length) ||
+    (r.nivel2 && urbRet01Arr(r.nivel2.acciones).length) ||
+    (r.nivel3 && urbRet01Arr(r.nivel3.acciones).length)
+  ));
+  var tieneEspiral = !!(diagData && Array.isArray(diagData.espiral) && diagData.espiral.length);
+  return tieneReceptivos || tieneEspiral;
+}
+function urbRet01ContenidoInterpretacion(){
+  if(!diagData || typeof diagData.sintesis !== 'string' || !diagData.sintesis.trim()) return null;
+  var tensiones = Array.isArray(diagData.tensiones) ? diagData.tensiones.filter(Boolean) : [];
+  if(!tensiones.length) return null;
+  return {
+    scope: { ciudad: diagData.ciudad || null },
+    sourceObjectRefs: ['urbanismo.diagData.sintesis', 'urbanismo.diagData.tensiones[0]'],
+    payload: (function(){
+      var p = { ciudad: diagData.ciudad || null, sintesis: diagData.sintesis, tensionRaiz: tensiones[0] };
+      if(typeof diagData.haiku === 'string' && diagData.haiku.trim()) p.haiku = diagData.haiku;
+      return p;
+    })(),
+    provenance: { generatedBy:'urbanismo.html', metodo:'lectura-territorial-324', ciudad: diagData.ciudad || null, at: urbRet01Now() },
+    targetHint: null
+  };
+}
+function urbRet01ContenidoTensionesSecundarias(){
+  var tensiones = (diagData && Array.isArray(diagData.tensiones)) ? diagData.tensiones.filter(Boolean) : [];
+  if(tensiones.length < 2) return null;
+  var secundarias = tensiones.slice(1);
+  return {
+    scope: { ciudad: diagData.ciudad || null },
+    sourceObjectRefs: secundarias.map(function(_, i){ return 'urbanismo.diagData.tensiones[' + (i + 1) + ']'; }),
+    payload: { ciudad: diagData.ciudad || null, tensiones: secundarias },
+    provenance: { generatedBy:'urbanismo.html', metodo:'lectura-territorial-324', ciudad: diagData.ciudad || null, at: urbRet01Now() },
+    targetHint: null
+  };
+}
+function urbRet01ContenidoProximoPaso(){
+  if(!diagData || !urbRet01TieneProyectivo()) return null;
+  var acciones = [];
+  if(diagData.receptivos){
+    ['nivel1','nivel2','nivel3'].forEach(function(k){
+      var n = diagData.receptivos[k];
+      if(n && Array.isArray(n.acciones)) acciones = acciones.concat(n.acciones);
+    });
+  }
+  if(!acciones.length && Array.isArray(diagData.espiral)){
+    acciones = diagData.espiral.map(function(s){ return s && s.paso; }).filter(Boolean);
+  }
+  if(!acciones.length) return null;
+  return {
+    scope: { ciudad: diagData.ciudad || null },
+    sourceObjectRefs: ['urbanismo.diagData.receptivos', 'urbanismo.diagData.espiral'],
+    payload: { ciudad: diagData.ciudad || null, acciones: acciones },
+    provenance: { generatedBy:'urbanismo.html', metodo:'abordaje-proyectivo', ciudad: diagData.ciudad || null, at: urbRet01Now() },
+    targetHint: null
+  };
+}
+function urbRet01ContenidoMemoriaLongitudinal(){
+  if(!diagData || typeof diagData.sintesis !== 'string' || !diagData.sintesis.trim() || !urbRet01TieneProyectivo()) return null;
+  return {
+    scope: { ciudad: diagData.ciudad || null },
+    sourceObjectRefs: ['urbanismo.diagData.sintesis', 'urbanismo.diagData.receptivos', 'urbanismo.diagData.espiral'],
+    payload: { ciudad: diagData.ciudad || null, sintesis: diagData.sintesis, cerradoConProyectivo: true, fecha: urbRet01Now() },
+    provenance: { generatedBy:'urbanismo.html', metodo:'diagnostico-y-proyectivo-cerrados', ciudad: diagData.ciudad || null, at: urbRet01Now() },
+    targetHint: null
+  };
+}
+// principle_candidate: deliberadamente SIN constructor de contenido. Urbanismo no tiene hoy
+// ningún detector real de recurrencia/principio (eso vive del lado del chat de Core, ajeno a
+// este producto) -- "no inferir principios sólo para llenar la clase" se cumple absteniéndose
+// por completo, no fabricando un candidato débil.
+
+/* ---- Persistencia: storage propio, nuevo, separado de diagData/checkpoint/CX5-U
+   metadata/CONTEXT_LEDGER/Contextos legacy/historial. Lista append-only, scoped por
+   organismId+specialtyStudyRef -- un urbanctx_* nuevo del MISMO organismo tiene su propia
+   colección; nunca se pisa un valor único. ---- */
+var URBRET01_STORAGE_LLAVE = 'ag_urb_ret01_envelopes_v1';
+function urbRet01CargarTodos(){
+  try{
+    var raw = JSON.parse(localStorage.getItem(URBRET01_STORAGE_LLAVE) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  }catch(e){ return []; }
+}
+function urbRet01GuardarTodos(lista){
+  try{ localStorage.setItem(URBRET01_STORAGE_LLAVE, JSON.stringify(lista)); }catch(e){ /* no bloquea la UI */ }
+}
+function urbRet01Append(organismId, specialtyStudyRef, envelope){
+  var lista = urbRet01CargarTodos();
+  lista.push({ organismId: organismId, specialtyStudyRef: specialtyStudyRef, envelope: envelope, guardadoEn: urbRet01Now() });
+  urbRet01GuardarTodos(lista);
+}
+function urbRet01LeerPorEstudio(organismId, specialtyStudyRef){
+  return urbRet01CargarTodos().filter(function(r){
+    return r && r.organismId === organismId && r.specialtyStudyRef === specialtyStudyRef;
+  }).map(function(r){ return r.envelope; });
+}
+
+/* ---- Orquestador: única función que decide QUÉ clases construir, según haya o no material
+   real. specialized_interpretation nunca requiere revisión humana (mismo criterio del contrato);
+   las demás sí -- por eso sólo se intentan cuando hay un actorId real (nunca se fabrica uno). ---- */
+function urbRet01PrepararTodos(actorId){
+  if(!urbRet01PuedePreparar()) return { ok:false, error:'IDENTIDAD_O_DIAGNOSTICO_NO_DISPONIBLE', envelopes:[] };
+  var organismId = CX5U.organismId;
+  var specialtyStudyRef = CX5U.specialtyStudyRef;
+  var organismRef = { id: organismId };
+  var actorLimpio = urbRet01Clean(actorId);
+  var generados = [];
+
+  function intentar(returnClass, contenido, humanReview){
+    if(!contenido) return;
+    var r = urbRet01ConstruirEnvelope({
+      specialtyId: 'urbanism', returnClass: returnClass, organismRef: organismRef,
+      scope: contenido.scope, version: 1, sourceObjectRefs: contenido.sourceObjectRefs,
+      payload: contenido.payload, targetHint: contenido.targetHint, provenance: contenido.provenance,
+      humanReview: humanReview
+    });
+    if(r.ok) generados.push(r.value);
+  }
+
+  intentar('specialized_interpretation', urbRet01ContenidoInterpretacion(), { reviewed:false, actorId:null });
+  if(actorLimpio){
+    intentar('relevant_tension_candidate', urbRet01ContenidoTensionesSecundarias(), { reviewed:true, actorId: actorLimpio });
+    intentar('next_step_candidate', urbRet01ContenidoProximoPaso(), { reviewed:true, actorId: actorLimpio });
+    intentar('longitudinal_memory_candidate', urbRet01ContenidoMemoriaLongitudinal(), { reviewed:true, actorId: actorLimpio });
+  }
+
+  generados.forEach(function(env){ urbRet01Append(organismId, specialtyStudyRef, env); });
+  return { ok:true, envelopes: generados };
+}
+
+/* ---- UX: caja mínima, texto explícito de que es un retorno PREPARADO/EXPORTABLE, nunca "ya
+   incorporado al Core". Reusa el mismo vocabulario CSS de este archivo (.card/.ctitle/.btn-sec/
+   .btn-sml), sin pestaña ni pantalla nueva. ---- */
+function urbRet01EscapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function urbRet01Render(){
+  var caja = document.getElementById('urbRet01Caja');
+  if(!caja) return;
+  if(!urbRet01PuedePreparar()){ caja.style.display = 'none'; caja.innerHTML = ''; return; }
+  caja.style.display = 'block';
+  var existentes = urbRet01LeerPorEstudio(CX5U.organismId, CX5U.specialtyStudyRef);
+  var listaHtml = existentes.length ? existentes.map(function(env, i){
+    // MIG-URB-01 (02/09): "Enviar a Comprender" es la única acción humana explícita de envío,
+    // separada de "Copiar JSON" -- reutiliza el envelope real ya certificado tal cual está en
+    // pantalla (nunca reconstruye otro). El estado (enviado/duplicado) se recuerda en memoria
+    // por índice+organismo+estudio para que sobreviva a los re-render de esta caja.
+    var claveEnvio = urbRet01ClaveEnvio(i);
+    var estadoEnvio = _urbRet01EnviosEnCurso[claveEnvio];
+    var botonEnviarHtml = estadoEnvio === 'enviado'
+      ? '<button class="btn-sml" disabled>Enviado a Comprender ✓</button>'
+      : (estadoEnvio === 'duplicado'
+        ? '<button class="btn-sml" disabled>Ya estaba en camino a Comprender</button>'
+        : '<button class="btn-sml" onclick="urbRet01Enviar(' + i + ')">Enviar a Comprender</button>');
+    return '<div class="card" style="margin-top:.5rem">' +
+      '<div class="ctitle" style="font-size:12px">' + urbRet01EscapeHtml(env.returnClass) + '</div>' +
+      '<pre style="white-space:pre-wrap;font-size:10px;max-height:180px;overflow:auto;background:#f7f7f7;padding:8px;border-radius:8px">' + urbRet01EscapeHtml(JSON.stringify(env, null, 2)) + '</pre>' +
+      '<button class="btn-sml" onclick="urbRet01Copiar(' + i + ')">Copiar JSON</button> ' +
+      botonEnviarHtml +
+      '</div>';
+  }).join('') : '<p style="font-size:11px;color:var(--texto3)">Todavía no se preparó ningún retorno para este análisis.</p>';
+  caja.innerHTML =
+    '<div class="card" style="margin-top:1rem">' +
+      '<div class="ctitle">Retorno hacia el Core (comprender.specialty-return.v1)</div>' +
+      '<p style="font-size:11px;color:var(--texto3)">Esto prepara un retorno EXPORTABLE, no una incorporación automática. El Core todavía debe aceptarlo del otro lado.</p>' +
+      '<button class="btn-sec btn-sml" onclick="urbRet01OnClickPreparar()">Preparar retorno</button>' +
+      '<div id="urbRet01Lista">' + listaHtml + '</div>' +
+    '</div>';
+}
+async function urbRet01OnClickPreparar(){
+  if(!urbRet01PuedePreparar()) return;
+  var actorEmail = '';
+  try{
+    if(typeof window.obtenerCorreoActivoComprender === 'function'){
+      actorEmail = await window.obtenerCorreoActivoComprender();
+    }
+  }catch(e){ actorEmail = ''; }
+  urbRet01PrepararTodos(actorEmail);
+  urbRet01Render();
+}
+function urbRet01Copiar(indice){
+  var existentes = urbRet01LeerPorEstudio(CX5U.organismId, CX5U.specialtyStudyRef);
+  var env = existentes[indice];
+  if(!env) return;
+  try{ navigator.clipboard.writeText(JSON.stringify(env, null, 2)); }catch(e){ /* silencioso, no bloquea */ }
+}
+/* MIG-URB-01 (02/09): estado en memoria (no persistido) de qué índices ya se enviaron/estaban
+   duplicados en esta sesión de pantalla -- puramente cosmético para el botón; la verdad real de
+   qué se envió vive en RETTRANSPORT01_STORAGE_LLAVE (ret_transport01_outbox_v1), no acá. */
+var _urbRet01EnviosEnCurso = {};
+function urbRet01ClaveEnvio(indice){
+  return (CX5U.organismId || '') + '|' + (CX5U.specialtyStudyRef || '') + '|' + indice;
+}
+/* Única acción humana explícita de envío (mismo brief RET-TRANSPORT-01 ya certificado en
+   Sustentabilidad/Tecnología): reutiliza el envelope real tal cual está en pantalla (nunca
+   reconstruye otro), y deja specialtyStudyRef = CX5U.specialtyStudyRef (urbanctx_* real, NUNCA
+   la firma de checkpoint) como metadata del item de outbox -- no forma parte del envelope en sí. */
+function urbRet01Enviar(indice){
+  var existentes = urbRet01LeerPorEstudio(CX5U.organismId, CX5U.specialtyStudyRef);
+  var env = existentes[indice];
+  if(!env) return;
+  var r = rtp01Encolar(env, { specialtyStudyRef: CX5U.specialtyStudyRef });
+  var clave = urbRet01ClaveEnvio(indice);
+  _urbRet01EnviosEnCurso[clave] = (r && r.ok) ? (r.duplicado ? 'duplicado' : 'enviado') : null;
+  urbRet01Render();
+}
+
+// Sólo lectura/construcción + los pocos puntos que los bancos dirigidos urb_ret_01_dirigido.mjs /
+// mig_urb_01_dirigido.mjs necesitan inspeccionar sin reimplementarlos en el test.
+window.urbRet01PuedePreparar = urbRet01PuedePreparar;
+window.urbRet01PrepararTodos = urbRet01PrepararTodos;
+window.urbRet01LeerPorEstudio = urbRet01LeerPorEstudio;
+window.urbRet01ConstruirEnvelope = urbRet01ConstruirEnvelope;
+window.urbRet01ValidarEnvelope = urbRet01ValidarEnvelope;
+window.urbRet01Render = urbRet01Render;
+window.urbRet01Enviar = urbRet01Enviar;
+/* ============ fin URB-RET-01 ============ */
+
+/* ============================================================================
+   RET-TRANSPORT-01 (02/09) · Outbox writer -- copia VERBATIM (mismos nombres con prefijo rtp01,
+   mismo algoritmo de fingerprint, misma forma de registro) del bloque equivalente de index.html
+   (rettransport01*), mismo código ya certificado en sustentabilidad.html/tecnologia.html.
+   Urbanismo NUNCA llama a receiveSpecialtyReturnEnvelope() ni a retgov01RecibirEnvelope()
+   cross-page, ni escribe organismo -- sólo encola en localStorage compartido (mismo origin); el
+   consumo real y la única puerta hacia RET-GOV viven exclusivamente en index.html. Storage key
+   nueva y separada de ag_export_pendiente_incorporar (legacy, ahora apagado como productor de
+   resultados nuevos -- ver exportarHistorial() más arriba) y de ag_core_specialty_inbox
+   (RET-GOV-01).
+   ============================================================================ */
+var RETTRANSPORT01_STORAGE_LLAVE = 'ret_transport01_outbox_v1';
+var RETTRANSPORT01_OUTBOX_MAX = 200;
+
+function rtp01Clonar(v){ return v == null ? v : JSON.parse(JSON.stringify(v)); }
+function rtp01Canonicalizar(valor){
+  if(Array.isArray(valor)) return valor.map(rtp01Canonicalizar);
+  if(valor && typeof valor === 'object'){
+    var claves = Object.keys(valor).sort(), out = {};
+    claves.forEach(function(k){ out[k] = rtp01Canonicalizar(valor[k]); });
+    return out;
+  }
+  return valor;
+}
+function rtp01FnvA(str, seed){
+  var h = seed >>> 0;
+  for(var i=0;i<str.length;i++){
+    h ^= str.charCodeAt(i);
+    h = (h + ((h<<1) + (h<<4) + (h<<7) + (h<<8) + (h<<24))) >>> 0;
+  }
+  return h >>> 0;
+}
+function rtp01HashTexto(s){
+  var a = rtp01FnvA(s, 0x811c9dc5);
+  var b = rtp01FnvA(s, 0x01000193);
+  return a.toString(16).padStart(8,'0') + b.toString(16).padStart(8,'0');
+}
+function rtp01Fingerprint(envelope){ return rtp01HashTexto(JSON.stringify(rtp01Canonicalizar(envelope))); }
+function rtp01NuevoOutboxId(){ return 'rto_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
+
+function rtp01CargarOutbox(){
+  try{
+    var c = JSON.parse(localStorage.getItem(RETTRANSPORT01_STORAGE_LLAVE) || 'null');
+    if(!c || !Array.isArray(c.items)) return { version:1, items: [] };
+    return c;
+  }catch(e){ return { version:1, items: [] }; }
+}
+function rtp01GuardarOutbox(c){
+  try{ localStorage.setItem(RETTRANSPORT01_STORAGE_LLAVE, JSON.stringify(c)); return true; }catch(e){ return false; }
+}
+function rtp01PurgarOutbox(c){
+  if(c.items.length <= RETTRANSPORT01_OUTBOX_MAX) return c;
+  var pend = c.items.filter(function(it){ return it.estadoEntrega === 'pending'; });
+  var resto = c.items.filter(function(it){ return it.estadoEntrega !== 'pending'; });
+  resto = resto.slice(Math.max(0, resto.length - (RETTRANSPORT01_OUTBOX_MAX - pend.length)));
+  c.items = resto.concat(pend);
+  return c;
+}
+/* Única acción humana explícita de envío (brief RET-TRANSPORT-01): generar el envelope nunca lo
+   encola solo -- sólo este llamado, disparado por el botón "Enviar a Comprender", deja el
+   envelope real ya certificado listo para que Core lo consuma en su propio lifecycle. Idempotente
+   por fingerprint+organismId: un mismo envelope reenviado nunca crea un segundo item pendiente. */
+function rtp01Encolar(envelope, meta){
+  meta = meta || {};
+  if(!envelope || typeof envelope !== 'object' || envelope.schema !== 'comprender.specialty-return.v1'){
+    return { ok:false, error:'ENVELOPE_INVALIDO' };
+  }
+  var organismId = envelope.organismRef && envelope.organismRef.id || null;
+  if(!organismId) return { ok:false, error:'ORGANISM_REQUIRED' };
+  var huella = rtp01Fingerprint(envelope);
+  var c = rtp01CargarOutbox();
+  var existente = c.items.find(function(it){ return it.fingerprint === huella && it.organismId === organismId; });
+  if(existente) return { ok:true, duplicado:true, outboxId: existente.outboxId };
+  var item = {
+    outboxId: rtp01NuevoOutboxId(),
+    envelope: rtp01Clonar(envelope),
+    fingerprint: huella,
+    specialtyId: envelope.specialtyId || null,
+    organismId: organismId,
+    specialtyStudyRef: meta.specialtyStudyRef || null,
+    estadoEntrega: 'pending',
+    intentosTecnicos: 0,
+    receivedId: null,
+    encoladoEn: new Date().toISOString(),
+    ultimoIntentoEn: null,
+    entregadoEn: null,
+    ultimoError: null
+  };
+  c.items.push(item);
+  c = rtp01PurgarOutbox(c);
+  rtp01GuardarOutbox(c);
+  return { ok:true, duplicado:false, outboxId: item.outboxId };
+}
+window.rtp01Encolar = rtp01Encolar;
+window.rtp01CargarOutbox = rtp01CargarOutbox;
+/* ============ fin RET-TRANSPORT-01 (outbox writer) ============ */
 </script>
 <script>
 /* ================================================================

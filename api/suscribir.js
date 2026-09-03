@@ -31,7 +31,7 @@
 // VARIABLES DE ENTORNO
 //   MP_ACCESS_TOKEN · LEMONSQUEEZY_API_KEY · SUPABASE_URL · SUPABASE_SECRET_KEY   (ya cargadas)
 
-import { PLANES } from './catalogo.js';
+import { PLANES, planContratable } from './catalogo.js';
 import { pasarelaDe } from '../lib/pasarela.js';
 
 const MP = 'https://api.mercadopago.com';
@@ -204,10 +204,18 @@ export default async function handler(req, res) {
   let cuerpo = req.body;
   if (typeof cuerpo === 'string') { try { cuerpo = JSON.parse(cuerpo); } catch (e) { cuerpo = {}; } }
   const pedido = String((cuerpo && cuerpo.plan) || '').toLowerCase();
-  const plan = PLANES[pedido];
-  if (!plan) {
-    return res.status(400).json({ error: { message: 'Plan invalido.' } });
+  // PLAN-C2A (26/08): un solo contrato de error para los tres casos que ya no deben poder
+  // contratarse -- identificador desconocido, o un plan que existe en el catálogo pero ya no
+  // es contratable (estudio/magister, retirados de la oferta pública, conservados sólo para
+  // reconocer suscripciones y perfiles legacy). planContratable() ya cubre ambos casos (false
+  // tanto si PLANES[pedido] no existe como si existe con contratable:false) -- ni un POST
+  // directo a este endpoint puede armar una alta o un cambio de plan hacia Estudio/Magister.
+  if (!planContratable(pedido)) {
+    return res.status(400).json({
+      error: { message: 'Ese plan no está disponible para contratación.', codigo: 'plan_no_contratable' },
+    });
   }
+  const plan = PLANES[pedido];
 
   // --- ¿Alta nueva o cambio de plan? Depende del estado real de la cuenta. ---
   let perfil = null;
