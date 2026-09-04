@@ -3175,6 +3175,7 @@ window.SustRuntime = {
     menu.style.right = Math.max(10, window.innerWidth - r.right) + 'px';
     menu.classList.add('open');
   }
+  window.abrirModulosMenu = abrirModulosMenu;
   document.addEventListener('click', function(e){
     var menu = document.getElementById('modulosMenu');
     if(menu.classList.contains('open') && !menu.contains(e.target) && !e.target.closest('.cai-ham')){
