@@ -13747,7 +13747,7 @@ var CX_BRIDGE_PAYLOAD_PERMITIDO = Object.freeze({
   CONTEXT_CONTINUE: ['respuestaHumana'],
   CONTEXT_CANCEL: [],
   CONTEXT_ASK: ['pregunta', 'porQue'],
-  CONTEXT_PROGRESS: [],
+  CONTEXT_PROGRESS: ['fase'],
   CONTEXT_RETURN: ['envelope', 'reassessmentFrame', 'ledgerEntry', 'reassessError'],
   CONTEXT_ERROR: ['code'],
   CONTEXT_CANCEL_ACK: []
@@ -13781,7 +13781,8 @@ var CX_BRIDGE_ERROR_CODES = Object.freeze({
   CAMPO_NO_PERMITIDO: 'BRIDGE_CAMPO_NO_PERMITIDO',
   C1_RECHAZO: 'BRIDGE_C1_RECHAZO',
   BRIDGE_UNSUPPORTED: 'BRIDGE_UNSUPPORTED',
-  CORE_UNREACHABLE: 'BRIDGE_CORE_UNREACHABLE'
+  CORE_UNREACHABLE: 'BRIDGE_CORE_UNREACHABLE',
+  SOLICITUD_EN_CURSO: 'BRIDGE_SOLICITUD_EN_CURSO'
 });
 
 // IDs con estilo idéntico al resto del código (rsm_/ctxop_/gc_: prefijo + contador o timestamp
@@ -14065,18 +14066,67 @@ function CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, openingId, bridge
   return { ok:false, tipo:'cierre' };
 }
 
+// CTX-URB-LIVE-02 (04/09): guarda minima de concurrencia + avisador de progreso real -- no es un
+// registry nuevo, es un unico Set de claves (misma clase de estructura que ya usan
+// createCxBridgeDedupSet/CX_BRIDGE_SPY) mas una funcion que envuelve CX_BRIDGE_responder(). Vive y
+// muere con la pestana de Core, igual que CX_BRIDGE_SESSION_REGISTRY.
+var CX_BRIDGE_CORE_EN_CURSO = new Set();
+function CX_BRIDGE_CORE_claveApertura(msg){
+  return 'open::' + msg.specialtyId + '::' + msg.organismId + '::' + msg.specialtyStudyRef + '::' + msg.contextCycleRef;
+}
+function CX_BRIDGE_CORE_claveContinuacion(msg){
+  return 'cont::' + msg.bridgeSessionId;
+}
+// Conecta el aviso de fase YA EXISTENTE del pipeline C1 (C1G1_avisarFase, hoy con onFase=null en
+// el unico listener real -- ver CX_BRIDGE_CORE_iniciar mas abajo, sin cambios) con un
+// CONTEXT_PROGRESS real hacia la especialidad que origino ESTE mensaje. Nunca reemplaza ni
+// adelanta el CONTEXT_ASK/CONTEXT_PROGRESS "fin de tramo"/CONTEXT_RETURN final, que sigue siendo
+// exclusivo de CX_BRIDGE_CORE_despacharNormalizado al terminar. payload.fase es la unica extension
+// agregada al contrato de CONTEXT_PROGRESS (antes: payload siempre {}); msg.to sigue siendo
+// siempre la especialidad que mando el mensaje original, asi que ninguna otra especialidad recibe
+// esto -- y aunque lo recibiera, su propio CX_BRIDGE_PAYLOAD_PERMITIDO (no tocado aca) lo
+// descartaria igual que cualquier mensaje que no reconoce.
+function CX_BRIDGE_CORE_crearAvisadorProgreso(canal, msgOriginal){
+  return function(faseId){
+    if(!faseId) return;
+    try{ CX_BRIDGE_responder(canal, 'CONTEXT_PROGRESS', msgOriginal, { fase: String(faseId) }); }catch(e){}
+  };
+}
+
 async function CX_BRIDGE_CORE_manejarOpen(canal, msg, onFase){
-  var request = CX_BRIDGE_construirRequestApertura(msg);
-  var resultado;
-  try{ resultado = await abrirContextoDesdeEspecialidadReal(request, onFase); }
-  catch(e){ CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.C1_RECHAZO }); return { ok:false }; }
-  if(!resultado || resultado.ok !== true){
-    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: (resultado && resultado.error) || CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
-    return { ok:false };
+  // CTX-URB-LIVE-02: impide un segundo pipeline C1 concurrente para la MISMA identidad
+  // (especialidad+organismo+estudio+ciclo) mientras ya hay uno real en curso -- doble click,
+  // reintento humano tras un timeout, o una segunda pestana con la misma especialidad abierta.
+  // No reemplaza el resumeToken/CONTEXT_RESUME_REGISTRY existente (esto es solo una guarda de
+  // concurrencia del bridge, nunca decide nada del lado C1/CX0/CX1).
+  var clave = CX_BRIDGE_CORE_claveApertura(msg);
+  if(CX_BRIDGE_CORE_EN_CURSO.has(clave)){
+    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.SOLICITUD_EN_CURSO });
+    return { ok:false, duplicado:true };
   }
-  var openingId = (resultado.resultado && resultado.resultado.estado && resultado.resultado.estado.opening && resultado.resultado.estado.opening.openingId) || null;
-  var norm = CX_BRIDGE_normalizarResultadoC1(resultado.resultado, true);
-  return CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, openingId, null);
+  CX_BRIDGE_CORE_EN_CURSO.add(clave);
+  try{
+    // CTX-URB-LIVE-02: onFase real conectado -- ignora el "null" que llega desde
+    // CX_BRIDGE_CORE_manejarMensaje() (el unico listener real, sin cambios) y arma un avisador
+    // propio atado a ESTE mensaje/canal, asi cada C1G1_avisarFase(...) del pipeline emite un
+    // CONTEXT_PROGRESS real hacia quien pregunto, mientras el tramo sigue en curso.
+    var avisar = CX_BRIDGE_CORE_crearAvisadorProgreso(canal, msg);
+    var request = CX_BRIDGE_construirRequestApertura(msg);
+    var resultado;
+    try{ resultado = await abrirContextoDesdeEspecialidadReal(request, avisar); }
+    catch(e){ CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.C1_RECHAZO }); return { ok:false }; }
+    if(!resultado || resultado.ok !== true){
+      CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: (resultado && resultado.error) || CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
+      return { ok:false };
+    }
+    var openingId = (resultado.resultado && resultado.resultado.estado && resultado.resultado.estado.opening && resultado.resultado.estado.opening.openingId) || null;
+    var norm = CX_BRIDGE_normalizarResultadoC1(resultado.resultado, true);
+    return CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, openingId, null);
+  } finally {
+    // CTX-URB-LIVE-02 (punto 6): limpia SIEMPRE, sea exito, error o excepcion -- nunca queda una
+    // clave "en curso" huerfana bloqueando reintentos legitimos futuros.
+    CX_BRIDGE_CORE_EN_CURSO.delete(clave);
+  }
 }
 
 async function CX_BRIDGE_CORE_manejarContinue(canal, msg, onFase){
@@ -14088,24 +14138,38 @@ async function CX_BRIDGE_CORE_manejarContinue(canal, msg, onFase){
     CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.IDENTIDAD_NO_COINCIDE });
     return { ok:false };
   }
-  var payload = msg.payload || {};
-  var resultado;
+  // CTX-URB-LIVE-02: misma guarda de concurrencia que manejarOpen, ahora por bridgeSessionId --
+  // impide una segunda CONTEXT_CONTINUE (u otra respuesta a CONTEXT_ASK) concurrente sobre la
+  // MISMA sesion ya abierta mientras la anterior todavia esta corriendo.
+  var clave = CX_BRIDGE_CORE_claveContinuacion(msg);
+  if(CX_BRIDGE_CORE_EN_CURSO.has(clave)){
+    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.SOLICITUD_EN_CURSO });
+    return { ok:false, duplicado:true };
+  }
+  CX_BRIDGE_CORE_EN_CURSO.add(clave);
   try{
-    resultado = s.esperaRespuesta
-      ? await C1G1_responderPregunta(s.estado, payload.respuestaHumana, onFase)
-      : await continuarContextoDesdeEspecialidadReal(s.estado, onFase);
-  }catch(e){
-    CX_BRIDGE_SESSION_REGISTRY.eliminar(msg.bridgeSessionId);
-    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
-    return { ok:false };
+    var avisar = CX_BRIDGE_CORE_crearAvisadorProgreso(canal, msg);
+    var payload = msg.payload || {};
+    var resultado;
+    try{
+      resultado = s.esperaRespuesta
+        ? await C1G1_responderPregunta(s.estado, payload.respuestaHumana, avisar)
+        : await continuarContextoDesdeEspecialidadReal(s.estado, avisar);
+    }catch(e){
+      CX_BRIDGE_SESSION_REGISTRY.eliminar(msg.bridgeSessionId);
+      CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
+      return { ok:false };
+    }
+    if(resultado && resultado.ok === false){
+      CX_BRIDGE_SESSION_REGISTRY.eliminar(msg.bridgeSessionId);
+      CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: resultado.error || CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
+      return { ok:false };
+    }
+    var norm = CX_BRIDGE_normalizarResultadoC1(resultado, false);
+    return CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, s.openingId, msg.bridgeSessionId);
+  } finally {
+    CX_BRIDGE_CORE_EN_CURSO.delete(clave);
   }
-  if(resultado && resultado.ok === false){
-    CX_BRIDGE_SESSION_REGISTRY.eliminar(msg.bridgeSessionId);
-    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: resultado.error || CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
-    return { ok:false };
-  }
-  var norm = CX_BRIDGE_normalizarResultadoC1(resultado, false);
-  return CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, s.openingId, msg.bridgeSessionId);
 }
 
 function CX_BRIDGE_CORE_manejarCancel(canal, msg){

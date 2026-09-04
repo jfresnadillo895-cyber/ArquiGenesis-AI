@@ -7271,7 +7271,7 @@ var CX_BRIDGE_PAYLOAD_PERMITIDO = Object.freeze({
   CONTEXT_CONTINUE: ['respuestaHumana'],
   CONTEXT_CANCEL: [],
   CONTEXT_ASK: ['pregunta', 'porQue'],
-  CONTEXT_PROGRESS: [],
+  CONTEXT_PROGRESS: ['fase'],
   CONTEXT_RETURN: ['envelope', 'reassessmentFrame', 'ledgerEntry', 'reassessError'],
   CONTEXT_ERROR: ['code'],
   CONTEXT_CANCEL_ACK: []
@@ -7292,7 +7292,9 @@ var CX_BRIDGE_ERROR_CODES = Object.freeze({
   CAMPO_NO_PERMITIDO: 'BRIDGE_CAMPO_NO_PERMITIDO',
   C1_RECHAZO: 'BRIDGE_C1_RECHAZO',
   BRIDGE_UNSUPPORTED: 'BRIDGE_UNSUPPORTED',
-  CORE_UNREACHABLE: 'BRIDGE_CORE_UNREACHABLE'
+  CORE_UNREACHABLE: 'BRIDGE_CORE_UNREACHABLE',
+  CORE_INACTIVO: 'BRIDGE_CORE_INACTIVO',
+  SOLICITUD_EN_CURSO: 'BRIDGE_SOLICITUD_EN_CURSO'
 });
 
 var CX_BRIDGE_SEQ = { session: 0, correlation: 0, message: 0 };
@@ -7386,11 +7388,32 @@ function createCxBridgeDedupSet(maxEntradas){
    lo que cada evento trae en su payload contractual. */
 function createCxBridgeClient(specialtyId, opciones){
   opciones = opciones || {};
-  var timeoutMs = (typeof opciones.timeoutMs === 'number') ? opciones.timeoutMs : 15000;
+  // CTX-URB-LIVE-02 (04/09): timeoutMs pasa a representar INACTIVIDAD, no la duracion total de la
+  // solicitud -- cada CONTEXT_PROGRESS real con payload.fase (latido del pipeline C1 real del lado
+  // Core) rearma este mismo plazo (ver canal.onmessage mas abajo); solo CONTEXT_ASK/CONTEXT_RETURN/
+  // CONTEXT_ERROR/CONTEXT_CANCEL_ACK cierran la solicitud de verdad. 90000ms (90s) por defecto: una
+  // sola llamada real a Anthropic en este mismo sistema ya se midio en ~33s (CORE-URB-HANDOFF-01/
+  // ADDENDUM); los huecos reales entre dos avisos de fase consecutivos de C1G1_avisarFase pueden
+  // cubrir hasta 2 llamadas reales seguidas (p.ej. executeCognitiveAction + reassessCognitiveAction
+  // dentro de un mismo ciclo, o executeFunctionalInterpretation + executeFocus antes de 'validacion')
+  // -- 90s deja margen real sobre ese peor caso medido, sin ser una espera indefinida.
+  var timeoutMs = (typeof opciones.timeoutMs === 'number') ? opciones.timeoutMs : 90000;
   var canal = (typeof BroadcastChannel === 'undefined') ? null : new BroadcastChannel(CX_BRIDGE_CHANNEL_NAME);
   var pendientes = new Map();
   var dedup = createCxBridgeDedupSet(200);
   var bridgeSessionActual = null;
+
+  // CTX-URB-LIVE-02: arma (o rearma) el temporizador de inactividad de una solicitud pendiente.
+  // "activo.valor" distingue, al vencer, si hubo o no al menos un latido real antes de apagarse --
+  // eso es lo que permite diferenciar "Core nunca respondio nada" de "Core respondia y dejo de
+  // hacerlo" (punto 7 del encargo) sin agregar ningun estado nuevo por fuera de "pendientes".
+  function armarTimeoutInactividad(correlationId, onError, activo){
+    return setTimeout(function(){
+      pendientes.delete(correlationId);
+      var code = activo.valor ? CX_BRIDGE_ERROR_CODES.CORE_INACTIVO : CX_BRIDGE_ERROR_CODES.CORE_UNREACHABLE;
+      onError && onError(code);
+    }, timeoutMs);
+  }
 
   if(canal){
     canal.onmessage = function(ev){
@@ -7402,6 +7425,16 @@ function createCxBridgeClient(specialtyId, opciones){
       dedup.marcar(msg.messageId);
       var p = pendientes.get(msg.correlationId);
       if(!p) return;   // tardío o desconocido: se descarta, nunca se reconstruye nada.
+      // CTX-URB-LIVE-02: un CONTEXT_PROGRESS con payload.fase es un latido real del pipeline
+      // TODAVIA en curso -- rearma la inactividad, pero NO cierra la solicitud ni dispara
+      // CONTEXT_CONTINUE (eso sigue siendo exclusivo del CONTEXT_PROGRESS "fin de tramo", sin
+      // payload.fase, ya existente -- ver rama else-if mas abajo, sin cambios).
+      if(msg.type === 'CONTEXT_PROGRESS' && msg.payload && msg.payload.fase){
+        p.activo.valor = true;
+        clearTimeout(p.timeoutHandle);
+        p.timeoutHandle = armarTimeoutInactividad(msg.correlationId, p.onError, p.activo);
+        return;
+      }
       pendientes.delete(msg.correlationId);
       clearTimeout(p.timeoutHandle);
       if(msg.type === 'CONTEXT_ASK'){ bridgeSessionActual = msg.bridgeSessionId || bridgeSessionActual; p.onAsk && p.onAsk(msg.payload, msg.bridgeSessionId); }
@@ -7424,14 +7457,14 @@ function createCxBridgeClient(specialtyId, opciones){
     for(var k in camposExtra){ if(Object.prototype.hasOwnProperty.call(camposExtra, k)) base[k] = camposExtra[k]; }
     var envio = CX_BRIDGE_enviarSobre(canal, base);
     if(!envio.ok){ callbacks.onError && callbacks.onError(envio.error); return null; }
-    pendientes.set(correlationId, {
+    var activo = { valor: false };
+    var entrada = {
       onAsk: callbacks.onAsk, onProgress: callbacks.onProgress, onReturn: callbacks.onReturn,
       onError: callbacks.onError, onCancelAck: callbacks.onCancelAck,
-      timeoutHandle: setTimeout(function(){
-        pendientes.delete(correlationId);
-        callbacks.onError && callbacks.onError(CX_BRIDGE_ERROR_CODES.CORE_UNREACHABLE);
-      }, timeoutMs)
-    });
+      activo: activo, timeoutHandle: null
+    };
+    entrada.timeoutHandle = armarTimeoutInactividad(correlationId, callbacks.onError, activo);
+    pendientes.set(correlationId, entrada);
     return correlationId;
   }
 
@@ -7740,6 +7773,10 @@ function cx5uCallbacksCiclo(){
 
 function cx5uAutorizarApertura(){
   if(!cx5uPuedeAbrir()) return;
+  // CTX-URB-LIVE-02: impide un segundo OPEN_CONTEXT_REQUEST mientras ya hay uno en curso para
+  // este mismo ciclo (doble click, reintento antes de que 'cargando' vuelva a 'expandido'/'error')
+  // -- una sola ejecucion real, nunca pipelines C1 concurrentes por el mismo click humano.
+  if(CX5U.fase === 'cargando' || CX5U.fase === 'pregunta') return;
   var cliente = cx5uObtenerCliente();
   if(!cliente.soportado()){ CX5U.errorCode = CX_BRIDGE_ERROR_CODES.BRIDGE_UNSUPPORTED; CX5U.fase = 'error'; cx5uRender(); return; }
   CX5U.contextCycleRef = cx5uNuevoContextCycleRef();
@@ -7812,6 +7849,11 @@ function cx5uTextoError(code){
   var M = {
     BRIDGE_UNSUPPORTED: 'Este navegador no admite el canal de Contextos Universal en esta pestaña.',
     BRIDGE_CORE_UNREACHABLE: 'No hubo respuesta desde Contextos Universal. Revisá que esté abierto en otra pestaña e intentá de nuevo.',
+    // CTX-URB-LIVE-02: sólo se usa cuando Core NUNCA emitió ningún progreso real (ver
+    // armarTimeoutInactividad) -- si Core llegó a responder con progreso y luego se quedó
+    // callado, el código es BRIDGE_CORE_INACTIVO, no éste.
+    BRIDGE_CORE_INACTIVO: 'Contextos Universal empezó a procesar pero dejó de responder. Intentá de nuevo.',
+    BRIDGE_SOLICITUD_EN_CURSO: 'Ya hay una solicitud a Contextos Universal en curso para este análisis.',
     BRIDGE_C1_RECHAZO: 'Contextos Universal no pudo procesar la solicitud.'
   };
   return M[code] || ('No se pudo abrir Contextos Universal (' + (code || 'error desconocido') + ').');
