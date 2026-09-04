@@ -236,7 +236,7 @@ async function rpc(nombre, cuerpo, secreta, tiempoLimiteMs, reintentos) {
 async function guardarResultadoPendienteUrbanismo(usuario, firma, fase, data, secreta) {
   try {
     const ahora = Date.now();
-    const r = await pedirASupabase('/rest/v1/urb_resultados_pendientes', {
+    const r = await pedirASupabase('/rest/v1/urb_resultados_pendientes?on_conflict=perfil,firma,fase', {
       method: 'POST',
       headers: {
         apikey: secreta,
