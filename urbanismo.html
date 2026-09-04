@@ -2726,14 +2726,11 @@ canvas{animation:none !important}
           <div class="ctitle">Síntesis diagnóstica</div>
           <p style="font-size:13px;color:var(--texto2);line-height:1.8" id="r-sint"></p>
         </div>
-        <!-- CX5-U (01/09): caja mínima de Contextos Universal -- vive DENTRO de la pantalla de
-             diagnóstico, nunca una pestaña/módulo/navegación nueva. Independiente y coexistente
-             con la capa de contexto legado (m-contexto/ctx-file/aplicarContextoPegado, más abajo
-             en este mismo documento) -- CX5-U nunca la reemplaza ni la escribe. Contenido armado
-             dinámicamente por cx5uRender(), llamado al final de renderDiag(). Oculta por defecto:
-             sólo aparece cuando el trigger territorial certificado (items+tensión) Y un
-             organismo Core están presentes. -->
-        <div id="cx5uCaja" style="display:none;"></div>
+        <!-- CX5-U / CTX-URB-FLOW-01 (04/09): la caja de Contextos Universal se reubicó fuera de
+             esta pantalla -- ver #etapa-ctxpuente, entre Validación y Proyectivo. Antes vivía acá
+             como botón pasivo exclusivo del Diagnóstico (CTX-URB-ACT-01 auditó ese defecto de
+             alcanzabilidad real). El contrato/lógica de cx5uRender()/cx5uPuedeAbrir()/CX_BRIDGE_*
+             no cambió -- sólo el contenedor DOM que ocupa. -->
         <!-- URB-RET-01 (01/09): caja mínima de retorno universal hacia el Core
              (comprender.specialty-return.v1) -- contrato DISTINTO del ContextEnvelope de CX5-U:
              no usa BroadcastChannel, no usa CX_BRIDGE_CLIENT, no toca el registro de contexto de
@@ -2812,6 +2809,25 @@ canvas{animation:none !important}
           <button onclick="recalcularPonderacion()" style="width:100%;margin-top:1rem;padding:10px;background:#2E5A87;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Recalcular con ponderación ajustada →</button>
         </div>
       </div>
+    </div>
+
+    <!-- CTX-URB-FLOW-01 (04/09): etapa intermedia Diagnóstico(validado) -> Contextos Universal
+         (opcional, decisión humana) -> Proyectivo. Vive entre etapa-diag y etapa-proy, mismo
+         criterio de mostrar/ocultar por style.display que las otras dos. Se muestra sólo si
+         cx5uPuedeAbrir() (ver mostrarProyectivo(), más abajo); si no hay organismo Core o el gate
+         metodológico no está satisfecho, se salta directo a Proyectivo -- exactamente el mismo
+         comportamiento que existía antes de este corte para el uso standalone de Urbanismo. -->
+    <div id="etapa-ctxpuente" style="display:none">
+      <div class="ap-band">
+        <h3>Diagnóstico urbano completado</h3>
+        <p>El diagnóstico ya fue validado. Podés ampliar la comprensión con Contextos Universal antes de continuar, o pasar directo al Abordaje Proyectivo.</p>
+      </div>
+      <div class="card">
+        <div class="ctitle">Contextos Universal</div>
+        <p style="font-size:13px;color:var(--texto2);line-height:1.7;margin-bottom:1rem">Ampliá la comprensión observando las relaciones y condiciones que exceden el sistema urbano analizado.</p>
+        <div id="cx5uCaja" style="display:none;"></div>
+      </div>
+      <button class="btn-proyectivo" onclick="avanzarAProyectivoDesdeContextos()">Continuar al abordaje proyectivo →</button>
     </div>
 
     <!-- ETAPA 2: PROYECTIVO (oculto hasta validación) -->
@@ -4904,7 +4920,32 @@ Responde SOLO JSON compacto:
   mostrarProyectivo(nota, intencion);
 }
 
+// CTX-URB-FLOW-01 (04/09): mostrarProyectivo() pasa a ser un enrutador -- decide si corresponde
+// ofrecer antes la etapa intermedia de Contextos Universal (#etapa-ctxpuente). El cómputo/render
+// real del proyectivo (mostrarProyectivoInterno, antes llamada 'mostrarProyectivo') no se modifica
+// ni una línea -- ver la función renombrada, un poco más abajo.
+var URBCTXFLOW01_pendienteProyectivo = null;
 function mostrarProyectivo(nota, intencion){
+  if(typeof cx5uPuedeAbrir === 'function' && cx5uPuedeAbrir()){
+    URBCTXFLOW01_pendienteProyectivo = { nota: nota, intencion: intencion };
+    document.getElementById('etapa-diag').style.display = 'none';
+    document.getElementById('etapa-proy').style.display = 'none';
+    document.getElementById('etapa-ctxpuente').style.display = 'block';
+    if(typeof cx5uRender === 'function') cx5uRender();
+    window.scrollTo(0,0);
+    return;
+  }
+  mostrarProyectivoInterno(nota, intencion);
+}
+function avanzarAProyectivoDesdeContextos(){
+  var datos = URBCTXFLOW01_pendienteProyectivo || { nota:'', intencion:'' };
+  URBCTXFLOW01_pendienteProyectivo = null;
+  document.getElementById('etapa-ctxpuente').style.display = 'none';
+  mostrarProyectivoInterno(datos.nota, datos.intencion);
+}
+window.avanzarAProyectivoDesdeContextos = avanzarAProyectivoDesdeContextos;
+
+function mostrarProyectivoInterno(nota, intencion){
   // Mostrar botón de acceso directo al proyectivo en el diagnóstico
   const btnIrProy = document.getElementById('btn-ir-proy');
   if(btnIrProy) btnIrProy.style.display = 'block';
@@ -7418,6 +7459,39 @@ function cx5uLimpiarIdentidadActivaPersistida(){
   try{ localStorage.removeItem(CX5UR1_IDENTIDAD_ACTIVA_LLAVE); }catch(e){}
 }
 
+/* ============ CTX-URB-FLOW-01 (04/09) · organismo Core recuperable entre recargas ============
+   Fragilidad detectada en CTX-URB-ACT-01: __organismoIdCoreUrbanismo (más abajo en este mismo
+   documento, en el bloque que lee 'ag_marco_pendiente') sólo se llena leyendo esa clave, de UN
+   SOLO USO -- Core la deja y esta página la borra apenas la lee. Una recarga, revisita o segunda
+   pestaña sin un handoff fresco desde Core deja esa variable en null para siempre, apagando el
+   gate de Contextos sin ningún error visible, aunque el estudio urbano en curso sea el mismo.
+   Fix mínimo: cachear el MISMO organismo_id que Core ya entregó -- no se sintetiza ni se inventa
+   ningún id nuevo (NO crear una segunda identidad del organismo) -- en una clave propia de
+   Urbanismo, de vida más larga que un solo load, pero acotada al mismo ciclo de vida que ya usa
+   la identidad CX5-U-R1 de arriba: se limpia en los mismos dos call sites reales (back(),
+   cargarHistorial()) a través de cx5uLimpiarIdentidadActual(), justo abajo. No se toca
+   'ag_marco_pendiente' ni su contrato de consumo único: Core sigue exactamente igual. */
+var CX5U_ORGANISMO_ACTIVO_LLAVE = 'ag_urb_organismo_activo_v1';
+function cx5uGuardarOrganismoActivo(organismoId, organismoNombre){
+  if(!organismoId) return;
+  try{
+    localStorage.setItem(CX5U_ORGANISMO_ACTIVO_LLAVE, JSON.stringify({
+      organismo_id: organismoId, organismo_nombre: organismoNombre || null, guardado: new Date().toISOString()
+    }));
+  }catch(e){ /* si falla el guardado, el próximo load simplemente no recupera nada -- no hay peor
+    caso que el comportamiento previo a este corte. */ }
+}
+function cx5uCargarOrganismoActivoPersistido(){
+  try{
+    var raw = JSON.parse(localStorage.getItem(CX5U_ORGANISMO_ACTIVO_LLAVE) || 'null');
+    if(!raw || typeof raw !== 'object' || !raw.organismo_id) return null;
+    return raw;
+  }catch(e){ return null; }
+}
+function cx5uLimpiarOrganismoActivoPersistido(){
+  try{ localStorage.removeItem(CX5U_ORGANISMO_ACTIVO_LLAVE); }catch(e){}
+}
+
 // ---- Estado efímero "actual": qué identidad corresponde al diagData que se está mostrando AHORA
 // mismo. Se llena en cada llamarAPI() real (fresh o refinamiento) y se limpia explícitamente en
 // back()/cargarHistorial() -- ver esos call sites. Nunca se recalcula por adivinanza.
@@ -7459,6 +7533,11 @@ function cx5uSincronizarIdentidad(organismId, firma){
     var nueva = { organismId: organismId, firma: firma, specialtyStudyRef: cx5uOpaqueId(), creado: new Date().toISOString() };
     cx5uGuardarIdentidadActivaPersistida(nueva);
     ref = nueva.specialtyStudyRef;
+    // CTX-URB-FLOW-01 (04/09): identidad genuinamente nueva (análisis distinto) -> el estado de
+    // UI del gate (fase/pregunta/retorno/error) no debe arrastrarse de un análisis anterior.
+    CX5U.fase = 'colapsado'; CX5U.contextCycleRef = null; CX5U.bridgeSessionId = null;
+    CX5U.pregunta = ''; CX5U.respuestaHumanaActual = ''; CX5U.askPayload = null;
+    CX5U.retorno = null; CX5U.errorCode = null;
   }
   CX5U.organismId = organismId;
   CX5U.specialtyStudyRef = ref;
@@ -7473,6 +7552,7 @@ function cx5uSincronizarIdentidad(organismId, firma){
 function cx5uLimpiarIdentidadActual(){
   CX5U.organismId = null; CX5U.specialtyStudyRef = null;
   cx5uLimpiarIdentidadActivaPersistida();
+  cx5uLimpiarOrganismoActivoPersistido();
 }
 
 function cx5uNuevoContextCycleRef(){ return 'ctxcyc_urb_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
@@ -7619,7 +7699,7 @@ function cx5uReiniciar(){
 // es quien decide, después y humanamente, qué implica ese Campo para la incidencia/PT/AP/
 // interpretación de la tensión raíz -- este bloque no reinterpreta nada por sí mismo.
 function cx5uEntendidoRetorno(){
-  CX5U.retorno = null; CX5U.contextCycleRef = null; CX5U.fase = 'colapsado';
+  CX5U.retorno = null; CX5U.contextCycleRef = null; CX5U.fase = 'incorporado';
   cx5uRender();
 }
 
@@ -7645,7 +7725,7 @@ function cx5uRender(){
   caja.style.display = '';
   var html = '';
   if(CX5U.fase === 'colapsado'){
-    html = '<button type="button" class="btn-sml" onclick="cx5uExpandir()">¿Algo externo podría estar condicionando esta tensión? Comprender el campo externo</button>';
+    html = '<button type="button" class="btn-pri" onclick="cx5uExpandir()">Ampliar con Contextos Universal</button>';
   } else if(CX5U.fase === 'expandido'){
     html = '<div class="card" style="margin-top:10px">'
       + '<div class="ctitle">Comprender el campo externo</div>'
@@ -7682,6 +7762,8 @@ function cx5uRender(){
       + '</p>'
       + '<button type="button" class="btn-pri" onclick="cx5uEntendidoRetorno()">Entendido</button>'
       + '</div>';
+  } else if(CX5U.fase === 'incorporado'){
+    html = '<div class="card" style="margin-top:10px"><p style="font-size:13px;color:var(--verde);font-weight:700">✓ Contexto incorporado</p></div>';
   } else if(CX5U.fase === 'error'){
     html = '<div class="card" style="margin-top:10px">'
       + '<p style="font-size:12px;color:var(--texto2);margin-bottom:10px">' + cx5uEsc(cx5uTextoError(CX5U.errorCode)) + '</p>'
@@ -8828,12 +8910,23 @@ var marcoOrganismoNombre = null;   // 14/08: capturado para la etiqueta "Continu
 (function(){
   try{
     var raw = localStorage.getItem('ag_marco_pendiente');
-    if(!raw) return;
+    if(!raw){
+      // CTX-URB-FLOW-01 (04/09): sin handoff fresco de Core en ESTE load (recarga, revisita,
+      // segunda pestaña) -- recuperar el mismo organismo_id que Core ya entregó antes, si el
+      // estudio urbano sigue activo (ver cx5uGuardarOrganismoActivo/cx5uCargarOrganismoActivoPersistido,
+      // definidos más arriba en el bloque CX5-U). No sintetiza nada nuevo: sólo relee el mismo id.
+      if(typeof cx5uCargarOrganismoActivoPersistido === 'function'){
+        var activo = cx5uCargarOrganismoActivoPersistido();
+        if(activo){ __organismoIdCoreUrbanismo = activo.organismo_id; marcoOrganismoNombre = activo.organismo_nombre || null; }
+      }
+      return;
+    }
     localStorage.removeItem('ag_marco_pendiente');
     var p = JSON.parse(raw);
     if(!p || !p.marco) return;
     __organismoIdCoreUrbanismo = p.marco.organismo_id || null;
     marcoOrganismoNombre = p.organismo || null;
+    if(typeof cx5uGuardarOrganismoActivo === 'function') cx5uGuardarOrganismoActivo(__organismoIdCoreUrbanismo, marcoOrganismoNombre);
     var texto = JSON.stringify(p.marco, null, 2);
     window.addEventListener('load', function(){
       setTimeout(function(){
