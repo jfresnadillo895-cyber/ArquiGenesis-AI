@@ -9452,16 +9452,24 @@ function C1F2_construirFichaCandidata(returnProposal, currentMemory){
 /* ---- Fase 1: preparar (nunca escribe nada, nunca crea Propuesta). Detecta el conflicto de
    versión "temprano" (basedOnVersion vs Memoria AHORA) antes de construir ningún candidato. ---- */
 function C1F2_prepararGobernanza(returnProposal, snapshot){
-  if(!returnProposal) return { ok:false, motivo:'ContextReturnProposal ausente' };
+  if(!returnProposal) return { ok:false, motivo:'ContextReturnProposal ausente', categoria:'error_tecnico' };
   if(!returnProposal.hasMeaningfulReturn){
-    return { ok:false, motivo:'no hay Retorno significativo -- nada que gobernar', hasMeaningfulReturn:false };
+    // CTX-CORE-INC-01 (04/09): rama E -- sin contenido significativo. Hoy es inalcanzable desde el
+    // botón "Incorporar" real (C1G1_construirComprension sólo arma vista.retorno/
+    // estadoFinal.returnProposal/gobernanzaPreparacion cuando hasMeaningfulReturn es true -- ver
+    // esa función); se clasifica igual, por las dudas, ya que esta función también corre desde
+    // window.debugC1F2GobernarRetorno y podría tener otros llamadores futuros.
+    return { ok:false, motivo:'no hay Retorno significativo -- nada que gobernar', hasMeaningfulReturn:false, categoria:'sin_contenido' };
   }
   if(!snapshot || typeof snapshot.organismVersion !== 'number'){
-    return { ok:false, motivo:'snapshot ausente o sin organismVersion' };
+    return { ok:false, motivo:'snapshot ausente o sin organismVersion', categoria:'error_tecnico' };
   }
   var o = state.organismo;
   if(!o || o.id !== snapshot.organismId){
-    return { ok:false, motivo:'el organismo activo (state.organismo) no coincide con el Snapshot de este Retorno' };
+    // CTX-CORE-INC-01 (04/09): rama D -- organismo incorrecto (el organismo activo de Core ya no
+    // es el mismo que originó este Retorno; p.ej. el humano cambió de organismo en otra parte del
+    // chat mientras esta tarjeta de Contextos seguía abierta).
+    return { ok:false, motivo:'el organismo activo (state.organismo) no coincide con el Snapshot de este Retorno', categoria:'organismo_incorrecto' };
   }
   var basedOnVersion = snapshot.organismVersion;
   var currentVersion = fichaVersion(o);
@@ -9472,8 +9480,13 @@ function C1F2_prepararGobernanza(returnProposal, snapshot){
   }
   var candidata = C1F2_construirFichaCandidata(returnProposal, snapshot.currentMemory);
   if(!Object.keys(candidata.fichaNueva).length){
+    // CTX-CORE-INC-01 (04/09): rama B -- contenido válido (SÍ hubo Retorno significativo) pero no
+    // directamente incorporable a un campo real de Ficha (todo keep_open, o sin targetField
+    // reconocido). "recibir != aceptar != incorporar": esto NO es un error técnico -- se resuelve
+    // en C1F2_resolverGobernanzaRetorno aceptando el antecedente como referencia contextual, por
+    // el mecanismo YA EXISTENTE de o.genealogia_contextos (ver C1F2_registrarGenealogiaContextual).
     return { ok:false, motivo:'ningún cambio del Retorno se pudo traducir a un campo real de Memoria (todos keep_open o sin mapear)',
-      basedOnVersion: basedOnVersion, noMapeados: candidata.noMapeados };
+      basedOnVersion: basedOnVersion, noMapeados: candidata.noMapeados, categoria:'no_mapeable' };
   }
   return { ok:true, basedOnVersion: basedOnVersion, fichaCandidata: candidata.fichaNueva,
     mapeados: candidata.mapeados, noMapeados: candidata.noMapeados };
@@ -9499,19 +9512,47 @@ function C1F2_resolverGobernanzaRetorno(preparacion, decisionHumana, correccionU
 
   // incorporar / editar: requieren una preparación válida (sin conflicto, con candidato real)
   if(!preparacion || !preparacion.ok){
+    // CTX-CORE-INC-01 (04/09): el conflicto de versión (preparacion.conflict) es un caso aparte,
+    // ya con su propio mensaje correcto desde antes de este corte -- no es ninguna de las 5 ramas
+    // en alcance acá, así que NO se le asigna 'error_tecnico' por default (eso lo dejaría mal
+    // clasificado para cualquier lector futuro de `categoria`, aunque el texto mostrado ya sea
+    // correcto por el chequeo de `resolucion.conflict` en C1G1_decidirGobernanza).
+    var categoriaPrep = (preparacion && preparacion.categoria) ? preparacion.categoria
+      : ((preparacion && preparacion.conflict) ? null : 'error_tecnico');
     return { ok:false, decision: decisionHumana, motivo:'no hay una preparación válida sobre la cual gobernar (conflicto de versión o candidato sin campos reales)',
-      conflict: !!(preparacion && preparacion.conflict) };
+      conflict: !!(preparacion && preparacion.conflict), categoria: categoriaPrep };
   }
 
   var o = state.organismo;
   var versionAntes = fichaVersion(o);
   var recuerdosAntes = recuerdosDe(o).length;
 
+  // CTX-CORE-INC-01 (04/09): clasificar ANTES de llamar a proponerFicha() -- reutiliza los mismos
+  // validadores reales que ella usa internamente (validarCandidatoFicha/diffFicha, sin duplicar ni
+  // una sola de sus reglas) para poder distinguir, con un motivo honesto y sin forzar ninguna
+  // escritura, dos situaciones que antes caían juntas en el mismo "no se generó una propuesta":
+  // rama A (candidato realmente inválido -- técnico, se mantiene visible y trazable) y rama C
+  // (el valor propuesto ya es exactamente el vigente -- no-op, se informa neutralmente, sin crear
+  // ninguna propuesta ni tocar ag_core_propuestas).
+  var valPrevia = validarCandidatoFicha(preparacion.fichaCandidata);
+  if(!valPrevia.ok){
+    return { ok:false, decision: decisionHumana, motivo: valPrevia.motivo, conflict:false, categoria:'error_tecnico',
+      organismVersionAntes: versionAntes, organismVersionDespues: versionAntes, fichaFieldsApplied: [], recuerdoId: null };
+  }
+  var diffPrevio = diffFicha(o.ficha, preparacion.fichaCandidata);
+  if(!diffPrevio.campos.length){
+    return { ok:true, decision: decisionHumana, aplicado:false, motivo:null, conflict:false, categoria:'no_op',
+      organismVersionAntes: versionAntes, organismVersionDespues: versionAntes, fichaFieldsApplied: [], recuerdoId: null };
+  }
+
   var prop = proponerFicha(preparacion.fichaCandidata, null, null, null);
   if(!prop){
+    // No debería llegarse acá con los dos chequeos de arriba ya hechos (misma validación, mismo
+    // diff) -- se deja como red de seguridad defensiva, nunca observada en las pruebas de este
+    // corte, clasificada igual como error técnico real.
     return { ok:false, decision: decisionHumana,
       motivo:'proponerFicha() no generó una propuesta (candidato inválido, o sin cambios reales sobre la Memoria actual)',
-      conflict:false, organismVersionAntes: versionAntes, organismVersionDespues: versionAntes,
+      conflict:false, categoria:'error_tecnico', organismVersionAntes: versionAntes, organismVersionDespues: versionAntes,
       fichaFieldsApplied: [], recuerdoId: null };
   }
 
@@ -9530,6 +9571,10 @@ function C1F2_resolverGobernanzaRetorno(preparacion, decisionHumana, correccionU
     ok: r.ok, decision: decisionHumana, aplicado: !!r.ok,
     motivo: r.ok ? null : r.motivo,
     conflict: !r.ok && r.motivo === 'la ficha cambió desde que se propuso',
+    // CTX-CORE-INC-01 (04/09): un fallo real de resolverPropuesta() que NO sea el conflicto de
+    // versión ya cubierto arriba (p.ej. "propuesta inexistente"/"la propuesta ya fue resuelta",
+    // condiciones de carrera reales) sigue siendo rama A -- error técnico, visible y trazable.
+    categoria: (r.ok || r.motivo === 'la ficha cambió desde que se propuso') ? null : 'error_tecnico',
     propuestaId: prop.id,
     organismVersionAntes: versionAntes,
     organismVersionDespues: r.ok ? fichaVersion(o) : versionAntes,
@@ -9576,9 +9621,16 @@ function C1F2_nuevoIdGenealogiaContextual(){
   return 'gc_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,6);
 }
 function C1F2_registrarGenealogiaContextual(org, estadoConRetorno, decisionUi){
-  // Alcance: sólo mantener_abierto/no_incorporar -- "incorporar" ya queda registrado vía
-  // Memoria+Recuerdo por el camino real (C1F2_resolverGobernanzaRetorno), no necesita esto.
-  if(decisionUi !== 'mantener_abierto' && decisionUi !== 'no_incorporar') return null;
+  // Alcance: mantener_abierto/no_incorporar -- "incorporar" cuando SÍ modifica Ficha ya queda
+  // registrado vía Memoria+Recuerdo por el camino real (C1F2_resolverGobernanzaRetorno), no
+  // necesita esto. CTX-CORE-INC-01 (04/09): se agrega un tercer valor posible,
+  // 'incorporar_no_mapeable' -- NO es uno de los 4 valores reales de C1F2_DECISIONES ni de los 3
+  // literales de UI ('incorporar'/'mantener_abierto'/'no_incorporar'): es la marca que usa
+  // exclusivamente C1G3_correrGobernanza() para la rama B (contenido válido de Contextos, pero sin
+  // ningún campo real de Ficha al que aplicarse -- ver C1F2_prepararGobernanza). El humano SÍ
+  // clickeó "Incorporar"; como no hay Ficha que tocar, se acepta el antecedente como referencia
+  // contextual por este mismo mecanismo -- append-only, cero escritura a Ficha/Memoria/principios.
+  if(decisionUi !== 'mantener_abierto' && decisionUi !== 'no_incorporar' && decisionUi !== 'incorporar_no_mapeable') return null;
   if(!org || !estadoConRetorno) return null;
   var opening = estadoConRetorno.opening;
   var snapshot = estadoConRetorno.snapshot;
@@ -10290,17 +10342,28 @@ function C1G1_decidirGobernanza(estadoConRetorno, decisionUsuario, correccionUsu
   // lectura de esa genealogía desde ningún prompt/Snapshot/M2.x.
   if(decisionCore === 'mantener_abierto') texto = 'Quedó registrado como abierto en la genealogía de Contextos, sin modificar la Memoria del organismo.';
   else if(decisionCore === 'rechazar') texto = 'No se incorporó a la Memoria; quedó registrado como antecedente contextual.';
+  // CTX-CORE-INC-01 (04/09): un texto distinto y honesto por cada rama, en vez de la única rama
+  // `else` genérica de antes -- "recibir != aceptar != incorporar": rama C (no_op) y rama B
+  // (no_mapeable) NO son errores, se informan en tono neutral; ramas D/E siguen siendo errores
+  // reales -- visibles y trazables, pero ahora distinguibles entre sí y del conflicto de versión.
+  else if(resolucion.ok && resolucion.categoria === 'no_op') texto = 'Esto ya está reflejado en la comprensión del organismo -- no hay ningún cambio nuevo que aplicar.';
   else if(resolucion.ok) texto = 'Listo, quedó incorporado a la comprensión del organismo.';
-  else texto = resolucion.conflict
-    ? 'La memoria del organismo cambió mientras tanto -- hace falta revisar esto de nuevo antes de aplicarlo.'
-    : 'No pudimos aplicar este cambio ahora.';
+  else if(resolucion.categoria === 'no_mapeable') texto = 'No modificó la Ficha del organismo (no hay un campo de Memoria al que aplicarse), pero quedó aceptado como antecedente contextual.';
+  else if(resolucion.conflict) texto = 'La memoria del organismo cambió mientras tanto -- hace falta revisar esto de nuevo antes de aplicarlo.';
+  else if(resolucion.categoria === 'organismo_incorrecto') texto = 'El organismo activo cambió mientras este Contexto seguía abierto -- no se puede aplicar sobre otro organismo. Revisá que el organismo correcto esté activo e intentá de nuevo.';
+  else if(resolucion.categoria === 'sin_contenido') texto = 'Contextos no encontró, en este ciclo, nada sustantivo para aplicar.';
+  else texto = resolucion.motivo ? ('No pudimos aplicar este cambio: ' + resolucion.motivo + '.') : 'No pudimos aplicar este cambio ahora.';
   // OMV-F8.3 (25/08): assessment/camposExcluidos se conservan acá -- sin esto, "Explorar otro
   // contexto" no tendría con qué volver a llamar a C1G1_abrirCampoYSeleccionarFrente (F8.1) y
   // la única salida tras cualquier decisión de gobernanza sería cerrar Contextos por completo.
   var estadoFinal = { snapshot: estadoConRetorno.snapshot, opening: estadoConRetorno.opening,
     graphState: estadoConRetorno.graphState, front: frenteConGenealogia,
     assessment: estadoConRetorno.assessment || null, camposExcluidos: estadoConRetorno.camposExcluidos || [] };
-  return { vista: { phase:'gobernanza_resuelta', texto: texto, aplicado: !!resolucion.aplicado }, estado: estadoFinal };
+  // CTX-CORE-INC-01 (04/09): categoria viaja en el resultado -- C1G3_correrGobernanza() la usa
+  // para decidir si esta resolución de "incorporar" corresponde registrarse como referencia
+  // contextual (rama B) sin releer C1F2_* de nuevo ni duplicar la clasificación.
+  return { vista: { phase:'gobernanza_resuelta', texto: texto, aplicado: !!resolucion.aplicado },
+    estado: estadoFinal, categoria: resolucion.categoria || null };
 }
 
 /* OMV-F8.3 (25/08): "la decisión de gobernanza no debe equivaler implícitamente a terminar
@@ -15780,11 +15843,18 @@ function C1G3_correrGobernanza(org, estado, decisionUi, miEpoch, cont){
   }
   // C1F2-P2 (21/08): persistencia durable de mantener_abierto/no_incorporar -- tiene que pasar
   // ACÁ, con el `estado` (estadoConRetorno) todavía disponible, y antes de borrar la sesión de
-  // abajo. No afecta a "incorporar" (la función misma filtra por decisión) ni cambia nada de la
-  // gobernanza real -- sólo agrega, si corresponde, una entrada a o.genealogia_contextos y
-  // guarda el organismo (mismo mecanismo de siempre, local + servidor).
+  // abajo. No afecta a "incorporar" cuando modifica Ficha (la función misma filtra por decisión)
+  // ni cambia nada de la gobernanza real -- sólo agrega, si corresponde, una entrada a
+  // o.genealogia_contextos y guarda el organismo (mismo mecanismo de siempre, local + servidor).
+  // CTX-CORE-INC-01 (04/09): "Incorporar" sobre contenido válido pero sin campo real de Ficha
+  // (rama B, r.categoria === 'no_mapeable') se registra con esta misma función -- 'incorporar' no
+  // se traduce nunca a otro valor salvo en este único caso explícito, para que quede distinguible
+  // de una Ficha efectivamente incorporada (que no pasa por acá, sigue registrada vía Memoria+
+  // Recuerdo únicamente).
+  var decisionParaGenealogia = (decisionUi === 'incorporar' && r.categoria === 'no_mapeable')
+    ? 'incorporar_no_mapeable' : decisionUi;
   if(org){
-    var entradaGenealogia = C1F2_registrarGenealogiaContextual(org, estado, decisionUi);
+    var entradaGenealogia = C1F2_registrarGenealogiaContextual(org, estado, decisionParaGenealogia);
     if(entradaGenealogia) guardarOrganismo(org);
   }
   // C1-Z1.1-B: cualquier decisión real de gobernanza (incorporar/mantener_abierto/no_incorporar)
