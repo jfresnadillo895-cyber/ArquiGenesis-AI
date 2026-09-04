@@ -3299,6 +3299,41 @@ JSON compacto SOLO (sin espacios extra):
 {"r1t":"Intuición Receptiva","r1p":"Institucional↔Cognitivo","r1d":"...","r1a":["a1","a2","a3","a4"],"r2t":"Instinto Receptivo","r2p":"Social+Cultural↔Expresión","r2d":"...","r2a":["a1","a2","a3","a4"],"r3t":"Percepción Receptiva","r3p":"Histórico↔Físico","r3d":"...","r3a":["a1","a2","a3","a4"],"esp":[{"p":"...","s":"logrado|proceso|pendiente"},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."}]}`;
 }
 
+/* ══════════════════════════════════════════
+   URB-PROY-VALID-01 (04/09) · validación de niveles receptivos obligatorios
+   ══════════════════════════════════════════
+   WEB-SMOKE-URB-02 confirmó que una respuesta de la IA puede llegar sintácticamente válida pero
+   con nivel2/nivel3 vacíos, y que regenerarProyectivo() podía tragar ese caso (y cualquier fallo
+   real) en silencio, dejando en pantalla un Abordaje Proyectivo con tarjetas vacías como si fuera
+   éxito. Este bloque NO fabrica contenido de relleno -- sólo decide si lo que la IA devolvió
+   alcanza para presentarse como completo. Se usa desde los DOS lugares que construyen
+   diagData.receptivos (llamarAPI() y regenerarProyectivo(), más abajo) y desde
+   mostrarProyectivoInterno() (el render final), como segunda barrera defensiva. */
+function urbProyValid01NivelOk(n){
+  if(!n || typeof n !== 'object') return false;
+  var titulo = (n.titulo==null ? '' : String(n.titulo)).trim();
+  var desc = (n.desc==null ? '' : String(n.desc)).trim();
+  var acciones = Array.isArray(n.acciones) ? n.acciones.filter(function(a){ return (a==null ? '' : String(a)).trim().length > 0; }) : [];
+  return !!(titulo && desc && acciones.length > 0);
+}
+function urbProyValid01ReceptivosOk(receptivos){
+  return !!(receptivos && typeof receptivos === 'object'
+    && urbProyValid01NivelOk(receptivos.nivel1)
+    && urbProyValid01NivelOk(receptivos.nivel2)
+    && urbProyValid01NivelOk(receptivos.nivel3));
+}
+// Mismo objeto {nivel1,nivel2,nivel3} que antes armaban por separado llamarAPI() y
+// regenerarProyectivo() a partir de las claves planas r1t/r1p/r1d/r1a, r2t.../r3a -- ahora en un
+// solo lugar para no duplicar la forma. No decide si es válido: eso lo hace la función de arriba.
+function urbProyValid01ReceptivosDesdePlano(p){
+  p = p || {};
+  return {
+    nivel1:{titulo:p.r1t||'',par:p.r1p||'',desc:p.r1d||'',acciones:p.r1a||[]},
+    nivel2:{titulo:p.r2t||'',par:p.r2p||'',desc:p.r2d||'',acciones:p.r2a||[]},
+    nivel3:{titulo:p.r3t||'',par:p.r3p||'',desc:p.r3d||'',acciones:p.r3a||[]}
+  };
+}
+
 // ══════════════════════════════════════════
 // UI
 // ══════════════════════════════════════════
@@ -4011,8 +4046,28 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   // ---- Llamada 3: receptivos + espiral, leyendo el nucleo ya resuelto como contexto ----
   // (Esta fase nunca se resume desde checkpoint: es la última -- si llegó hasta acá con éxito, el
   // análisis completo termina en este mismo llamado y el checkpoint se limpia más abajo.)
-  const rawRecEsp=await llamarFaseConRecuperacion(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200,'receptivos_espiral',etapaCap,firmaCap,esReanudacion);
-  const parsedRecEsp=parsearJSONIA(rawRecEsp);
+  let rawRecEsp=await llamarFaseConRecuperacion(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200,'receptivos_espiral',etapaCap,firmaCap,esReanudacion);
+  let parsedRecEsp=parsearJSONIA(rawRecEsp);
+
+  // URB-PROY-VALID-01 (04/09): los niveles receptivos son obligatorios para presentar el Abordaje
+  // Proyectivo como completo (WEB-SMOKE-URB-02, FALLO 2: una respuesta sintácticamente válida
+  // puede traer nivel2/nivel3 vacíos). Como máximo UN reintento, con una llamada fresca (nunca
+  // resumida de un recorte de servidor previo, que sería el mismo contenido incompleto) al MISMO
+  // caso/objetivo/datos -- el prompt no cambia.
+  let receptivosCandidato = urbProyValid01ReceptivosDesdePlano(parsedRecEsp);
+  if(!urbProyValid01ReceptivosOk(receptivosCandidato)){
+    console.error('URB-PROY-VALID-01: niveles receptivos incompletos en el primer intento (receptivos_espiral) -- reintentando una vez.', receptivosCandidato);
+    try{
+      rawRecEsp=await llamarFaseConRecuperacion(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200,'receptivos_espiral',etapaCap,firmaCap,false);
+      parsedRecEsp=parsearJSONIA(rawRecEsp);
+      receptivosCandidato = urbProyValid01ReceptivosDesdePlano(parsedRecEsp);
+    }catch(eReintentoRecEsp){
+      console.error('URB-PROY-VALID-01: el reintento de receptivos_espiral falló:', eReintentoRecEsp);
+    }
+    if(!urbProyValid01ReceptivosOk(receptivosCandidato)){
+      console.error('URB-PROY-VALID-01: niveles receptivos siguen incompletos tras el reintento -- no se fabrica contenido de relleno; el Abordaje Proyectivo queda marcado como no disponible hasta un nuevo intento.', receptivosCandidato);
+    }
+  }
 
   // Análisis completo de punta a punta -- el checkpoint de ESTA firma ya cumplió su función.
   limpiarCheckpointUrbanismo(firmaCap);
@@ -4029,11 +4084,12 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   if(parsed.da!==undefined&&!parsed.dist_actual) parsed.dist_actual=parsed.da;
   if(parsed.dh!==undefined&&!parsed.dist_horizonte) parsed.dist_horizonte=parsed.dh;
   if(parsed.esp&&!parsed.espiral) parsed.espiral=parsed.esp.map(s=>({paso:s.p||s.paso,estado:s.s||s.estado}));
-  if(!parsed.receptivos) parsed.receptivos={
-    nivel1:{titulo:parsed.r1t||'',par:parsed.r1p||'',desc:parsed.r1d||'',acciones:parsed.r1a||[]},
-    nivel2:{titulo:parsed.r2t||'',par:parsed.r2p||'',desc:parsed.r2d||'',acciones:parsed.r2a||[]},
-    nivel3:{titulo:parsed.r3t||'',par:parsed.r3p||'',desc:parsed.r3d||'',acciones:parsed.r3a||[]}
-  };
+  // URB-PROY-VALID-01 (04/09): NUNCA se fabrica contenido de relleno. Si tras el reintento los
+  // niveles siguen incompletos, parsed.receptivos queda en null (no un objeto con niveles vacíos)
+  // y parsed.receptivosIncompletos=true -- mostrarProyectivoInterno() (más abajo) usa ese flag
+  // para detener la transición al Proyectivo en vez de dibujar tarjetas vacías como si fuera éxito.
+  parsed.receptivos = urbProyValid01ReceptivosOk(receptivosCandidato) ? receptivosCandidato : null;
+  parsed.receptivosIncompletos = !urbProyValid01ReceptivosOk(receptivosCandidato);
 
   diagData=parsed;
   setSt(false);
@@ -4838,29 +4894,36 @@ async function regenerarProyectivo(nota, intencion){
   document.getElementById('ap-desc').innerHTML = '';
   window.scrollTo(0,0);
 
-  var _t0Proy = Date.now();   // CAP-M1 (26/08) -- declarado antes del try para poder registrar
-                              // también si fetch() ni siquiera llega a responder (catch de abajo)
-  var _regProy = false;       // evita registrar dos veces el mismo fallo (acá y en res.ok===false)
-  try{
-    const ciudad = diagData.ciudad;
-    const c2 = document.getElementById('c2-txt')?.value?.trim()||'';
+  // URB-PROY-VALID-01 (04/09): el cuerpo de UN intento se extrajo a esta función interna, sin
+  // modificar ni una línea de su lógica original (prompt, fetch, parseo, registrarUso), para
+  // poder repetirlo hasta 2 veces si los niveles receptivos llegan incompletos -- sin duplicar el
+  // prompt. Devuelve true sólo si diagData.receptivos quedó con contenido real y válido; nunca
+  // fabrica contenido de relleno (si no es válido, no lo asigna). Cualquier fallo (red, status no
+  // ok, JSON inválido) se traza en consola acá mismo -- ya no se traga en silencio.
+  async function intentoRegenerarProyectivo(numeroIntento){
+    var _t0Proy = Date.now();   // CAP-M1 (26/08) -- declarado antes del try para poder registrar
+                                // también si fetch() ni siquiera llega a responder (catch de abajo)
+    var _regProy = false;       // evita registrar dos veces el mismo fallo (acá y en res.ok===false)
+    try{
+      const ciudad = diagData.ciudad;
+      const c2 = document.getElementById('c2-txt')?.value?.trim()||'';
 
-    // Construir contexto con valores ajustados
-    const valoresAjustados = EJES.map(e=>
-      nombreVisible(e)+' ('+e+'): '+(ponderados[e]||5)+'/10 — '
-      +(ponderados[e]>=7?'fortaleza':ponderados[e]>=5?'en desarrollo':'déficit')
-    ).join('\n');
-    const pares = [['CIVILIZACIÓN','MENTE'],['CULTURA','EMOCIÓN'],['HISTORIA','CUERPO FÍSICO']];
-    const tensionesStr = pares.map(([m,mi])=>{
-      const b = Math.abs((ponderados[m]||5)-(ponderados[mi]||5));
-      return b>2 ? nombreVisible(m)+'↔'+nombreVisible(mi)+' (brecha '+Math.round(b*10)/10+')' : '';
-    }).filter(Boolean).join(', ');
-    const contextoAjustado = 'VALORES VALIDADOS POR EL PROFESIONAL:\n' + valoresAjustados
-      + (tensionesStr ? '\nTENSIONES: '+tensionesStr : '')
-      + (nota ? '\nNOTA: '+nota : '')
-      + (intencion ? '\nOBJETIVO: '+intencion : '');
+      // Construir contexto con valores ajustados
+      const valoresAjustados = EJES.map(e=>
+        nombreVisible(e)+' ('+e+'): '+(ponderados[e]||5)+'/10 — '
+        +(ponderados[e]>=7?'fortaleza':ponderados[e]>=5?'en desarrollo':'déficit')
+      ).join('\n');
+      const pares = [['CIVILIZACIÓN','MENTE'],['CULTURA','EMOCIÓN'],['HISTORIA','CUERPO FÍSICO']];
+      const tensionesStr = pares.map(([m,mi])=>{
+        const b = Math.abs((ponderados[m]||5)-(ponderados[mi]||5));
+        return b>2 ? nombreVisible(m)+'↔'+nombreVisible(mi)+' (brecha '+Math.round(b*10)/10+')' : '';
+      }).filter(Boolean).join(', ');
+      const contextoAjustado = 'VALORES VALIDADOS POR EL PROFESIONAL:\n' + valoresAjustados
+        + (tensionesStr ? '\nTENSIONES: '+tensionesStr : '')
+        + (nota ? '\nNOTA: '+nota : '')
+        + (intencion ? '\nOBJETIVO: '+intencion : '');
 
-    const prompt = `Eres un experto en análisis urbano sistémico (metodología ArquiGenesis AI Urban).
+      const prompt = `Eres un experto en análisis urbano sistémico (metodología ArquiGenesis AI Urban).
 
 El profesional ha ajustado los valores del diagnóstico de ${ciudad} basándose en su conocimiento directo del territorio.
 ${contextoAjustado}
@@ -4873,50 +4936,80 @@ ${intencion?`INTENCIÓN: El proyectivo debe estar orientado específicamente hac
 Responde SOLO JSON compacto:
 {"haiku":"v1·v2·v3","hexp":"explicación","r1t":"Intuición Receptiva","r1p":"Institucional↔Cognitivo","r1d":"descripción orientada al objetivo","r1a":["a1","a2","a3","a4"],"r2t":"Instinto Receptivo","r2p":"Social+Cultural↔Expresión","r2d":"descripción","r2a":["a1","a2","a3","a4"],"r3t":"Percepción Receptiva","r3p":"Histórico↔Físico","r3d":"descripción orientada al objetivo","r3a":["a1","a2","a3","a4"],"da":${Math.min(...EJES.map(e=>ponderados[e]||5)).toFixed(1)},"dh":${Math.min(Math.min(...EJES.map(e=>ponderados[e]||5))+3,9).toFixed(1)},"esp":[{"p":"acción concreta de corto plazo 1","s":"logrado|proceso|pendiente"},{"p":"acción concreta de corto plazo 2","s":"proceso|pendiente"},{"p":"acción de mediano plazo 1","s":"pendiente"},{"p":"acción de mediano plazo 2","s":"pendiente"},{"p":"acción de largo plazo 1","s":"pendiente"},{"p":"acción de largo plazo 2 — evaluación y relanzamiento del ciclo","s":"pendiente"}],"sust":"párrafo de sustentabilidad","sint":"síntesis actualizada con valores corregidos"}`;
 
-    incrementarAPI('haiku');
-    incrementarAPI('proy');
-    const res = await fetch(apiEndpoint(),{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:3000,messages:[{role:'user',content:prompt}]})
-    });
+      incrementarAPI('haiku');
+      incrementarAPI('proy');
+      const res = await fetch(apiEndpoint(),{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:3000,messages:[{role:'user',content:prompt}]})
+      });
 
-    if(!res.ok){
-      registrarUso('urbanismo', {}, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:false });
+      if(!res.ok){
+        registrarUso('urbanismo', {}, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:false });
+        _regProy = true;
+        throw new Error('Error API '+res.status);
+      }
+      const data = await res.json();
+      registrarUso('urbanismo', data, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:true });
       _regProy = true;
-      throw new Error('Error API '+res.status);
+      const raw = data.content.map(i=>i.text||'').join('');
+      const m = raw.match(/\{[\s\S]*\}/);
+      if(!m) throw new Error('JSON inválido');
+      const parsed = JSON.parse(m[0]);
+
+      // URB-PROY-VALID-01 (04/09): receptivos se valida ANTES de aceptar CUALQUIER campo de esta
+      // respuesta -- si no alcanza, no se aplica nada a diagData (ni haiku, ni síntesis, ni
+      // espiral): o se actualiza todo junto, o no se toca nada, para no dejar un estado a medio
+      // camino. diagData.receptivos, en ese caso, queda tal como estaba (nunca se fabrica
+      // contenido de relleno).
+      var receptivosCandidato = urbProyValid01ReceptivosDesdePlano(parsed);
+      if(!urbProyValid01ReceptivosOk(receptivosCandidato)){
+        console.error('URB-PROY-VALID-01: intento '+numeroIntento+'/2 de regenerarProyectivo() devolvió niveles receptivos incompletos.', receptivosCandidato);
+        return false;
+      }
+
+      // Recién acá, con receptivos ya validado, se actualiza diagData -- de punta a punta.
+      if(parsed.haiku) diagData.haiku = parsed.haiku;
+      if(parsed.hexp) diagData.haiku_exp = parsed.hexp;
+      diagData.receptivos = receptivosCandidato;
+      if(parsed.da) diagData.dist_actual = parsed.da;
+      if(parsed.dh) diagData.dist_horizonte = parsed.dh;
+      if(parsed.esp) diagData.espiral = parsed.esp.map(s=>({paso:s.p||s.paso,estado:s.s||s.estado}));
+      if(parsed.sust) diagData.sustentabilidad = parsed.sust;
+      if(parsed.sint) diagData.sintesis = parsed.sint;
+      return true;
+
+    } catch(e){
+      console.error('URB-PROY-VALID-01: error regenerando proyectivo (intento '+numeroIntento+'/2):', e);
+      // CAP-M1 (26/08): si llegamos hasta acá SIN haber registrado nada (fetch() ni siquiera
+      // respondió, o el body no se pudo leer), es el único lugar que se entera del fallo.
+      if(!_regProy) registrarUso('urbanismo', {}, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:false });
+      return false;
     }
-    const data = await res.json();
-    registrarUso('urbanismo', data, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:true });
-    _regProy = true;
-    const raw = data.content.map(i=>i.text||'').join('');
-    const m = raw.match(/\{[\s\S]*\}/);
-    if(!m) throw new Error('JSON inválido');
-    const parsed = JSON.parse(m[0]);
-
-    // Actualizar diagData con el proyectivo regenerado
-    if(parsed.haiku) diagData.haiku = parsed.haiku;
-    if(parsed.hexp) diagData.haiku_exp = parsed.hexp;
-    if(parsed.r1t) diagData.receptivos = {
-      nivel1:{titulo:parsed.r1t,par:parsed.r1p||'',desc:parsed.r1d||'',acciones:parsed.r1a||[]},
-      nivel2:{titulo:parsed.r2t||'',par:parsed.r2p||'',desc:parsed.r2d||'',acciones:parsed.r2a||[]},
-      nivel3:{titulo:parsed.r3t||'',par:parsed.r3p||'',desc:parsed.r3d||'',acciones:parsed.r3a||[]}
-    };
-    if(parsed.da) diagData.dist_actual = parsed.da;
-    if(parsed.dh) diagData.dist_horizonte = parsed.dh;
-    if(parsed.esp) diagData.espiral = parsed.esp.map(s=>({paso:s.p||s.paso,estado:s.s||s.estado}));
-    if(parsed.sust) diagData.sustentabilidad = parsed.sust;
-    if(parsed.sint) diagData.sintesis = parsed.sint;
-
-  } catch(e){
-    console.error('Error regenerando proyectivo:', e);
-    // CAP-M1 (26/08): si llegamos hasta acá SIN haber registrado nada (fetch() ni siquiera
-    // respondió, o el body no se pudo leer), es el único lugar que se entera del fallo.
-    if(!_regProy) registrarUso('urbanismo', {}, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:false });
-    // Si falla, continuar con lo que hay
   }
 
+  // URB-PROY-VALID-01 (04/09): como máximo 2 intentos totales (1 reintento) -- mismo
+  // caso/objetivo/datos, el prompt no cambia. Ningún fallo se traga en silencio: cada intento ya
+  // quedó trazado en consola dentro de intentoRegenerarProyectivo(); acá sólo se decide si
+  // reintentar y qué mostrar al final.
+  let receptivosOk = await intentoRegenerarProyectivo(1);
+  if(!receptivosOk) receptivosOk = await intentoRegenerarProyectivo(2);
+
   mostrarCarga(false);
+
+  if(!receptivosOk){
+    // Se agotaron los intentos: no se fabrica contenido, no se presenta el Proyectivo como
+    // válido. diagData.receptivos NUNCA se sobreescribió con algo incompleto (sigue como estaba
+    // antes de este llamado) -- se detiene la transición, se vuelve al diagnóstico ya validado
+    // (que sigue intacto) y se avisa con un error visible, sin romper la sesión.
+    console.error('URB-PROY-VALID-01: abordaje proyectivo NO se muestra -- niveles receptivos incompletos tras 2 intentos.');
+    document.getElementById('etapa-proy').style.display='none';
+    document.getElementById('etapa-diag').style.display='block';
+    setEtapa(1);
+    alert('No se pudo completar el abordaje proyectivo. Intentá nuevamente.');
+    return;
+  }
+
   mostrarProyectivo(nota, intencion);
 }
 
@@ -4946,6 +5039,16 @@ function avanzarAProyectivoDesdeContextos(){
 window.avanzarAProyectivoDesdeContextos = avanzarAProyectivoDesdeContextos;
 
 function mostrarProyectivoInterno(nota, intencion){
+  // URB-PROY-VALID-01 (04/09): segunda barrera, independiente de cuál camino llegó hasta acá
+  // (llamarAPI(), regenerarProyectivo(), o cualquier otro que en el futuro llame a esta función) --
+  // si diagData.receptivos no tiene los 3 niveles con contenido real, NO se transiciona a la
+  // pantalla de Proyectivo (nunca tarjetas vacías aparentando éxito): se queda donde está el
+  // usuario y se avisa. No fabrica nada; sólo verifica.
+  if(!diagData || !urbProyValid01ReceptivosOk(diagData.receptivos)){
+    console.error('URB-PROY-VALID-01: se intentó mostrar el Abordaje Proyectivo con niveles receptivos incompletos -- transición bloqueada.', diagData && diagData.receptivos);
+    alert('No se pudo completar el abordaje proyectivo. Intentá nuevamente.');
+    return;
+  }
   // Mostrar botón de acceso directo al proyectivo en el diagnóstico
   const btnIrProy = document.getElementById('btn-ir-proy');
   if(btnIrProy) btnIrProy.style.display = 'block';
