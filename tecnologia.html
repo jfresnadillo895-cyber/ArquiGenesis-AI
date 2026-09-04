@@ -72,13 +72,33 @@ main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
 .progreso .paso.hecho{background:var(--acento-suave);color:var(--oro);}
 .progreso .paso.actual{background:var(--oro);color:#fff;}
 @media(max-width:700px){ .gridmenu{grid-template-columns:1fr;} }
+
+/* NAV-4ESP-01 (04/09) -- retorno visible a Comprender AI/Core: mismo patron/icono que
+   negocios.html/urbanismo.html (boton .cai-ham + panel #modulosMenu + items .cai-item),
+   adaptado a la paleta propia de este archivo. Solo agrega el item de retorno al Core --
+   no replica el listado completo de especialidades de negocios.html/urbanismo.html, que
+   depende de ACCESO_MODULOS/credPlan (ausentes aca y fuera de alcance de NAV-4ESP-01). */
+.cai-ham{background:none;border:1px solid var(--linea);color:var(--texto-suave);border-radius:9px;
+  padding:6px 11px;font-size:15px;cursor:pointer;line-height:1;flex-shrink:0;font-family:inherit}
+.cai-ham:hover{border-color:var(--acento);color:var(--acento)}
+#modulosMenu{position:fixed;z-index:9050;background:var(--fondo-panel);border:1px solid var(--linea);
+  border-radius:14px;padding:6px;min-width:200px;box-shadow:0 12px 34px rgba(28,42,58,.16);
+  display:none;flex-direction:column}
+#modulosMenu.open{display:flex}
+#modulosMenu .vacio{padding:11px 14px;font-size:12.5px;color:var(--tenue)}
+.cai-item{text-align:left;padding:11px 14px;font-size:13.5px;color:var(--texto);border-radius:9px;
+  background:none;border:none;cursor:pointer;font-family:inherit;transition:background .15s}
+.cai-item:hover{background:var(--acento-suave)}
 </style>
 </head>
 <body>
 
+<div id="modulosMenu"></div>
+
 <header>
   <span class="marca">Comprender · Tecnología</span>
   <span id="hCorreo" class="hint" style="margin-left:auto;"></span>
+  <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
 </header>
 
 <main>
@@ -2375,6 +2395,50 @@ window.TEC_RUNTIME_UNIVERSAL_CONTRACT = TEC_LOAD('vendor/universal-contract/cont
   /* ---------- MODULE_ID canónico (confirmado por Javier tras CAT-TEC-01) ---------- */
   window.MODULE_ID = 'tecnologias';
   window.TEC_SPECIALTY_ID = 'technology';
+
+  /* ---------- NAV-4ESP-01 (04/09): retorno a Comprender AI/Core -- mismo patron que
+     negocios.html/urbanismo.html (NAV_CORE/caiIrA/caiNavItems/construirModulosMenu/
+     abrirModulosMenu). caiNavItems() aca solo ofrece el retorno al Core: este archivo no
+     tiene ACCESO_MODULOS/credPlan, y portarlos excede el alcance de NAV-4ESP-01 (paridad
+     de navegacion superior, no un selector de especialidades nuevo). ---------- */
+  var NAV_CORE = { nombre: 'Comprender AI', archivo: 'index.html' };
+  function caiIrA(archivo){ try{ window.open(archivo, '_blank'); }catch(e){ location.href = archivo; } }
+  function caiNavItems(){
+    return [[NAV_CORE.nombre + ' →', function(){ caiIrA(NAV_CORE.archivo); }]];
+  }
+  function construirModulosMenu(){
+    var menu = document.getElementById('modulosMenu');
+    menu.innerHTML = '';
+    var items = caiNavItems();
+    if(!items.length){
+      var v = document.createElement('div'); v.className = 'vacio';
+      v.textContent = 'Todavía no hay más módulos disponibles.';
+      menu.appendChild(v);
+      return;
+    }
+    items.forEach(function(it){
+      var b = document.createElement('button');
+      b.className = 'cai-item';
+      b.textContent = it[0];
+      b.addEventListener('click', function(){ menu.classList.remove('open'); it[1](); });
+      menu.appendChild(b);
+    });
+  }
+  function abrirModulosMenu(boton){
+    var menu = document.getElementById('modulosMenu');
+    if(menu.classList.contains('open')){ menu.classList.remove('open'); return; }
+    construirModulosMenu();
+    var r = boton.getBoundingClientRect();
+    menu.style.top = (r.bottom + 8) + 'px';
+    menu.style.right = Math.max(10, window.innerWidth - r.right) + 'px';
+    menu.classList.add('open');
+  }
+  document.addEventListener('click', function(e){
+    var menu = document.getElementById('modulosMenu');
+    if(menu.classList.contains('open') && !menu.contains(e.target) && !e.target.closest('.cai-ham')){
+      menu.classList.remove('open');
+    }
+  });
 
   /* ---------- envoltorio de fetch (copia fiel del patrón de negocios.html/sustentabilidad.html) ---------- */
   var _fetch = window.fetch;
