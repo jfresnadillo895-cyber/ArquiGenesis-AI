@@ -84,7 +84,7 @@
 //                         ya protege cualquier otro correo real del sistema, ver lib/comm-emitir.js)
 
 import { emitirYEnviarCorreo } from '../lib/comm-emitir.js';
-import { localeDe, biLocale, htmlFirma } from '../lib/i18n-server.js';
+import { localeDe, biLocale, htmlFirma, normalizarLocale } from '../lib/i18n-server.js';
 
 const TIPOS = ['arrepentimiento', 'baja_servicio', 'supresion_datos', 'consulta', 'reclamo'];
 const ESTADOS = ['recibido', 'en_validacion', 'ejecutado', 'rechazado', 'requiere_intervencion'];
@@ -202,15 +202,19 @@ function idempotenciaPorDefecto(tipo, correo, identificadorOperacion) {
 }
 
 const NOMBRES_TIPO = {
-  arrepentimiento: { es:'arrepentimiento', en:'withdrawal request' },
-  baja_servicio: { es:'baja de servicio', en:'service cancellation' },
-  supresion_datos: { es:'supresión de datos', en:'data deletion' },
-  consulta: { es:'consulta', en:'inquiry' },
-  reclamo: { es:'reclamo', en:'claim' },
+  arrepentimiento: { es:'arrepentimiento', en:'withdrawal request', pt:'solicitação de arrependimento' },
+  baja_servicio: { es:'baja de servicio', en:'service cancellation', pt:'cancelamento de serviço' },
+  supresion_datos: { es:'supresión de datos', en:'data deletion', pt:'exclusão de dados' },
+  consulta: { es:'consulta', en:'inquiry', pt:'consulta' },
+  reclamo: { es:'reclamo', en:'claim', pt:'reclamação' },
 };
 function nombreTipo(tipo, locale) {
   const n = NOMBRES_TIPO[tipo];
-  return n ? (locale === 'en' ? n.en : n.es) : tipo;
+  if (!n) return tipo;
+  const l = normalizarLocale(locale);
+  if (l === 'en') return n.en;
+  if (l === 'pt') return n.pt;
+  return n.es;
 }
 
 async function manejarPost(req, res, SB_URL, SERVICE_KEY) {
@@ -234,16 +238,16 @@ async function manejarPost(req, res, SB_URL, SERVICE_KEY) {
   }
   if (intentosIp >= LIMITE_IP_POR_HORA) {
     await registrarIntento(ip, correo, tipo, 'rechazada_limite_ip', SB_URL, SERVICE_KEY);
-    return res.status(429).json({ error: { message: biLocale(locale, 'Demasiadas solicitudes. Probá de nuevo más tarde.', 'Too many requests. Try again later.'), codigo: 'limite_excedido' } });
+    return res.status(429).json({ error: { message: biLocale(locale, 'Demasiadas solicitudes. Probá de nuevo más tarde.', 'Too many requests. Try again later.', 'Muitas solicitações. Tente novamente mais tarde.'), codigo: 'limite_excedido' } });
   }
 
   if (!TIPOS.includes(tipo)) {
     await registrarIntento(ip, correo, tipo, 'rechazada_tipo_invalido', SB_URL, SERVICE_KEY);
-    return res.status(400).json({ error: { message: biLocale(locale, 'Tipo inválido.', 'Invalid request type.'), codigo: 'tipo_invalido' } });
+    return res.status(400).json({ error: { message: biLocale(locale, 'Tipo inválido.', 'Invalid request type.', 'Tipo inválido.'), codigo: 'tipo_invalido' } });
   }
   if (!correo || !REGEX_CORREO.test(correo)) {
     await registrarIntento(ip, correo, tipo, 'rechazada_correo_invalido', SB_URL, SERVICE_KEY);
-    return res.status(400).json({ error: { message: biLocale(locale, 'El correo es obligatorio.', 'Email is required.'), codigo: 'correo_requerido' } });
+    return res.status(400).json({ error: { message: biLocale(locale, 'El correo es obligatorio.', 'Email is required.', 'O e-mail é obrigatório.'), codigo: 'correo_requerido' } });
   }
 
   // Limite por correo -- solo cuenta solicitudes NUEVAS aceptadas (no reintentos idempotentes
@@ -257,7 +261,7 @@ async function manejarPost(req, res, SB_URL, SERVICE_KEY) {
   }
   if (intentosCorreo >= LIMITE_CORREO_POR_DIA) {
     await registrarIntento(ip, correo, tipo, 'rechazada_limite_correo', SB_URL, SERVICE_KEY);
-    return res.status(429).json({ error: { message: biLocale(locale, 'Demasiadas solicitudes. Probá de nuevo más tarde.', 'Too many requests. Try again later.'), codigo: 'limite_excedido' } });
+    return res.status(429).json({ error: { message: biLocale(locale, 'Demasiadas solicitudes. Probá de nuevo más tarde.', 'Too many requests. Try again later.', 'Muitas solicitações. Tente novamente mais tarde.'), codigo: 'limite_excedido' } });
   }
 
   const nombre = limpiarTexto(cuerpo.nombre, LARGO_MAXIMO.nombre);
@@ -300,7 +304,7 @@ async function manejarPost(req, res, SB_URL, SERVICE_KEY) {
   } catch (e) {
     await registrarIntento(ip, correo, tipo, 'rechazada_error_interno', SB_URL, SERVICE_KEY);
     registrar({ error: 'FALLO REGISTRANDO SOLICITUD', detalle: String((e && e.message) || e) });
-    return res.status(502).json({ error: { message: biLocale(locale, 'No se pudo registrar la solicitud. Volvé a intentar.', 'The request could not be registered. Try again.') } });
+    return res.status(502).json({ error: { message: biLocale(locale, 'No se pudo registrar la solicitud. Volvé a intentar.', 'The request could not be registered. Try again.', 'Não foi possível registrar a solicitação. Tente novamente.') } });
   }
 
   await registrarIntento(ip, correo, tipo, resultado && resultado.ya_existia ? 'aceptada_repetida' : 'aceptada_nueva', SB_URL, SERVICE_KEY);
@@ -316,10 +320,11 @@ async function manejarPost(req, res, SB_URL, SERVICE_KEY) {
         type: 'solicitud.acuse', producer: 'solicitudes_legales',
         payload: { tipo, solicitud_id: resultado.id, locale },
         destinatario: correo,
-        asunto: biLocale(locale, 'Recibimos tu solicitud de ' + nombreTipo(tipo, locale), 'We received your ' + nombreTipo(tipo, locale)),
+        asunto: biLocale(locale, 'Recibimos tu solicitud de ' + nombreTipo(tipo, locale), 'We received your ' + nombreTipo(tipo, locale), 'Recebemos sua solicitação de ' + nombreTipo(tipo, locale)),
         contenidoHtml: biLocale(locale,
           '<p>Hola,</p><p>Recibimos tu solicitud de <strong>' + nombreTipo(tipo, locale) + '</strong>. Tu número de referencia es <strong>' + resultado.id + '</strong>.</p><p>La vamos a revisar y te vamos a confirmar el resultado por este mismo medio.</p>',
-          '<p>Hello,</p><p>We received your <strong>' + nombreTipo(tipo, locale) + '</strong>. Your reference number is <strong>' + resultado.id + '</strong>.</p><p>We will review it and confirm the outcome through this same channel.</p>'
+          '<p>Hello,</p><p>We received your <strong>' + nombreTipo(tipo, locale) + '</strong>. Your reference number is <strong>' + resultado.id + '</strong>.</p><p>We will review it and confirm the outcome through this same channel.</p>',
+          '<p>Olá,</p><p>Recebemos sua solicitação de <strong>' + nombreTipo(tipo, locale) + '</strong>. Seu número de referência é <strong>' + resultado.id + '</strong>.</p><p>Vamos analisá-la e confirmar o resultado por este mesmo meio.</p>'
         ) + htmlFirma(locale),
       });
     } catch (e) {
@@ -445,7 +450,7 @@ export default async function handler(req, res) {
   const SB_URL = String(process.env.SUPABASE_URL || '').replace(/\/+$/, '');
   const SERVICE_KEY = process.env.SUPABASE_SECRET_KEY;
   if (!SB_URL || !SERVICE_KEY) {
-    return res.status(500).json({ error: { message: biLocale(locale, 'Falta configuracion en el servidor.', 'Server configuration is incomplete.') } });
+    return res.status(500).json({ error: { message: biLocale(locale, 'Falta configuracion en el servidor.', 'Server configuration is incomplete.', 'Configuração do servidor incompleta.') } });
   }
 
   if (req.method === 'POST') {
@@ -458,12 +463,12 @@ export default async function handler(req, res) {
     const claveStaff = process.env.STAFF_API_KEY;
     const recibida = String(req.headers['x-staff-key'] || '');
     if (!claveStaff || recibida !== claveStaff) {
-      return res.status(401).json({ error: { message: biLocale(locale, 'No autorizado.', 'Unauthorized.') } });
+      return res.status(401).json({ error: { message: biLocale(locale, 'No autorizado.', 'Unauthorized.', 'Não autorizado.') } });
     }
     if (req.method === 'GET') return manejarGet(req, res, SB_URL, SERVICE_KEY);
     return manejarPatch(req, res, SB_URL, SERVICE_KEY);
   }
 
   res.setHeader('Allow', 'POST, GET, PATCH, OPTIONS');
-  return res.status(405).json({ error: { message: biLocale(locale, 'Metodo no permitido.', 'Method not allowed.') } });
+  return res.status(405).json({ error: { message: biLocale(locale, 'Metodo no permitido.', 'Method not allowed.', 'Método não permitido.') } });
 }

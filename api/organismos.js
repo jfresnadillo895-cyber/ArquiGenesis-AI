@@ -69,20 +69,20 @@ export default async function handler(req, res) {
   const locale = localeDe(req);
   if (req.method !== 'GET' && req.method !== 'POST' && req.method !== 'DELETE') {
     res.setHeader('Allow', 'GET, POST, DELETE');
-    return res.status(405).json({ error: { message: biLocale(locale, 'Metodo no permitido.', 'Method not allowed.') } });
+    return res.status(405).json({ error: { message: biLocale(locale, 'Metodo no permitido.', 'Method not allowed.', 'Método não permitido.') } });
   }
 
   const SB_URL = process.env.SUPABASE_URL;
   const SERVICE_KEY = process.env.SUPABASE_SECRET_KEY;
   if (!SB_URL || !SERVICE_KEY) {
-    return res.status(500).json({ error: { message: biLocale(locale, 'Falta SUPABASE_URL o SUPABASE_SECRET_KEY.', 'Server configuration is incomplete.') } });
+    return res.status(500).json({ error: { message: biLocale(locale, 'Falta SUPABASE_URL o SUPABASE_SECRET_KEY.', 'Server configuration is incomplete.', 'Configuração do servidor incompleta.') } });
   }
 
   // --- Sesion ---
   const cabecera = String(req.headers['authorization'] || '');
   const token = cabecera.toLowerCase().startsWith('bearer ') ? cabecera.slice(7).trim() : '';
   if (!token) {
-    return res.status(401).json({ error: { message: biLocale(locale, 'Inicia sesion para continuar.', 'Sign in to continue.'), codigo: 'sin_sesion' } });
+    return res.status(401).json({ error: { message: biLocale(locale, 'Inicia sesion para continuar.', 'Sign in to continue.', 'Entre para continuar.'), codigo: 'sin_sesion' } });
   }
 
   let perfil;
@@ -90,10 +90,10 @@ export default async function handler(req, res) {
     perfil = await identificar(token, SB_URL, SERVICE_KEY);
   } catch (e) {
     registrar({ error: 'base_inalcanzable', detalle: String((e && e.message) || e) });
-    return res.status(503).json({ error: { message: biLocale(locale, 'El servicio no esta disponible. Volve a intentar.', 'The service is unavailable. Try again.'), codigo: 'servicio_no_disponible' } });
+    return res.status(503).json({ error: { message: biLocale(locale, 'El servicio no esta disponible. Volve a intentar.', 'The service is unavailable. Try again.', 'O serviço não está disponível. Tente novamente.'), codigo: 'servicio_no_disponible' } });
   }
   if (!perfil) {
-    return res.status(401).json({ error: { message: biLocale(locale, 'Sesion vencida. Volve a iniciar sesion.', 'Your session has expired. Sign in again.'), codigo: 'sesion_invalida' } });
+    return res.status(401).json({ error: { message: biLocale(locale, 'Sesion vencida. Volve a iniciar sesion.', 'Your session has expired. Sign in again.', 'Sua sessão expirou. Entre novamente.'), codigo: 'sesion_invalida' } });
   }
 
   // --- GET: listar ---
@@ -109,7 +109,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ organismos: lista });
     } catch (e) {
       registrar({ error: 'fallo_listar', perfil: perfil.slice(0, 8), detalle: String((e && e.message) || e) });
-      return res.status(503).json({ error: { message: biLocale(locale, 'No se pudieron traer los organismos. Volve a intentar.', 'Could not load your organisms. Try again.'), codigo: 'servicio_no_disponible' } });
+      return res.status(503).json({ error: { message: biLocale(locale, 'No se pudieron traer los organismos. Volve a intentar.', 'Could not load your organisms. Try again.', 'Não foi possível carregar os organismos. Tente novamente.'), codigo: 'servicio_no_disponible' } });
     }
   }
 
@@ -117,7 +117,7 @@ export default async function handler(req, res) {
   if (req.method === 'DELETE') {
     const clienteId = String((req.query && req.query.cliente_id) || '').trim();
     if (!clienteId) {
-      return res.status(400).json({ error: { message: biLocale(locale, 'Falta cliente_id.', 'Missing client_id.') } });
+      return res.status(400).json({ error: { message: biLocale(locale, 'Falta cliente_id.', 'Missing client_id.', 'Falta o client_id.') } });
     }
     try {
       const ruta = '/rest/v1/organismos?perfil=eq.' + perfil + '&cliente_id=eq.' + encodeURIComponent(clienteId);
@@ -131,7 +131,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, encontrado: Array.isArray(borrados) && borrados.length > 0 });
     } catch (e) {
       registrar({ error: 'fallo_borrar', perfil: perfil.slice(0, 8), cliente_id: clienteId, detalle: String((e && e.message) || e) });
-      return res.status(503).json({ error: { message: biLocale(locale, 'No se pudo borrar. Volve a intentar.', 'Could not delete it. Try again.'), codigo: 'servicio_no_disponible' } });
+      return res.status(503).json({ error: { message: biLocale(locale, 'No se pudo borrar. Volve a intentar.', 'Could not delete it. Try again.', 'Não foi possível excluir. Tente novamente.'), codigo: 'servicio_no_disponible' } });
     }
   }
 
@@ -141,7 +141,7 @@ export default async function handler(req, res) {
   const clienteId = cuerpo && String(cuerpo.cliente_id || '').trim();
   const datos = cuerpo && cuerpo.datos;
   if (!clienteId || !datos || typeof datos !== 'object') {
-    return res.status(400).json({ error: { message: biLocale(locale, 'Falta cliente_id o datos.', 'Missing client_id or data.') } });
+    return res.status(400).json({ error: { message: biLocale(locale, 'Falta cliente_id o datos.', 'Missing client_id or data.', 'Falta o client_id ou os dados.') } });
   }
   const nombre = (cuerpo.nombre != null) ? String(cuerpo.nombre) : null;
   const estado = (cuerpo.estado === 'archivado') ? 'archivado' : 'activo';
@@ -162,7 +162,7 @@ export default async function handler(req, res) {
       // No se pisa: el cliente decide como conservar ambas o fusionar.
       registrar({ accion: 'conflicto', perfil: perfil.slice(0, 8), cliente_id: clienteId, version_servidor: r.version });
       return res.status(409).json({
-        error: { message: biLocale(locale, 'Hay una version mas nueva guardada. No se sobrescribio.', 'A newer version is already saved. It was not overwritten.'), codigo: 'conflicto_version' },
+        error: { message: biLocale(locale, 'Hay una version mas nueva guardada. No se sobrescribio.', 'A newer version is already saved. It was not overwritten.', 'Já existe uma versão mais nova salva. Não foi sobrescrita.'), codigo: 'conflicto_version' },
         version: r.version,
         datos: r.datos,
       });
@@ -180,8 +180,8 @@ export default async function handler(req, res) {
         SB_URL, SERVICE_KEY,
         organizationId: perfil, purposeId: 'organismo_disponible', type: 'organismo.disponible',
         producer: 'organismos', payload: { organismo_id: r.id, nombre: nombre || null, locale },
-        titulo: biLocale(locale, 'Tu análisis está disponible', 'Your analysis is available'),
-        resumen: nombre ? biLocale(locale, `"${nombre}" ya está guardado.`, `"${nombre}" is now saved.`) : biLocale(locale, 'Tu nuevo análisis ya está guardado.', 'Your new analysis is now saved.'),
+        titulo: biLocale(locale, 'Tu análisis está disponible', 'Your analysis is available', 'Sua análise está disponível'),
+        resumen: nombre ? biLocale(locale, `"${nombre}" ya está guardado.`, `"${nombre}" is now saved.`, `"${nombre}" já foi salvo.`) : biLocale(locale, 'Tu nuevo análisis ya está guardado.', 'Your new analysis is now saved.', 'Sua nova análise já foi salva.'),
       });
     }
 
@@ -189,6 +189,6 @@ export default async function handler(req, res) {
 
   } catch (e) {
     registrar({ error: 'fallo_guardar', perfil: perfil.slice(0, 8), cliente_id: clienteId, detalle: String((e && e.message) || e) });
-    return res.status(503).json({ error: { message: biLocale(locale, 'No se pudo guardar. Volve a intentar.', 'Could not save. Try again.'), codigo: 'servicio_no_disponible' } });
+    return res.status(503).json({ error: { message: biLocale(locale, 'No se pudo guardar. Volve a intentar.', 'Could not save. Try again.', 'Não foi possível salvar. Tente novamente.'), codigo: 'servicio_no_disponible' } });
   }
 }

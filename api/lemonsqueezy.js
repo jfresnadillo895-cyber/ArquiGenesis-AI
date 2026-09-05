@@ -220,8 +220,8 @@ export async function POST(request) {
           SB_URL: process.env.SUPABASE_URL, SERVICE_KEY: process.env.SUPABASE_SECRET_KEY,
           organizationId: perfil, purposeId: 'plan_activado', type: 'plan.activado',
           producer: 'pago_lemonsqueezy', payload: { plan, dias: 30, locale },
-          titulo: biLocale(locale, 'Tu plan quedó activo', 'Your plan is now active'),
-          resumen: biLocale(locale, `Tu plan ${plan} está activo.`, `Your ${plan} plan is active.`),
+          titulo: biLocale(locale, 'Tu plan quedó activo', 'Your plan is now active', 'Seu plano ficou ativo'),
+          resumen: biLocale(locale, `Tu plan ${plan} está activo.`, `Your ${plan} plan is active.`, `Seu plano ${plan} está ativo.`),
         });
       }
       return Response.json({ ok: true });
@@ -249,8 +249,8 @@ export async function POST(request) {
           SB_URL: process.env.SUPABASE_URL, SERVICE_KEY: process.env.SUPABASE_SECRET_KEY,
           organizationId: perfil, purposeId: 'plan_activado', type: 'plan.activado',
           producer: 'pago_lemonsqueezy', payload: { plan, dias: 30, locale },
-          titulo: biLocale(locale, 'Tu plan quedó activo', 'Your plan is now active'),
-          resumen: biLocale(locale, `Tu plan ${plan} está activo.`, `Your ${plan} plan is active.`),
+          titulo: biLocale(locale, 'Tu plan quedó activo', 'Your plan is now active', 'Seu plano ficou ativo'),
+          resumen: biLocale(locale, `Tu plan ${plan} está activo.`, `Your ${plan} plan is active.`, `Seu plano ${plan} está ativo.`),
         });
 
       } else if (evento === 'subscription_cancelled') {

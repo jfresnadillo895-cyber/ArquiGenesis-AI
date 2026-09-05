@@ -50,11 +50,11 @@ async function accionEliminar(id, SB_URL, SERVICE_KEY, res, locale) {
       body: JSON.stringify({ baja_programada: bajaProgramada }),
     });
     if (!r.ok) {
-      res.status(502).json({ error: { message: biLocale(locale, 'No se pudo programar la eliminación de la cuenta.', 'The account deletion could not be scheduled.'), codigo: 'fallo_programar' } });
+      res.status(502).json({ error: { message: biLocale(locale, 'No se pudo programar la eliminación de la cuenta.', 'The account deletion could not be scheduled.', 'Não foi possível programar a exclusão da conta.'), codigo: 'fallo_programar' } });
       return;
     }
   } catch (e) {
-    res.status(502).json({ error: { message: biLocale(locale, 'No se pudo programar la eliminación de la cuenta.', 'The account deletion could not be scheduled.'), codigo: 'fallo_programar' } });
+    res.status(502).json({ error: { message: biLocale(locale, 'No se pudo programar la eliminación de la cuenta.', 'The account deletion could not be scheduled.', 'Não foi possível programar a exclusão da conta.'), codigo: 'fallo_programar' } });
     return;
   }
 
@@ -69,14 +69,17 @@ async function accionEliminar(id, SB_URL, SERVICE_KEY, res, locale) {
         SB_URL, SERVICE_KEY, organizationId: id, purposeId: 'cuenta_baja_programada', type: 'cuenta.baja_programada',
         producer: 'cuenta', payload: { baja_programada: bajaProgramada },
         destinatario: email,
-        asunto: biLocale(locale, 'Tu cuenta de Comprender AI va a eliminarse el ' + fecha, 'Your Comprender AI account will be deleted on ' + fecha),
+        asunto: biLocale(locale, 'Tu cuenta de Comprender AI va a eliminarse el ' + fecha, 'Your Comprender AI account will be deleted on ' + fecha, 'Sua conta do Comprender AI será excluída em ' + fecha),
         contenidoHtml: biLocale(locale,
           '<p>Hola,</p>' +
           '<p>Programamos la eliminación de tu cuenta para el <strong>' + fecha + '</strong>. Hasta ese momento, tu cuenta sigue funcionando con normalidad.</p>' +
           '<p>Si te arrepentís, podés cancelar esto en cualquier momento antes de esa fecha, desde el panel de tu cuenta.</p>',
           '<p>Hello,</p>' +
           '<p>We scheduled your account for deletion on <strong>' + fecha + '</strong>. Until then, your account will continue to work normally.</p>' +
-          '<p>If you change your mind, you can cancel this at any time before that date from your account panel.</p>'
+          '<p>If you change your mind, you can cancel this at any time before that date from your account panel.</p>',
+          '<p>Olá,</p>' +
+          '<p>Programamos a exclusão da sua conta para o dia <strong>' + fecha + '</strong>. Até essa data, sua conta continua funcionando normalmente.</p>' +
+          '<p>Se mudar de ideia, você pode cancelar isso a qualquer momento antes dessa data, no painel da sua conta.</p>'
         ) + htmlFirma(locale),
       });
     }
@@ -99,11 +102,11 @@ async function accionCancelarBaja(id, SB_URL, SERVICE_KEY, res, locale) {
       body: JSON.stringify({ baja_programada: null }),
     });
     if (!r.ok) {
-      res.status(502).json({ error: { message: biLocale(locale, 'No se pudo cancelar la eliminación.', 'The account deletion could not be canceled.'), codigo: 'fallo_cancelar' } });
+      res.status(502).json({ error: { message: biLocale(locale, 'No se pudo cancelar la eliminación.', 'The account deletion could not be canceled.', 'Não foi possível cancelar a exclusão.'), codigo: 'fallo_cancelar' } });
       return;
     }
   } catch (e) {
-    res.status(502).json({ error: { message: biLocale(locale, 'No se pudo cancelar la eliminación.', 'The account deletion could not be canceled.'), codigo: 'fallo_cancelar' } });
+    res.status(502).json({ error: { message: biLocale(locale, 'No se pudo cancelar la eliminación.', 'The account deletion could not be canceled.', 'Não foi possível cancelar a exclusão.'), codigo: 'fallo_cancelar' } });
     return;
   }
 
@@ -117,10 +120,11 @@ async function accionCancelarBaja(id, SB_URL, SERVICE_KEY, res, locale) {
         SB_URL, SERVICE_KEY, organizationId: id, purposeId: 'cuenta_baja_cancelada', type: 'cuenta.baja_cancelada',
         producer: 'cuenta', payload: {},
         destinatario: email,
-        asunto: biLocale(locale, 'Cancelamos la eliminación de tu cuenta de Comprender AI', 'We canceled the deletion of your Comprender AI account'),
+        asunto: biLocale(locale, 'Cancelamos la eliminación de tu cuenta de Comprender AI', 'We canceled the deletion of your Comprender AI account', 'Cancelamos a exclusão da sua conta do Comprender AI'),
         contenidoHtml: biLocale(locale,
           '<p>Hola,</p><p>Confirmamos que cancelamos la eliminación programada de tu cuenta. Tu cuenta sigue activa con normalidad.</p>',
-          '<p>Hello,</p><p>We confirm that the scheduled deletion of your account has been canceled. Your account remains active.</p>'
+          '<p>Hello,</p><p>We confirm that the scheduled deletion of your account has been canceled. Your account remains active.</p>',
+          '<p>Olá,</p><p>Confirmamos que cancelamos a exclusão programada da sua conta. Sua conta continua ativa normalmente.</p>'
         ) + htmlFirma(locale),
       });
     }
@@ -140,45 +144,45 @@ async function accionCancelarDowngrade(id, SB_URL, SERVICE_KEY, res, locale) {
       body: JSON.stringify({ p_perfil: id }),
     });
     if (!r.ok) {
-      res.status(502).json({ error: { message: biLocale(locale, 'No se pudo cancelar el cambio de plan.', 'The plan change could not be canceled.'), codigo: 'fallo_cancelar' } });
+      res.status(502).json({ error: { message: biLocale(locale, 'No se pudo cancelar el cambio de plan.', 'The plan change could not be canceled.', 'Não foi possível cancelar a mudança de plano.'), codigo: 'fallo_cancelar' } });
       return;
     }
     const d = await r.json().catch(() => null);
     const fila = Array.isArray(d) ? d[0] : d;
     if (!fila || !fila.ok) {
-      res.status(404).json({ error: { message: biLocale(locale, 'No había ningún cambio de plan pendiente.', 'There was no pending plan change.'), codigo: 'sin_pendiente' } });
+      res.status(404).json({ error: { message: biLocale(locale, 'No había ningún cambio de plan pendiente.', 'There was no pending plan change.', 'Não havia nenhuma mudança de plano pendente.'), codigo: 'sin_pendiente' } });
       return;
     }
     res.status(200).json({ ok: true, plan: fila.plan });
   } catch (e) {
-    res.status(502).json({ error: { message: biLocale(locale, 'No se pudo cancelar el cambio de plan.', 'The plan change could not be canceled.'), codigo: 'fallo_cancelar' } });
+    res.status(502).json({ error: { message: biLocale(locale, 'No se pudo cancelar el cambio de plan.', 'The plan change could not be canceled.', 'Não foi possível cancelar a mudança de plano.'), codigo: 'fallo_cancelar' } });
   }
 }
 
 export default async function handler(req, res) {
   const locale = localeDe(req);
   if (req.method !== 'POST') {
-    res.status(405).json({ error: { message: biLocale(locale, 'Método no permitido', 'Method not allowed'), codigo: 'metodo_invalido' } });
+    res.status(405).json({ error: { message: biLocale(locale, 'Método no permitido', 'Method not allowed', 'Método não permitido'), codigo: 'metodo_invalido' } });
     return;
   }
 
   const encabezado = req.headers.authorization || '';
   const token = encabezado.indexOf('Bearer ') === 0 ? encabezado.slice(7) : '';
   if (!token) {
-    res.status(401).json({ error: { message: biLocale(locale, 'Falta la sesión.', 'Missing session.'), codigo: 'sin_sesion' } });
+    res.status(401).json({ error: { message: biLocale(locale, 'Falta la sesión.', 'Missing session.', 'Falta a sessão.'), codigo: 'sin_sesion' } });
     return;
   }
 
   const SB_URL = process.env.SUPABASE_URL;
   const SERVICE_KEY = process.env.SUPABASE_SECRET_KEY;
   if (!SB_URL || !SERVICE_KEY) {
-    res.status(500).json({ error: { message: biLocale(locale, 'Falta configuración del servidor.', 'Server configuration is incomplete.'), codigo: 'sin_config' } });
+    res.status(500).json({ error: { message: biLocale(locale, 'Falta configuración del servidor.', 'Server configuration is incomplete.', 'Configuração do servidor incompleta.'), codigo: 'sin_config' } });
     return;
   }
 
   const id = await identificarUsuario(SB_URL, SERVICE_KEY, token).catch(() => null);
   if (!id) {
-    res.status(401).json({ error: { message: biLocale(locale, 'Sesión inválida.', 'Invalid session.'), codigo: 'sesion_invalida' } });
+    res.status(401).json({ error: { message: biLocale(locale, 'Sesión inválida.', 'Invalid session.', 'Sessão inválida.'), codigo: 'sesion_invalida' } });
     return;
   }
 
@@ -192,5 +196,5 @@ export default async function handler(req, res) {
   if (accion === 'cancelar_baja') return accionCancelarBaja(id, SB_URL, SERVICE_KEY, res, locale);
   if (accion === 'cancelar_downgrade') return accionCancelarDowngrade(id, SB_URL, SERVICE_KEY, res, locale);
 
-  res.status(400).json({ error: { message: biLocale(locale, 'Acción inválida.', 'Invalid action.'), codigo: 'accion_invalida' } });
+  res.status(400).json({ error: { message: biLocale(locale, 'Acción inválida.', 'Invalid action.', 'Ação inválida.'), codigo: 'accion_invalida' } });
 }
