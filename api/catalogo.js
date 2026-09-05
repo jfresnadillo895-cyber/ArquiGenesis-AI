@@ -31,11 +31,15 @@
 // (mismo precio, mismos ids de Lemon Squeezy, mismos umbrales) porque hacen falta para reconocer
 // webhooks y perfiles legacy -- pero contratable:false los saca de la oferta y del checkout
 // nuevo sin borrar ni renombrar nada. Ver planContratable() más abajo.
+import { localeDe, bi } from '../lib/i18n-server.js';
+
 export const PLANES = {
   profesional: {
     id: 'profesional',
     nombre: 'Profesional',
-    titulo: 'Comprender · Profesional',   // "reason" que ve el comprador en Mercado Pago
+    nombre_en: 'Professional',
+    titulo: 'Comprender · Profesional',
+    titulo_en: 'Comprender · Professional',   // "reason" que ve el comprador en Mercado Pago
     // PLAN-C2B (26/08): precio único de Profesional convergido a USD 25 / ARS 39.000. umbral
     // se deja sin tocar (20000) -- 39000 lo sigue superando con margen, no hace falta moverlo
     // para reconocer el webhook. ls_variant_id/ls_checkout_uuid NO se tocan: son el ID de un
@@ -54,7 +58,9 @@ export const PLANES = {
   estudio: {
     id: 'estudio',
     nombre: 'Pro · Estudio',
+    nombre_en: 'Pro · Studio',
     titulo: 'Pro · Estudio',
+    titulo_en: 'Pro · Studio',
     monto: 80000,
     umbral: 60000,
     creditos: 4500,
@@ -66,7 +72,9 @@ export const PLANES = {
   magister: {
     id: 'magister',
     nombre: 'Magister',
+    nombre_en: 'Magister',
     titulo: 'Comprender · Magister',
+    titulo_en: 'Comprender · Magister',
     monto: 160000,
     umbral: 120000,
     creditos: 9000,
@@ -90,11 +98,12 @@ export function planContratable(planId) {
 // personalizado -- es lo que va a usar el futuro boton "Suscribirme" internacional.
 // PLAN-C2A (26/08): null también si el plan no es contratable -- evita armar un checkout
 // nuevo de Estudio/Magister aunque alguien conozca su ls_checkout_uuid.
-export function checkoutLemonSqueezy(planId, perfilId) {
+export function checkoutLemonSqueezy(planId, perfilId, locale = 'es') {
   const p = PLANES[planId];
   if (!p || !p.ls_checkout_uuid || !p.contratable) return null;
   return 'https://' + LS_STORE + '.lemonsqueezy.com/checkout/buy/' + p.ls_checkout_uuid +
-    '?checkout[custom][perfil]=' + encodeURIComponent(perfilId);
+    '?checkout[custom][perfil]=' + encodeURIComponent(perfilId) +
+    '&checkout[custom][locale]=' + encodeURIComponent(locale === 'en' ? 'en' : 'es');
 }
 const LS_STORE = 'comprenderai';   // subdominio de la tienda en Lemon Squeezy
 
@@ -121,9 +130,10 @@ export function planPorMonto(monto) {
 }
 
 export default async function handler(req, res) {
+  const locale = localeDe(req);
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
-    return res.status(405).json({ error: { message: 'Metodo no permitido.' } });
+    return res.status(405).json({ error: { message: bi(req, 'Metodo no permitido.', 'Method not allowed.') } });
   }
   // PLAN-C2A (26/08): sólo se publica lo contratable -- Estudio y Magister (precios, créditos,
   // uuid de checkout incluidos) dejan de exponerse acá. planPorVariante()/planPorMonto() siguen
@@ -132,7 +142,7 @@ export default async function handler(req, res) {
     .filter((p) => p.contratable)
     .map((p) => ({
       id: p.id,
-      nombre: p.nombre,
+      nombre: locale === 'en' ? (p.nombre_en || p.nombre) : p.nombre,
       precio_ars: p.monto,
       creditos: p.creditos,
       precio_usd: p.ls_precio_usd,           // Corte B.6 -- para el link "Pagar en USD"

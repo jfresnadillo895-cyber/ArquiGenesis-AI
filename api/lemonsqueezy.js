@@ -65,6 +65,7 @@
 import crypto from 'crypto';
 import { planPorVariante } from './catalogo.js';
 import { emitirYNotificar } from '../lib/comm-emitir.js';
+import { normalizarLocale, biLocale } from '../lib/i18n-server.js';
 
 const LS_API = 'https://api.lemonsqueezy.com/v1';
 
@@ -129,6 +130,7 @@ export async function POST(request) {
 
   const evento = String((cuerpo.meta && cuerpo.meta.event_name) || '');
   const perfil = (cuerpo.meta && cuerpo.meta.custom_data && cuerpo.meta.custom_data.perfil) || null;
+  const locale = normalizarLocale((cuerpo.meta && cuerpo.meta.custom_data && cuerpo.meta.custom_data.locale) || 'es');
   const tipoDato = (cuerpo.data && cuerpo.data.type) || '';
   const idDato = (cuerpo.data && cuerpo.data.id) || '';
 
@@ -217,8 +219,9 @@ export async function POST(request) {
         await emitirYNotificar({
           SB_URL: process.env.SUPABASE_URL, SERVICE_KEY: process.env.SUPABASE_SECRET_KEY,
           organizationId: perfil, purposeId: 'plan_activado', type: 'plan.activado',
-          producer: 'pago_lemonsqueezy', payload: { plan, dias: 30 },
-          titulo: 'Tu plan quedó activo', resumen: `Tu plan ${plan} está activo.`,
+          producer: 'pago_lemonsqueezy', payload: { plan, dias: 30, locale },
+          titulo: biLocale(locale, 'Tu plan quedó activo', 'Your plan is now active'),
+          resumen: biLocale(locale, `Tu plan ${plan} está activo.`, `Your ${plan} plan is active.`),
         });
       }
       return Response.json({ ok: true });
@@ -245,8 +248,9 @@ export async function POST(request) {
         await emitirYNotificar({
           SB_URL: process.env.SUPABASE_URL, SERVICE_KEY: process.env.SUPABASE_SECRET_KEY,
           organizationId: perfil, purposeId: 'plan_activado', type: 'plan.activado',
-          producer: 'pago_lemonsqueezy', payload: { plan, dias: 30 },
-          titulo: 'Tu plan quedó activo', resumen: `Tu plan ${plan} está activo.`,
+          producer: 'pago_lemonsqueezy', payload: { plan, dias: 30, locale },
+          titulo: biLocale(locale, 'Tu plan quedó activo', 'Your plan is now active'),
+          resumen: biLocale(locale, `Tu plan ${plan} está activo.`, `Your ${plan} plan is active.`),
         });
 
       } else if (evento === 'subscription_cancelled') {

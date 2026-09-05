@@ -33,6 +33,7 @@
 
 import { PLANES, planContratable } from './catalogo.js';
 import { pasarelaDe } from '../lib/pasarela.js';
+import { localeDe, biLocale } from '../lib/i18n-server.js';
 
 const MP = 'https://api.mercadopago.com';
 const VUELTA = 'https://app.comprenderai.com/?suscripcion=ok';
@@ -65,17 +66,17 @@ async function rpc(nombre, cuerpo, SB_URL, SERVICE_KEY) {
 }
 
 // ---------- Cambio de plan sobre una suscripcion existente (ex api/cambiar-plan.js) ----------
-async function cambiarPlan(usuario, pedido, perfil, SB_URL, SERVICE_KEY, res) {
+async function cambiarPlan(usuario, pedido, perfil, SB_URL, SERVICE_KEY, res, locale) {
   const planNuevo = PLANES[pedido];
   if (perfil.plan === pedido) {
-    return res.status(409).json({ error: { message: 'Ya estás en ese plan.', codigo: 'mismo_plan' } });
+    return res.status(409).json({ error: { message: biLocale(locale, 'Ya estás en ese plan.', 'You are already on that plan.'), codigo: 'mismo_plan' } });
   }
 
   const pasarela = await pasarelaDe(usuario.id, SB_URL, SERVICE_KEY).catch(() => null);
   if (!pasarela) {
     registrar({ error: 'pasarela_no_reconocida', perfil: usuario.id.slice(0, 8) });
     return res.status(409).json({
-      error: { message: 'No pudimos identificar tu forma de pago. Escribinos a contacto@comprenderai.com.', codigo: 'pasarela_desconocida' },
+      error: { message: biLocale(locale, 'No pudimos identificar tu forma de pago. Escribinos a contacto@comprenderai.com.', 'We could not identify your payment method. Contact us at contacto@comprenderai.com.'), codigo: 'pasarela_desconocida' },
     });
   }
 
@@ -87,34 +88,34 @@ async function cambiarPlan(usuario, pedido, perfil, SB_URL, SERVICE_KEY, res) {
       const r = await rpc('programar_downgrade', { p_perfil: usuario.id, p_plan_nuevo: pedido }, SB_URL, SERVICE_KEY);
       if (!r || !r.ok) {
         registrar({ accion: 'downgrade_rechazado', perfil: usuario.id.slice(0, 8), motivo: r && r.motivo });
-        return res.status(409).json({ error: { message: 'No se pudo programar el cambio de plan.', codigo: r && r.motivo } });
+        return res.status(409).json({ error: { message: biLocale(locale, 'No se pudo programar el cambio de plan.', 'The plan change could not be scheduled.'), codigo: r && r.motivo } });
       }
       registrar({ accion: 'downgrade_programado', perfil: usuario.id.slice(0, 8), plan_pendiente: pedido, vence: r.vence });
       return res.status(200).json({ ok: true, aplicado: 'programado', plan_pendiente: pedido, vence: r.vence });
     } catch (e) {
       registrar({ error: 'fallo_programar_downgrade', detalle: String((e && e.message) || e) });
-      return res.status(502).json({ error: { message: 'No se pudo programar el cambio de plan. Volve a intentar.' } });
+      return res.status(502).json({ error: { message: biLocale(locale, 'No se pudo programar el cambio de plan. Volve a intentar.', 'The plan change could not be scheduled. Try again.') } });
     }
   }
 
   // ---------- UPGRADE ----------
   if (pasarela === 'mercadopago') {
     const token = process.env.MP_ACCESS_TOKEN;
-    if (!token) return res.status(500).json({ error: { message: 'Falta configuracion en el servidor.' } });
+    if (!token) return res.status(500).json({ error: { message: biLocale(locale, 'Falta configuracion en el servidor.', 'Server configuration is incomplete.') } });
     try {
       const rPut = await fetch(MP + '/preapproval/' + perfil.suscripcion, {
         method: 'PUT',
         headers: { Authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-        body: JSON.stringify({ reason: planNuevo.titulo, auto_recurring: { transaction_amount: planNuevo.monto } }),
+        body: JSON.stringify({ reason: locale === 'en' ? (planNuevo.titulo_en || planNuevo.titulo) : planNuevo.titulo, auto_recurring: { transaction_amount: planNuevo.monto } }),
       });
       if (!rPut.ok) {
         const detalle = await rPut.json().catch(() => ({}));
         registrar({ error: 'MP RECHAZO EL CAMBIO', estado: rPut.status, detalle: JSON.stringify(detalle).slice(0, 400) });
-        return res.status(502).json({ error: { message: 'No se pudo actualizar la suscripción en Mercado Pago. Volve a intentar.' } });
+        return res.status(502).json({ error: { message: biLocale(locale, 'No se pudo actualizar la suscripción en Mercado Pago. Volve a intentar.', 'The Mercado Pago subscription could not be updated. Try again.') } });
       }
     } catch (e) {
       registrar({ error: 'FALLO CONTACTANDO MP', detalle: String((e && e.message) || e) });
-      return res.status(502).json({ error: { message: 'No se pudo contactar a Mercado Pago.' } });
+      return res.status(502).json({ error: { message: biLocale(locale, 'No se pudo contactar a Mercado Pago.', 'Could not contact Mercado Pago.') } });
     }
 
     try {
@@ -126,16 +127,16 @@ async function cambiarPlan(usuario, pedido, perfil, SB_URL, SERVICE_KEY, res) {
     } catch (e) {
       registrar({ error: 'fallo_acreditar_upgrade_tras_mp_ok', perfil: usuario.id.slice(0, 8), detalle: String((e && e.message) || e) });
       return res.status(502).json({
-        error: { message: 'Tu plan se actualizó en Mercado Pago pero no pudimos acreditar los créditos todavía. Escribinos a contacto@comprenderai.com si no se resuelve solo.' },
+        error: { message: biLocale(locale, 'Tu plan se actualizó en Mercado Pago pero no pudimos acreditar los créditos todavía. Escribinos a contacto@comprenderai.com si no se resuelve solo.', 'Your plan was updated in Mercado Pago, but we could not credit your balance yet. Contact us at contacto@comprenderai.com if it does not resolve automatically.') },
       });
     }
   }
 
   // pasarela === 'lemonsqueezy'
   const apiKey = process.env.LEMONSQUEEZY_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: { message: 'Falta configuracion en el servidor.' } });
+  if (!apiKey) return res.status(500).json({ error: { message: biLocale(locale, 'Falta configuracion en el servidor.', 'Server configuration is incomplete.') } });
   if (!planNuevo.ls_variant_id) {
-    return res.status(500).json({ error: { message: 'Ese plan no está disponible para pago internacional todavía.' } });
+    return res.status(500).json({ error: { message: biLocale(locale, 'Ese plan no está disponible para pago internacional todavía.', 'That plan is not available for international payment yet.') } });
   }
   try {
     const rPatch = await fetch('https://api.lemonsqueezy.com/v1/subscriptions/' + perfil.suscripcion, {
@@ -154,11 +155,11 @@ async function cambiarPlan(usuario, pedido, perfil, SB_URL, SERVICE_KEY, res) {
     if (!rPatch.ok) {
       const detalle = await rPatch.text().catch(() => '');
       registrar({ error: 'LS RECHAZO EL CAMBIO', estado: rPatch.status, detalle: detalle.slice(0, 400) });
-      return res.status(502).json({ error: { message: 'No se pudo actualizar la suscripción en Lemon Squeezy. Volve a intentar.' } });
+      return res.status(502).json({ error: { message: biLocale(locale, 'No se pudo actualizar la suscripción en Lemon Squeezy. Volve a intentar.', 'The Lemon Squeezy subscription could not be updated. Try again.') } });
     }
   } catch (e) {
     registrar({ error: 'FALLO CONTACTANDO LS', detalle: String((e && e.message) || e) });
-    return res.status(502).json({ error: { message: 'No se pudo contactar a Lemon Squeezy.' } });
+    return res.status(502).json({ error: { message: biLocale(locale, 'No se pudo contactar a Lemon Squeezy.', 'Could not contact Lemon Squeezy.') } });
   }
 
   // El credito lo otorga el webhook normal (subscription_payment_success, billing_reason
@@ -167,37 +168,38 @@ async function cambiarPlan(usuario, pedido, perfil, SB_URL, SERVICE_KEY, res) {
   registrar({ accion: 'upgrade_facturando', perfil: usuario.id.slice(0, 8), plan: pedido });
   return res.status(200).json({
     ok: true, aplicado: 'facturando_diferencia',
-    mensaje: 'Estamos procesando el cobro de la diferencia. Tu plan se actualiza apenas se confirme, normalmente en segundos.',
+    mensaje: biLocale(locale, 'Estamos procesando el cobro de la diferencia. Tu plan se actualiza apenas se confirme, normalmente en segundos.', 'We are processing the price difference. Your plan will update as soon as the charge is confirmed, usually within seconds.'),
   });
 }
 
 export default async function handler(req, res) {
+  const locale = localeDe(req);
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: { message: 'Metodo no permitido.' } });
+    return res.status(405).json({ error: { message: biLocale(locale, 'Metodo no permitido.', 'Method not allowed.') } });
   }
 
   const SB_URL = String(process.env.SUPABASE_URL || '').replace(/\/+$/, '');
   const SERVICE_KEY = process.env.SUPABASE_SECRET_KEY;
   if (!process.env.MP_ACCESS_TOKEN || !SB_URL || !SERVICE_KEY) {
-    return res.status(500).json({ error: { message: 'Falta configuracion en el servidor.' } });
+    return res.status(500).json({ error: { message: biLocale(locale, 'Falta configuracion en el servidor.', 'Server configuration is incomplete.') } });
   }
 
   // --- Sesión ---
   const cabecera = String(req.headers['authorization'] || '');
   const sesion = cabecera.toLowerCase().startsWith('bearer ') ? cabecera.slice(7).trim() : '';
   if (!sesion) {
-    return res.status(401).json({ error: { message: 'Inicia sesion para suscribirte.', codigo: 'sin_sesion' } });
+    return res.status(401).json({ error: { message: biLocale(locale, 'Inicia sesion para suscribirte.', 'Sign in to subscribe.'), codigo: 'sin_sesion' } });
   }
 
   let usuario;
   try {
     usuario = await identificar(sesion);
   } catch (e) {
-    return res.status(503).json({ error: { message: 'El servicio no esta disponible. Volve a intentar.' } });
+    return res.status(503).json({ error: { message: biLocale(locale, 'El servicio no esta disponible. Volve a intentar.', 'The service is unavailable. Try again.') } });
   }
   if (!usuario) {
-    return res.status(401).json({ error: { message: 'Sesion vencida. Volve a iniciar sesion.', codigo: 'sesion_invalida' } });
+    return res.status(401).json({ error: { message: biLocale(locale, 'Sesion vencida. Volve a iniciar sesion.', 'Your session has expired. Sign in again.'), codigo: 'sesion_invalida' } });
   }
 
   // --- Plan pedido ---
@@ -212,7 +214,7 @@ export default async function handler(req, res) {
   // directo a este endpoint puede armar una alta o un cambio de plan hacia Estudio/Magister.
   if (!planContratable(pedido)) {
     return res.status(400).json({
-      error: { message: 'Ese plan no está disponible para contratación.', codigo: 'plan_no_contratable' },
+      error: { message: biLocale(locale, 'Ese plan no está disponible para contratación.', 'That plan is not available for purchase.'), codigo: 'plan_no_contratable' },
     });
   }
   const plan = PLANES[pedido];
@@ -234,7 +236,7 @@ export default async function handler(req, res) {
     (perfil.estado === 'activo' || perfil.estado === 'gracia'));
 
   if (yaSuscripto) {
-    return cambiarPlan(usuario, pedido, perfil, SB_URL, SERVICE_KEY, res);
+    return cambiarPlan(usuario, pedido, perfil, SB_URL, SERVICE_KEY, res, locale);
   }
 
   // --- Alta nueva: crear la suscripción en Mercado Pago ---
@@ -249,7 +251,7 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + process.env.MP_ACCESS_TOKEN, 'content-type': 'application/json' },
       body: JSON.stringify({
-        reason: plan.titulo,
+        reason: locale === 'en' ? (plan.titulo_en || plan.titulo) : plan.titulo,
         external_reference: usuario.id,      // ← lo que ata todo
         payer_email: usuario.correo,
         back_url: VUELTA,
@@ -268,7 +270,7 @@ export default async function handler(req, res) {
     if (!r.ok || !d.init_point) {
       registrar({ error: 'MP RECHAZO LA SUSCRIPCION', estado: r.status, detalle: JSON.stringify(d).slice(0, 400) });
       return res.status(502).json({
-        error: { message: 'No se pudo iniciar la suscripcion. Volve a intentar en unos minutos.' },
+        error: { message: biLocale(locale, 'No se pudo iniciar la suscripcion. Volve a intentar en unos minutos.', 'The subscription could not be started. Try again in a few minutes.') },
       });
     }
 
@@ -278,6 +280,6 @@ export default async function handler(req, res) {
 
   } catch (e) {
     registrar({ error: 'FALLO CREANDO', detalle: String((e && e.message) || e) });
-    return res.status(502).json({ error: { message: 'No se pudo contactar a Mercado Pago.' } });
+    return res.status(502).json({ error: { message: biLocale(locale, 'No se pudo contactar a Mercado Pago.', 'Could not contact Mercado Pago.') } });
   }
 }
