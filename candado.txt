@@ -615,7 +615,7 @@
         // Corte L: hay una eliminacion en curso -- el panel deja de ofrecer "Eliminar cuenta"
         // y en cambio muestra el plazo y la opcion de arrepentirse.
         var fechaBaja = '';
-        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }); }
+        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString(ComprenderI18n.localeTag(), { day:'numeric', month:'long', year:'numeric' }); }
         catch(e){ fechaBaja = perfilBajaProgramada; }
         cuerpo =
           '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
@@ -1156,7 +1156,7 @@
         // en api/catalogo.js y en el sistema de saldo -- esto es sólo lo que se muestra.
         var elA = capa.querySelector('[data-plan-ars="' + p.id + '"]');
         if(elA && typeof real.precio_ars === 'number'){
-          elA.textContent = '$' + real.precio_ars.toLocaleString('es-AR');
+          elA.textContent = '$' + real.precio_ars.toLocaleString(ComprenderI18n.localeTag());
         }
       });
     });
@@ -1197,7 +1197,7 @@
             } else if(x.d.aplicado === 'facturando_diferencia'){
               estado.textContent = x.d.mensaje || 'Estamos procesando el cambio de plan.';
             } else if(x.d.aplicado === 'programado'){
-              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
+              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString(ComprenderI18n.localeTag(), { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
               estado.textContent = 'Vas a pasar al plan ' + nombrePlan + ' el ' + fecha + '. Tu plan actual sigue activo hasta esa fecha.';
             } else {
               estado.textContent = 'Cambio de plan registrado.';
@@ -1267,7 +1267,7 @@
             var uuid = real && real.ls_checkout_uuid;
             if(!uuid){ if(pestana) pestana.close(); estado.textContent = 'El pago internacional no está disponible en este momento.'; return; }
             var url = 'https://' + LS_STORE + '.lemonsqueezy.com/checkout/buy/' + uuid +
-              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId);
+              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId) + '&checkout[custom][locale]=' + encodeURIComponent((window.ComprenderI18n && ComprenderI18n.getLocale()) || 'es');
             if(pestana){ pestana.location.href = url; } else { location.href = url; }   // pestaña bloqueada -- se cae al comportamiento de antes
           }).catch(function(){
             if(pestana) pestana.close();

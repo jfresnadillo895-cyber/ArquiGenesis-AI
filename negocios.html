@@ -601,6 +601,8 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
      historial de incrementos queda documentado en PENDIENTES.md, no en la interfaz. -->
 <footer>COMPRENDER · NEGOCIOS PRO — versión profesional · Un producto de ARQUIGÉNESIS</footer>
 
+<!-- 209 AG · I18N ES/EN -->
+<script src="./lib/i18n.js"></script>
 <script>
 /* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
    v6 suma controles de cuenta sobre el v5 (sesion + planes + registro + recuperacion): ver el
@@ -1365,7 +1367,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
         // Corte L: hay una eliminacion en curso -- el panel deja de ofrecer "Eliminar cuenta"
         // y en cambio muestra el plazo y la opcion de arrepentirse.
         var fechaBaja = '';
-        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }); }
+        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString(ComprenderI18n.localeTag(), { day:'numeric', month:'long', year:'numeric' }); }
         catch(e){ fechaBaja = perfilBajaProgramada; }
         cuerpo =
           '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
@@ -1906,7 +1908,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
         // en api/catalogo.js y en el sistema de saldo -- esto es sólo lo que se muestra.
         var elA = capa.querySelector('[data-plan-ars="' + p.id + '"]');
         if(elA && typeof real.precio_ars === 'number'){
-          elA.textContent = '$' + real.precio_ars.toLocaleString('es-AR');
+          elA.textContent = '$' + real.precio_ars.toLocaleString(ComprenderI18n.localeTag());
         }
       });
     });
@@ -1947,7 +1949,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
             } else if(x.d.aplicado === 'facturando_diferencia'){
               estado.textContent = x.d.mensaje || 'Estamos procesando el cambio de plan.';
             } else if(x.d.aplicado === 'programado'){
-              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
+              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString(ComprenderI18n.localeTag(), { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
               estado.textContent = 'Vas a pasar al plan ' + nombrePlan + ' el ' + fecha + '. Tu plan actual sigue activo hasta esa fecha.';
             } else {
               estado.textContent = 'Cambio de plan registrado.';
@@ -2017,7 +2019,7 @@ footer{border-top:1px solid var(--linea);padding:26px 20px;text-align:center;fon
             var uuid = real && real.ls_checkout_uuid;
             if(!uuid){ if(pestana) pestana.close(); estado.textContent = 'El pago internacional no está disponible en este momento.'; return; }
             var url = 'https://' + LS_STORE + '.lemonsqueezy.com/checkout/buy/' + uuid +
-              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId);
+              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId) + '&checkout[custom][locale]=' + encodeURIComponent((window.ComprenderI18n && ComprenderI18n.getLocale()) || 'es');
             if(pestana){ pestana.location.href = url; } else { location.href = url; }   // pestaña bloqueada -- se cae al comportamiento de antes
           }).catch(function(){
             if(pestana) pestana.close();
@@ -3401,7 +3403,7 @@ function renderCajaBorrador(){
   if(!caja) return;
   if(!_borradorPendienteOfrecido){ caja.style.display = 'none'; caja.innerHTML = ''; return; }
   var d = _borradorPendienteOfrecido;
-  var fecha = new Date(d.actualizado).toLocaleString('es-AR');
+  var fecha = new Date(d.actualizado).toLocaleString(ComprenderI18n.localeTag());
   var cerrado = d.estado_borrador === 'cerrado_pendiente_importacion';
   caja.innerHTML = '';
   var p = document.createElement('p');
@@ -3461,7 +3463,7 @@ function construirTeContinuidad(){
     fila.className = 'te-cont-fila';
 
     var fechaCierre = (entrada.datos && entrada.datos.generado) ? new Date(entrada.datos.generado) : new Date(entrada.fecha);
-    var fechaTxt = fechaCierre.toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' });
+    var fechaTxt = fechaCierre.toLocaleDateString(ComprenderI18n.localeTag(), { day:'numeric', month:'long', year:'numeric' });
     var meta = document.createElement('div');
     meta.className = 'te-cont-meta';
     meta.textContent = 'v' + entrada.version + (esUltima ? ' (última)' : '') + ' · ' + fechaTxt
@@ -3509,7 +3511,7 @@ function pintarInicio(){
     // misma etiqueta en los tres Pro, para que se reconozca de un vistazo que esta sesión sigue
     // a un organismo puntual del Core, no importa desde cuál de los tres Pro se esté mirando.
     cajaOk.innerHTML = '↺ Continuidad del organismo «' + escaparHtml(state.organismoNombre) + '».'
-      + (state.marcoGenerado ? ' Marco generado el ' + new Date(state.marcoGenerado).toLocaleString('es-AR') + '.' : '')
+      + (state.marcoGenerado ? ' Marco generado el ' + new Date(state.marcoGenerado).toLocaleString(ComprenderI18n.localeTag()) + '.' : '')
       + ' La evaluación que generes acá se va a poder importar directamente sobre este organismo, aparte de su ficha confirmada.';
   } else {
     cajaOk.style.display = 'none';
@@ -4512,7 +4514,7 @@ function abrirDiagnosticoIntegral(){
     vigenteBox.style.display = 'block';
     vigenteBox.innerHTML = '';
     var h = document.createElement('div'); h.style.fontWeight = '500'; h.style.marginBottom = '6px';
-    h.textContent = 'Vigente: relaciones v' + vigente.version + ' (' + new Date(vigente.fecha).toLocaleDateString('es-AR') + ')';
+    h.textContent = 'Vigente: relaciones v' + vigente.version + ' (' + new Date(vigente.fecha).toLocaleDateString(ComprenderI18n.localeTag()) + ')';
     var p = document.createElement('div'); p.style.fontSize = '.85rem'; p.style.color = 'var(--texto-suave)';
     p.textContent = vigente.contenido.tension_sistemica;
     vigenteBox.appendChild(h); vigenteBox.appendChild(p);
@@ -4943,7 +4945,7 @@ function abrirProyectivo(){
     boxProyVigente.style.display = 'block';
     boxProyVigente.innerHTML = '';
     var hv = document.createElement('div'); hv.style.fontWeight = '500'; hv.style.marginBottom = '6px';
-    hv.textContent = 'Vigente: proyectivo v' + vigenteProy.version + ' (' + new Date(vigenteProy.fecha).toLocaleDateString('es-AR') + ')';
+    hv.textContent = 'Vigente: proyectivo v' + vigenteProy.version + ' (' + new Date(vigenteProy.fecha).toLocaleDateString(ComprenderI18n.localeTag()) + ')';
     var pv = document.createElement('div'); pv.style.fontSize = '.85rem'; pv.style.color = 'var(--texto-suave)';
     pv.textContent = vigenteProy.contenido.sintesis_proyectiva;
     boxProyVigente.appendChild(hv); boxProyVigente.appendChild(pv);
@@ -5558,7 +5560,7 @@ function abrirCampoDecisiones(){
     boxDecVigente.style.display = 'block';
     boxDecVigente.innerHTML = '';
     var hv = document.createElement('div'); hv.style.fontWeight = '500'; hv.style.marginBottom = '6px';
-    hv.textContent = 'Vigente: Campo de decisiones v' + decVigente.version + ' (' + new Date(decVigente.fecha).toLocaleDateString('es-AR') + ')';
+    hv.textContent = 'Vigente: Campo de decisiones v' + decVigente.version + ' (' + new Date(decVigente.fecha).toLocaleDateString(ComprenderI18n.localeTag()) + ')';
     var pv = document.createElement('div'); pv.style.fontSize = '.85rem'; pv.style.color = 'var(--texto-suave)';
     pv.textContent = decVigente.contenido.sintesis;
     boxDecVigente.appendChild(hv); boxDecVigente.appendChild(pv);
@@ -6896,7 +6898,7 @@ function renderVistaAccion(){
   cont.appendChild(hSeg);
   a.seguimientos.forEach(function(s){
     var box = document.createElement('div'); box.className = 'ejec-seguimiento';
-    var f = document.createElement('div'); f.className = 'fecha'; f.textContent = new Date(s.fecha).toLocaleString('es-AR');
+    var f = document.createElement('div'); f.className = 'fecha'; f.textContent = new Date(s.fecha).toLocaleString(ComprenderI18n.localeTag());
     box.appendChild(f);
     var cuerpo2 = document.createElement('div');
     var partes = [];

@@ -405,6 +405,8 @@ header header .cai-ham{flex-shrink:0}
   <strong>Un producto de ARQUIGÉNESIS</strong>
 </footer>
 
+<!-- 209 AG · I18N ES/EN -->
+<script src="./lib/i18n.js"></script>
 <script>/* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
    v6 suma controles de cuenta sobre el v5 (sesion + planes + registro + recuperacion): ver el
    correo logueado, cambiar la contraseña estando adentro (pidiendo la actual), cerrar sesión
@@ -1167,7 +1169,7 @@ header header .cai-ham{flex-shrink:0}
         // Corte L: hay una eliminacion en curso -- el panel deja de ofrecer "Eliminar cuenta"
         // y en cambio muestra el plazo y la opcion de arrepentirse.
         var fechaBaja = '';
-        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }); }
+        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString(ComprenderI18n.localeTag(), { day:'numeric', month:'long', year:'numeric' }); }
         catch(e){ fechaBaja = perfilBajaProgramada; }
         cuerpo =
           '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
@@ -1700,7 +1702,7 @@ header header .cai-ham{flex-shrink:0}
         // en api/catalogo.js y en el sistema de saldo -- esto es sólo lo que se muestra.
         var elA = capa.querySelector('[data-plan-ars="' + p.id + '"]');
         if(elA && typeof real.precio_ars === 'number'){
-          elA.textContent = '$' + real.precio_ars.toLocaleString('es-AR');
+          elA.textContent = '$' + real.precio_ars.toLocaleString(ComprenderI18n.localeTag());
         }
       });
     });
@@ -1739,7 +1741,7 @@ header header .cai-ham{flex-shrink:0}
             } else if(x.d.aplicado === 'facturando_diferencia'){
               estado.textContent = x.d.mensaje || 'Estamos procesando el cambio de plan.';
             } else if(x.d.aplicado === 'programado'){
-              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
+              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString(ComprenderI18n.localeTag(), { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
               estado.textContent = 'Vas a pasar al plan ' + nombrePlan + ' el ' + fecha + '. Tu plan actual sigue activo hasta esa fecha.';
             } else {
               estado.textContent = 'Cambio de plan registrado.';
@@ -1807,7 +1809,7 @@ header header .cai-ham{flex-shrink:0}
             var uuid = real && real.ls_checkout_uuid;
             if(!uuid){ if(pestana) pestana.close(); estado.textContent = 'El pago internacional no está disponible en este momento.'; return; }
             var url = 'https://' + LS_STORE + '.lemonsqueezy.com/checkout/buy/' + uuid +
-              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId);
+              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId) + '&checkout[custom][locale]=' + encodeURIComponent((window.ComprenderI18n && ComprenderI18n.getLocale()) || 'es');
             if(pestana){ pestana.location.href = url; } else { location.href = url; }   // pestaña bloqueada -- se cae al comportamiento de antes
           }).catch(function(){
             if(pestana) pestana.close();
@@ -3212,7 +3214,7 @@ function confirmarPDF(){
   document.getElementById('pdfCiudad').textContent=t.nombre;
   document.getElementById('pdfSub').textContent=t.tipo+' · '+t.region+' · '+t.pais;
   document.getElementById('pdfIVC').textContent='IVC global: '+state.ivc.global.toFixed(1)+' — '+lecturaIVC(state.ivc.global);
-  document.getElementById('pdfFecha').textContent=new Date().toLocaleDateString('es-AR',{year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('pdfFecha').textContent=new Date().toLocaleDateString(ComprenderI18n.localeTag(),{year:'numeric',month:'long',day:'numeric'});
   // window.print() está bloqueado dentro del sandbox de artifacts (iframe sin
   // permiso 'allow-modals'). Se intenta; si falla o no ocurre nada, se abre
   // el informe en una pestaña nueva desde donde el navegador sí permite imprimir.
@@ -3229,10 +3231,14 @@ function abrirInformeEnPestaña(){
     setProgreso('Tu navegador bloqueó la ventana. Habilitá las ventanas emergentes para descargar el informe, o abrí Contextos en una pestaña propia (fuera de esta vista) y usá "Descargar informe PDF".');
     return;
   }
-  w.document.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'+estilos+
+  const _i18n = window.ComprenderI18n;
+  const _loc = _i18n ? _i18n.getLocale() : 'es';
+  let _htmlInforme = '<!DOCTYPE html><html lang="'+_loc+'"><head><meta charset="UTF-8">'+estilos+
     '<style>body{background:#fff!important;}@media screen{.print-only-hint{position:fixed;top:0;left:0;right:0;background:#2E5A87;color:#FFFFFF;font-family:sans-serif;font-size:13px;text-align:center;padding:8px;z-index:999}}@media print{.print-only-hint{display:none}}</style>'+
     '</head><body><div class="print-only-hint">Informe listo · usá Ctrl/Cmd+P o el menú del navegador → Imprimir → Guardar como PDF</div>'+
-    '<main style="max-width:1080px;margin:0 auto;padding:70px 20px 40px">'+seccion.innerHTML+'</main></body></html>');
+    '<main style="max-width:1080px;margin:0 auto;padding:70px 20px 40px">'+seccion.innerHTML+'</main></body></html>';
+  if(_i18n) _htmlInforme = _i18n.translateHtmlString(_htmlInforme, _loc);
+  w.document.write(_htmlInforme);
   w.document.close();
 }
 

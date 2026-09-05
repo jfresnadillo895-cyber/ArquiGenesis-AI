@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprender · Urbanismo — versión profesional</title>
+<!-- 209 AG · I18N ES/EN -->
+<script src="./lib/i18n.js"></script>
 <script>/* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
    v6 suma controles de cuenta sobre el v5 (sesion + planes + registro + recuperacion): ver el
    correo logueado, cambiar la contraseña estando adentro (pidiendo la actual), cerrar sesión
@@ -766,7 +768,7 @@
         // Corte L: hay una eliminacion en curso -- el panel deja de ofrecer "Eliminar cuenta"
         // y en cambio muestra el plazo y la opcion de arrepentirse.
         var fechaBaja = '';
-        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }); }
+        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString(ComprenderI18n.localeTag(), { day:'numeric', month:'long', year:'numeric' }); }
         catch(e){ fechaBaja = perfilBajaProgramada; }
         cuerpo =
           '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
@@ -1299,7 +1301,7 @@
         // en api/catalogo.js y en el sistema de saldo -- esto es sólo lo que se muestra.
         var elA = capa.querySelector('[data-plan-ars="' + p.id + '"]');
         if(elA && typeof real.precio_ars === 'number'){
-          elA.textContent = '$' + real.precio_ars.toLocaleString('es-AR');
+          elA.textContent = '$' + real.precio_ars.toLocaleString(ComprenderI18n.localeTag());
         }
       });
     });
@@ -1338,7 +1340,7 @@
             } else if(x.d.aplicado === 'facturando_diferencia'){
               estado.textContent = x.d.mensaje || 'Estamos procesando el cambio de plan.';
             } else if(x.d.aplicado === 'programado'){
-              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
+              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString(ComprenderI18n.localeTag(), { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
               estado.textContent = 'Vas a pasar al plan ' + nombrePlan + ' el ' + fecha + '. Tu plan actual sigue activo hasta esa fecha.';
             } else {
               estado.textContent = 'Cambio de plan registrado.';
@@ -1406,7 +1408,7 @@
             var uuid = real && real.ls_checkout_uuid;
             if(!uuid){ if(pestana) pestana.close(); estado.textContent = 'El pago internacional no está disponible en este momento.'; return; }
             var url = 'https://' + LS_STORE + '.lemonsqueezy.com/checkout/buy/' + uuid +
-              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId);
+              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId) + '&checkout[custom][locale]=' + encodeURIComponent((window.ComprenderI18n && ComprenderI18n.getLocale()) || 'es');
             if(pestana){ pestana.location.href = url; } else { location.href = url; }   // pestaña bloqueada -- se cae al comportamiento de antes
           }).catch(function(){
             if(pestana) pestana.close();
@@ -6207,8 +6209,8 @@ function cargarHistorial(idx){
 function guardarEnHistorial(){
   if(!diagData) return;
   const ahora = new Date();
-  const fecha = ahora.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})
-    + ' ' + ahora.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+  const fecha = ahora.toLocaleDateString(ComprenderI18n.localeTag(),{day:'2-digit',month:'2-digit',year:'numeric'})
+    + ' ' + ahora.toLocaleTimeString(ComprenderI18n.localeTag(),{hour:'2-digit',minute:'2-digit'});
   historial.push({
     ciudad: diagData.ciudad,
     diagData: JSON.parse(JSON.stringify(diagData)),
@@ -6236,7 +6238,7 @@ function compartirDiagnostico(){
 
   var payload = {
     ciudad: diagData.ciudad,
-    fecha: new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}),
+    fecha: new Date().toLocaleDateString(ComprenderI18n.localeTag(),{day:'2-digit',month:'2-digit',year:'numeric'}),
     ponderados: ponderados,
     haiku: diagData.haiku,
     hexp: diagData.hexp,
@@ -6400,7 +6402,7 @@ function renderPerfil(){
   var meta = [];
   if(perfilTerritorio.region) meta.push(perfilTerritorio.region);
   if(perfilTerritorio.poblacion) meta.push(perfilTerritorio.poblacion);
-  if(perfilTerritorio.inicio) meta.push('Monitoreo desde ' + new Date(perfilTerritorio.inicio).toLocaleDateString('es-AR',{month:'long',year:'numeric'}));
+  if(perfilTerritorio.inicio) meta.push('Monitoreo desde ' + new Date(perfilTerritorio.inicio).toLocaleDateString(ComprenderI18n.localeTag(),{month:'long',year:'numeric'}));
   if(perfilTerritorio.responsable) meta.push('Resp.: ' + perfilTerritorio.responsable);
 
   document.getElementById('pb-nombre').textContent = perfilTerritorio.nombre;
@@ -6908,7 +6910,7 @@ function confirmarPDF(){
   // Preparar portada
   document.getElementById('pdf-ciudad-titulo').textContent = diagData.ciudad || '—';
   document.getElementById('pdf-desc-portada').textContent = diagData.descripcion || '';
-  document.getElementById('pdf-fecha').textContent = new Date().toLocaleDateString('es-AR',{year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('pdf-fecha').textContent = new Date().toLocaleDateString(ComprenderI18n.localeTag(),{year:'numeric',month:'long',day:'numeric'});
   
   const ctxLabel = {urban:'Diagnóstico Urbano Sistémico', business:'Diagnóstico Organizacional Sistémico', research:'Análisis Sistémico de Investigación'};
   document.getElementById('pdf-contexto-titulo').textContent = ctxLabel[contextoApp] || ctxLabel.urban;
