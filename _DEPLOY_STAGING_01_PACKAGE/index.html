@@ -797,8 +797,6 @@ header .spacer{flex:1}
   <div class="inf-doc" id="infDoc"></div>
 </div>
 
-<!-- 209 AG · I18N ES/EN -->
-<script src="./lib/i18n.js"></script>
 <script>/* --- Candado de acceso v6 · sesion real de usuario (Supabase Auth) ----------------------------
    v6 suma controles de cuenta sobre el v5 (sesion + planes + registro + recuperacion): ver el
    correo logueado, cambiar la contraseña estando adentro (pidiendo la actual), cerrar sesión
@@ -1562,7 +1560,7 @@ header .spacer{flex:1}
         // Corte L: hay una eliminacion en curso -- el panel deja de ofrecer "Eliminar cuenta"
         // y en cambio muestra el plazo y la opcion de arrepentirse.
         var fechaBaja = '';
-        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString(ComprenderI18n.localeTag(), { day:'numeric', month:'long', year:'numeric' }); }
+        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }); }
         catch(e){ fechaBaja = perfilBajaProgramada; }
         cuerpo =
           '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
@@ -2099,7 +2097,7 @@ header .spacer{flex:1}
         // en api/catalogo.js y en el sistema de saldo -- esto es sólo lo que se muestra.
         var elA = capa.querySelector('[data-plan-ars="' + p.id + '"]');
         if(elA && typeof real.precio_ars === 'number'){
-          elA.textContent = '$' + real.precio_ars.toLocaleString(ComprenderI18n.localeTag());
+          elA.textContent = '$' + real.precio_ars.toLocaleString('es-AR');
         }
       });
     });
@@ -2138,7 +2136,7 @@ header .spacer{flex:1}
             } else if(x.d.aplicado === 'facturando_diferencia'){
               estado.textContent = x.d.mensaje || 'Estamos procesando el cambio de plan.';
             } else if(x.d.aplicado === 'programado'){
-              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString(ComprenderI18n.localeTag(), { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
+              var fecha = x.d.vence ? new Date(x.d.vence).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }) : 'el final de tu ciclo actual';
               estado.textContent = 'Vas a pasar al plan ' + nombrePlan + ' el ' + fecha + '. Tu plan actual sigue activo hasta esa fecha.';
             } else {
               estado.textContent = 'Cambio de plan registrado.';
@@ -2206,7 +2204,7 @@ header .spacer{flex:1}
             var uuid = real && real.ls_checkout_uuid;
             if(!uuid){ if(pestana) pestana.close(); estado.textContent = 'El pago internacional no está disponible en este momento.'; return; }
             var url = 'https://' + LS_STORE + '.lemonsqueezy.com/checkout/buy/' + uuid +
-              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId) + '&checkout[custom][locale]=' + encodeURIComponent((window.ComprenderI18n && ComprenderI18n.getLocale()) || 'es');
+              '?checkout[custom][perfil]=' + encodeURIComponent(perfilId);
             if(pestana){ pestana.location.href = url; } else { location.href = url; }   // pestaña bloqueada -- se cae al comportamiento de antes
           }).catch(function(){
             if(pestana) pestana.close();
@@ -2395,7 +2393,7 @@ function traducirErrorAPI(msg){
     if(m){
       try{
         const d = m[1].length === 10 ? new Date(parseInt(m[1],10)*1000) : new Date(m[1]);
-        cuando = ' Se libera aproximadamente a las ' + d.toLocaleTimeString(ComprenderI18n.localeTag(),{hour:'2-digit',minute:'2-digit'}) + '.';
+        cuando = ' Se libera aproximadamente a las ' + d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}) + '.';
       }catch(e){}
     }
     return 'Se alcanzó el límite de uso del plan de Claude para esta variante de prueba.' + cuando + ' Los datos quedan intactos — retomá después del reinicio. En producción este límite no existe: las consultas van por tu propia clave de API.';
@@ -9454,24 +9452,16 @@ function C1F2_construirFichaCandidata(returnProposal, currentMemory){
 /* ---- Fase 1: preparar (nunca escribe nada, nunca crea Propuesta). Detecta el conflicto de
    versión "temprano" (basedOnVersion vs Memoria AHORA) antes de construir ningún candidato. ---- */
 function C1F2_prepararGobernanza(returnProposal, snapshot){
-  if(!returnProposal) return { ok:false, motivo:'ContextReturnProposal ausente', categoria:'error_tecnico' };
+  if(!returnProposal) return { ok:false, motivo:'ContextReturnProposal ausente' };
   if(!returnProposal.hasMeaningfulReturn){
-    // CTX-CORE-INC-01 (04/09): rama E -- sin contenido significativo. Hoy es inalcanzable desde el
-    // botón "Incorporar" real (C1G1_construirComprension sólo arma vista.retorno/
-    // estadoFinal.returnProposal/gobernanzaPreparacion cuando hasMeaningfulReturn es true -- ver
-    // esa función); se clasifica igual, por las dudas, ya que esta función también corre desde
-    // window.debugC1F2GobernarRetorno y podría tener otros llamadores futuros.
-    return { ok:false, motivo:'no hay Retorno significativo -- nada que gobernar', hasMeaningfulReturn:false, categoria:'sin_contenido' };
+    return { ok:false, motivo:'no hay Retorno significativo -- nada que gobernar', hasMeaningfulReturn:false };
   }
   if(!snapshot || typeof snapshot.organismVersion !== 'number'){
-    return { ok:false, motivo:'snapshot ausente o sin organismVersion', categoria:'error_tecnico' };
+    return { ok:false, motivo:'snapshot ausente o sin organismVersion' };
   }
   var o = state.organismo;
   if(!o || o.id !== snapshot.organismId){
-    // CTX-CORE-INC-01 (04/09): rama D -- organismo incorrecto (el organismo activo de Core ya no
-    // es el mismo que originó este Retorno; p.ej. el humano cambió de organismo en otra parte del
-    // chat mientras esta tarjeta de Contextos seguía abierta).
-    return { ok:false, motivo:'el organismo activo (state.organismo) no coincide con el Snapshot de este Retorno', categoria:'organismo_incorrecto' };
+    return { ok:false, motivo:'el organismo activo (state.organismo) no coincide con el Snapshot de este Retorno' };
   }
   var basedOnVersion = snapshot.organismVersion;
   var currentVersion = fichaVersion(o);
@@ -9482,13 +9472,8 @@ function C1F2_prepararGobernanza(returnProposal, snapshot){
   }
   var candidata = C1F2_construirFichaCandidata(returnProposal, snapshot.currentMemory);
   if(!Object.keys(candidata.fichaNueva).length){
-    // CTX-CORE-INC-01 (04/09): rama B -- contenido válido (SÍ hubo Retorno significativo) pero no
-    // directamente incorporable a un campo real de Ficha (todo keep_open, o sin targetField
-    // reconocido). "recibir != aceptar != incorporar": esto NO es un error técnico -- se resuelve
-    // en C1F2_resolverGobernanzaRetorno aceptando el antecedente como referencia contextual, por
-    // el mecanismo YA EXISTENTE de o.genealogia_contextos (ver C1F2_registrarGenealogiaContextual).
     return { ok:false, motivo:'ningún cambio del Retorno se pudo traducir a un campo real de Memoria (todos keep_open o sin mapear)',
-      basedOnVersion: basedOnVersion, noMapeados: candidata.noMapeados, categoria:'no_mapeable' };
+      basedOnVersion: basedOnVersion, noMapeados: candidata.noMapeados };
   }
   return { ok:true, basedOnVersion: basedOnVersion, fichaCandidata: candidata.fichaNueva,
     mapeados: candidata.mapeados, noMapeados: candidata.noMapeados };
@@ -9514,47 +9499,19 @@ function C1F2_resolverGobernanzaRetorno(preparacion, decisionHumana, correccionU
 
   // incorporar / editar: requieren una preparación válida (sin conflicto, con candidato real)
   if(!preparacion || !preparacion.ok){
-    // CTX-CORE-INC-01 (04/09): el conflicto de versión (preparacion.conflict) es un caso aparte,
-    // ya con su propio mensaje correcto desde antes de este corte -- no es ninguna de las 5 ramas
-    // en alcance acá, así que NO se le asigna 'error_tecnico' por default (eso lo dejaría mal
-    // clasificado para cualquier lector futuro de `categoria`, aunque el texto mostrado ya sea
-    // correcto por el chequeo de `resolucion.conflict` en C1G1_decidirGobernanza).
-    var categoriaPrep = (preparacion && preparacion.categoria) ? preparacion.categoria
-      : ((preparacion && preparacion.conflict) ? null : 'error_tecnico');
     return { ok:false, decision: decisionHumana, motivo:'no hay una preparación válida sobre la cual gobernar (conflicto de versión o candidato sin campos reales)',
-      conflict: !!(preparacion && preparacion.conflict), categoria: categoriaPrep };
+      conflict: !!(preparacion && preparacion.conflict) };
   }
 
   var o = state.organismo;
   var versionAntes = fichaVersion(o);
   var recuerdosAntes = recuerdosDe(o).length;
 
-  // CTX-CORE-INC-01 (04/09): clasificar ANTES de llamar a proponerFicha() -- reutiliza los mismos
-  // validadores reales que ella usa internamente (validarCandidatoFicha/diffFicha, sin duplicar ni
-  // una sola de sus reglas) para poder distinguir, con un motivo honesto y sin forzar ninguna
-  // escritura, dos situaciones que antes caían juntas en el mismo "no se generó una propuesta":
-  // rama A (candidato realmente inválido -- técnico, se mantiene visible y trazable) y rama C
-  // (el valor propuesto ya es exactamente el vigente -- no-op, se informa neutralmente, sin crear
-  // ninguna propuesta ni tocar ag_core_propuestas).
-  var valPrevia = validarCandidatoFicha(preparacion.fichaCandidata);
-  if(!valPrevia.ok){
-    return { ok:false, decision: decisionHumana, motivo: valPrevia.motivo, conflict:false, categoria:'error_tecnico',
-      organismVersionAntes: versionAntes, organismVersionDespues: versionAntes, fichaFieldsApplied: [], recuerdoId: null };
-  }
-  var diffPrevio = diffFicha(o.ficha, preparacion.fichaCandidata);
-  if(!diffPrevio.campos.length){
-    return { ok:true, decision: decisionHumana, aplicado:false, motivo:null, conflict:false, categoria:'no_op',
-      organismVersionAntes: versionAntes, organismVersionDespues: versionAntes, fichaFieldsApplied: [], recuerdoId: null };
-  }
-
   var prop = proponerFicha(preparacion.fichaCandidata, null, null, null);
   if(!prop){
-    // No debería llegarse acá con los dos chequeos de arriba ya hechos (misma validación, mismo
-    // diff) -- se deja como red de seguridad defensiva, nunca observada en las pruebas de este
-    // corte, clasificada igual como error técnico real.
     return { ok:false, decision: decisionHumana,
       motivo:'proponerFicha() no generó una propuesta (candidato inválido, o sin cambios reales sobre la Memoria actual)',
-      conflict:false, categoria:'error_tecnico', organismVersionAntes: versionAntes, organismVersionDespues: versionAntes,
+      conflict:false, organismVersionAntes: versionAntes, organismVersionDespues: versionAntes,
       fichaFieldsApplied: [], recuerdoId: null };
   }
 
@@ -9573,10 +9530,6 @@ function C1F2_resolverGobernanzaRetorno(preparacion, decisionHumana, correccionU
     ok: r.ok, decision: decisionHumana, aplicado: !!r.ok,
     motivo: r.ok ? null : r.motivo,
     conflict: !r.ok && r.motivo === 'la ficha cambió desde que se propuso',
-    // CTX-CORE-INC-01 (04/09): un fallo real de resolverPropuesta() que NO sea el conflicto de
-    // versión ya cubierto arriba (p.ej. "propuesta inexistente"/"la propuesta ya fue resuelta",
-    // condiciones de carrera reales) sigue siendo rama A -- error técnico, visible y trazable.
-    categoria: (r.ok || r.motivo === 'la ficha cambió desde que se propuso') ? null : 'error_tecnico',
     propuestaId: prop.id,
     organismVersionAntes: versionAntes,
     organismVersionDespues: r.ok ? fichaVersion(o) : versionAntes,
@@ -9623,16 +9576,9 @@ function C1F2_nuevoIdGenealogiaContextual(){
   return 'gc_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,6);
 }
 function C1F2_registrarGenealogiaContextual(org, estadoConRetorno, decisionUi){
-  // Alcance: mantener_abierto/no_incorporar -- "incorporar" cuando SÍ modifica Ficha ya queda
-  // registrado vía Memoria+Recuerdo por el camino real (C1F2_resolverGobernanzaRetorno), no
-  // necesita esto. CTX-CORE-INC-01 (04/09): se agrega un tercer valor posible,
-  // 'incorporar_no_mapeable' -- NO es uno de los 4 valores reales de C1F2_DECISIONES ni de los 3
-  // literales de UI ('incorporar'/'mantener_abierto'/'no_incorporar'): es la marca que usa
-  // exclusivamente C1G3_correrGobernanza() para la rama B (contenido válido de Contextos, pero sin
-  // ningún campo real de Ficha al que aplicarse -- ver C1F2_prepararGobernanza). El humano SÍ
-  // clickeó "Incorporar"; como no hay Ficha que tocar, se acepta el antecedente como referencia
-  // contextual por este mismo mecanismo -- append-only, cero escritura a Ficha/Memoria/principios.
-  if(decisionUi !== 'mantener_abierto' && decisionUi !== 'no_incorporar' && decisionUi !== 'incorporar_no_mapeable') return null;
+  // Alcance: sólo mantener_abierto/no_incorporar -- "incorporar" ya queda registrado vía
+  // Memoria+Recuerdo por el camino real (C1F2_resolverGobernanzaRetorno), no necesita esto.
+  if(decisionUi !== 'mantener_abierto' && decisionUi !== 'no_incorporar') return null;
   if(!org || !estadoConRetorno) return null;
   var opening = estadoConRetorno.opening;
   var snapshot = estadoConRetorno.snapshot;
@@ -10344,28 +10290,17 @@ function C1G1_decidirGobernanza(estadoConRetorno, decisionUsuario, correccionUsu
   // lectura de esa genealogía desde ningún prompt/Snapshot/M2.x.
   if(decisionCore === 'mantener_abierto') texto = 'Quedó registrado como abierto en la genealogía de Contextos, sin modificar la Memoria del organismo.';
   else if(decisionCore === 'rechazar') texto = 'No se incorporó a la Memoria; quedó registrado como antecedente contextual.';
-  // CTX-CORE-INC-01 (04/09): un texto distinto y honesto por cada rama, en vez de la única rama
-  // `else` genérica de antes -- "recibir != aceptar != incorporar": rama C (no_op) y rama B
-  // (no_mapeable) NO son errores, se informan en tono neutral; ramas D/E siguen siendo errores
-  // reales -- visibles y trazables, pero ahora distinguibles entre sí y del conflicto de versión.
-  else if(resolucion.ok && resolucion.categoria === 'no_op') texto = 'Esto ya está reflejado en la comprensión del organismo -- no hay ningún cambio nuevo que aplicar.';
   else if(resolucion.ok) texto = 'Listo, quedó incorporado a la comprensión del organismo.';
-  else if(resolucion.categoria === 'no_mapeable') texto = 'No modificó la Ficha del organismo (no hay un campo de Memoria al que aplicarse), pero quedó aceptado como antecedente contextual.';
-  else if(resolucion.conflict) texto = 'La memoria del organismo cambió mientras tanto -- hace falta revisar esto de nuevo antes de aplicarlo.';
-  else if(resolucion.categoria === 'organismo_incorrecto') texto = 'El organismo activo cambió mientras este Contexto seguía abierto -- no se puede aplicar sobre otro organismo. Revisá que el organismo correcto esté activo e intentá de nuevo.';
-  else if(resolucion.categoria === 'sin_contenido') texto = 'Contextos no encontró, en este ciclo, nada sustantivo para aplicar.';
-  else texto = resolucion.motivo ? ('No pudimos aplicar este cambio: ' + resolucion.motivo + '.') : 'No pudimos aplicar este cambio ahora.';
+  else texto = resolucion.conflict
+    ? 'La memoria del organismo cambió mientras tanto -- hace falta revisar esto de nuevo antes de aplicarlo.'
+    : 'No pudimos aplicar este cambio ahora.';
   // OMV-F8.3 (25/08): assessment/camposExcluidos se conservan acá -- sin esto, "Explorar otro
   // contexto" no tendría con qué volver a llamar a C1G1_abrirCampoYSeleccionarFrente (F8.1) y
   // la única salida tras cualquier decisión de gobernanza sería cerrar Contextos por completo.
   var estadoFinal = { snapshot: estadoConRetorno.snapshot, opening: estadoConRetorno.opening,
     graphState: estadoConRetorno.graphState, front: frenteConGenealogia,
     assessment: estadoConRetorno.assessment || null, camposExcluidos: estadoConRetorno.camposExcluidos || [] };
-  // CTX-CORE-INC-01 (04/09): categoria viaja en el resultado -- C1G3_correrGobernanza() la usa
-  // para decidir si esta resolución de "incorporar" corresponde registrarse como referencia
-  // contextual (rama B) sin releer C1F2_* de nuevo ni duplicar la clasificación.
-  return { vista: { phase:'gobernanza_resuelta', texto: texto, aplicado: !!resolucion.aplicado },
-    estado: estadoFinal, categoria: resolucion.categoria || null };
+  return { vista: { phase:'gobernanza_resuelta', texto: texto, aplicado: !!resolucion.aplicado }, estado: estadoFinal };
 }
 
 /* OMV-F8.3 (25/08): "la decisión de gobernanza no debe equivaler implícitamente a terminar
@@ -13749,7 +13684,7 @@ var CX_BRIDGE_PAYLOAD_PERMITIDO = Object.freeze({
   CONTEXT_CONTINUE: ['respuestaHumana'],
   CONTEXT_CANCEL: [],
   CONTEXT_ASK: ['pregunta', 'porQue'],
-  CONTEXT_PROGRESS: ['fase'],
+  CONTEXT_PROGRESS: [],
   CONTEXT_RETURN: ['envelope', 'reassessmentFrame', 'ledgerEntry', 'reassessError'],
   CONTEXT_ERROR: ['code'],
   CONTEXT_CANCEL_ACK: []
@@ -13783,8 +13718,7 @@ var CX_BRIDGE_ERROR_CODES = Object.freeze({
   CAMPO_NO_PERMITIDO: 'BRIDGE_CAMPO_NO_PERMITIDO',
   C1_RECHAZO: 'BRIDGE_C1_RECHAZO',
   BRIDGE_UNSUPPORTED: 'BRIDGE_UNSUPPORTED',
-  CORE_UNREACHABLE: 'BRIDGE_CORE_UNREACHABLE',
-  SOLICITUD_EN_CURSO: 'BRIDGE_SOLICITUD_EN_CURSO'
+  CORE_UNREACHABLE: 'BRIDGE_CORE_UNREACHABLE'
 });
 
 // IDs con estilo idéntico al resto del código (rsm_/ctxop_/gc_: prefijo + contador o timestamp
@@ -14068,67 +14002,18 @@ function CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, openingId, bridge
   return { ok:false, tipo:'cierre' };
 }
 
-// CTX-URB-LIVE-02 (04/09): guarda minima de concurrencia + avisador de progreso real -- no es un
-// registry nuevo, es un unico Set de claves (misma clase de estructura que ya usan
-// createCxBridgeDedupSet/CX_BRIDGE_SPY) mas una funcion que envuelve CX_BRIDGE_responder(). Vive y
-// muere con la pestana de Core, igual que CX_BRIDGE_SESSION_REGISTRY.
-var CX_BRIDGE_CORE_EN_CURSO = new Set();
-function CX_BRIDGE_CORE_claveApertura(msg){
-  return 'open::' + msg.specialtyId + '::' + msg.organismId + '::' + msg.specialtyStudyRef + '::' + msg.contextCycleRef;
-}
-function CX_BRIDGE_CORE_claveContinuacion(msg){
-  return 'cont::' + msg.bridgeSessionId;
-}
-// Conecta el aviso de fase YA EXISTENTE del pipeline C1 (C1G1_avisarFase, hoy con onFase=null en
-// el unico listener real -- ver CX_BRIDGE_CORE_iniciar mas abajo, sin cambios) con un
-// CONTEXT_PROGRESS real hacia la especialidad que origino ESTE mensaje. Nunca reemplaza ni
-// adelanta el CONTEXT_ASK/CONTEXT_PROGRESS "fin de tramo"/CONTEXT_RETURN final, que sigue siendo
-// exclusivo de CX_BRIDGE_CORE_despacharNormalizado al terminar. payload.fase es la unica extension
-// agregada al contrato de CONTEXT_PROGRESS (antes: payload siempre {}); msg.to sigue siendo
-// siempre la especialidad que mando el mensaje original, asi que ninguna otra especialidad recibe
-// esto -- y aunque lo recibiera, su propio CX_BRIDGE_PAYLOAD_PERMITIDO (no tocado aca) lo
-// descartaria igual que cualquier mensaje que no reconoce.
-function CX_BRIDGE_CORE_crearAvisadorProgreso(canal, msgOriginal){
-  return function(faseId){
-    if(!faseId) return;
-    try{ CX_BRIDGE_responder(canal, 'CONTEXT_PROGRESS', msgOriginal, { fase: String(faseId) }); }catch(e){}
-  };
-}
-
 async function CX_BRIDGE_CORE_manejarOpen(canal, msg, onFase){
-  // CTX-URB-LIVE-02: impide un segundo pipeline C1 concurrente para la MISMA identidad
-  // (especialidad+organismo+estudio+ciclo) mientras ya hay uno real en curso -- doble click,
-  // reintento humano tras un timeout, o una segunda pestana con la misma especialidad abierta.
-  // No reemplaza el resumeToken/CONTEXT_RESUME_REGISTRY existente (esto es solo una guarda de
-  // concurrencia del bridge, nunca decide nada del lado C1/CX0/CX1).
-  var clave = CX_BRIDGE_CORE_claveApertura(msg);
-  if(CX_BRIDGE_CORE_EN_CURSO.has(clave)){
-    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.SOLICITUD_EN_CURSO });
-    return { ok:false, duplicado:true };
+  var request = CX_BRIDGE_construirRequestApertura(msg);
+  var resultado;
+  try{ resultado = await abrirContextoDesdeEspecialidadReal(request, onFase); }
+  catch(e){ CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.C1_RECHAZO }); return { ok:false }; }
+  if(!resultado || resultado.ok !== true){
+    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: (resultado && resultado.error) || CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
+    return { ok:false };
   }
-  CX_BRIDGE_CORE_EN_CURSO.add(clave);
-  try{
-    // CTX-URB-LIVE-02: onFase real conectado -- ignora el "null" que llega desde
-    // CX_BRIDGE_CORE_manejarMensaje() (el unico listener real, sin cambios) y arma un avisador
-    // propio atado a ESTE mensaje/canal, asi cada C1G1_avisarFase(...) del pipeline emite un
-    // CONTEXT_PROGRESS real hacia quien pregunto, mientras el tramo sigue en curso.
-    var avisar = CX_BRIDGE_CORE_crearAvisadorProgreso(canal, msg);
-    var request = CX_BRIDGE_construirRequestApertura(msg);
-    var resultado;
-    try{ resultado = await abrirContextoDesdeEspecialidadReal(request, avisar); }
-    catch(e){ CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.C1_RECHAZO }); return { ok:false }; }
-    if(!resultado || resultado.ok !== true){
-      CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: (resultado && resultado.error) || CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
-      return { ok:false };
-    }
-    var openingId = (resultado.resultado && resultado.resultado.estado && resultado.resultado.estado.opening && resultado.resultado.estado.opening.openingId) || null;
-    var norm = CX_BRIDGE_normalizarResultadoC1(resultado.resultado, true);
-    return CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, openingId, null);
-  } finally {
-    // CTX-URB-LIVE-02 (punto 6): limpia SIEMPRE, sea exito, error o excepcion -- nunca queda una
-    // clave "en curso" huerfana bloqueando reintentos legitimos futuros.
-    CX_BRIDGE_CORE_EN_CURSO.delete(clave);
-  }
+  var openingId = (resultado.resultado && resultado.resultado.estado && resultado.resultado.estado.opening && resultado.resultado.estado.opening.openingId) || null;
+  var norm = CX_BRIDGE_normalizarResultadoC1(resultado.resultado, true);
+  return CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, openingId, null);
 }
 
 async function CX_BRIDGE_CORE_manejarContinue(canal, msg, onFase){
@@ -14140,38 +14025,24 @@ async function CX_BRIDGE_CORE_manejarContinue(canal, msg, onFase){
     CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.IDENTIDAD_NO_COINCIDE });
     return { ok:false };
   }
-  // CTX-URB-LIVE-02: misma guarda de concurrencia que manejarOpen, ahora por bridgeSessionId --
-  // impide una segunda CONTEXT_CONTINUE (u otra respuesta a CONTEXT_ASK) concurrente sobre la
-  // MISMA sesion ya abierta mientras la anterior todavia esta corriendo.
-  var clave = CX_BRIDGE_CORE_claveContinuacion(msg);
-  if(CX_BRIDGE_CORE_EN_CURSO.has(clave)){
-    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.SOLICITUD_EN_CURSO });
-    return { ok:false, duplicado:true };
-  }
-  CX_BRIDGE_CORE_EN_CURSO.add(clave);
+  var payload = msg.payload || {};
+  var resultado;
   try{
-    var avisar = CX_BRIDGE_CORE_crearAvisadorProgreso(canal, msg);
-    var payload = msg.payload || {};
-    var resultado;
-    try{
-      resultado = s.esperaRespuesta
-        ? await C1G1_responderPregunta(s.estado, payload.respuestaHumana, avisar)
-        : await continuarContextoDesdeEspecialidadReal(s.estado, avisar);
-    }catch(e){
-      CX_BRIDGE_SESSION_REGISTRY.eliminar(msg.bridgeSessionId);
-      CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
-      return { ok:false };
-    }
-    if(resultado && resultado.ok === false){
-      CX_BRIDGE_SESSION_REGISTRY.eliminar(msg.bridgeSessionId);
-      CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: resultado.error || CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
-      return { ok:false };
-    }
-    var norm = CX_BRIDGE_normalizarResultadoC1(resultado, false);
-    return CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, s.openingId, msg.bridgeSessionId);
-  } finally {
-    CX_BRIDGE_CORE_EN_CURSO.delete(clave);
+    resultado = s.esperaRespuesta
+      ? await C1G1_responderPregunta(s.estado, payload.respuestaHumana, onFase)
+      : await continuarContextoDesdeEspecialidadReal(s.estado, onFase);
+  }catch(e){
+    CX_BRIDGE_SESSION_REGISTRY.eliminar(msg.bridgeSessionId);
+    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
+    return { ok:false };
   }
+  if(resultado && resultado.ok === false){
+    CX_BRIDGE_SESSION_REGISTRY.eliminar(msg.bridgeSessionId);
+    CX_BRIDGE_responder(canal, 'CONTEXT_ERROR', msg, { code: resultado.error || CX_BRIDGE_ERROR_CODES.C1_RECHAZO });
+    return { ok:false };
+  }
+  var norm = CX_BRIDGE_normalizarResultadoC1(resultado, false);
+  return CX_BRIDGE_CORE_despacharNormalizado(canal, msg, norm, s.openingId, msg.bridgeSessionId);
 }
 
 function CX_BRIDGE_CORE_manejarCancel(canal, msg){
@@ -14432,8 +14303,8 @@ function cardConsumo(){
     };
     var usd = function(x){ return 'USD ' + x.toFixed(4); };
     fila('Llamadas registradas', String(s.n));
-    fila('Tokens', s.ent.toLocaleString(ComprenderI18n.localeTag()) + ' de entrada · ' + s.sal.toLocaleString(ComprenderI18n.localeTag()) + ' de salida' +
-         (s.cle ? ' · ' + s.cle.toLocaleString(ComprenderI18n.localeTag()) + ' leídos de caché' : ''));
+    fila('Tokens', s.ent.toLocaleString('es-AR') + ' de entrada · ' + s.sal.toLocaleString('es-AR') + ' de salida' +
+         (s.cle ? ' · ' + s.cle.toLocaleString('es-AR') + ' leídos de caché' : ''));
     fila('Costo estimado total', usd(s.costo));
     fila('Costo promedio por llamada', usd(s.costo / s.n));
     var k, tp = [];
@@ -14455,7 +14326,7 @@ function cardConsumo(){
         msTotal += d.ms; llamadasFase += d.n;
         var nombre = C1_FASE_LABEL_CONSUMO[id] || id;
         var prom = d.n ? Math.round(d.ms / d.n) : 0;
-        return nombre + ': ' + d.n + ' · ' + prom.toLocaleString(ComprenderI18n.localeTag()) + ' ms promedio';
+        return nombre + ': ' + d.n + ' · ' + prom.toLocaleString('es-AR') + ' ms promedio';
       });
       fila('Contextos Universal · por fase', fp.join('  ·  '));
       fila('Contextos Universal · tiempo de IA total', llamadasFase + ' llamada' + (llamadasFase === 1 ? '' : 's') +
@@ -14505,11 +14376,11 @@ function cardConsumo(){
             var ini = du.porEtapa.inicial, ref = du.porEtapa.refinamiento;
             var promIni = ini.n ? Math.round(ini.ms / ini.n) : 0;
             var promRef = ref.n ? Math.round(ref.ms / ref.n) : 0;
-            return nombreUrb + ': ' + du.n + ' (inicial ' + ini.n + ' · ' + promIni.toLocaleString(ComprenderI18n.localeTag()) +
-              ' ms promedio; refinamiento ' + ref.n + ' · ' + promRef.toLocaleString(ComprenderI18n.localeTag()) + ' ms promedio)';
+            return nombreUrb + ': ' + du.n + ' (inicial ' + ini.n + ' · ' + promIni.toLocaleString('es-AR') +
+              ' ms promedio; refinamiento ' + ref.n + ' · ' + promRef.toLocaleString('es-AR') + ' ms promedio)';
           }
           var promUrb = du.n ? Math.round(du.ms / du.n) : 0;
-          return nombreUrb + ': ' + du.n + ' · ' + promUrb.toLocaleString(ComprenderI18n.localeTag()) + ' ms promedio';
+          return nombreUrb + ': ' + du.n + ' · ' + promUrb.toLocaleString('es-AR') + ' ms promedio';
         });
         fila('Urbanismo · por fase', fpUrb.join('  ·  '));
         fila('Urbanismo · tiempo de IA total', llamadasFaseUrb + ' llamada' + (llamadasFaseUrb === 1 ? '' : 's') +
@@ -15243,7 +15114,7 @@ function renderInforme(o, red){
   const sub = document.createElement('div'); sub.className='id-sub'; sub.textContent = 'Informe de comprensión · Producto de Arquigénesis'; doc.appendChild(sub);
   const h1 = document.createElement('h1'); h1.textContent = o.nombre; doc.appendChild(h1);
   const meta = document.createElement('div'); meta.className='id-meta';
-  meta.textContent = o.tipo + ' · ' + new Date().toLocaleDateString(ComprenderI18n.localeTag(), {day:'numeric', month:'long', year:'numeric'}) + ' · Metodología ArquiGenesis — Javier Darío Fresnadillo';
+  meta.textContent = o.tipo + ' · ' + new Date().toLocaleDateString('es-AR', {day:'numeric', month:'long', year:'numeric'}) + ' · Metodología ArquiGenesis — Javier Darío Fresnadillo';
   doc.appendChild(meta);
 
   if(red.resumen){ sec('Resumen ejecutivo'); parr(red.resumen); }
@@ -15909,18 +15780,11 @@ function C1G3_correrGobernanza(org, estado, decisionUi, miEpoch, cont){
   }
   // C1F2-P2 (21/08): persistencia durable de mantener_abierto/no_incorporar -- tiene que pasar
   // ACÁ, con el `estado` (estadoConRetorno) todavía disponible, y antes de borrar la sesión de
-  // abajo. No afecta a "incorporar" cuando modifica Ficha (la función misma filtra por decisión)
-  // ni cambia nada de la gobernanza real -- sólo agrega, si corresponde, una entrada a
-  // o.genealogia_contextos y guarda el organismo (mismo mecanismo de siempre, local + servidor).
-  // CTX-CORE-INC-01 (04/09): "Incorporar" sobre contenido válido pero sin campo real de Ficha
-  // (rama B, r.categoria === 'no_mapeable') se registra con esta misma función -- 'incorporar' no
-  // se traduce nunca a otro valor salvo en este único caso explícito, para que quede distinguible
-  // de una Ficha efectivamente incorporada (que no pasa por acá, sigue registrada vía Memoria+
-  // Recuerdo únicamente).
-  var decisionParaGenealogia = (decisionUi === 'incorporar' && r.categoria === 'no_mapeable')
-    ? 'incorporar_no_mapeable' : decisionUi;
+  // abajo. No afecta a "incorporar" (la función misma filtra por decisión) ni cambia nada de la
+  // gobernanza real -- sólo agrega, si corresponde, una entrada a o.genealogia_contextos y
+  // guarda el organismo (mismo mecanismo de siempre, local + servidor).
   if(org){
-    var entradaGenealogia = C1F2_registrarGenealogiaContextual(org, estado, decisionParaGenealogia);
+    var entradaGenealogia = C1F2_registrarGenealogiaContextual(org, estado, decisionUi);
     if(entradaGenealogia) guardarOrganismo(org);
   }
   // C1-Z1.1-B: cualquier decisión real de gobernanza (incorporar/mantener_abierto/no_incorporar)
@@ -17472,7 +17336,7 @@ function cardRecuerdos(o){
     recs.forEach(function(r){
       var det = document.createElement('details'); det.className = 'recuerdo-item';
       var sum = document.createElement('summary');
-      var fecha = r.createdAt ? new Date(r.createdAt).toLocaleDateString(ComprenderI18n.localeTag(), { day:'numeric', month:'long', year:'numeric' }) : '—';
+      var fecha = r.createdAt ? new Date(r.createdAt).toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric' }) : '—';
       sum.textContent = r.title + ' · ' + fecha;
       det.appendChild(sum);
       var origen = document.createElement('div'); origen.className = 'rec-origen';

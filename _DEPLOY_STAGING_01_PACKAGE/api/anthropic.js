@@ -1,5 +1,3 @@
-import { bi } from '../lib/i18n-server.js';
-
 // api/anthropic.js — Proxy de produccion de la suite Comprender (Vercel Serverless Function)
 // ---------------------------------------------------------------------------------------------
 // v4 · RESERVA ATOMICA DE CREDITOS (01/08)
@@ -137,18 +135,18 @@ async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
   } catch (e) {
     console.error(JSON.stringify({ evento: 'base_inalcanzable', detalle: String((e && e.message) || e) }));
     return res.status(503).json({
-      error: { message: bi(req, 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.', 'The service is unavailable right now. Try again in a few minutes.', 'O serviço não está disponível neste momento. Tente novamente em alguns minutos.'), codigo: 'servicio_no_disponible' },
+      error: { message: 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.', codigo: 'servicio_no_disponible' },
     });
   }
   if (!perfil) {
-    return res.status(401).json({ error: { message: bi(req, 'Sesion vencida o invalida. Volve a iniciar sesion.', 'Your session has expired or is invalid. Sign in again.', 'Sua sessão expirou ou é inválida. Entre novamente.'), codigo: 'sesion_invalida' } });
+    return res.status(401).json({ error: { message: 'Sesion vencida o invalida. Volve a iniciar sesion.', codigo: 'sesion_invalida' } });
   }
 
   const firma = String((req.query && req.query.firma) || '').trim();
   const fase = String((req.query && req.query.fase) || '').trim();
   const FASES_VALIDAS = ['items', 'nucleo', 'receptivos_espiral'];
   if (!firma || FASES_VALIDAS.indexOf(fase) === -1) {
-    return res.status(400).json({ error: { message: bi(req, 'Falta firma o fase invalida.', 'Missing signature or invalid phase.', 'Falta a assinatura ou a fase é inválida.') } });
+    return res.status(400).json({ error: { message: 'Falta firma o fase invalida.' } });
   }
 
   try {
@@ -172,7 +170,7 @@ async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
     if (!r.ok) throw new Error('reclamo devolvio ' + r.status);
     const filas = await r.json();
     if (!Array.isArray(filas) || filas.length === 0) {
-      return res.status(404).json({ error: { message: bi(req, 'No hay nada para recuperar.', 'There is nothing to recover.', 'Não há nada para recuperar.'), codigo: 'no_encontrado' } });
+      return res.status(404).json({ error: { message: 'No hay nada para recuperar.', codigo: 'no_encontrado' } });
     }
     const fila = filas[0];
     return res.status(200).json({
@@ -186,7 +184,7 @@ async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
       fase,
       detalle: String((e && e.message) || e),
     }));
-    return res.status(503).json({ error: { message: bi(req, 'No se pudo recuperar. Volve a intentar.', 'Could not recover the result. Try again.', 'Não foi possível recuperar. Tente novamente.'), codigo: 'servicio_no_disponible' } });
+    return res.status(503).json({ error: { message: 'No se pudo recuperar. Volve a intentar.', codigo: 'servicio_no_disponible' } });
   }
 }
 
@@ -238,7 +236,7 @@ async function rpc(nombre, cuerpo, secreta, tiempoLimiteMs, reintentos) {
 async function guardarResultadoPendienteUrbanismo(usuario, firma, fase, data, secreta) {
   try {
     const ahora = Date.now();
-    const r = await pedirASupabase('/rest/v1/urb_resultados_pendientes?on_conflict=perfil,firma,fase', {
+    const r = await pedirASupabase('/rest/v1/urb_resultados_pendientes', {
       method: 'POST',
       headers: {
         apikey: secreta,
@@ -292,20 +290,20 @@ async function liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog) {
 export default async function handler(req, res) {
   if (req.method !== 'POST' && req.method !== 'GET') {
     res.setHeader('Allow', 'GET, POST');
-    return res.status(405).json({ error: { message: bi(req, 'Metodo no permitido. Usa POST o GET.', 'Method not allowed. Use POST or GET.', 'Método não permitido. Use POST ou GET.') } });
+    return res.status(405).json({ error: { message: 'Metodo no permitido. Usa POST o GET.' } });
   }
 
   const secreta = process.env.SUPABASE_SECRET_KEY;
   const urlBase = process.env.SUPABASE_URL;
   if (!secreta || !urlBase) {
-    return res.status(500).json({ error: { message: bi(req, 'Falta SUPABASE_URL o SUPABASE_SECRET_KEY. El proxy no atiende sin base.', 'Server configuration is incomplete.', 'Configuração do servidor incompleta.') } });
+    return res.status(500).json({ error: { message: 'Falta SUPABASE_URL o SUPABASE_SECRET_KEY. El proxy no atiende sin base.' } });
   }
 
   // --- Token (comun a GET y POST) ---
   const cabecera = String(req.headers['authorization'] || '');
   const token = cabecera.toLowerCase().startsWith('bearer ') ? cabecera.slice(7).trim() : '';
   if (!token) {
-    return res.status(401).json({ error: { message: bi(req, 'Falta la sesion. Inicia sesion para continuar.', 'Missing session. Sign in to continue.', 'Falta a sessão. Entre para continuar.'), codigo: 'sin_sesion' } });
+    return res.status(401).json({ error: { message: 'Falta la sesion. Inicia sesion para continuar.', codigo: 'sin_sesion' } });
   }
 
   // URB-ROBUST 03 (26/08): GET recupera una fase larga de Urbanismo -- ver
@@ -316,7 +314,7 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: { message: bi(req, 'Falta ANTHROPIC_API_KEY en el servidor.', 'Server configuration is incomplete.', 'Configuração do servidor incompleta.') } });
+  if (!apiKey) return res.status(500).json({ error: { message: 'Falta ANTHROPIC_API_KEY en el servidor.' } });
 
   const modulo = String(req.headers['x-comprender-modulo'] || 'core').trim().toLowerCase() || 'core';
 
@@ -336,7 +334,7 @@ export default async function handler(req, res) {
     usuario = await identificar(token, secreta);
     _tlog('identificar_listo');
     if (!usuario) {
-      return res.status(401).json({ error: { message: bi(req, 'Sesion vencida o invalida. Volve a iniciar sesion.', 'Your session has expired or is invalid. Sign in again.', 'Sua sessão expirou ou é inválida. Entre novamente.'), codigo: 'sesion_invalida' } });
+      return res.status(401).json({ error: { message: 'Sesion vencida o invalida. Volve a iniciar sesion.', codigo: 'sesion_invalida' } });
     }
     permiso = await rpc('reservar', { p_perfil: usuario, p_modulo: modulo }, secreta);
     _tlog('reservar_listo');
@@ -346,7 +344,7 @@ export default async function handler(req, res) {
     console.error(JSON.stringify({ evento: 'base_inalcanzable', detalle: String((e && e.message) || e) }));
     return res.status(503).json({
       error: {
-        message: bi(req, 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.', 'The service is unavailable right now. Try again in a few minutes.', 'O serviço não está disponível neste momento. Tente novamente em alguns minutos.'),
+        message: 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.',
         codigo: 'servicio_no_disponible',
       },
     });
@@ -355,14 +353,14 @@ export default async function handler(req, res) {
   if (!permiso || !permiso.permitido) {
     const motivo = (permiso && permiso.motivo) || 'no_autorizado';
     const mapa = {
-      sin_saldo:          [402, bi(req, 'Te quedaste sin creditos.', 'You have run out of credits.', 'Você ficou sem créditos.')],
-      requiere_plan:      [403, bi(req, 'Tu plan no incluye este modulo.', 'Your plan does not include this module.', 'Seu plano não inclui este módulo.')],
-      modulo_inactivo:    [403, bi(req, 'Este modulo no esta disponible.', 'This module is not available.', 'Este módulo não está disponível.')],
-      perfil_inexistente: [401, bi(req, 'No encontramos tu cuenta. Volve a iniciar sesion.', 'We could not find your account. Sign in again.', 'Não encontramos sua conta. Entre novamente.')],
-      cuenta_pausada:     [403, bi(req, 'Tu cuenta esta pausada. Escribinos si crees que es un error.', 'Your account is paused. Contact us if you think this is a mistake.', 'Sua conta está pausada. Escreva para nós se achar que isso é um erro.')],
-      cuenta_cancelada:   [403, bi(req, 'Tu cuenta esta cancelada y no tiene un plan activo. Suscribite de nuevo para seguir generando.', 'Your account is canceled and has no active plan. Subscribe again to continue generating.', 'Sua conta está cancelada e não tem um plano ativo. Assine novamente para continuar gerando.')],
+      sin_saldo:          [402, 'Te quedaste sin creditos.'],
+      requiere_plan:      [403, 'Tu plan no incluye este modulo.'],
+      modulo_inactivo:    [403, 'Este modulo no esta disponible.'],
+      perfil_inexistente: [401, 'No encontramos tu cuenta. Volve a iniciar sesion.'],
+      cuenta_pausada:     [403, 'Tu cuenta esta pausada. Escribinos si crees que es un error.'],
+      cuenta_cancelada:   [403, 'Tu cuenta esta cancelada y no tiene un plan activo. Suscribite de nuevo para seguir generando.'],
     };
-    const [codigo, mensaje] = mapa[motivo] || [403, bi(req, 'No autorizado.', 'Unauthorized.', 'Não autorizado.')];
+    const [codigo, mensaje] = mapa[motivo] || [403, 'No autorizado.'];
     return res.status(codigo).json({
       error: {
         message: mensaje,
@@ -390,11 +388,11 @@ export default async function handler(req, res) {
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = null; } }
   if (!body || !Array.isArray(body.messages)) {
     await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
-    return res.status(400).json({ error: { message: bi(req, 'Cuerpo invalido: se esperaba { model, max_tokens, messages }.', 'Invalid request body: expected { model, max_tokens, messages }.', 'Corpo inválido: esperava-se { model, max_tokens, messages }.') } });
+    return res.status(400).json({ error: { message: 'Cuerpo invalido: se esperaba { model, max_tokens, messages }.' } });
   }
   if (MODELOS_PERMITIDOS && MODELOS_PERMITIDOS.indexOf(body.model) === -1) {
     await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
-    return res.status(400).json({ error: { message: bi(req, 'Modelo no permitido.', 'Model not allowed.', 'Modelo não permitido.') } });
+    return res.status(400).json({ error: { message: 'Modelo no permitido.' } });
   }
   if (typeof body.max_tokens === 'number' && body.max_tokens > MAX_TOKENS_TOPE) {
     body.max_tokens = MAX_TOKENS_TOPE;
@@ -422,7 +420,7 @@ export default async function handler(req, res) {
     // intento nada que haya costado algo.
     await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
     return res.status(502).json({
-      error: { message: bi(req, 'No se pudo contactar al proveedor de IA.', 'Could not contact the AI provider.', 'Não foi possível contatar o provedor de IA.'), detalle: String((e && e.message) || e) },
+      error: { message: 'No se pudo contactar al proveedor de IA.', detalle: String((e && e.message) || e) },
     });
   }
 
