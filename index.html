@@ -26258,6 +26258,39 @@ window.addEventListener('beforeinstallprompt', function(e){
 window.addEventListener('appinstalled', function(){ deferredInstallPrompt = null; });
 
 /* ================= init ================= */
+/* VR-1 · 122.28 CORE SANDBOX ONLY.
+   Superficie mínima y reversible para el adaptador epistemológico externo.
+   No se incorpora al backup canónico ni habilita escrituras automáticas en Memoria. */
+window.__VR1_CORE_SANDBOX_CONTRACT__ = Object.freeze({
+  contractVersion: '1.0.0',
+  sandbox: true,
+  getActiveOrganism: function(){
+    return state.organismo ? JSON.parse(JSON.stringify(state.organismo)) : null;
+  },
+  listOrganisms: function(){
+    return JSON.parse(JSON.stringify(cargarOrganismos()));
+  },
+  openOrganismById: function(organismId){
+    var target = cargarOrganismos().find(function(item){ return item && item.id === organismId; });
+    if(!target) return false;
+    abrirOrganismo(target);
+    return true;
+  },
+  buildCoreBackup: function(){
+    return JSON.parse(JSON.stringify(construirRespaldo()));
+  },
+  importCoreBackup: function(payload){
+    return procesarImport(JSON.parse(JSON.stringify(payload)));
+  },
+  getCoreVersion: function(org){
+    return org && org._sv && Number.isInteger(org._sv.version) ? org._sv.version : null;
+  },
+  authorityBoundary: Object.freeze({
+    directFichaWrite: false,
+    directRecuerdoWrite: false,
+    humanReviewRequired: true
+  })
+});
 renderOrgList();
 mostrarOnboarding(false);
 sincronizarOrganismosConServidor();   // Corte 0.5
@@ -26266,5 +26299,7 @@ if(location.hash === '#pruebas') cardBancoPruebas();
 if(location.hash === '#ciclo') mostrarCiclo();
 if(location.hash === '#ayuda') mostrarAyuda();
 </script>
+<script src="vr1/pilot-fixtures.js"></script>
+<script type="module" src="lib/vr1-core-sandbox-bridge.mjs"></script>
 </body>
 </html>

@@ -1,0 +1,34 @@
+{
+  "id": "ORG-SYNTHETIC-001",
+  "nombre": "Proyecto sintético Trenque Lauquen",
+  "tipo": "proyecto",
+  "ficha": {
+    "diagnostico": "El proyecto se encuentra en estudio preliminar.",
+    "proximo": "Revisar indicadores urbanísticos."
+  },
+  "ficha_historial": [],
+  "recuerdos": [
+    {
+      "id": "rec_fixture_001",
+      "title": "Inicio del estudio",
+      "createdAt": "2026-08-17T12:00:00.000Z",
+      "source": "core",
+      "field": ["diagnostico"],
+      "before": {"diagnostico": ""},
+      "after": {"diagnostico": "El proyecto se encuentra en estudio preliminar."},
+      "summary": "Diagnóstico: El proyecto se encuentra en estudio preliminar.",
+      "organismVersion": 1,
+      "originRef": {"propuestaId": "p_fixture_001", "turno": 1, "resuelto_como": "confirmada"}
+    }
+  ],
+  "hitos": [],
+  "horizonte": null,
+  "principios": [],
+  "diagnosticos_pro": [
+    {"origen": "urban_pro", "version": 1, "fecha": "2026-08-17T11:00:00.000Z", "resumen": "Antecedente urbano legado verificable como contexto, no como evidencia."}
+  ],
+  "evaluaciones_negocio_pro": [
+    {"version": 1, "fecha": "2026-08-17T11:30:00.000Z", "resumen": "Antecedente de negocio legado."}
+  ],
+  "_sv": {"version": 7}
+}
