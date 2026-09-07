@@ -4,6 +4,11 @@
 // bridge como módulo ES real, para ejercer exactamente el código que corre en
 // el navegador.
 //
+// Reubicado a vr1-dev-suite/ (antes vivía en lib/, junto al módulo que prueba)
+// a pedido de Javier en VR1SBCORR03, siguiendo la misma separación runtime/
+// pruebas ya usada en el corte final para main. Único cambio mecánico por la
+// reubicación: el import del bridge, más abajo, sube un nivel ('../lib/...').
+//
 // Objetivo: demostrar, con aserciones, que con el flag apagado:
 //   - no se monta botón ni panel;
 //   - no se importa el organismo piloto (no se llama al importador real del Core);
@@ -22,6 +27,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // Fixture real del caso base VR-1 (mismo contenido que vr1/EVR-TL-001.result.json /
 // results/EVR-TL-001.result.json en el paquete), no un objeto inventado a mano.
 const REAL_BASE_RESULT = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'vr1', 'EVR-TL-001.result.json'), 'utf8'));
+// Fixture real de la contradicción/norma posterior (vr1/EVR-TL-001.conflict-v2.json),
+// el mismo que usa "Simular norma posterior" en el panel -- status:
+// 'reopened_due_to_normative_change', el identificador que VR1SBCORR03 agrega
+// al diccionario de presentación.
+const REAL_CONTRADICTION_RESULT = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'vr1', 'EVR-TL-001.conflict-v2.json'), 'utf8'));
 
 class FakeClassList {
   constructor() { this.s = new Set(); }
@@ -93,7 +103,7 @@ globalThis.URL = { createObjectURL: () => 'blob:fake', revokeObjectURL: () => {}
 const STORE_KEY = 'ag_vr1_core_sandbox_ledger_v1';
 const FLAG_KEY = 'ag_vr1_core_sandbox_enabled_v1';
 
-const mod = await import('./vr1-core-sandbox-bridge.mjs');
+const mod = await import('../lib/vr1-core-sandbox-bridge.mjs');
 const Sandbox = window.VR1Sandbox;
 
 test('flag apagado (estado por defecto) · window.VR1Sandbox existe pero no monta nada', () => {
@@ -187,6 +197,27 @@ test('conservación exacta de los valores internos · el store guardado sigue co
   assert.equal(view.result.unresolved.some(x => x.includes('Ubicación') || x.includes('Vigencia')), false, 'el valor interno nunca debe contener las etiquetas traducidas de presentación');
 });
 
+// --- VR1SBCORR03 · entrada agregada al diccionario tras el smoke test de Javier ---
+test('presentación · "revisión reabierta por cambio normativo" usa el texto exacto en español del diccionario, no sólo un texto sin guiones bajos', () => {
+  window.VR1_PILOT_CONTRADICTION = REAL_CONTRADICTION_RESULT;
+  const outcome = Sandbox.attachPilotContradiction();
+  assert.equal(outcome.response.status, 'appended');
+  Sandbox.render();
+  const activePanel = document.body.children.find(c => c.id === 'vr1sb-panel');
+  const grid = activePanel.children.find(c => c.className === 'vr1sb-grid');
+  const [resultCard] = grid.children;
+  const resultMain = resultCard.children.find(c => c.tagName === 'STRONG');
+  // Exige el texto EXACTO del diccionario -- la ausencia de guiones bajos no alcanza:
+  // el fallback humanizado ("Reopened due to normative change") tampoco los tiene,
+  // y no es la traducción real que pidió Javier.
+  assert.equal(resultMain.textContent, 'Revisión reabierta por cambio normativo', 'debe mostrarse exactamente la entrada agregada al diccionario, no una humanización genérica');
+  assert.notEqual(resultMain.textContent, 'Reopened due to normative change', 'ya no debe caer en el fallback humanizado en inglés');
+  assert.doesNotMatch(resultMain.textContent, /_/);
+  // El valor guardado internamente sigue siendo el identificador canónico crudo, sin traducir:
+  const store = Sandbox.getStore();
+  assert.equal(store.entries.at(-1).result_status, 'reopened_due_to_normative_change', 'el ledger debe seguir el identificador canónico, no la etiqueta en español');
+});
+
 test('setEnabled(false) · desmonta botón y panel, y vuelve a rechazar operaciones', () => {
   Sandbox.setEnabled(false);
   assert.equal(Sandbox.isEnabled(), false);
@@ -242,7 +273,7 @@ test('recarga con flag ya activo (simulada) · el mensaje inicial coincide con e
   globalThis.localStorage = freshLocalStorage;
 
   try {
-    await import(`./vr1-core-sandbox-bridge.mjs?reload-test=${Date.now()}`);
+    await import(`../lib/vr1-core-sandbox-bridge.mjs?reload-test=${Date.now()}`);
 
     const reloadedPanel = freshDocument.body.children.find(c => c.id === 'vr1sb-panel');
     assert.ok(reloadedPanel, 'con el flag ya activo, el panel debe montarse también al "recargar"');
