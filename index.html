@@ -3241,7 +3241,20 @@ function encolarSincronizacionOrganismo(organismId, task){
    cambio mas fresco que ya se haya guardado en esa entrada mientras la tarea
    esperaba en la cola) como state.organismo._sv si sigue siendo el mismo
    organismo que esta abierto en pantalla. */
-function sincronizarOrganismoServidorAhora(snapshot){
+/* CONFLICTOVERSION02 (08/09) -- versionConocidaActual(organismoId) lee la versión confirmada
+   MÁS RECIENTE desde la propia lista persistida (cargarOrganismos()), no desde una referencia en
+   memoria que podría no ser el mismo objeto que otra tarea de la cola ya actualizó. Es la misma
+   fuente que ya actualizan, de forma consistente entre sí, tanto sincronizarOrganismoServidorAhora()
+   como aplicarConfirmacionEpistemica() (ambas hacen persistirOrganismos(lista) con el _sv nuevo
+   ANTES de que su propia promesa resuelva) -- así que leerla acá, recién al momento de despachar,
+   es leer literalmente "lo último que la escritura anterior de este organismo dejó confirmado",
+   sin importar qué llamador la dejó ahí. */
+function versionConocidaActual(organismoId){
+  var lista = cargarOrganismos();
+  var entrada = lista.find(function(o){ return o.id === organismoId; });
+  return (entrada && entrada._sv && typeof entrada._sv.version === 'number') ? entrada._sv.version : null;
+}
+function sincronizarOrganismoServidorAhora(snapshot, versionConocida){
   var limpio = {};
   for(var k in snapshot){ if(Object.prototype.hasOwnProperty.call(snapshot,k) && k !== '_sv') limpio[k] = snapshot[k]; }
   return fetch('/api/organismos', {
@@ -3252,7 +3265,7 @@ function sincronizarOrganismoServidorAhora(snapshot){
       nombre: snapshot.nombre || null,
       estado: 'activo',
       datos: limpio,
-      version_conocida: (snapshot._sv && snapshot._sv.version) || null
+      version_conocida: versionConocida
     })
   }).then(function(r){ return r.json().then(function(d){ return { ok:r.ok, estado:r.status, datos:d }; }); })
     .then(function(r){
@@ -3269,10 +3282,24 @@ function sincronizarOrganismoServidorAhora(snapshot){
     })
     .catch(function(){ /* sin conexion: la copia local ya quedo guardada, se reintenta en el proximo guardado */ });
 }
+/* CONFLICTOVERSION02 (08/09) -- version_conocida se lee AHORA, recién al momento de despachar,
+   DENTRO de la tarea encolada (mismo patrón ya certificado de crearCandidatoEpistemicoServidor()/
+   resolverRevisionEpistemicaServidor(), extendido acá al camino genérico). Antes se leía UNA SOLA
+   VEZ, al encolar, junto con la foto del contenido -- si dos guardados del mismo organismo se
+   encolaban casi juntos (por ejemplo, "Guardar sesión": un guardarOrganismo() directo seguido de
+   otro dentro de crearCheckpointSesion(), ver más abajo), el segundo viajaba con la versión previa
+   a que el primero confirmara la suya, chocaba por versión (409) contra el servidor real, y su
+   propio contenido (el checkpoint, en ese ejemplo) nunca llegaba a persistirse ahí -- aunque la
+   copia local ya lo mostrara guardado. La FOTO DEL CONTENIDO sigue tomándose acá, en el instante
+   de encolar (nunca una referencia que la cola pueda ver mutar más tarde) -- sólo la versión
+   conocida se difiere hasta el despacho real. */
 function sincronizarOrganismoServidor(org){
   if(!org || !org.id) return Promise.resolve();
-  var snapshot = JSON.parse(JSON.stringify(org)); // foto limpia, tomada AHORA -- no una referencia que la cola pueda ver mutar mas tarde
-  return encolarSincronizacionOrganismo(org.id, function(){ return sincronizarOrganismoServidorAhora(snapshot); });
+  var snapshot = JSON.parse(JSON.stringify(org)); // foto limpia del CONTENIDO, tomada AHORA
+  var organismoId = org.id;
+  return encolarSincronizacionOrganismo(organismoId, function(){
+    return sincronizarOrganismoServidorAhora(snapshot, versionConocidaActual(organismoId));
+  });
 }
 
 /* ============ Corte 122.30 · integración epistemológica -- flag, ids e idempotencia (§6, §15) ============
