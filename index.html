@@ -3358,6 +3358,35 @@ function aplicarConfirmacionEpistemica(organismo, datos, subarboles){
   }
 }
 
+/* §7.6 -- ante 409/conflicto_version de cualquiera de las dos operaciones epistemológicas, se
+   recupera el organismo vigente por el MISMO camino autenticado que ya usa
+   sincronizarOrganismosConServidor() (GET /api/organismos, con el mismo envoltorio de fetch de
+   más arriba, que agrega el Authorization -- ningún mecanismo de sesión nuevo). Nunca mezcla el
+   blob completo: aplica exclusivamente version/registro_epistemico/momentos, y sólo los que el
+   renglón vigente realmente trae (si un subárbol falta en la respuesta, no se toca -- nunca se
+   pisa con `undefined`), por el mismo aplicarConfirmacionEpistemica() ya certificado (§8) -- no
+   una ruta de merge nueva. No reintenta ninguna operación por sí sola: la decisión de reintentar
+   sigue siendo humana (el propio componente congelado ya reactiva sus botones ante un rechazo).
+   Si el organismo ya no aparece en la lista vigente (por ejemplo, se borró desde otra sesión), no
+   hace nada -- no hay ninguna versión "recuperada" que aplicar sobre un organismo que el servidor
+   ya no reconoce. */
+function recuperarOrganismoVigente(organismo){
+  if(!organismo || !organismo.id) return Promise.resolve(null);
+  return fetch('/api/organismos')
+    .then(function(r){ return r.json().then(function(d){ return { ok:r.ok, datos:d }; }); })
+    .then(function(r){
+      if(!r.ok || !r.datos || !Array.isArray(r.datos.organismos)) return null;
+      var fila = r.datos.organismos.find(function(row){ return row.cliente_id === organismo.id; });
+      if(!fila || !fila.datos || typeof fila.version !== 'number') return null;
+      var _datosVigentes = { version: fila.version };
+      if(Object.prototype.hasOwnProperty.call(fila.datos, 'registro_epistemico')) _datosVigentes.registro_epistemico = fila.datos.registro_epistemico;
+      if(Object.prototype.hasOwnProperty.call(fila.datos, 'momentos')) _datosVigentes.momentos = fila.datos.momentos;
+      aplicarConfirmacionEpistemica(organismo, _datosVigentes, ['registro_epistemico', 'momentos']);
+      return fila;
+    })
+    .catch(function(){ return null; });
+}
+
 /* crearCandidatoEpistemicoServidor() / resolverRevisionEpistemicaServidor() -- §7.3/§7.4/§7.5.
    Las dos encolan mediante encolarSincronizacionOrganismo(), igual que sincronizarOrganismoServidor():
    ningún call-site autorizado despacha estos requests fuera de la cola del organismo. Ninguna de
@@ -3408,7 +3437,16 @@ function construirAccionesTarjetaEpistemica(organismo){
   function decidir(accion){
     return function(recordRef){
       return resolverRevisionEpistemicaServidor(organismo, recordRef, accion).then(function(r){
-        if(!r || !r.ok) throw new Error('resolucion_epistemica_fallida');
+        if(!r || !r.ok){
+          // §7.6 -- igual que en creación: ante conflicto de versión, se recupera el organismo
+          // vigente por el camino autenticado existente en vez de reintentar con una versión
+          // inventada. La tarjeta conserva su estado previo (el propio componente congelado ya
+          // reactiva los botones al rechazar esta promesa, sin esperar esta recuperación) -- acá
+          // sólo se corrige la versión local para que el PRÓXIMO intento humano (mismo botón) no
+          // vuelva a chocar contra la misma versión ya vieja.
+          if(r && r.estado === 409) recuperarOrganismoVigente(organismo);
+          throw new Error('resolucion_epistemica_fallida');
+        }
         aplicarConfirmacionEpistemica(organismo, r.datos, ['registro_epistemico', 'momentos']);
       });
     };
@@ -11158,6 +11196,18 @@ async function enviar(texto){
         var _creacion = await crearCandidatoEpistemicoServidor(state.organismo, turnRef, _eventRef, propuestaEpistemica, parsed.visible);
         if(epoch !== state.epoch) return;   // la sesión cambió mientras esperábamos la confirmación del servidor
         if(_creacion && _creacion.ok && _creacion.datos && _creacion.datos.recordRef){
+          // Bug real de QA en staging (08/09): esta línea faltaba. §7.3 pasos 9-10 / §8 -- recién
+          // confirmada la creación, se aplica sobre el organismo EN MEMORIA el único subárbol que
+          // esta operación devuelve (registro_epistemico) y se actualiza org._sv.version -- ANTES
+          // de montar la tarjeta y ANTES de cualquier guardado genérico posterior en este mismo
+          // turno (el autosave de guardarBorrador()/guardarOrganismo(), más abajo). Sin esto, ese
+          // autosave viaja con una version_conocida vieja (la de ANTES de esta creación): el
+          // servidor lo rechaza por versión (409, absorbido en silencio por
+          // sincronizarOrganismoServidorAhora) y org._sv queda atrasado -- cualquier acción
+          // posterior sobre la tarjeta (aceptar/no incorporar) hereda esa misma versión vieja y
+          // también choca contra el servidor, con un 409 que no tiene forma de resolverse sin
+          // recargar la página.
+          aplicarConfirmacionEpistemica(state.organismo, _creacion.datos, ['registro_epistemico']);
           var _entradaHistorial = state.history[state.history.length - 1];
           if(_entradaHistorial && _entradaHistorial.role === 'assistant' && _entradaHistorial.turnRef === turnRef){
             _entradaHistorial.recordRef = _creacion.datos.recordRef;
@@ -11168,6 +11218,17 @@ async function enviar(texto){
               actions: construirAccionesTarjetaEpistemica(state.organismo)
             });
           }
+        } else if(_creacion && !_creacion.ok && _creacion.estado === 409){
+          // §7.6 -- ante conflicto de versión en la creación, nunca se inventa una versión ni se
+          // reintenta a ciegas: se recupera el organismo vigente por el camino autenticado
+          // existente, para que cualquier operación posterior sobre este mismo organismo (el
+          // autosave que sigue, o un reintento humano) parta de la versión real y no de la que ya
+          // sabíamos vieja. No se muestra ninguna tarjeta acá -- eso exigiría encontrar la misma
+          // operación idempotente ya aplicada en el store vigente, y esta creación en particular
+          // nunca llegó a aplicarse (el servidor rechaza por versión ANTES de tocar el ledger, ver
+          // api/organismos.js: manejarCrearCandidatoEpistemico() corta en el paso 2, antes del
+          // paso 8 que recién ahí escribe el ledger).
+          recuperarOrganismoVigente(state.organismo);
         }
       }
     }
