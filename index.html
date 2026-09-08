@@ -263,6 +263,38 @@ header .spacer{flex:1}
 }
 .principio-chat-txt{display:block;font-size:13.5px;line-height:1.6;color:var(--dim);font-style:italic}
 .principio-chat.confirmado{background:var(--panel)}
+/* 122.29 · tarjeta de sustentación -- mismo lenguaje visual que .principio-chat (ver comentario
+   PR-UX1 arriba): un momento de pausa dentro del mensaje del Core, no un panel aparte ni una
+   alerta. Misma tarjeta en mobile y desktop, sin CSS por dispositivo -- se angosta sola dentro
+   de #chat, igual que .principio-chat. Nada de paneles oscuros ni z-index alto: eso es exclusivo
+   del sandbox técnico (lib/vr1-core-sandbox-bridge.mjs), no de este componente. */
+.sustentacion-card{
+  max-width:440px;width:100%;margin:8px auto 0;box-sizing:border-box;
+  padding:14px 18px;border-radius:14px;
+  border:1px solid var(--line);background:var(--panel2);
+  animation:fadein .5s ease;
+}
+.sustentacion-card.is-review{border-left:2px solid #D4756B}
+.sustentacion-card.is-accepted{border-left:2px solid var(--energia)}
+.sustentacion-card.is-rejected{border-left:2px solid var(--faint)}
+.sustentacion-card__badge{
+  display:block;font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--faint);margin-bottom:7px;
+}
+.sustentacion-card.is-review .sustentacion-card__badge{color:#D4756B}
+.sustentacion-card__summary{font-size:13.5px;line-height:1.6;color:var(--dim);margin-bottom:8px}
+.sustentacion-card__details{margin-top:6px}
+.sustentacion-card__details summary{cursor:pointer;font-size:12.5px;color:var(--accent);list-style:none}
+.sustentacion-card__details summary::-webkit-details-marker{display:none}
+.sustentacion-card__details summary::before{content:"› ";color:var(--faint)}
+.sustentacion-card__details[open] summary::before{content:"⌄ "}
+.sustentacion-card__list{margin:6px 0 0 0;padding-left:18px;font-size:12.5px;color:var(--dim);line-height:1.6}
+.sustentacion-card__list a{color:var(--accent)}
+.sustentacion-card__more{color:var(--faint)}
+.sustentacion-card__empty{font-size:12.5px;color:var(--faint);font-style:italic;margin-top:6px}
+.sustentacion-card__level{font-size:11.5px;color:var(--faint);margin-top:8px}
+.sustentacion-card__actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.sustentacion-card__status{font-size:12px;color:var(--dim);margin-top:8px;min-height:1em}
 .derivacion{
   border:1px solid rgba(46,90,135,.22);border-radius:12px;padding:12px 16px;
   background:var(--accent-soft);font-size:13px;color:var(--dim);line-height:1.55;
@@ -1139,6 +1171,11 @@ header .spacer{flex:1}
     if(Date.now() < (s.vence - MARGEN)) return Promise.resolve(s.token);
     return refrescar().then(function(n){ return n ? n.token : null; });
   }
+  // 122.30 · §15 -- integracionEpistemicaHabilitada() (fuera de este cierre) necesita el MISMO
+  // camino autenticado existente para verificar "sesión válida", en vez de inventar un segundo
+  // mecanismo. Único punto de exposición hacia afuera del cierre; no cambia nada de lo que ya
+  // pasaba acá adentro.
+  window.tokenVigente = tokenVigente;
 
   /* ---------- saldo ---------- */
   // Se guarda donde credEstado() lo busca. El navegador deja de calcular el saldo:
@@ -2858,7 +2895,33 @@ function addUserMsg(text){
   scrollBottom();
 }
 
-function addMotorMsg(parsed, replay){
+/* 122.30 · puerta única de montaje de la tarjeta de sustentación (§4 del contrato 122.30),
+   compartida por el hook inmediato de addMotorMsg() (más abajo) y por el camino productivo
+   diferido de enviar() -- éste la llama recién después de que el servidor confirma el
+   candidato epistemológico. No interpreta el ledger, no crea acciones (onAccept/onReject
+   los arma quien la llama) y NUNCA modifica lib/sustentacion-card.mjs: sólo valida el nodo y
+   el sobre recibidos, evita un segundo montaje sobre el mismo mensaje, llama a
+   window.__sustentacionCard.create(presentation, actions) -- la API real y congelada del
+   componente -- y agrega exclusivamente el `.node` que ésta devuelve. */
+function mountSustentacionCard(messageNode, envelope){
+  if(!messageNode || typeof messageNode.appendChild !== 'function') return false;
+  if(!envelope || typeof envelope !== 'object' || !envelope.presentation) return false;
+  if(messageNode.__epistemicCardMounted) return false;   // evita un segundo montaje en el mismo mensaje
+  if(!window.__sustentacionCard || typeof window.__sustentacionCard.create !== 'function') return false;
+  try{
+    const r = window.__sustentacionCard.create(envelope.presentation, envelope.actions || {});
+    if(r && r.ok && r.node){
+      messageNode.appendChild(r.node);
+      messageNode.__epistemicCardMounted = true;
+      return true;
+    }
+  }catch(e){
+    if(window.console && console.warn) console.warn('[sustentacion] render omitido:', e);
+  }
+  return false;
+}
+
+function addMotorMsg(parsed, replay, sustentacion = null){
   const d = document.createElement('div');
   d.className = 'msg motor';
   const b = document.createElement('div');
@@ -2898,8 +2961,21 @@ function addMotorMsg(parsed, replay){
     }
     d.appendChild(l);
   }
+
+  /* 122.29/122.30 · hook de render OPCIONAL, sin parser productivo de marcadores y sin
+     persistencia propia -- delega en mountSustentacionCard() (puerta única, ver arriba),
+     compartida con el montaje diferido de enviar(). `sustentacion` sigue siendo null en el
+     camino histórico (respuesta común, sin candidato epistemológico elegible); este bloque
+     no cambia nada del comportamiento existente mientras nadie pase el tercer argumento. Ver
+     lib/sustentacion-card.mjs (componente puro) y CONTRATO_VISUAL_122.29_PROPUESTA_v3.md /
+     CONTRATO_122.30_INTEGRACION_EPISTEMICA_CONGELADO_v3.md. */
+  if(sustentacion){
+    mountSustentacionCard(d, sustentacion);
+  }
+
   el.stream.appendChild(d);
   scrollBottom();
+  return d;   // 122.30: callers históricos pueden seguir ignorando el retorno sin cambiar de conducta
 }
 
 function addPensando(){
@@ -3097,7 +3173,33 @@ function guardarOrganismo(org){
   const i = list.findIndex(function(o){ return o.id === org.id; });
   if(i > -1) list[i] = org; else list.push(org);
   persistirOrganismos(list);
-  sincronizarOrganismoServidor(org);   // Corte 0.5 -- ademas de local, al servidor
+  // 122.30: conserva la escritura local inmediata de siempre; el guardado remoto ahora pasa
+  // por la cola de la frontera remota (ver sincronizarOrganismoServidor() más abajo) y esta
+  // función devuelve esa promesa encolada -- los callers históricos que ignoran el retorno
+  // siguen funcionando exactamente igual.
+  return sincronizarOrganismoServidor(org);   // Corte 0.5 -- ademas de local, al servidor
+}
+
+/* 122.30 · cola única en la frontera remota (§7.5 del contrato 122.30).
+   Se ubica DEBAJO de guardarOrganismo(), en la capa que ya inicia cualquier sincronización
+   remota del organismo -- no reutiliza guardarOrganismo() (que también escribe local) ni
+   altera la semántica del merge de inicio de sesión. Cubre, sin tocar sus propios call-sites,
+   tanto guardarOrganismo() como las llamadas directas desde sincronizarOrganismosConServidor()
+   y window.alConfirmarSesion (alias de la misma función) -- las tres pasan por
+   sincronizarOrganismoServidor(), que a partir de acá encola en vez de despachar directo.
+   Las dos operaciones epistemológicas (crearCandidatoEpistemicoServidor() y
+   resolverRevisionEpistemicaServidor(), más abajo) encolan por la misma función.
+   Cada tarea encolada encadena sobre la anterior DEL MISMO ORGANISMO; un error se absorbe
+   sólo para liberar el siguiente elemento de la cola, nunca se declara éxito ni se reintenta
+   automáticamente por fuera del contrato idempotente de cada operación. */
+var _colasSincronizacionPorOrganismo = {};
+function encolarSincronizacionOrganismo(organismId, task){
+  var anterior = _colasSincronizacionPorOrganismo[organismId] || Promise.resolve();
+  var siguiente = anterior.then(task, task); // corre `task` tanto si la anterior resolvió como si fue rechazada -- nunca declara éxito por eso, sólo libera el turno
+  // La cola pública guarda una versión que nunca rechaza, para que un error de una tarea no
+  // deje huérfana la cadena para las siguientes tareas del mismo organismo.
+  _colasSincronizacionPorOrganismo[organismId] = siguiente.catch(function(){});
+  return siguiente;
 }
 
 /* ============ Corte 0.5 · persistencia real de organismos (01/08) ============
@@ -3118,31 +3220,219 @@ function guardarOrganismo(org){
    con su version real (ver api/organismos.js). Resolverlo con una interfaz para
    elegir queda para un paso posterior -- por ahora, ante un conflicto, no se
    pisa nada y el local sigue como estaba. */
-function sincronizarOrganismoServidor(org){
-  if(!org || !org.id) return;
+/* Corte 122.30 · §7.5 -- cola unica en la frontera remota.
+   Antes, cada llamado a sincronizarOrganismoServidor(org) largaba su propio
+   fetch de inmediato: si guardarOrganismo() se llamaba dos veces seguidas para
+   el mismo organismo (tipeo rapido, dos ediciones casi simultaneas), podian
+   viajar dos POST en paralelo y el que llegaba segundo al servidor podia
+   pisar en el orden equivocado. Ahora sincronizarOrganismoServidor(org):
+     1. Saca una foto limpia (JSON.parse/stringify) del organismo EN ESTE
+        INSTANTE -- no una referencia viva que pueda seguir mutando mientras
+        la tarea espera turno en la cola.
+     2. Encola esa foto para el organismo (encolarSincronizacionOrganismo),
+        que garantiza que las tareas del mismo organismo corren en orden,
+        una por vez.
+   sincronizarOrganismoServidorAhora(snapshot) es la funcion interna que de
+   verdad dispara el POST y aplica la respuesta -- es la misma logica que
+   antes tenia sincronizarOrganismoServidor(), sin cambios de comportamiento,
+   solo movida a un lugar que la cola puede invocar cuando le toca el turno.
+   Al confirmar version nueva, se actualiza tanto la entrada persistida en la
+   lista local (solo el campo _sv, para no pisar con la foto vieja cualquier
+   cambio mas fresco que ya se haya guardado en esa entrada mientras la tarea
+   esperaba en la cola) como state.organismo._sv si sigue siendo el mismo
+   organismo que esta abierto en pantalla. */
+function sincronizarOrganismoServidorAhora(snapshot){
   var limpio = {};
-  for(var k in org){ if(Object.prototype.hasOwnProperty.call(org,k) && k !== '_sv') limpio[k] = org[k]; }
-  fetch('/api/organismos', {
+  for(var k in snapshot){ if(Object.prototype.hasOwnProperty.call(snapshot,k) && k !== '_sv') limpio[k] = snapshot[k]; }
+  return fetch('/api/organismos', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      cliente_id: org.id,
-      nombre: org.nombre || null,
+      cliente_id: snapshot.id,
+      nombre: snapshot.nombre || null,
       estado: 'activo',
       datos: limpio,
-      version_conocida: (org._sv && org._sv.version) || null
+      version_conocida: (snapshot._sv && snapshot._sv.version) || null
     })
   }).then(function(r){ return r.json().then(function(d){ return { ok:r.ok, estado:r.status, datos:d }; }); })
     .then(function(r){
       if(r.ok && r.datos && typeof r.datos.version === 'number'){
-        org._sv = { version: r.datos.version };
+        var nuevaV = { version: r.datos.version };
+        snapshot._sv = nuevaV;
         var lista2 = cargarOrganismos();
-        var j = lista2.findIndex(function(o){ return o.id === org.id; });
-        if(j > -1){ lista2[j] = org; persistirOrganismos(lista2); }
+        var j = lista2.findIndex(function(o){ return o.id === snapshot.id; });
+        if(j > -1){ lista2[j]._sv = nuevaV; persistirOrganismos(lista2); }
+        if(state.organismo && state.organismo.id === snapshot.id) state.organismo._sv = nuevaV;
       }
       // 409 conflicto_version: por ahora no se resuelve solo. No se pisa nada local.
+      return r;
     })
     .catch(function(){ /* sin conexion: la copia local ya quedo guardada, se reintenta en el proximo guardado */ });
+}
+function sincronizarOrganismoServidor(org){
+  if(!org || !org.id) return Promise.resolve();
+  var snapshot = JSON.parse(JSON.stringify(org)); // foto limpia, tomada AHORA -- no una referencia que la cola pueda ver mutar mas tarde
+  return encolarSincronizacionOrganismo(org.id, function(){ return sincronizarOrganismoServidorAhora(snapshot); });
+}
+
+/* ============ Corte 122.30 · integración epistemológica -- flag, ids e idempotencia (§6, §15) ============
+   generarIdEstable(prefijo) reutiliza EXACTAMENTE el mismo helper/fallback ya certificado que usa
+   registrarSenalVital() más abajo (crypto.randomUUID() si existe; si no, un fallback con Date.now()
+   en base 36 + un componente aleatorio) -- el contrato prohíbe introducir un segundo fallback
+   distinto (§6.2), así que esto es una extracción del mismo algoritmo para reutilizarlo acá y en
+   la idempotencia de la resolución humana, no una función nueva con lógica propia. */
+function generarIdEstable(prefijo){
+  var base = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID()
+    : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+  return prefijo + '-' + base;
+}
+
+/* Hash funcional simple y determinista (FNV-1a de 32 bits) del candidato -- nunca criptográfico,
+   nunca prueba de autenticidad (§6.1, §6.4): sólo sirve para que una clave de idempotencia de
+   creación sea estable frente a un reintento del MISMO candidato y distinta frente a uno distinto. */
+function hashFuncionalCandidato(proposal, visibleText){
+  var s = JSON.stringify(proposal || {}) + '|' + String(visibleText || '');
+  var h = 0x811c9dc5;
+  for(var i = 0; i < s.length; i++){
+    h ^= s.charCodeAt(i);
+    h = (h * 0x01000193) >>> 0;
+  }
+  return h.toString(16);
+}
+
+function epistemicAdapter(){
+  return (typeof window !== 'undefined' && window.__epistemicAdapter) ? window.__epistemicAdapter : null;
+}
+
+var STAGING_HOSTNAME_INTEGRACION_EPISTEMICA = 'staging.comprenderai.com';
+var PREF_INTEGRACION_EPISTEMICA_KEY = 'ag_core_pref_integracion_epistemica_staging';
+function preferenciaIntegracionEpistemicaHabilitada(){
+  try{ return localStorage.getItem(PREF_INTEGRACION_EPISTEMICA_KEY) === '1'; }catch(e){ return false; }
+}
+/* §15: las TRES condiciones simultáneas -- host de staging exacto, preferencia local de ensayo, y
+   sesión válida. En cualquier otro host (incluido app.comprenderai.com) el valor efectivo es
+   SIEMPRE false, aunque la preferencia esté encendida. tokenVigente() es el mismo camino
+   autenticado que ya usa el resto de la aplicación (sincronizarSaldo(), el envoltorio de fetch
+   más abajo) -- no se inventa un segundo mecanismo de sesión. */
+function integracionEpistemicaHabilitada(){
+  if(location.hostname !== STAGING_HOSTNAME_INTEGRACION_EPISTEMICA || !preferenciaIntegracionEpistemicaHabilitada()){
+    return Promise.resolve(false);
+  }
+  return tokenVigente().then(function(t){ return !!t; });
+}
+/* Variante síncrona (host + preferencia, sin verificar sesión), usada exclusivamente por el
+   camino de REPLAY (restaurarBorrador()/restaurarCheckpoint()): ese camino no despacha ningún
+   request -- sólo decide si reconstruye, a partir de datos YA persistidos localmente, una tarjeta
+   que sólo pudo haberse creado en su momento con el flag completo (incluida sesión) activo. Exigir
+   una revalidación de sesión para una decisión puramente local de render sería inconsistente con
+   cómo se renderiza cualquier otro dato ya cargado en memoria, y no debilita ninguna de las
+   garantías del §15: fuera de staging, o con la preferencia apagada, el valor sigue siendo
+   siempre false, ningún request se despacha, y la salida queda indistinguible del baseline 122.29. */
+function integracionEpistemicaHabilitadaSync(){
+  return location.hostname === STAGING_HOSTNAME_INTEGRACION_EPISTEMICA && preferenciaIntegracionEpistemicaHabilitada();
+}
+
+var MAX_VISIBLE_TEXT_LEN_CLIENTE = 4000;   // debe coincidir con MAX_VISIBLE_TEXT_LEN de api/organismos.js (prueba de contrato)
+
+/* §8: aplica SOBRE EL ORGANISMO EN MEMORIA sólo los subárboles devueltos por una operación
+   epistemológica confirmada (nunca un eco completo del organismo), actualiza org._sv.version, y
+   persiste esa copia en la entrada correspondiente de la lista local -- recién después de esto el
+   llamador puede considerar "actualizada" cualquier tarjeta que dependa de este estado. No toca
+   sincronizarOrganismoServidorAhora() (que ya tiene su propia lógica, ya probada, para el camino
+   genérico) -- esto es exclusivo de los dos caminos epistemológicos nuevos. */
+function aplicarConfirmacionEpistemica(organismo, datos, subarboles){
+  if(!organismo || !organismo.id || !datos) return;
+  var nuevaV = (typeof datos.version === 'number') ? { version: datos.version } : organismo._sv;
+  subarboles.forEach(function(k){ if(Object.prototype.hasOwnProperty.call(datos, k)) organismo[k] = datos[k]; });
+  organismo._sv = nuevaV;
+  var lista = cargarOrganismos();
+  var j = lista.findIndex(function(o){ return o.id === organismo.id; });
+  if(j > -1){
+    subarboles.forEach(function(k){ if(Object.prototype.hasOwnProperty.call(datos, k)) lista[j][k] = datos[k]; });
+    lista[j]._sv = nuevaV;
+    persistirOrganismos(lista);
+  }
+  if(state.organismo && state.organismo.id === organismo.id && state.organismo !== organismo){
+    subarboles.forEach(function(k){ if(Object.prototype.hasOwnProperty.call(datos, k)) state.organismo[k] = datos[k]; });
+    state.organismo._sv = nuevaV;
+  }
+}
+
+/* crearCandidatoEpistemicoServidor() / resolverRevisionEpistemicaServidor() -- §7.3/§7.4/§7.5.
+   Las dos encolan mediante encolarSincronizacionOrganismo(), igual que sincronizarOrganismoServidor():
+   ningún call-site autorizado despacha estos requests fuera de la cola del organismo. Ninguna de
+   las dos rechaza jamás su promesa por un fallo del propio request (sin sesión, sin conexión, 409,
+   400): siempre resuelve con { ok:false } en ese caso, para que la cola libere el siguiente turno
+   sin declarar éxito y para que el llamador decida qué hacer (nunca mostrar tarjeta fantasma en la
+   creación; dejar la tarjeta como estaba en la resolución). */
+function crearCandidatoEpistemicoServidor(organismo, turnRef, eventRef, proposal, visibleText){
+  if(!organismo || !organismo.id) return Promise.resolve({ ok:false });
+  var proposalSnapshot = JSON.parse(JSON.stringify(proposal));
+  var visibleTextSnapshot = String(visibleText || '').slice(0, MAX_VISIBLE_TEXT_LEN_CLIENTE);
+  var idKey = 'CREATE:' + organismo.id + ':' + turnRef + ':' + hashFuncionalCandidato(proposalSnapshot, visibleTextSnapshot);
+  return encolarSincronizacionOrganismo(organismo.id, function(){
+    var versionConocida = (organismo._sv && organismo._sv.version) != null ? organismo._sv.version : null;   // recién ahora, justo antes de despachar (§7.5)
+    return fetch('/api/organismos', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        operacion: 'create_epistemic_candidate', cliente_id: organismo.id, version_conocida: versionConocida,
+        turnRef: turnRef, eventRef: eventRef, idempotency_key: idKey,
+        candidate: { proposal: proposalSnapshot, visibleText: visibleTextSnapshot }
+      })
+    }).then(function(r){ return r.json().then(function(d){ return { ok: !!(r.ok && d && d.ok === true), estado: r.status, datos: d }; }); })
+      .catch(function(){ return { ok:false }; });
+  });
+}
+function resolverRevisionEpistemicaServidor(organismo, recordRef, accion){
+  if(!organismo || !organismo.id || !recordRef) return Promise.resolve({ ok:false });
+  var idKey = 'RESOLVE:' + recordRef + ':' + accion + ':' + generarIdEstable('intento');   // identificador estable de ESTE intento (§6.4)
+  return encolarSincronizacionOrganismo(organismo.id, function(){
+    var versionConocida = (organismo._sv && organismo._sv.version) != null ? organismo._sv.version : null;
+    return fetch('/api/organismos', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        operacion: 'resolve_epistemic_review', cliente_id: organismo.id, recordRef: recordRef,
+        accion: accion, version_conocida: versionConocida, idempotency_key: idKey
+      })
+    }).then(function(r){ return r.json().then(function(d){ return { ok: !!(r.ok && d && d.ok === true), estado: r.status, datos: d }; }); })
+      .catch(function(){ return { ok:false }; });
+  });
+}
+/* Fábrica de { onAccept, onReject } para el envelope de mountSustentacionCard(). El componente
+   (lib/sustentacion-card.mjs, congelado) llama a cada callback con SÓLO el recordRef y espera una
+   promesa: si resuelve, el propio componente transiciona su estado visual (accepted/rejected_as_reference)
+   y muestra el descargo fijo correspondiente; si rechaza, reactiva los botones y muestra un aviso
+   genérico de reintento -- no hace falta reconstruir ni volver a montar la tarjeta acá en ningún
+   caso (§7.6: ante conflicto, la tarjeta existente conserva su estado previo). */
+function construirAccionesTarjetaEpistemica(organismo){
+  function decidir(accion){
+    return function(recordRef){
+      return resolverRevisionEpistemicaServidor(organismo, recordRef, accion).then(function(r){
+        if(!r || !r.ok) throw new Error('resolucion_epistemica_fallida');
+        aplicarConfirmacionEpistemica(organismo, r.datos, ['registro_epistemico', 'momentos']);
+      });
+    };
+  }
+  return { onAccept: decidir('accept_as_reference'), onReject: decidir('reject') };
+}
+
+/* §9.2 -- replay real, usado tanto por restaurarBorrador() como por restaurarCheckpoint().
+   Sin recordRef en la entrada: comportamiento histórico, sin tarjeta (null). Con recordRef
+   presente pero inexistente/inválido en o.registro_epistemico: tampoco se muestra tarjeta y el
+   mensaje no se rompe -- presentationFromRegistroEpistemico() ya devuelve null en ese caso, nunca
+   lanza. La tarjeta reconstruida refleja el ESTADO ACTUAL del registro, no una fotografía del
+   turno original (mismo store se relee cada vez). Gateado por integracionEpistemicaHabilitadaSync()
+   (§15): fuera de staging o con la preferencia local apagada, nunca se reconstruye una tarjeta,
+   aunque el dato exista en o.registro_epistemico -- la salida queda indistinguible del baseline
+   122.29. El replay en sí nunca ejecuta acciones ni crea registros nuevos: sólo lee. */
+function envelopeReplayEpistemico(o, m){
+  if(!o || !m || !m.recordRef || !integracionEpistemicaHabilitadaSync()) return null;
+  var _adapter = epistemicAdapter();
+  if(!_adapter) return null;
+  var locale = (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.getLocale) ? ComprenderI18n.getLocale() : 'es';
+  var presentation = _adapter.presentationFromRegistroEpistemico({ registroEpistemico: o.registro_epistemico, recordRef: m.recordRef, locale: locale });
+  if(!presentation) return null;
+  return { presentation: presentation, actions: construirAccionesTarjetaEpistemica(o) };
 }
 
 /* Se corre una vez al iniciar: trae lo que el servidor tenga y el navegador no
@@ -10778,7 +11068,11 @@ function historialParaAPI(history){
       corte = corte + 1;   // no hay lugar (o no había user antes): se descarta el huérfano
     }
   }
-  return history.slice(corte);
+  // 122.30 · §9.1 -- proyección obligatoria a { role, content } antes de armar `messages`. turnRef,
+  // recordRef y cualquier otro dato de estado/ledger/revisión que viva en la entrada del historial
+  // NUNCA viaja hacia Anthropic. Se aplica acá porque este es el único punto que arma la ventana
+  // para el fetch principal y para cualquier camino alternativo que la reutilice.
+  return history.slice(corte).map(function(m){ return { role: m.role, content: m.content }; });
 }
 
 /* ================= motor ================= */
@@ -10819,12 +11113,18 @@ async function enviar(texto){
     const raw = (data.content || []).filter(x => x.type === 'text').map(x => x.text).join('\n');
     if(!raw){ addError('El motor devolvió una respuesta vacía. Probá reformular la consulta.'); state.history.pop(); return; }
 
-    state.history.push({ role:'assistant', content: raw });
+    // 122.30 · §6.2/§9 -- turnRef estable, generado ANTES de addMotorMsg y conservado en la
+    // entrada del historial del asistente (opcional para historia vieja, ver §9).
+    var turnRef = generarIdEstable('TURN');
+    state.history.push({ role:'assistant', content: raw, turnRef: turnRef });
     const parsed = parseMotor(raw);
     if(parsed.diag || parsed.tension || parsed.funcion){
       state.ultimaLectura = { diag: parsed.diag, tension: parsed.tension, funcion: parsed.funcion };
     }
-    addMotorMsg(parsed);
+    // 122.30 · §7.5 paso 3 -- se conserva el nodo .msg.motor ya renderizado: addMotorMsg() gana acá
+    // el retorno compatible, para poder montarle la tarjeta de sustentación MÁS ABAJO (paso 7) sin
+    // reordenar nada de lo que ya pasa acá arriba, ni demorar el texto conversacional un instante.
+    var msgNodeMotor = addMotorMsg(parsed);
     // Punto 10 (21/08): addPrincipio() ahora sólo hace aparición en sesión (Hilo + state.principios)
     // -- ya NO escribe en state.organismo.principios[]. La incorporación persistente pasa a ser un
     // candidato más de la misma propuesta que ya gobierna ficha/hito/horizonte (ver proponerFicha()).
@@ -10839,8 +11139,37 @@ async function enviar(texto){
     // Corte J: un cierre de etapa u horizonte tambien dispara la propuesta, aunque ese turno no
     // haya traido un [[FICHA:...]] (el cierre puede llegar solo). Punto 10: un principio candidato,
     // igual que un hito o un horizonte, también justifica una propuesta aunque la ficha no cambie.
+    var propuestaEpistemica = null;
     if(parsed.ficha || parsed.cierreEtapa || parsed.horizonte || principiosCandidatos.length){
-      proponerFicha(parsed.ficha || {}, state.ultimaLectura, parsed.cierreEtapa, parsed.horizonte, principiosCandidatos);
+      propuestaEpistemica = proponerFicha(parsed.ficha || {}, state.ultimaLectura, parsed.cierreEtapa, parsed.horizonte, principiosCandidatos);
+    }
+    // 122.30 · §7.5 pasos 5-7. Paso 5: sin propuesta elegible, camino histórico exacto, sin request
+    // ni tarjeta (el `if` completo se salta). Paso 6: con propuesta elegible, esperar el turno de la
+    // cola del organismo (crearCandidatoEpistemicoServidor ya encola) y pedir la creación. Paso 7:
+    // sólo si el servidor confirma, se agrega recordRef a la entrada ya empujada del historial y se
+    // monta la tarjeta sobre el nodo ya renderizado; si falla cualquier paso, el mensaje queda
+    // intacto y no aparece ninguna tarjeta fantasma. Todo detrás del flag de activación (§15) --
+    // apagado, este bloque entero es un no-op indistinguible del baseline 122.29.
+    var _epAdapter = epistemicAdapter();
+    if(state.organismo && propuestaEpistemica && _epAdapter && _epAdapter.isEpistemicCandidate({ proposal: propuestaEpistemica })){
+      var _integracionOk = await integracionEpistemicaHabilitada();
+      if(_integracionOk){
+        var _eventRef = { type: 'proposal', id: propuestaEpistemica.id, organism_id: state.organismo.id };
+        var _creacion = await crearCandidatoEpistemicoServidor(state.organismo, turnRef, _eventRef, propuestaEpistemica, parsed.visible);
+        if(epoch !== state.epoch) return;   // la sesión cambió mientras esperábamos la confirmación del servidor
+        if(_creacion && _creacion.ok && _creacion.datos && _creacion.datos.recordRef){
+          var _entradaHistorial = state.history[state.history.length - 1];
+          if(_entradaHistorial && _entradaHistorial.role === 'assistant' && _entradaHistorial.turnRef === turnRef){
+            _entradaHistorial.recordRef = _creacion.datos.recordRef;
+          }
+          if(msgNodeMotor){
+            mountSustentacionCard(msgNodeMotor, {
+              presentation: _creacion.datos.presentation,
+              actions: construirAccionesTarjetaEpistemica(state.organismo)
+            });
+          }
+        }
+      }
     }
     var cerroLectura = false;
     if(state.modoUrban && state.organismo && parsed.udims.length && parsed.proyectivo){
@@ -11535,6 +11864,7 @@ function cardAvisoCreditos(umbral, c){
    No reemplaza a organismo.principios ni a organismo.destilados: se suma al lado.
    Vive en el navegador y NO viaja al prompt — guardar texto no gasta tokens. */
 var RECORRIDO_MAX = 400;
+var TIPO_MOMENTO_REVISION_EPISTEMICA = 'revision_epistemica';   // 122.30 · §12 -- debe coincidir EXACTO con la constante homónima de api/organismos.js; prueba de contrato en vr1-dev-suite/ lo verifica
 var TIPO_MOMENTO = {
   cristalizacion:  'Reflexión',
   principio:       'Principio',
@@ -11543,6 +11873,9 @@ var TIPO_MOMENTO = {
   ficha_confirmada:'Ficha confirmada',
   etapa_completada:'Etapa comprendida'
 };
+// El momento 'revision_epistemica' sólo se crea server-side (§12); esta entrada es exclusivamente
+// para que el Recorrido pueda renderizar su etiqueta humana cuando lo lee de vuelta.
+TIPO_MOMENTO[TIPO_MOMENTO_REVISION_EPISTEMICA] = 'Revisión epistemológica';
 /* Punto 11 (21/08): texto determinista para el momento 'etapa_completada' -- reemplaza el previo
    `p.hito.etapa || p.hito.comprendimos` (pobre, sólo mostraba uno de los dos). Combina etapa +
    comprendimos cuando ambos existen; nunca serializa el hito completo; tope ~280 caracteres.
@@ -16571,7 +16904,7 @@ function restaurarBorrador(o){
   for(var i=0; i<state.history.length; i++){
     var m = state.history[i];
     if(m.role === 'user') addUserMsg(m.content);
-    else addMotorMsg(parseMotor(m.content), true);   // replay: no re-registra momentos
+    else addMotorMsg(parseMotor(m.content), true, envelopeReplayEpistemico(o, m));   // replay: no re-registra momentos (§9.2)
   }
   // UX-P1C (25/08): reconstruir los principios de sesión perdidos por el bug de autosave --
   // mismo patrón que restaurarCheckpoint() (PR-A2.3), reutilizando restaurarPrincipiosDeSesion()
@@ -16767,7 +17100,7 @@ function restaurarCheckpoint(org, modulo, indice){
   for(var i=0; i<state.history.length; i++){
     var m = state.history[i];
     if(m.role === 'user') addUserMsg(m.content);
-    else addMotorMsg(parseMotor(m.content), true);   // replay: no re-registra momentos
+    else addMotorMsg(parseMotor(m.content), true, envelopeReplayEpistemico(org, m));   // replay: no re-registra momentos (§9.2)
   }
   // PR-UX1 (25/08): las tarjetas de principios en el chat se insertan DESPUÉS de replayar toda la
   // conversación (ver el comentario largo de restaurarPrincipiosDeSesion() más arriba) -- quedan
@@ -26301,5 +26634,11 @@ if(location.hash === '#ayuda') mostrarAyuda();
 </script>
 <script src="vr1/pilot-fixtures.js"></script>
 <script type="module" src="lib/vr1-core-sandbox-bridge.mjs"></script>
+<!-- 122.29: componente puro, se carga una sola vez. No importa nada de vr1-dev-suite/. -->
+<script type="module" src="lib/sustentacion-card.mjs"></script>
+<!-- 122.30: adaptador productivo puro (política de elegibilidad + ledger->presentation para
+     replay). Nunca lib/epistemic-ledger.mjs del lado del cliente -- ese módulo es exclusivo
+     del servidor (api/organismos.js) y del laboratorio (bridge de sandbox). -->
+<script type="module" src="lib/epistemic-production-adapter.mjs"></script>
 </body>
 </html>
