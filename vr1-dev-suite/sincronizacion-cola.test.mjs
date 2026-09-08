@@ -196,6 +196,81 @@ test('cola · al confirmar version nueva sólo actualiza _sv en la lista local, 
   assert.equal(entrada.campo_extra, 'valor-MAS-FRESCO-que-la-foto', 'ningún otro campo de la entrada persistida se pisa con la foto vieja que viajó en la cola -- sólo _sv');
 });
 
+test('cola · un guardado genérico exitoso N -> N+1 actualiza _sv.version de inmediato (antes de que la promesa encolada resuelva)', async () => {
+  const { context, localStorage, pending, calls } = await setup();
+  localStorage.setItem('ag_core_organismos', JSON.stringify([{ id: 'org-F', nombre: 'Original' }]));
+  vm.runInContext(`state.organismo = { id: 'org-F', nombre: 'Original' };`, context);
+
+  const org = vm.runInContext('state.organismo', context);
+  const p = context.sincronizarOrganismoServidor(org);
+  await flush();
+  assert.equal(calls[0].body.version_conocida, null, 'primer guardado de este organismo: sin versión previa conocida (ni en la lista ni en el organismo)');
+  pending[0].resolve(fakeOkResponse(1));
+  await p; // §7.5/CONFLICTOVERSION02: la promesa encolada NO debe resolver hasta que la confirmación ya esté aplicada localmente
+
+  const orgTrasResolver = JSON.parse(JSON.stringify(vm.runInContext('state.organismo', context)));
+  assert.deepEqual(orgTrasResolver._sv, { version: 1 }, 'state.organismo._sv ya refleja N+1 apenas resuelve la promesa devuelta, sin esperar a un flush adicional');
+  const entrada = JSON.parse(localStorage.getItem('ag_core_organismos')).find(o => o.id === 'org-F');
+  assert.deepEqual(entrada._sv, { version: 1 }, 'la entrada persistida también, en el mismo instante');
+});
+
+test('cola · dos guardados consecutivos del mismo organismo usan N y luego N+1, sin 409 -- el segundo lee la versión que el primero confirmó, no la que tenía al encolarse', async () => {
+  const { context, localStorage, pending, calls } = await setup();
+  // el organismo ya tenía una versión confirmada (3) antes de este par de guardados -- mismo
+  // punto de partida que "aceptación -> autosave -> Guardar sesión" en la app real.
+  localStorage.setItem('ag_core_organismos', JSON.stringify([{ id: 'org-Q', nombre: 'Q', _sv: { version: 3 } }]));
+  vm.runInContext(`state.organismo = { id: 'org-Q', nombre: 'Q', _sv: { version: 3 } };`, context);
+
+  const org = vm.runInContext('state.organismo', context);
+  const p1 = context.sincronizarOrganismoServidor(org);
+  // segundo guardado del MISMO organismo, encolado casi junto con el primero -- como
+  // guardarOrganismo() directo seguido de crearCheckpointSesion() dentro de guardarSesion() en
+  // la app real. org._sv en memoria sigue siendo {version:3} en este instante -- el primero
+  // todavía no respondió.
+  vm.runInContext(`state.organismo.checkpoints = { core: [{ fecha: 'x' }] };`, context);
+  const p2 = context.sincronizarOrganismoServidor(vm.runInContext('state.organismo', context));
+
+  await flush();
+  assert.equal(pending.length, 1, 'sólo se despachó el primero; el segundo espera su turno');
+  assert.equal(calls[0].body.version_conocida, 3, 'el primero viaja con la versión confirmada anterior (3)');
+
+  pending[0].resolve(fakeOkResponse(4));
+  await waitForPending(pending, 2);
+  assert.equal(pending.length, 2, 'recién al resolver el primero se despacha el segundo, en su turno');
+  // CONFLICTOVERSION02: ésta es la aserción que antes de la corrección fallaba -- el segundo
+  // guardado leía version_conocida=3 (la foto vieja tomada al encolarse) y el servidor real lo
+  // rechazaba con 409, perdiendo en silencio el contenido que ese segundo guardado quería
+  // persistir (en la app real, el checkpoint de "Guardar sesión"). Ahora debe leer la versión
+  // RECIÉN confirmada por el primero, no la que tenía al encolarse.
+  assert.equal(calls[1].body.version_conocida, 4, 'el segundo debe leer la versión que el primero ACABA de confirmar (4), no la vieja (3) que tenía al encolarse -- así nunca choca por versión contra el servidor real');
+  assert.ok(calls[1].body.datos.checkpoints, 'y su propio contenido (el checkpoint, en este ejemplo) sigue siendo el capturado en SU momento de encolarse -- sólo la versión se difiere hasta el despacho');
+
+  pending[1].resolve(fakeOkResponse(5));
+  await Promise.all([p1, p2]);
+  const entrada = JSON.parse(localStorage.getItem('ag_core_organismos')).find(o => o.id === 'org-Q');
+  assert.deepEqual(entrada._sv, { version: 5 }, 'tras ambos guardados exitosos y encadenados, la versión final es la del último confirmado');
+});
+
+test('cola · un 409 real de un guardado genérico (versión ya vieja también en el momento de despachar) sigue sin pisar nada local -- comportamiento preexistente, no degradado por CONFLICTOVERSION02', async () => {
+  const { context, localStorage, pending, calls } = await setup();
+  localStorage.setItem('ag_core_organismos', JSON.stringify([{ id: 'org-R', nombre: 'R', campo_extra: 'antes', _sv: { version: 2 } }]));
+  vm.runInContext(`state.organismo = { id: 'org-R', nombre: 'R', _sv: { version: 2 } };`, context);
+
+  const org = vm.runInContext('state.organismo', context);
+  const p = context.sincronizarOrganismoServidor(org);
+  await flush();
+  assert.equal(calls[0].body.version_conocida, 2);
+
+  // el servidor real ya está más adelante (otra sesión guardó mientras tanto) -- conflicto real,
+  // no causado por una foto vieja de ESTA cola.
+  pending[0].resolve({ ok: false, status: 409, json: async () => ({ error: { message: 'conflicto', codigo: 'conflicto_version' }, version: 9 }) });
+  await p;
+
+  const entrada = JSON.parse(localStorage.getItem('ag_core_organismos')).find(o => o.id === 'org-R');
+  assert.deepEqual(entrada._sv, { version: 2 }, '§7.6/comportamiento preexistente: ante un 409 real, no se inventa ni se pisa ninguna versión -- la entrada local sigue exactamente como estaba');
+  assert.equal(entrada.campo_extra, 'antes');
+});
+
 test('cola · sincronizarOrganismosConServidor() despacha las subidas locales por el mismo camino de la cola', async () => {
   const { context, localStorage, pending, calls } = await setup();
 

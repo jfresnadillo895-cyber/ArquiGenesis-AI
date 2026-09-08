@@ -313,3 +313,129 @@ test('secuencia real completa (QA 08/09): crear -> v2 (1 entrada/1 revisión) ->
   assert.equal(presentationReplay.recordRef, recordRef);
   assert.equal(presentationReplay.state, 'accepted_as_reference', 'paso 5: el replay refleja el estado VIGENTE (aceptado), no una fotografía del turno original en que la revisión todavía estaba pendiente');
 });
+
+// ---------------------------------------------------------------------------------------------
+// CONFLICTOVERSION02 (08/09) -- segundo bug real de QA en staging, reportado DESPUÉS de que el
+// anterior (CONFLICTOVERSION01, arriba) ya estuviera aplicado: "Aceptar como referencia" volvió a
+// responder 200/v4 correctamente, pero un guardado genérico posterior (autosave o "Guardar
+// sesión") que SÍ respondió 200/v5 no se reflejaba de inmediato en el organismo local -- quedaba
+// en v4 hasta que un par de escrituras siguientes, todavía con la versión vieja, chocaban con 409
+// y disparaban la recuperación (§7.6) que ya corregía todo. Causa demostrada (ver el informe):
+// sincronizarOrganismoServidor() tomaba `version_conocida` en el mismo instante en que tomaba la
+// foto del CONTENIDO -- al encolar --, no al despachar. Cuando dos guardados del mismo organismo
+// se encolaban casi juntos (exactamente lo que hace guardarSesion(): un guardarOrganismo() directo
+// + otro dentro de registrarMomento() + otro dentro de crearCheckpointSesion(), demostrado abajo),
+// el segundo y el tercero viajaban con la versión previa a que el primero confirmara la suya,
+// chocaban por versión contra el servidor real, y su contenido (el checkpoint, el momento) se
+// perdía en silencio -- aunque localStorage ya lo mostrara "guardado".
+//
+// Esta prueba reproduce el escenario real completo con el servidor real (Supabase mockeado, igual
+// que la prueba de arriba): organismo ya aceptado en v4 -> "Guardar sesión" (que dispara TRES
+// guardados genéricos reales y encadenados del mismo organismo) -> los tres deben terminar
+// aplicados en el servidor real, sin ningún 409, y el organismo canónico local (releído fresco)
+// debe coincidir exactamente con lo que el servidor terminó guardando -- incluido el checkpoint,
+// que antes de esta corrección se perdía.
+test('CONFLICTOVERSION02: "Guardar sesión" dispara varios guardados genéricos encadenados del mismo organismo -- todos deben aplicarse en el servidor real, sin 409, sin perder el checkpoint', async () => {
+  const { fetchMock: fakeSupabaseFetch, rows } = makeFakeSupabase();
+  const handler = await importHandlerFresh();
+
+  async function bridgeFetch(opciones) {
+    const method = (opciones && opciones.method) || 'GET';
+    const body = opciones && opciones.body ? JSON.parse(opciones.body) : undefined;
+    const req = { method, body, headers: { authorization: 'Bearer ' + TOKEN }, query: {} };
+    const res = makeRes();
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = fakeSupabaseFetch;
+    try { await handler(req, res); } finally { globalThis.fetch = realFetch; }
+    return { ok: res._status >= 200 && res._status < 300, status: res._status, json: async () => res._body };
+  }
+  const solicitudes = [];
+  const fetchImpl = async (recurso, opciones) => {
+    const url = String((recurso && recurso.url) ? recurso.url : recurso || '');
+    if (url.indexOf('/api/organismos') > -1) {
+      if (opciones && opciones.body) solicitudes.push(JSON.parse(opciones.body));
+      return bridgeFetch(opciones);
+    }
+    return anthropicOkResponse();
+  };
+
+  const { context, localStorage } = buildContext(fetchImpl, 'app.comprenderai.com'); // fuera de staging: el flag epistemológico no interviene, este bug es del camino genérico
+  loadCoreScript(context);
+  await flush();
+  sembrarSesionYCreditos(localStorage);
+
+  // Organismo ya aceptado como referencia en un turno anterior (v4), tal como quedó la corrección
+  // CONFLICTOVERSION01 -- el servidor real ya tiene esa fila a v4.
+  rows.set(PERFIL + '|org-seq-2', {
+    perfil: PERFIL, cliente_id: 'org-seq-2', id: 'row-1', nombre: 'QA 122.30 · SMOKE 3', estado: 'activo',
+    datos: { id: 'org-seq-2', nombre: 'QA 122.30 · SMOKE 3', ficha: {}, principios: [] }, version: 4,
+  });
+  vm.runInContext(`
+    state.organismo = { id: 'org-seq-2', nombre: 'QA 122.30 · SMOKE 3', ficha: {}, principios: [], history: [{role:'user',content:'hola'}], _sv: { version: 4 } };
+    state.history = [{role:'user',content:'hola'}];
+    state.principios = [];
+    state.ultimaLectura = null;
+    localStorage.setItem('ag_core_organismos', JSON.stringify([{ id: 'org-seq-2', nombre: 'QA 122.30 · SMOKE 3', ficha: {}, principios: [], _sv: { version: 4 } }]));
+  `, context);
+
+  // "Guardar sesión" real -- el mismo botón que en la app real dispara guardarSesion(destilado),
+  // que a su vez encadena registrarMomento() (guarda un momento) y crearCheckpointSesion() (guarda
+  // un checkpoint), cada uno con su propio guardarOrganismo(). Se demuestra abajo que son tres
+  // guardados reales y distintos, no uno solo.
+  vm.runInContext(`guardarSesion('destilado de prueba real')`, context);
+  // Acá se encolan TRES despachos reales y encadenados del mismo organismo (cada uno con su propio
+  // round-trip real: fetch -> handler real -> rpc('guardar_organismo') contra el Supabase mockeado),
+  // y la cola por organismo no deja arrancar el siguiente hasta que el anterior resolvió por completo
+  // -- a diferencia del resto de las pruebas de este archivo, que sólo tienen UN despacho en vuelo
+  // entre cada flush() y por eso les alcanza con el default (14 ticks). Encadenar tres de esos
+  // round-trips reales necesita bastantes más ticks de microtarea para drenar del todo (confirmado
+  // empíricamente: con flush() default esta prueba capturaba sólo 1 de las 3 solicitudes reales,
+  // aunque el log del servidor real mostraba las tres -- no era un bug de la corrección, era que la
+  // prueba leía `solicitudes` demasiado pronto).
+  await flush(300);
+
+  const guardadosGenericos = solicitudes.filter(s => !s.operacion);
+  assert.equal(guardadosGenericos.length, 3, 'demostrado: "Guardar sesión" dispara tres guardados genéricos encadenados del mismo organismo (registrarMomento() adentro de guardarSesion(), el guardarOrganismo() directo, y crearCheckpointSesion()) -- comportamiento histórico legítimo (tres mutaciones distintas: momento, destilado, checkpoint), no una única escritura duplicada tres veces');
+
+  const filaFinal = rows.get(PERFIL + '|org-seq-2');
+  assert.equal(filaFinal.version, 7, 'los tres guardados deben aplicarse en secuencia sin ningún 409 (v4 -> v5 -> v6 -> v7)');
+  assert.ok(filaFinal.datos.checkpoints && filaFinal.datos.checkpoints.core && filaFinal.datos.checkpoints.core.length === 1, 'el checkpoint creado por "Guardar sesión" SÍ llega a persistirse en el servidor real -- antes de esta corrección, el guardado que lo llevaba chocaba por versión (409) y se perdía en silencio, aunque localStorage ya lo mostrara guardado');
+  assert.ok(filaFinal.datos.destilados && filaFinal.datos.destilados.length === 1, 'el destilado también persiste');
+  assert.ok(filaFinal.datos.momentos && filaFinal.datos.momentos.some(m => m.tipo === 'destilado'), 'el momento registrado por registrarMomento() también persiste');
+
+  const orgLocalFinal = JSON.parse(JSON.stringify(vm.runInContext('cargarOrganismos()[0]', context)));
+  assert.deepEqual(orgLocalFinal._sv, { version: 7 }, 'el organismo canónico local (relectura fresca) coincide exactamente con lo que el servidor real terminó guardando -- sin necesitar ningún 409 ni recuperación para llegar ahí');
+});
+
+// ---------------------------------------------------------------------------------------------
+test('replay de una tarjeta accepted_as_reference (envelopeReplayEpistemico) es de sólo lectura: no dispara ningún fetch ni muta el organismo', async () => {
+  const { context, localStorage } = buildContext(async () => { throw new Error('el replay NO debe llamar a fetch -- es de sólo lectura'); }, 'staging.comprenderai.com');
+  loadCoreScript(context);
+  sembrarSesionYCreditos(localStorage);
+  localStorage.setItem('ag_core_pref_integracion_epistemica_staging', '1');
+
+  const recordRef = 'ER-11111111-1111-1111-1111-111111111111';
+  const registroEpistemico = {
+    schema_version: 'vr1-core-ledger/1.1', ledger_version: 2,
+    entries: [{ record: { record_id: recordRef, revision: { version: 1 }, claim: { claim_id: 'CLAIM-1', content: 'algo aceptado' }, verification: {}, support: [], limits: { uncertainties: [] } } }],
+    operations: [], review_events: [],
+    reviews: [{ review_id: 'REV-1', state: 'accepted_as_reference', changed_claims: ['CLAIM-1'] }],
+    turn_index: {}, change_types: { [recordRef]: [] },
+  };
+  vm.runInContext(`
+    globalThis.__orgReplay = ${JSON.stringify({ id: 'org-replay-1', nombre: 'Test', ficha: { funcion: 'orientar' }, principios: ['p1'], registro_epistemico: registroEpistemico, momentos: [{ tipo: 'revision_epistemica' }], _sv: { version: 4 } })};
+  `, context);
+  const orgAntesJSON = vm.runInContext('JSON.stringify(__orgReplay)', context);
+
+  const envelope = vm.runInContext(`
+    envelopeReplayEpistemico(__orgReplay, { recordRef: ${JSON.stringify(recordRef)} })
+  `, context);
+
+  assert.ok(envelope, 'reconstruye un envoltorio real a partir del registro ya persistido');
+  assert.equal(envelope.presentation.state, 'accepted_as_reference');
+  assert.equal(envelope.presentation.recordRef, recordRef);
+  assert.equal(typeof envelope.actions.onAccept, 'function', 'sigue entregando acciones reales (para un eventual re-uso), pero invocarlas es decisión humana -- el replay en sí no las llama');
+  // el MISMO objeto (misma referencia dentro del realm vm) pasado como argumento no fue tocado
+  const orgDespuesJSON = vm.runInContext('JSON.stringify(__orgReplay)', context);
+  assert.equal(orgDespuesJSON, orgAntesJSON, 'envelopeReplayEpistemico() no muta el organismo que recibe -- es puramente de lectura, byte-equivalente antes/después');
+});
