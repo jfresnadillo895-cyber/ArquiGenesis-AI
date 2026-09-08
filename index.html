@@ -921,6 +921,21 @@ header .spacer{flex:1}
   function borrar(){
     try{ localStorage.removeItem(LLAVE); }catch(e){}
     try{ localStorage.removeItem('ag_core_saldo'); }catch(e){}
+    /* AISLAMIENTO01 (08/09) -- bug real de seguridad encontrado al probar el cambio de identidad
+       en el mismo navegador: cerrar sesión nunca borraba ag_core_organismos (ni las claves
+       adjuntas que guardan historial/propuestas por organismo), así que la cuenta que iniciara
+       sesión después, en el mismo localStorage, heredaba los organismos -- ficha, principios,
+       momentos, checkpoints -- de la cuenta anterior: los veía en su lista, y
+       sincronizarOrganismosConServidor() (que corre sola apenas hay sesión nueva) los subía al
+       servidor real bajo la cuenta nueva, porque nada acá los distinguía de "trabajo local propio
+       todavía sin sincronizar". Confirmado con ejecución real de punta a punta (cliente + servidor
+       real, dos cuentas reales) antes de tocar esta función. Se borran acá, junto con la sesión,
+       las claves que son organismo/historial de la cuenta que se va -- no las que son preferencia
+       de este navegador (ag_core_onb, ag_urban_activado, etc., que no cambian de significado entre
+       cuentas y no exponen nada de una cuenta a la otra). */
+    try{ localStorage.removeItem('ag_core_organismos'); }catch(e){}
+    try{ localStorage.removeItem('ag_core_propuestas'); }catch(e){}
+    try{ localStorage.removeItem('ag_core_sesiones'); }catch(e){}
   }
   function desdeRespuesta(d){
     if(!d || !d.access_token) return null;
