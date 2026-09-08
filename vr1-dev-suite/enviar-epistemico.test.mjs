@@ -228,6 +228,21 @@ test('enviar() con flag completo (staging + preferencia + sesión) y propuesta e
   assert.equal(capturedPresentation.recordRef, 'ER-TEST-0001');
   assert.equal(typeof capturedActions.onAccept, 'function');
   assert.equal(typeof capturedActions.onReject, 'function');
+
+  // Bug real de QA en staging (08/09): una creación confirmada por el servidor (versión 2 en este
+  // mock) que no se aplica sobre el organismo en memoria deja org._sv atrasado -- el guardado
+  // genérico que sigue en el mismo turno (guardarBorrador(), más abajo en enviar()) viaja
+  // entonces con una version_conocida vieja, el servidor lo rechaza (409) y esa versión vieja
+  // queda "pegada": cualquier acción posterior sobre la tarjeta (aceptar/no incorporar) hereda el
+  // mismo 409 sin salida hasta recargar la página. Esta es la prueba de regresión directa de esa
+  // causa: org._sv debe reflejar la versión que el propio servidor confirmó en la respuesta de
+  // create_epistemic_candidate, ANTES de que corra ningún guardado posterior.
+  // Objeto del realm vm -- deepEqual contra un literal del realm exterior falla por prototipos
+  // distintos aunque la estructura sea idéntica (mismo motivo que el resto de esta suite).
+  const orgTrasCreacion = JSON.parse(JSON.stringify(vm.runInContext('state.organismo', context)));
+  assert.deepEqual(orgTrasCreacion._sv, { version: 2 }, 'org._sv debe actualizarse con la versión que confirmó create_epistemic_candidate, no quedar atrasado');
+  assert.ok(orgTrasCreacion.registro_epistemico, 'registro_epistemico devuelto por la creación también se aplica sobre el organismo en memoria');
+  assert.equal(orgTrasCreacion.registro_epistemico.ledger_version, 1);
 });
 
 test('enviar() con flag apagado (host de producción): no pide creación ni monta tarjeta, camino histórico intacto', async () => {
@@ -335,6 +350,80 @@ test('enviar() con flag completo y creación rechazada por el servidor (409 conf
     })()
   `, context);
   assert.equal(bubbleMontado, true, 'el mensaje conversacional original sigue visible pese al fallo de creación');
+});
+
+test('enviar() con flag completo y creación rechazada por 409: recupera el organismo vigente (§7.6) por el camino autenticado, sin inventar versión ni mezclar el blob', async () => {
+  const llamadasGet = [];
+  // Servidor simulado con estado real de versión (4, ya adelantado por "otra sesión" respecto de
+  // lo que este cliente sabe): así el guardado genérico que enviar() dispara igual, después del
+  // 409 de creación (guardarBorrador() de fin de turno), también choca de verdad -- igual que en
+  // el servidor real, donde la RPC guardar_organismo aplica el mismo chequeo de versión sin
+  // importar qué operación la llame (ver api/organismos.js). Un mock que "éxito siempre" acá
+  // enmascararía exactamente el escenario que produjo el bug real.
+  const VERSION_SERVIDOR = 4;
+  const fetchImpl = async (recurso, opciones) => {
+    const url = String((recurso && recurso.url) ? recurso.url : recurso || '');
+    if (url.indexOf('/api/organismos') > -1) {
+      if (!opciones || !opciones.body) {
+        // GET sin body: puede ser el barrido de arranque (una vez, al cargar) o la recuperación
+        // §7.6 tras el 409 de abajo -- ambas comparten el mismo camino autenticado existente, así
+        // que ambas se sirven acá; se cuenta cuántas veces se pidió para probar que sí se disparó.
+        llamadasGet.push(true);
+        return {
+          ok: true, status: 200, json: async () => ({
+            organismos: [{
+              cliente_id: 'org-envio-1', nombre: 'Test', version: VERSION_SERVIDOR,
+              datos: {
+                id: 'org-envio-1', nombre: 'Test',
+                registro_epistemico: { schema_version: 'vr1-core-ledger/1.1', ledger_version: 3, entries: [], operations: [], reviews: [], review_events: [] },
+                momentos: [],
+              },
+            }],
+          }),
+        };
+      }
+      const body = JSON.parse(opciones.body);
+      if (body.operacion === 'create_epistemic_candidate') {
+        return { ok: false, status: 409, json: async () => ({ error: { message: 'conflicto', codigo: 'conflicto_version' }, version: VERSION_SERVIDOR }) };
+      }
+      // guardado genérico (guardarBorrador() al final de enviar()): el servidor real aplica el
+      // mismo chequeo de version_conocida que las operaciones epistemológicas -- con la versión
+      // local todavía atrasada (el bug bajo prueba), esto también debe chocar.
+      if (body.version_conocida !== VERSION_SERVIDOR) {
+        return { ok: false, status: 409, json: async () => ({ error: { message: 'conflicto', codigo: 'conflicto_version' }, version: VERSION_SERVIDOR }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true, id: body.cliente_id, version: VERSION_SERVIDOR + 1 }) };
+    }
+    return anthropicOkResponse();
+  };
+  const { context, localStorage } = buildContext(fetchImpl, 'staging.comprenderai.com');
+  loadCoreScript(context);
+  sembrarSesionYCreditos(localStorage);
+  localStorage.setItem('ag_core_pref_integracion_epistemica_staging', '1');
+  await prepararOrganismo(context);
+  llamadasGet.length = 0; // descarta el GET del barrido de arranque disparado por loadCoreScript()
+
+  let tarjetaMontada = false;
+  context.window.__sustentacionCard.create = function () { tarjetaMontada = true; return { ok: true, node: new FakeElement('div') }; };
+
+  await context.enviar('hola');
+  // recuperarOrganismoVigente() se dispara sin esperarse (fire-and-forget: enviar() no debe
+  // bloquear el resto del turno por una recuperación de fondo) -- se cede microtareas de sobra
+  // para que su propia cadena fetch -> r.json() -> aplicarConfirmacionEpistemica() termine antes
+  // de leer el resultado.
+  await flush();
+
+  assert.equal(tarjetaMontada, false, '§7.6: en conflicto de creación no aparece tarjeta -- esta creación en particular nunca se aplicó');
+  assert.ok(llamadasGet.length >= 1, 'ante el 409 de creación, se debe recuperar el organismo vigente por el mismo camino autenticado (GET /api/organismos)');
+
+  // Objeto del realm vm -- mismo motivo de siempre en este archivo (ver el otro test de onAccept):
+  // deepEqual entre un objeto de otro realm y un literal del realm exterior falla por prototipos
+  // distintos aunque la estructura sea idéntica.
+  const orgTrasConflicto = JSON.parse(JSON.stringify(vm.runInContext('state.organismo', context)));
+  assert.deepEqual(orgTrasConflicto._sv, { version: 4 }, 'org._sv se corrige con la versión real del servidor -- nunca se inventa ni se deja la vieja');
+  assert.equal(orgTrasConflicto.registro_epistemico.ledger_version, 3, 'registro_epistemico también se recupera del renglón vigente');
+  assert.equal(orgTrasConflicto.nombre, 'Test', '§8: la recuperación aplica sólo version/registro_epistemico/momentos -- nombre no se toca');
+  assert.deepEqual(orgTrasConflicto.ficha, {}, '§8: ficha tampoco se toca por una recuperación §7.6');
 });
 
 // ---- construirAccionesTarjetaEpistemica() / resolverRevisionEpistemicaServidor() (§7.4/§11) ----
