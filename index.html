@@ -161,7 +161,8 @@ header .spacer{flex:1}
   transform:translateX(-100%);transition:transform .22s ease;
 }
 #tuEspacio.open{transform:none}
-#teTop{padding:16px 16px 12px}
+/* NUEVACOMP01 (09/09): #teTop{padding:16px 16px 12px} retirada -- era exclusivamente el
+   contenedor de #teNueva, eliminado del HTML (ver más abajo en el body). */
 #teOrgSec{flex:1;overflow-y:auto;padding:4px 16px 16px}
 #teOrgSec h4{font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;margin-bottom:10px}
 #teConfig{border-top:1px solid var(--line);padding:4px 6px 6px;flex-shrink:0;display:flex;flex-direction:column}
@@ -694,9 +695,14 @@ header .spacer{flex:1}
 <div id="app">
   <div id="teFondo"></div>
   <div id="tuEspacio">
-    <div id="teTop">
-      <button class="orgnew" id="teNueva" style="margin:0"><b>+ Nueva comprensión</b></button>
-    </div>
+    <!-- NUEVACOMP01 (09/09): se elimina "+ Nueva comprensión" (id="teNueva") y su contenedor
+         #teTop -- decisión de producto de Javier: duplicaba la acción global "Nueva" del
+         encabezado (id="btnNueva", sin cambios, ver más abajo) y sumaba ruido visual sin una
+         semántica propia ("nuevo recorrido dentro del mismo organismo" queda para el futuro
+         diseño multiescalar, explícitamente fuera de este corte). Se retira también el div
+         #teTop -- sólo envolvía este botón (ver CSS "#teTop{padding:...}") y no tiene ninguna
+         otra referencia en JS; dejarlo vacío habría dejado un hueco con padding en su lugar, el
+         mismo ruido visual que se pide eliminar. Ver NUEVACOMP01_AUDITORIA.md §1/§6. -->
     <div id="teOrgSec">
       <h4>Organismos</h4>
       <input id="teOrgSearch" type="text" placeholder="Buscar..." style="display:none;width:100%;padding:9px 12px;font-size:13px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;box-sizing:border-box;font-family:inherit;background:var(--panel);color:var(--text)">
@@ -11496,8 +11502,35 @@ async function enviar(texto){
     if(parsed.destilado && parsed.destiladoTexto) ofrecerGuardado(parsed.destiladoTexto);
     // Borrador de sesión: mientras no consolide, se guarda el hilo en curso;
     // al cerrar una lectura, se limpia (el significado ya es persistente).
+    //
+    // NUEVACOMP01 (09/09): esta rama vaciaba el borrador SIN preservar los principios
+    // emergentes del propio turno de cierre -- a diferencia de la rama normal (guardarBorrador(),
+    // UX-P1C), que sí los copia. Consecuencia real: un principio que emergía justo en el turno
+    // donde se cerraba una lectura especializada (Urbanismo/Negocios/Contextos) desaparecía del
+    // Hilo y del chat al reabrir el organismo -- aunque la propuesta de Memoria asociada
+    // (proponerFicha(), aparte de esto) siguiera intacta. Ver NUEVACOMP01_AUDITORIA.md §3
+    // (Escenario 2) y §8 (causa raíz y propuesta mínima).
+    //
+    // Corrección: se sigue "vaciando" el borrador en el sentido que le importa a
+    // restaurarBorrador()/abrirOrganismo() -- SIN `history` -- para no revivir el hilo de chat ya
+    // cerrado ni desplazar la tarjeta "Recuerdo guardado" (ofrecerRecuerdoGuardado(), OMV-F5.1),
+    // que sigue disparándose exactamente igual que antes cuando existe un checkpoint manual
+    // (restaurarBorrador() exige b.history.length; un borrador sin `history` sigue devolviendo
+    // false ahí, así que el control de flujo de abrirOrganismo() no cambia). Lo único nuevo es que,
+    // si emergió al menos un principio en este turno, se guarda una copia liviana de
+    // state.principios (mismo patrón que guardarBorrador()) para que abrirOrganismo() pueda
+    // recuperarlos -- ver el punto correspondiente ahí. Si no emergió ningún principio, el
+    // resultado es idéntico al de antes (borrador null).
     if(state.organismo){
-      if(cerroLectura){ state.organismo.borrador = null; guardarOrganismo(state.organismo); }
+      if(cerroLectura){
+        var nuevacomp01CopiaPrincipios = (state.principios || []).map(function(p){
+          return { texto: p.texto, fam: p.fam || null, estado: p.estado || 'emergente' };
+        });
+        state.organismo.borrador = nuevacomp01CopiaPrincipios.length
+          ? { principios: nuevacomp01CopiaPrincipios }
+          : null;
+        guardarOrganismo(state.organismo);
+      }
       else { guardarBorrador(); }
     }
   }catch(err){
@@ -17774,6 +17807,27 @@ function abrirOrganismo(orgParam){
   // que el modelo vuelva a emitir DERIVAR. No-op si el organismo no tiene 'urban' en derivable.
   ofrecerContinuidadUrban(org);
   if(restaurarBorrador(org)) return;   // hay hilo en curso sin consolidar: se retoma tal cual
+  // NUEVACOMP01 (09/09): restaurarBorrador() no tuvo `history` que reproducir (ni hilo en curso,
+  // ni el caso de arriba) -- pero puede haber quedado una copia liviana de principios emergentes
+  // guardada por la rama cerroLectura de enviar() (ver ahí) cuando una lectura especializada
+  // cerró en el mismo turno en que emergió un principio. Se recuperan acá, ANTES de ofrecer la
+  // tarjeta de checkpoint o de continuar automáticamente, reutilizando restaurarPrincipiosDeSesion()
+  // tal cual (mismo call que ya usan restaurarBorrador() y restaurarCheckpoint() más abajo) -- sin
+  // reproducir ningún historial de chat, sólo Hilo + tarjeta gemela. Se excluye cualquier texto que
+  // ya esté confirmado en org.principios[] (mismo comparador normalizarPrincipioParaComparar() que
+  // ya usa marcarPrincipiosConfirmadosEnSesion() para esta clase de dedup) -- evita repintarlo como
+  // "emergente" si en el tiempo transcurrido la propuesta asociada ya se confirmó por otra vía
+  // (Memoria, otra pestaña). Ver NUEVACOMP01_AUDITORIA.md §8.
+  if(org.borrador && org.borrador.principios && org.borrador.principios.length){
+    var nuevacomp01YaConfirmados = {};
+    (org.principios || []).forEach(function(p){
+      nuevacomp01YaConfirmados[normalizarPrincipioParaComparar(p.texto)] = true;
+    });
+    var nuevacomp01PrincipiosPendientes = org.borrador.principios.filter(function(p){
+      return p && p.texto && !nuevacomp01YaConfirmados[normalizarPrincipioParaComparar(p.texto)];
+    });
+    if(nuevacomp01PrincipiosPendientes.length) restaurarPrincipiosDeSesion(nuevacomp01PrincipiosPendientes);
+  }
   // OMV-F5.1 (24/08): si no hay un hilo en curso (arriba) pero SÍ hay un checkpoint manual --
   // típicamente porque la última lectura especializada cerró y limpió o.borrador (ver el punto
   // donde "Guardar sesión" corre) -- no se dispara todavía el "Retomemos el organismo…"
@@ -19103,7 +19157,10 @@ function cerrarTuEspacio(){
   teMenuNuevaCarpeta = false;
   teImportarProAbierto = null;
 }
-document.getElementById('teNueva').addEventListener('click', function(){ cerrarTuEspacio(); nuevaSesion(); });
+// NUEVACOMP01 (09/09): listener de #teNueva retirado junto con el botón (ver arriba en el
+// HTML). #btnNueva (línea ~18486, el.btnNueva.addEventListener('click', nuevaSesion)) sigue
+// exactamente igual -- misma función nuevaSesion(), misma semántica: sale de la vista del
+// organismo e inicia una comprensión independiente desde cero, sin tocar el organismo anterior.
 document.getElementById('teFondo').addEventListener('click', cerrarTuEspacio);
 document.addEventListener('keydown', function(e){
   if(e.key === 'Escape' && document.getElementById('tuEspacio').classList.contains('open')) cerrarTuEspacio();
