@@ -1623,12 +1623,29 @@ header .spacer{flex:1}
           botonSecundario('ccIrClave','Cambiar contraseña') +
           enlace('ccSalir','Cerrar sesión') +
           '<div id="ccAviso" style="font-size:13px;color:#2a7;margin-top:8px;min-height:18px;"></div>';
+      } else if(vistaC === 'idioma'){
+        // 122.31 §9: misma API pública que ya expone lib/i18n.js (ComprenderI18n.getLocale/
+        // setLocale), sin tocar ese archivo ni reimplementar el diccionario acá. Los endónimos
+        // (Español/English/Português) se dejan sin traducir a propósito -- un selector de idioma
+        // no debería traducirse a sí mismo.
+        var localeActualCC = (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.getLocale) ? ComprenderI18n.getLocale() : 'es';
+        var opcionesIdiomaCC = [['es','Español'], ['en','English'], ['pt','Português']];
+        cuerpo = opcionesIdiomaCC.map(function(o){
+          var activoCC = o[0] === localeActualCC;
+          return '<button id="ccIdioma_' + o[0] + '" style="width:100%;padding:11px;font-size:14px;' +
+            'font-weight:' + (activoCC ? '700' : '600') + ';border:1px solid ' + (activoCC ? '#1a1a1a' : '#ddd') + ';' +
+            'border-radius:8px;cursor:pointer;background:' + (activoCC ? '#f3f2ef' : '#fff') + ';' +
+            'color:#1a1a1a;margin-bottom:10px;text-align:left;">' + o[1] + (activoCC ? ' ✓' : '') + '</button>';
+        }).join('') + enlace('ccVolver','Volver');
       } else {
         // 10/08: "Comprensión disponible" solo aparece si la página define el hook -- en el
         // Core (index.html) sí; en Urbanismo/Contextos no (tienen su propio medidor, sin
         // tocar), así que ahí este botón simplemente no se dibuja.
         cuerpo =
           (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tu capacidad') : '') +
+          // 122.31 §9: "Idioma" sólo aparece acá en staging -- fuera de ahí el idioma sigue
+          // viviendo exclusivamente en el switch de <header> que ya monta lib/i18n.js, sin cambios.
+          (activo122_31() ? botonSecundario('ccIrIdioma','Idioma') : '') +
           botonSecundario('ccIrClave','Cambiar contraseña') +
           botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
           enlace('ccSalir','Cerrar sesión');
@@ -1645,6 +1662,8 @@ header .spacer{flex:1}
         if(irCreditos) irCreditos.addEventListener('click', function(){ cerrar(); if(window.comprenderVerCreditos) window.comprenderVerCreditos(); });
         var irClave = capa.querySelector('#ccIrClave');
         if(irClave) irClave.addEventListener('click', function(){ vistaC='clave'; pintar(); });
+        var irIdioma = capa.querySelector('#ccIrIdioma');
+        if(irIdioma) irIdioma.addEventListener('click', function(){ vistaC='idioma'; pintar(); });
         var irEliminar = capa.querySelector('#ccIrEliminar');
         if(irEliminar) irEliminar.addEventListener('click', function(){ vistaC='eliminar'; pintar(); });
         var salir = capa.querySelector('#ccSalir');
@@ -1750,6 +1769,17 @@ header .spacer{flex:1}
               ocupado(false,'Eliminar mi cuenta');
               avisoEl.textContent = 'No se pudo conectar. Revisá tu conexión.';
             });
+          });
+        });
+      } else if(vistaC === 'idioma'){
+        // 122.31 §9: sin ccAviso/ccAccion propios -- cada botón de idioma actúa directo, sin
+        // paso de confirmación (cambiar de idioma es reversible con un solo click más). El
+        // wiring de #ccVolver de arriba (compartido con clave/eliminar) ya cubre "Volver".
+        ['es','en','pt'].forEach(function(loc){
+          var btnIdioma = capa.querySelector('#ccIdioma_' + loc);
+          if(btnIdioma) btnIdioma.addEventListener('click', function(){
+            if(typeof ComprenderI18n !== 'undefined' && ComprenderI18n.setLocale) ComprenderI18n.setLocale(loc);
+            pintar();   // repinta con el nuevo idioma marcado como activo
           });
         });
       }
@@ -2404,7 +2434,20 @@ header .spacer{flex:1}
           if(g) anotarSaldo(g.get('x-comprender-plan'), g.get('x-comprender-saldo'));
         }catch(e){}
         // 401 del proxy = la sesion no sirve. Se limpia y se vuelve a pedir.
-        if(resp && resp.status === 401){ borrar(); portal('Tu sesión venció. Ingresá de nuevo.'); }
+        if(resp && resp.status === 401){
+          borrar();
+          /* AISLAMIENTO02 (08/09) -- antes, acá sólo se limpiaba localStorage (borrar()) y se
+             mostraba el portal encima: el organismo/la conversación de la cuenta que venció
+             seguían enteros en memoria (y a la vista, detrás del portal) hasta que alguien volvía
+             a entrar. Si esa entrada nueva era de OTRA cuenta en el mismo navegador, cualquier
+             tarea que ya estuviera en cola para el organismo de la cuenta vieja podía despachar
+             recién ahí, con el token de la cuenta nueva. Se avisa acá, apenas se detecta el
+             vencimiento, al núcleo (script aparte, mismo patrón de exposición que
+             window.alConfirmarSesion) para que retire el organismo/la conversación de la vista y
+             bloquee lo que ya estuviera encolado -- sin esperar a que alguien vuelva a entrar. */
+          if(typeof window.alVencerSesion === 'function'){ try{ window.alVencerSesion(); }catch(e){} }
+          portal('Tu sesión venció. Ingresá de nuevo.');
+        }
 
         // 402 sin saldo · 403 plan insuficiente: el contador es el disparador,
         // la pantalla de planes es el destino. Se abre sola donde hizo falta.
@@ -2729,6 +2772,10 @@ const state = {
   modoContext: false, // evaluación de campo en curso
   modoNegocio: false, // lectura empresarial en curso
   epoch: 0,           // token de sesión: invalida respuestas en vuelo al cambiar de organismo/sesión
+  identidadEpoch: 0,  // AISLAMIENTO02 (08/09): token de CUENTA -- se incrementa al vencer la sesión
+                       // (401) o al iniciar sesión de nuevo (misma cuenta u otra) sin recargar la
+                       // página. encolarSincronizacionOrganismo() lo usa para no despachar, ya bajo
+                       // la cuenta nueva, una tarea que había quedado en cola de la cuenta anterior.
   started: false,
   busy: false,
   c1g3Epoch: 0,       // C1-G3: token propio de la tarjeta "Contextos Universal", independiente del
@@ -2984,7 +3031,11 @@ function addMotorMsg(parsed, replay, sustentacion = null){
      no cambia nada del comportamiento existente mientras nadie pase el tercer argumento. Ver
      lib/sustentacion-card.mjs (componente puro) y CONTRATO_VISUAL_122.29_PROPUESTA_v3.md /
      CONTRATO_122.30_INTEGRACION_EPISTEMICA_CONGELADO_v3.md. */
-  if(sustentacion){
+  // 122.31 §4.1: en Modo Conversación (staging, default) la tarjeta epistemológica no se monta
+  // en el hilo -- el candidato ya quedó creado/confirmado por el camino productivo de todos modos
+  // (ver enviar()); sólo el montaje visual inmediato queda condicionado. Fuera de staging, sin
+  // cambios (debeMostrarInterrupcionesInmediatas122_31() es siempre true ahí).
+  if(sustentacion && debeMostrarInterrupcionesInmediatas122_31()){
     mountSustentacionCard(d, sustentacion);
   }
 
@@ -3088,6 +3139,10 @@ function addPrincipio(texto, fam){
   el.dot.classList.remove('principio');
   void el.dot.offsetWidth;
   el.dot.classList.add('principio');
+  // 122.31: renderChipPropuestas() ya cubre las mutaciones de propuestas/comprensiones -- este
+  // camino (aparición de un principio emergente en sesión) no pasa por ahí, así que necesita su
+  // propio llamado para que la etiqueta de #btnGuardar no quede desactualizada.
+  if(typeof actualizarEtiquetaGuardar === 'function') actualizarEtiquetaGuardar();
   // PR-UX1 (25/08): además del Hilo (panel lateral), una tarjeta liviana en el chat mismo, en la
   // posición temporal donde surge -- mismo data-pridx, para poder actualizar ambas piezas juntas
   // cuando se confirme. addPrincipio() sigue siendo el único punto de aparición en sesión, tanto
@@ -3209,8 +3264,23 @@ function guardarOrganismo(org){
    automáticamente por fuera del contrato idempotente de cada operación. */
 var _colasSincronizacionPorOrganismo = {};
 function encolarSincronizacionOrganismo(organismId, task){
+  /* AISLAMIENTO02 (08/09) -- se captura el identidadEpoch vigente AL ENCOLAR. Si para cuando le
+     toca el turno a esta tarea la identidad ya cambió (venció la sesión y/o entró otra cuenta en
+     el mismo navegador -- ver alRotarIdentidad()), la tarea NO se despacha: fue encolada bajo una
+     identidad que ya no es la actual, y despacharla ahora enviaría contenido de la cuenta anterior
+     con el token de la cuenta nueva (la Authorization siempre la inyecta, fresca, el envoltorio de
+     fetch de "Candado de acceso" -- ver más arriba en el archivo). Mismo patrón que epoch/
+     c1g3Epoch en el resto del archivo: se compara el valor capturado contra el vigente al momento
+     de correr, nunca al momento de programar. Cubre, sin cambiar sus propios call-sites, a las
+     tres operaciones que ya pasan por acá (sincronizarOrganismoServidor() y las dos epistemológicas
+     más abajo). */
+  var identidadEpochAlEncolar = state.identidadEpoch;
+  function tareaSegura(){
+    if(state.identidadEpoch !== identidadEpochAlEncolar) return Promise.resolve();
+    return task();
+  }
   var anterior = _colasSincronizacionPorOrganismo[organismId] || Promise.resolve();
-  var siguiente = anterior.then(task, task); // corre `task` tanto si la anterior resolvió como si fue rechazada -- nunca declara éxito por eso, sólo libera el turno
+  var siguiente = anterior.then(tareaSegura, tareaSegura); // corre `task` tanto si la anterior resolvió como si fue rechazada -- nunca declara éxito por eso, sólo libera el turno
   // La cola pública guarda una versión que nunca rechaza, para que un error de una tarea no
   // deje huérfana la cadena para las siguientes tareas del mismo organismo.
   _colasSincronizacionPorOrganismo[organismId] = siguiente.catch(function(){});
@@ -3374,6 +3444,78 @@ function integracionEpistemicaHabilitadaSync(){
   return location.hostname === STAGING_HOSTNAME_INTEGRACION_EPISTEMICA && preferenciaIntegracionEpistemicaHabilitada();
 }
 
+/* ================= 122.31 · Continuidad cognitiva -- Modo Conversación / Modo Investigación ====
+   Igual que integracionEpistemicaHabilitada() de arriba, TODO 122.31 vive exclusivamente en
+   STAGING_HOSTNAME_INTEGRACION_EPISTEMICA (constante reutilizada, sin duplicar) -- en cualquier
+   otro host, incluido app.comprenderai.com y cualquier deploy de producción, activo122_31() es
+   SIEMPRE false y la app se comporta byte a byte como el baseline 122.30, aunque este MISMO
+   archivo se sirviera ahí (autorizado por Javier el 08/09: "aplicar sólo en staging, sin
+   producción ni main"). No depende de integracionEpistemicaHabilitada(): 122.31 es una
+   reorganización de PRESENTACIÓN (qué se ve y cuándo), no otra puerta hacia el ledger
+   epistemológico -- ambos sistemas conviven en el mismo host de staging pero son ejes
+   independientes (§4 del contrato: cambiar de modo "no modifica la inteligencia del motor, no
+   borra registros y no acepta nada automáticamente"). */
+function activo122_31(){
+  return location.hostname === STAGING_HOSTNAME_INTEGRACION_EPISTEMICA;
+}
+var PREF_MODO_INVESTIGACION_KEY = 'ag_core_pref_modo_investigacion_staging';
+/* Modo Investigación: apagado por defecto (§4.2 "Debe estar apagado por defecto"), opt-in local
+   por dispositivo -- igual que preferenciaIntegracionEpistemicaHabilitada(), no depende de sesión
+   ni de servidor. Fuera de staging, siempre false, sin importar lo que haya en localStorage. */
+function modoInvestigacionActivo(){
+  if(!activo122_31()) return false;
+  try{ return localStorage.getItem(PREF_MODO_INVESTIGACION_KEY) === '1'; }catch(e){ return false; }
+}
+function alternarModoInvestigacion122_31(){
+  var nuevo = !modoInvestigacionActivo();
+  try{ localStorage.setItem(PREF_MODO_INVESTIGACION_KEY, nuevo ? '1' : '0'); }catch(e){}
+  return nuevo;
+}
+/* Modo Conversación (§4.1) es el DEFAULT en staging: no hay una preferencia propia que lo prenda
+   -- está activo exactamente mientras Modo Investigación no lo está. No hay un tercer estado. */
+function modoConversacion122_31Activo(){
+  return activo122_31() && !modoInvestigacionActivo();
+}
+/* Punto único que gobierna si una interrupción INMEDIATA del recorrido (el cartel `avisoPropuesta`
+   del sistema N1.0, o el montaje automático de la tarjeta de sustentación epistemológica de
+   staging) debe mostrarse en este turno. Fuera de staging, SIEMPRE true -- comportamiento
+   histórico N1.0/122.30, sin cambios, para cualquier otro host. En staging, sigue el modo: en
+   Conversación (default) no se muestra -- pero se sigue generando y persistiendo igual que
+   siempre (§6 "recolección silenciosa"; ningún call-site de creación/confirmación queda detrás de
+   esta función, sólo el montaje visual inmediato) -- y en Investigación sí se muestra, igual que
+   en 122.30 sin este contrato. */
+function debeMostrarInterrupcionesInmediatas122_31(){
+  return !activo122_31() || modoInvestigacionActivo();
+}
+
+/* §4.2: "el modo se enciende desde un control discreto de la conversación". Creado en JS, sólo en
+   staging, para no tocar el header estático que ven todos los hosts (mismo criterio que ya usa
+   lib/i18n.js con #comprenderIdioma, insertándose antes de #btnMenu). No hay recorte visual nuevo
+   que aprender: reutiliza la clase .hbtn ya existente en el resto del header. */
+function pintarControlModoInvestigacion(){
+  if(!activo122_31()) return;
+  var existente = document.getElementById('btnModoInvestigacion');
+  if(existente){ actualizarControlModoInvestigacion(); return; }
+  var header = document.querySelector('header');
+  if(!header) return;
+  var b = document.createElement('button');
+  b.className = 'hbtn';
+  b.id = 'btnModoInvestigacion';
+  b.title = 'Modo Investigación: muestra en línea comprensión candidata, evidencia y propuestas de memoria. Apagado por defecto.';
+  b.addEventListener('click', function(){
+    alternarModoInvestigacion122_31();
+    actualizarControlModoInvestigacion();
+  });
+  var menu = document.getElementById('btnMenu');
+  if(menu && menu.parentNode === header) header.insertBefore(b, menu); else header.appendChild(b);
+  actualizarControlModoInvestigacion();
+}
+function actualizarControlModoInvestigacion(){
+  var b = document.getElementById('btnModoInvestigacion');
+  if(!b) return;
+  b.textContent = modoInvestigacionActivo() ? 'Investigación: ON' : 'Investigación';
+}
+
 var MAX_VISIBLE_TEXT_LEN_CLIENTE = 4000;   // debe coincidir con MAX_VISIBLE_TEXT_LEN de api/organismos.js (prueba de contrato)
 
 /* §8: aplica SOBRE EL ORGANISMO EN MEMORIA sólo los subárboles devueltos por una operación
@@ -3490,6 +3632,10 @@ function construirAccionesTarjetaEpistemica(organismo){
           throw new Error('resolucion_epistemica_fallida');
         }
         aplicarConfirmacionEpistemica(organismo, r.datos, ['registro_epistemico', 'momentos']);
+        // 122.31: aceptar/rechazar una comprensión la saca de comprensionesPendientesDeRevision()
+        // -- mantiene la etiqueta de #btnGuardar al día tanto si la tarjeta se decidió desde el
+        // hilo (Modo Investigación) como desde la revisión consolidada.
+        if(typeof actualizarEtiquetaGuardar === 'function') actualizarEtiquetaGuardar();
       });
     };
   }
@@ -3556,7 +3702,21 @@ function sincronizarOrganismosConServidor(){
    (incognito, primera vez) la sincronizacion de arriba corre una sola vez al cargar --
    antes de que exista sesion -- y falla en silencio; nada la volvia a intentar despues
    de iniciar sesion. Bug real encontrado el 01/08 al probar en una ventana de incognito. */
-window.alConfirmarSesion = sincronizarOrganismosConServidor;
+/* AISLAMIENTO02 (08/09) -- antes esto era un alias directo a sincronizarOrganismosConServidor().
+   candado.txt llama a window.alConfirmarSesion() cada vez que un login/registro/recuperación
+   termina bien DENTRO del portal, sin recargar la página -- puede ser la misma cuenta reingresando
+   después de que venciera, o directamente otra cuenta en el mismo navegador. Ninguno de los dos
+   casos recarga la página (a diferencia del logout explícito: cerrarSesionComprender() hace
+   location.reload() y por eso queda fuera de este problema), así que el organismo/la conversación
+   que estuvieran en memoria de la sesión anterior seguían ahí, visibles y guardables, cuando esta
+   función corría. Ahora primero se retira ese estado (alRotarIdentidad(), definida más abajo junto
+   a nuevaSesion() -- mismo bloqueo de tareas en cola que ya corre también desde el 401, ver
+   window.alVencerSesion y encolarSincronizacionOrganismo() más arriba) y recién después se
+   sincroniza con el servidor bajo la identidad nueva. */
+window.alConfirmarSesion = function(){
+  try{ alRotarIdentidad(); }catch(e){}
+  return sincronizarOrganismosConServidor();
+};
 
 function fusionarFicha(fichaNueva){
   if(!state.organismo || !fichaNueva) return;
@@ -3874,7 +4034,10 @@ function proponerFicha(fichaNueva, lectura, hito, horizonte, principiosCandidato
   c.propuestas.push(prop);
   purgarCola(c);
   if(!persistirPropuestas(c)){ avisoCuotaLlena(); return null; }
-  avisoPropuesta(prop);
+  // 122.31 §4.1: en Modo Conversación (staging, default) el cartel inmediato no se muestra --
+  // la propuesta se generó y persistió arriba igual que siempre, disponible en la revisión
+  // consolidada del retorno (ver pintarRevisarYGuardar()). Fuera de staging, sin cambios.
+  if(debeMostrarInterrupcionesInmediatas122_31()) avisoPropuesta(prop);
   renderChipPropuestas();
   return prop;
 }
@@ -4177,6 +4340,9 @@ function renderChipPropuestas(){
   var n = state.organismo ? propuestasPendientes(state.organismo.id).length : 0;
   if(n > 0){ badge.textContent = n; badge.style.display = 'inline-block'; }
   else { badge.style.display = 'none'; }
+  // 122.31: mismo punto de mutación que ya cubre creación/resolución de propuestas -- basta este
+  // único call site para mantener la etiqueta de #btnGuardar al día en staging.
+  if(typeof actualizarEtiquetaGuardar === 'function') actualizarEtiquetaGuardar();
 }
 
 /* ---- Corte I · cierre inmediato: se muestra al confirmar/corregir una ficha que trae
@@ -11254,12 +11420,20 @@ async function enviar(texto){
           if(_entradaHistorial && _entradaHistorial.role === 'assistant' && _entradaHistorial.turnRef === turnRef){
             _entradaHistorial.recordRef = _creacion.datos.recordRef;
           }
-          if(msgNodeMotor){
+          // 122.31 §4.1: la creación/confirmación de arriba (aplicarConfirmacionEpistemica,
+          // recordRef) queda intacta y sin condición -- sólo el montaje visual inmediato de la
+          // tarjeta se posterga a la revisión consolidada mientras el modo activo sea
+          // Conversación. Fuera de staging, sin cambios.
+          if(msgNodeMotor && debeMostrarInterrupcionesInmediatas122_31()){
             mountSustentacionCard(msgNodeMotor, {
               presentation: _creacion.datos.presentation,
               actions: construirAccionesTarjetaEpistemica(state.organismo)
             });
           }
+          // 122.31: hay una comprensión candidata nueva -- se haya montado la tarjeta o no
+          // (Modo Conversación la deja para la revisión consolidada), la etiqueta de #btnGuardar
+          // debe reflejarla ya mismo.
+          if(typeof actualizarEtiquetaGuardar === 'function') actualizarEtiquetaGuardar();
         } else if(_creacion && !_creacion.ok && _creacion.estado === 409){
           // §7.6 -- ante conflicto de versión en la creación, nunca se inventa una versión ni se
           // reintenta a ciegas: se recupera el organismo vigente por el camino autenticado
@@ -11334,6 +11508,176 @@ function generarDestiladoLocal(){
   const ten = lect && lect.tension && TENSION_NOMBRE[lect.tension] ? TENSION_NOMBRE[lect.tension] : '—';
   const fn = lect && lect.funcion ? lect.funcion : '—';
   return 'PRINCIPIOS\n' + ideas + '\n\nLECTURA VIGENTE\nOrientación: ' + orient + '\nTensión raíz: ' + ten + '\nFunción: ' + fn;
+}
+
+/* ================= 122.31 · revisión consolidada («Revisar y guardar») =================
+   §7 del contrato: una única superficie, separada del hilo conversacional, con cuatro
+   secciones en el orden fijado ahí (Comprensiones / Principios emergentes / Memoria /
+   Sustentación) y dos salidas que NUNCA exigen terminar la revisión. Todo lo que se lista acá
+   ya fue generado y persistido por el camino productivo de siempre (proponerFicha(),
+   crearCandidatoEpistemicoServidor() en enviar() -- ninguno de los dos se toca); esta pantalla
+   sólo lo hace visible y ofrece las mismas acciones reales que ya existían (resolverPropuesta()
+   / cardPropuesta(), y las acciones propias de la tarjeta de sustentación congelada),
+   consolidadas en un solo lugar en vez de dispersas como interrupciones inmediatas. Reutiliza
+   el mismo overlay/el.cardContent que ofrecerGuardado()/cardPropuesta() -- no es una pieza de
+   UI nueva, es el mismo cascarón con contenido distinto. Sólo se invoca en staging (ver wiring
+   de #btnGuardar, más abajo); fuera de staging #btnGuardar sigue yendo directo a
+   ofrecerGuardado(null), sin pasar por ninguna de estas funciones. */
+
+/* Dedup por record_id sobre org.registro_epistemico.entries[] (sólo lectura, mismo camino que
+   restaurarBorrador()/restaurarCheckpoint() ya usan vía envelopeReplayEpistemico() -- no se
+   toca api/organismos.js ni el ledger). Sólo entra lo que el adaptador marca
+   'review_required': ya incorporado o ya rechazado no vuelve a aparecer (§8 -- el cambio de
+   estado epistemológico al decidir es justamente lo que saca al ítem de esta lista en el
+   próximo repintado). */
+function comprensionesPendientesDeRevision(org){
+  if(!org || !org.registro_epistemico || !Array.isArray(org.registro_epistemico.entries)) return [];
+  var vistos = {}, resultado = [];
+  org.registro_epistemico.entries.forEach(function(e){
+    var id = e && e.record && e.record.record_id;
+    if(!id || vistos[id]) return;
+    vistos[id] = true;
+    var envelope = envelopeReplayEpistemico(org, { recordRef: id });
+    if(envelope && envelope.presentation && envelope.presentation.state === 'review_required'){
+      resultado.push(envelope);
+    }
+  });
+  return resultado;
+}
+
+/* Cuenta lo que la superficie consolidada tiene para mostrar ahora mismo -- usada tanto por
+   actualizarEtiquetaGuardar() (el texto de #btnGuardar) como por el propio título de la
+   pantalla. Un principio "emergente" de la sesión cuenta como disponible para revisar aunque
+   quedarse emergente sea, por sí mismo, una resolución válida (§5) -- no es una alarma, es sólo
+   visibilidad. */
+function contarPendientesRevision122_31(){
+  if(!activo122_31() || !state.organismo) return 0;
+  var n = comprensionesPendientesDeRevision(state.organismo).length;
+  n += propuestasPendientes(state.organismo.id).length;
+  n += (state.principios || []).filter(function(p){ return p.estado === 'emergente'; }).length;
+  return n;
+}
+
+/* §7: "Revisar y guardar · N" sólo cuando hay algo que mostrar; si no, el botón vuelve a decir
+   lo de siempre. Fuera de staging es no-op: el texto de #btnGuardar nunca se toca ahí. */
+function actualizarEtiquetaGuardar(){
+  if(!activo122_31() || !el.btnGuardar) return;
+  var n = contarPendientesRevision122_31();
+  el.btnGuardar.textContent = n > 0 ? ('Revisar y guardar · ' + n) : 'Guardar sesión';
+}
+
+function seccionRevision122_31(titulo){
+  var h = document.createElement('h4');
+  h.style.cssText = 'font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:20px 0 8px';
+  h.textContent = titulo;
+  return h;
+}
+
+function pintarRevisarYGuardar(){
+  var org = state.organismo;
+  el.cardContent.innerHTML = '';
+  var h = document.createElement('h3'); h.textContent = 'Revisar y guardar';
+  var intro = document.createElement('p');
+  intro.style.cssText = 'font-size:13px;color:var(--faint);margin-bottom:4px';
+  intro.textContent = 'Lo que surgió durante el recorrido, en un solo lugar. Podés guardar la sesión ahora mismo sin revisar nada, o decidir lo que quieras acá abajo primero.';
+  el.cardContent.appendChild(h);
+  el.cardContent.appendChild(intro);
+
+  // 1. Comprensiones (§7 orden de revisión, punto 1)
+  el.cardContent.appendChild(seccionRevision122_31('Comprensiones'));
+  var comprensiones = org ? comprensionesPendientesDeRevision(org) : [];
+  if(!comprensiones.length){
+    var vC = document.createElement('p'); vC.style.cssText = 'font-size:13px;color:var(--faint)';
+    vC.textContent = 'No hay comprensiones pendientes de revisión.';
+    el.cardContent.appendChild(vC);
+  }else if(window.__sustentacionCard && typeof window.__sustentacionCard.create === 'function'){
+    comprensiones.forEach(function(envelope){
+      try{
+        var r = window.__sustentacionCard.create(envelope.presentation, envelope.actions || {});
+        if(r && r.ok && r.node) el.cardContent.appendChild(r.node);
+      }catch(e){ if(window.console && console.warn) console.warn('[122.31] comprensión omitida:', e); }
+    });
+  }
+
+  // 2. Principios emergentes (§7 orden de revisión, punto 2). Sin FK directa hacia la propuesta
+  // que los trae: se recapitulan acá (sesión en curso, state.principios) y la decisión real
+  // (confirmar/descartar) se toma junto con el resto de la memoria, más abajo -- misma propuesta,
+  // ver comentario de proponerFicha() sobre principios_candidatos viajando junto a ficha/hito/
+  // horizonte, sin una cuarta cola de confirmación propia.
+  el.cardContent.appendChild(seccionRevision122_31('Principios emergentes'));
+  var principios = org ? (state.principios || []) : [];
+  if(!principios.length){
+    var vP = document.createElement('p'); vP.style.cssText = 'font-size:13px;color:var(--faint)';
+    vP.textContent = 'No hay principios emergentes en esta sesión.';
+    el.cardContent.appendChild(vP);
+  }else{
+    principios.forEach(function(p){
+      var box = document.createElement('div'); box.className = 'propcmp';
+      var t = document.createElement('div'); t.className = 'pc-campo';
+      t.textContent = p.estado === 'confirmado' ? 'confirmado' : 'emergente';
+      var r = document.createElement('div'); r.className = 'pc-new';
+      r.textContent = p.texto;
+      box.appendChild(t); box.appendChild(r);
+      el.cardContent.appendChild(box);
+    });
+    var notaP = document.createElement('p');
+    notaP.style.cssText = 'font-size:12px;color:var(--faint);margin-top:2px';
+    notaP.textContent = 'Confirmarlos o descartarlos se decide junto con el resto de la memoria, en la sección de abajo.';
+    el.cardContent.appendChild(notaP);
+  }
+
+  // 3. Memoria (§7 orden de revisión, punto 3) -- mismas propuestas de siempre
+  // (propuestasPendientes()/cardPropuesta()/resolverPropuesta(), sin cambios); acá sólo se listan
+  // y cada una abre su propia tarjeta real de decisión (Confirmar/Rechazar/Corregir), igual que
+  // ya hacía cardPropuestas() desde el menú.
+  el.cardContent.appendChild(seccionRevision122_31('Memoria'));
+  var pendientesMemoria = org ? propuestasPendientes(org.id) : [];
+  if(!pendientesMemoria.length){
+    var vM = document.createElement('p'); vM.style.cssText = 'font-size:13px;color:var(--faint)';
+    vM.textContent = 'No hay cambios de memoria pendientes.';
+    el.cardContent.appendChild(vM);
+  }else{
+    pendientesMemoria.forEach(function(p){
+      var box = document.createElement('div'); box.className = 'propcmp'; box.style.cursor = 'pointer';
+      var t = document.createElement('div'); t.className = 'pc-campo';
+      // Misma etiqueta que ya usa cardPropuestas() para el mismo estado -- no se inventa un
+      // segundo texto para "pendiente" (PROP_ESTADO_LABEL ya tiene sus entradas de i18n).
+      t.textContent = (PROP_ESTADO_LABEL[p.estado] || p.estado) + ' · ' + new Date(p.creado).toLocaleString();
+      var r = document.createElement('div'); r.className = 'pc-new';
+      var etiquetas = (p.campos || []).map(function(k){ return CAMPO_LABEL[k] || k; });
+      if(p.hito) etiquetas.push('cierre de etapa');
+      if(p.horizonte) etiquetas.push('horizonte');
+      if(p.principios_candidatos && p.principios_candidatos.length) etiquetas.push(p.principios_candidatos.length + ' principio(s)');
+      r.textContent = etiquetas.length ? etiquetas.join(' · ') : 'actualización de memoria';
+      box.appendChild(t); box.appendChild(r);
+      box.onclick = function(){ cardPropuesta(p.id, false); };
+      el.cardContent.appendChild(box);
+    });
+  }
+
+  // 4. Sustentación (§7 orden de revisión, punto 4) -- evidencia/pendientes/alcance de cada
+  // comprensión ya se muestran DENTRO de su propia tarjeta congelada (sección 1, arriba): esa es
+  // la misma información, no se duplica un segundo camino de lectura para el mismo dato.
+  el.cardContent.appendChild(seccionRevision122_31('Sustentación'));
+  var vS = document.createElement('p'); vS.style.cssText = 'font-size:13px;color:var(--faint)';
+  vS.textContent = comprensiones.length
+    ? 'La evidencia, los pendientes y el alcance de cada comprensión aparecen dentro de su propia tarjeta, arriba.'
+    : 'No hay sustentación que mostrar todavía: aparece junto a cada comprensión candidata.';
+  el.cardContent.appendChild(vS);
+
+  var row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '18px';
+  var bPostergar = document.createElement('button'); bPostergar.className = 'btn'; bPostergar.textContent = 'Guardar sesión y revisar después';
+  var bGuardar = document.createElement('button'); bGuardar.className = 'btn primary'; bGuardar.textContent = 'Guardar decisiones';
+  // §7 "Libertad para postergar": ambas salidas llevan al mismo paso siguiente -- ninguna exige
+  // haber revisado nada de lo de arriba. Lo que se haya decidido en esta pantalla (aceptar,
+  // rechazar, confirmar, corregir) ya se aplicó al hacer click en su propio botón real, en el
+  // momento; esta pantalla nunca acumula decisiones para recién aplicarlas acá.
+  bPostergar.onclick = function(){ cerrarOverlay(); ofrecerGuardado(null); };
+  bGuardar.onclick = function(){ cerrarOverlay(); ofrecerGuardado(null); };
+  row.appendChild(bPostergar); row.appendChild(bGuardar);
+  el.cardContent.appendChild(row);
+
+  el.overlay.classList.add('open');
 }
 
 function ofrecerGuardado(textoDestilado){
@@ -16768,7 +17112,31 @@ function nuevaSesion(){
   el.btnFicha.style.display = 'none';
   el.input.placeholder = 'Escribí acá qué está pasando…';
   renderOrgList();
+  // 122.31: sin organismo activo no hay nada que revisar -- vuelve al texto de siempre antes de
+  // que el botón pueda mostrarse de nuevo (evita un texto de la sesión anterior, aunque sea por
+  // un instante).
+  if(typeof actualizarEtiquetaGuardar === 'function') actualizarEtiquetaGuardar();
 }
+
+/* AISLAMIENTO02 (08/09) -- retiro de estado ante vencimiento de sesión o cambio de identidad en el
+   mismo navegador sin recarga. Reusa nuevaSesion() (ya certificada: retira organismo/historial/
+   principios/paneles y vuelve a la pantalla de bienvenida) en vez de duplicar su lógica -- acá sólo
+   se agrega lo que nuevaSesion() no cubre porque nunca tuvo que cubrirlo: el token de identidad que
+   usa encolarSincronizacionOrganismo() para no despachar tareas de la cuenta anterior (ver ahí), el
+   epoch propio de "Contextos Universal" (una tarjeta de ese módulo puede seguir en vuelo aunque no
+   haya ningún organismo abierto en el chat principal) y el mapa de aperturas de Contextos sin
+   resolver (c1g3Sesiones), que tampoco depende de qué organismo esté abierto. Se llama tanto desde
+   el vencimiento (401, ver window.alVencerSesion) como, siempre, antes de sincronizar con el
+   servidor tras cualquier login/registro/recuperación exitosos (ver window.alConfirmarSesion) --
+   así cubre "expiración" y "cambio de identidad" con el mismo camino, sin tener que distinguir cuál
+   de los dos fue. */
+function alRotarIdentidad(){
+  state.identidadEpoch = (state.identidadEpoch || 0) + 1;
+  state.c1g3Epoch++;
+  state.c1g3Sesiones = {};
+  nuevaSesion();
+}
+window.alVencerSesion = alRotarIdentidad;
 
 /* ================= organismos: interfaz ================= */
 var ORG_LIMITE_INICIAL = 3;
@@ -18059,7 +18427,29 @@ document.getElementById('btnVerTodos').addEventListener('click', function(){
   renderOrgList();
 });
 
-el.btnGuardar.addEventListener('click', function(){ ofrecerGuardado(null); });
+el.btnGuardar.addEventListener('click', function(){
+  // 122.31 §7: en staging, "Guardar sesión" pasa a ser el punto de entrada a la revisión
+  // consolidada. Fuera de staging, camino histórico exacto, sin cambios.
+  if(activo122_31()) pintarRevisarYGuardar(); else ofrecerGuardado(null);
+});
+// 122.31 §4.2: control discreto de Modo Investigación -- se crea una sola vez acá (no-op fuera
+// de staging); el header ya existe en el DOM en este punto del parseo, igual que el resto de los
+// botones de arriba.
+if(typeof pintarControlModoInvestigacion === 'function') pintarControlModoInvestigacion();
+// 122.31 §9: Idioma se reubica de <header> a Panel lateral → Cuenta → Idioma. lib/i18n.js NO se
+// toca -- mountSwitch() no tiene gate propio y lo comparten Urbanismo/Contextos -- en vez de eso
+// se oculta acá, sólo en staging, el botón #comprenderIdioma que ese archivo ya montó, y el mismo
+// cambio de idioma se ofrece desde "Mi cuenta" (mostrarCuenta(), vista 'idioma', más abajo) usando
+// exclusivamente la API pública ya expuesta (ComprenderI18n.getLocale/setLocale) -- sin depender
+// de ningún detalle interno del componente. Se registra en DOMContentLoaded DESPUÉS del listener
+// propio de lib/i18n.js (su <script> se parsea antes que éste), así mountSwitch() ya corrió para
+// cuando esto se ejecuta.
+if(activo122_31()){
+  document.addEventListener('DOMContentLoaded', function(){
+    var sw = document.getElementById('comprenderIdioma');
+    if(sw) sw.style.display = 'none';
+  });
+}
 el.btnNueva.addEventListener('click', nuevaSesion);
 // UX-P1E (25/08): marca clickeable -- click normal + Enter/Espacio (role="button" con tabindex,
 // ver HTML) para que sea alcanzable por teclado. irAHome() no crea ni borra ningún organismo,
