@@ -2983,12 +2983,29 @@ function mountSustentacionCard(messageNode, envelope){
   return false;
 }
 
+/* 122.31-CORR02 (09/09, hallazgo menor de la caminata humana): el chat nunca tuvo -- ni tiene
+   ahora -- un renderizador de markdown: .bubble usa textContent a propósito (mismo criterio de
+   seguridad de addUserMsg(), ver CSS white-space:pre-wrap), así que cualquier "**negrita**" que
+   el motor incluya en su texto se ve literal, asteriscos incluidos. No se agrega un parser de
+   markdown -- eso cambiaría textContent por innerHTML, una superficie de riesgo (texto del
+   modelo insertado como HTML) que este corte no está autorizado a abrir por un hallazgo menor de
+   presentación. En cambio, sólo se retiran en pantalla los delimitadores dobles de negrita,
+   dejando el texto de adentro intacto. Sólo afecta lo que se pinta acá: parsed.visible en sí
+   sigue exactamente igual y llega sin tocar a crearCandidatoEpistemicoServidor() (más abajo) y a
+   cualquier prueba que lo compare (parseMotor() no se toca). Gateado a activo122_31(): fuera de
+   staging, producción sigue mostrando el texto crudo del motor, sin ningún cambio -- mismo
+   criterio que el resto de 122.31. */
+function limpiarNegritaMarkdown122_31(texto){
+  if(typeof texto !== 'string' || !texto) return texto;
+  return texto.replace(/\*\*(\S(?:[^*]*\S)?)\*\*/g, '$1');
+}
+
 function addMotorMsg(parsed, replay, sustentacion = null){
   const d = document.createElement('div');
   d.className = 'msg motor';
   const b = document.createElement('div');
   b.className = 'bubble';
-  b.textContent = parsed.visible;
+  b.textContent = activo122_31() ? limpiarNegritaMarkdown122_31(parsed.visible) : parsed.visible;
   d.appendChild(b);
 
   for(const c of parsed.cristaliza){
@@ -11672,7 +11689,23 @@ function pintarRevisarYGuardar(){
   // haber revisado nada de lo de arriba. Lo que se haya decidido en esta pantalla (aceptar,
   // rechazar, confirmar, corregir) ya se aplicó al hacer click en su propio botón real, en el
   // momento; esta pantalla nunca acumula decisiones para recién aplicarlas acá.
-  bPostergar.onclick = function(){ cerrarOverlay(); ofrecerGuardado(null); };
+  //
+  // 122.31-CORR01 (09/09, defecto bloqueante de la caminata humana): "Guardar sesión y revisar
+  // después" reusaba ofrecerGuardado(null), que abre la compuerta legacy "Destilado de la
+  // sesión" (Descartar / Guardar sesión) -- una SEGUNDA decisión obligatoria que el contrato no
+  // permite en esta salida (§7 "Libertad para postergar" es letra muerta si postergar abre otra
+  // puerta). Ahora guarda directo: mismo guardarSesion() de siempre (nunca tocado), con el mismo
+  // destilado que ofrecerGuardado() le habría pasado (generarDestiladoLocal(), también intacta),
+  // y cierra el overlay sin abrir nada más -- se vuelve directo al recorrido, que es lo único que
+  // seguía debajo del overlay. guardarSesion() no lee ni decide sobre comprensiones/principios/
+  // propuestas pendientes (ver su propio cuerpo): esos siguen exactamente como estaban, intactos
+  // y recuperables la próxima vez que se abra "Revisar y guardar". No toca identidadEpoch/
+  // c1g3Epoch (AISLAMIENTO02) ni la cola de sincronización por epoch: guardarOrganismo()/
+  // crearCheckpointSesion(), llamadas desde dentro de guardarSesion(), son las mismas de
+  // siempre, sin epoch propio que gestionar acá. bGuardar ("Guardar decisiones", abajo) sigue
+  // yendo por ofrecerGuardado(null) sin cambios -- no fue lo que reportó el defecto, y esta
+  // corrección toca únicamente la ruta de bPostergar.
+  bPostergar.onclick = function(){ guardarSesion(generarDestiladoLocal()); cerrarOverlay(); };
   bGuardar.onclick = function(){ cerrarOverlay(); ofrecerGuardado(null); };
   row.appendChild(bPostergar); row.appendChild(bGuardar);
   el.cardContent.appendChild(row);
