@@ -17563,6 +17563,89 @@ function checkpointMasReciente(org){
   return lista.length ? lista[0] : null;
 }
 
+/* ============ NUEVACOMP02 (10/09) · autoguardado silencioso al pulsar "Nueva" ============
+   Decisión de producto de Javier: `#btnNueva` (única "Nueva" que queda tras NUEVACOMP01 --
+   #teNueva ya no existe) tiene que guardar la sesión en curso ANTES de ejecutar la salida real
+   de siempre (nuevaSesion()), si esa sesión tiene conversación significativa sin consolidar --
+   sin abrir ninguna pantalla propia (ni "Destilado de la sesión" ni ninguna otra), sin decidir
+   nada sobre comprensiones/propuestas pendientes, preservando conversación, principios, Memoria
+   pendiente y checkpoints existentes, sin crear sesiones vacías, sin duplicar un guardado
+   idéntico ya existente, y sin abandonar la sesión en silencio si el guardado falla.
+
+   El camino de datos reutilizado es el MISMO que ya certificó 122.31-CORR01 para "Guardar
+   sesión y revisar después": guardarSesion(generarDestiladoLocal()) -- nunca abre pantalla
+   propia, nunca lee ni decide sobre comprensionesPendientesDeRevision()/propuestasPendientes()
+   (ver esa auditoría), y adentro llama a crearCheckpointSesion() (OMV-F5), el mismo mecanismo
+   detrás de "Recuerdo guardado". No se reimplementa nada de esto -- sólo se decide CUÁNDO
+   llamarlo y se verifica que de verdad haya quedado guardado. */
+
+// "Significativa" = exactamente el mismo criterio que ya usa crearCheckpointSesion() para saber
+// si hay algo que guardar (state.history.length > 0) -- "no crear sesiones vacías" sale gratis,
+// sin inventar un umbral nuevo y sin arriesgar que un criterio distinto discrepe del real.
+//
+// "Sin cambios desde el último guardado" -- compara la sesión actual (historial acotado igual
+// que crearCheckpointSesion(), principios de sesión, panel especializado) contra el checkpoint
+// MÁS RECIENTE del organismo (cualquier módulo, mismo checkpointMasReciente() de OMV-F5.1;
+// checkpointMasReciente() sólo da {modulo,indice,fecha} -- el checkpoint completo se busca en
+// org.checkpoints[modulo][indice], igual que ya hace restaurarCheckpoint()). Si los tres
+// coinciden exactamente, no hay nada nuevo que guardar -- guardar de nuevo sólo apilaría una
+// copia idéntica del mismo contenido.
+function sesionIdenticaAlUltimoCheckpoint(org){
+  var entrada = checkpointMasReciente(org);
+  var chk = entrada && org.checkpoints && org.checkpoints[entrada.modulo] && org.checkpoints[entrada.modulo][entrada.indice];
+  if(!chk) return false;   // nunca se guardó nada todavía -- no hay "sin cambios" posible
+  var hActual = state.history.length > BORRADOR_MAX_MSGS
+    ? state.history.slice(state.history.length - BORRADOR_MAX_MSGS)
+    : state.history.slice();
+  var pActual = (state.principios || []).map(function(p){
+    return { texto: p.texto, fam: p.fam || null, estado: p.estado || 'emergente' };
+  });
+  return JSON.stringify(hActual) === JSON.stringify(chk.history || []) &&
+         JSON.stringify(pActual) === JSON.stringify(chk.principios || []) &&
+         JSON.stringify(state.panelEspecializado || null) === JSON.stringify(chk.panel || null);
+}
+
+// "Si el guardado falla, no abandonar la sesión en silencio" -- guardarOrganismo() escribe local
+// de forma SÍNCRONA (localStorage) y encola el guardado remoto aparte, en segundo plano (122.30,
+// nunca bloquea, nunca lanza hacia el llamador -- ver comentario de guardarOrganismo()); la única
+// falla real y detectable acá es la escritura local, y persistirOrganismos() traga esa excepción
+// por diseño (try/catch vacío). Por eso no alcanza con que guardarSesion() no haya lanzado: se
+// relee cargarOrganismos() (nunca `org` en memoria, mismo criterio de control negativo que ya usa
+// el resto de la suite) y se compara la cantidad real de destilados/checkpoints antes y después.
+// Devuelve 'nada-que-guardar' | 'sin-cambios' | 'guardado' | 'fallo'.
+function intentarGuardadoAutomaticoAntesDeNueva(){
+  var o = state.organismo;
+  if(!o || !state.history || !state.history.length) return 'nada-que-guardar';
+  if(sesionIdenticaAlUltimoCheckpoint(o)) return 'sin-cambios';
+  var destiladosAntes = (o.destilados || []).length;
+  var checkpointsAntes = totalCheckpoints(o);
+  try{
+    guardarSesion(generarDestiladoLocal());
+  }catch(e){
+    return 'fallo';
+  }
+  var orgPersistido = cargarOrganismos().find(function(x){ return x.id === o.id; });
+  var seGuardo = !!orgPersistido
+    && (orgPersistido.destilados || []).length === destiladosAntes + 1
+    && totalCheckpoints(orgPersistido) === checkpointsAntes + 1;
+  return seGuardo ? 'guardado' : 'fallo';
+}
+
+// Nueva función detrás de #btnNueva (ver wiring más abajo, reemplaza a nuevaSesion() directo).
+// En 'nada-que-guardar'/'sin-cambios'/'guardado' sigue exactamente igual que antes: nuevaSesion()
+// real, sin cambios. Sólo en 'fallo' se corta ANTES de nuevaSesion() -- la sesión actual queda
+// intacta, tal como estaba, y se avisa con un mensaje pasivo en el chat (addError(), el mismo
+// patrón ya usado para errores de red en enviar()) -- nunca una alerta ni una confirmación que
+// exija una decisión.
+function alPulsarBtnNueva(){
+  var resultado = intentarGuardadoAutomaticoAntesDeNueva();
+  if(resultado === 'fallo'){
+    addError('No se pudo guardar la sesión actual antes de empezar una nueva comprensión -- seguís exactamente donde estabas, nada se perdió. Probá de nuevo, o guardá manualmente desde "Guardar sesión y revisar después".');
+    return;
+  }
+  nuevaSesion();
+}
+
 /* PR-A2.3 (25/08), extendida por PR-UX1 (25/08): reconstruye state.principios + el Hilo + la
    representación en el chat a partir de la copia guardada en un checkpoint (chk.principios) --
    SOLO aparición en sesión, igual que addPrincipio() en vivo: nunca toca o.principios[] ni
@@ -18537,7 +18620,11 @@ if(activo122_31()){
     if(sw) sw.style.display = 'none';
   });
 }
-el.btnNueva.addEventListener('click', nuevaSesion);
+// NUEVACOMP02 (10/09): antes iba directo a nuevaSesion() -- ahora pasa primero por
+// alPulsarBtnNueva() (ver esa función más arriba, junto a checkpointMasReciente()), que guarda
+// la sesión en curso si corresponde (silencioso, sin pantalla propia) y sólo entonces llama a
+// nuevaSesion(), sin cambios en esa función ni en su comportamiento habitual.
+el.btnNueva.addEventListener('click', alPulsarBtnNueva);
 // UX-P1E (25/08): marca clickeable -- click normal + Enter/Espacio (role="button" con tabindex,
 // ver HTML) para que sea alcanzable por teclado. irAHome() no crea ni borra ningún organismo,
 // ver su propio comentario.
@@ -19158,9 +19245,10 @@ function cerrarTuEspacio(){
   teImportarProAbierto = null;
 }
 // NUEVACOMP01 (09/09): listener de #teNueva retirado junto con el botón (ver arriba en el
-// HTML). #btnNueva (línea ~18486, el.btnNueva.addEventListener('click', nuevaSesion)) sigue
-// exactamente igual -- misma función nuevaSesion(), misma semántica: sale de la vista del
-// organismo e inicia una comprensión independiente desde cero, sin tocar el organismo anterior.
+// HTML). #btnNueva sigue con la misma semántica de siempre -- sale de la vista del organismo e
+// inicia una comprensión independiente desde cero, sin tocar el organismo anterior -- aunque
+// desde NUEVACOMP02 (10/09) su wiring pasa por alPulsarBtnNueva() antes de llegar a nuevaSesion()
+// (autoguardado silencioso de la sesión en curso si corresponde; ver esa función).
 document.getElementById('teFondo').addEventListener('click', cerrarTuEspacio);
 document.addEventListener('keydown', function(e){
   if(e.key === 'Escape' && document.getElementById('tuEspacio').classList.contains('open')) cerrarTuEspacio();
