@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprender · Contextos — versión profesional</title>
+<!-- MARCA-VIVA-01 (11/09): componente de la marca viva (define <comprender-mark>). -->
+<script src="/comprender-mark.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -180,10 +182,10 @@ header header .cai-ham{flex-shrink:0}
 }
 
 /* ===== TÍTULO DE MARCA — idéntico en los tres productos ===== */
+/* MARCA-VIVA-01 (11/09): .cai-toro se retira (ver urbanismo.html). Esta copia de @keyframes
+   girar era exclusiva de .cai-toro -- se saca; el nombre "girar" sigue existiendo en el archivo
+   (usado por .btn .spinner, sin relación con el logo), así que no se toca esa otra regla. */
 .cai-head{display:flex;align-items:center;gap:10px;flex:0 1 auto;min-width:0}
-.cai-toro{width:30px;height:30px;min-width:30px;flex:none;color:#2E5A87;
-  animation:girar 30s linear infinite;transform-origin:center}
-@keyframes girar{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 .cai-titulo{
   font-family:'DM Sans','Inter','IBM Plex Sans',system-ui,-apple-system,sans-serif !important;
   font-size:21px !important; font-weight:400 !important; line-height:1.15 !important;
@@ -198,7 +200,6 @@ header header .cai-ham{flex-shrink:0}
 .cai-ham{flex-shrink:0}
 @media (max-width:840px){
   .cai-titulo{font-size:17px !important}
-  .cai-toro{width:26px;height:26px;min-width:26px}
   .cai-baja{display:none}
 }
 
@@ -223,7 +224,7 @@ header header .cai-ham{flex-shrink:0}
 <div id="modulosMenu"></div>
 
 <header>
-  <div class="cai-head"><svg class="cai-toro" viewBox="0 0 40 40" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".55" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="15" ry="6" stroke-width="1" opacity=".4" transform="rotate(20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".4" transform="rotate(-20 20 20)"/><ellipse cx="20" cy="20" rx="6" ry="15" stroke-width="1" opacity=".55" transform="rotate(20 20 20)"/><circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/></g></svg><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Contextos</b></div><div class="cai-baja">Versión profesional</div></div></div>
+  <div class="cai-head"><comprender-mark variant="compact" size="30" phase="spiral_deployment" aria-hidden="true"></comprender-mark><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Contextos</b></div><div class="cai-baja">Versión profesional</div></div></div>
   <span style="flex:1"></span>
   <!-- Panel P4 (21/08): el medidor fijo de créditos en el header se sacó -- mismo criterio ya
        aplicado en el Core (index.html, 10/08): "Tus créditos" (credTarjeta()) sigue existiendo

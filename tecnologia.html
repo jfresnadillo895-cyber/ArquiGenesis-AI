@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprender · Tecnología — versión profesional</title>
+<!-- MARCA-VIVA-01 (11/09): componente de la marca viva (define <comprender-mark>). -->
+<script src="/comprender-mark.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -96,6 +98,9 @@ main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
 <div id="modulosMenu"></div>
 
 <header>
+  <!-- MARCA-VIVA-01 (11/09): esta página no tenía ícono, solo texto -- se suma acá para que
+       quede consistente con el resto del ecosistema (decisión confirmada). -->
+  <comprender-mark variant="compact" size="26" phase="spiral_deployment" aria-hidden="true"></comprender-mark>
   <span class="marca">Comprender · Tecnología</span>
   <span id="hCorreo" class="hint" style="margin-left:auto;"></span>
   <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>

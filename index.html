@@ -14,6 +14,10 @@
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="icon" href="/favicon-16.png" sizes="16x16" type="image/png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<!-- MARCA-VIVA-01 (11/09): componente de la marca viva (define <comprender-mark>). Sin
+     dependencias, se puede cargar en cualquier punto antes o después de sus usos en el DOM --
+     los custom elements se "actualizan" solos apenas el navegador registra la definición. -->
+<script src="/comprender-mark.js"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Comprender AI">
@@ -70,29 +74,11 @@ header{
 .lg-textos{display:flex;flex-direction:column;line-height:1.15;min-width:0}
 .lg-compy{font-family:'DM Sans',sans-serif;font-size:10px;color:var(--faint);letter-spacing:.06em;margin-top:1px}
 @media (max-width:560px){.lg-compy{display:none}}
-.toro{
-  /* Marca unificada del ecosistema: mismo tamaño y misma velocidad de reposo que
-     Urbanismo y Contextos (kit: .cai-toro). En reposo los tres se ven idénticos.
-     El Core conserva los estados .busy y .principio: acá el giro informa que el
-     sistema está trabajando, y por eso el movimiento significa algo. */
-  width:30px;height:30px;min-width:30px;flex-shrink:0;color:var(--accent);
-  animation:girar 30s linear infinite;
-  transform-origin:center;
-}
-.toro.busy{color:var(--energia);animation:girar 5s linear infinite, latido 1s ease-in-out infinite}
-.toro.principio{color:var(--trans);animation:girar 3s linear infinite, latido .6s ease-in-out 4}
-@keyframes girar{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.toro,.toro.busy,.toro.principio,.toro-hero{animation:none}}
-/* LATIDO-01 (28/08): la regla de acá abajo estaba rota -- el primer "}" ya cerraba el
-   @keyframes válido (0%,100%/50%) y lo que seguía (otro "50%{...}" con box-shadow, más una
-   "}" suelta) quedaba fuera de cualquier regla, así que el navegador lo descartaba en
-   silencio. El único fragmento que sobrevivía era un parpadeo de opacidad muy leve (1→.55),
-   y encima el ícono ya está girando rápido en 5s durante .busy -- entre las dos cosas, el
-   latido no se percibía. Se deja una sola regla válida, con una caída de opacidad más
-   profunda (.4) para que se note incluso compitiendo con el giro. Sigue siendo sólo
-   opacity -- si tocara "transform" (p. ej. scale) entraría en conflicto con el "rotate" de
-   @keyframes girar, que corre al mismo tiempo en la misma propiedad. */
-@keyframes latido{0%,100%{opacity:1}50%{opacity:.4}}
+/* MARCA-VIVA-01 (11/09): .toro/.toro.busy/.toro.principio/.toro-hero + @keyframes girar/latido
+   se retiran acá -- eran el CSS que animaba el glifo "toro" a mano (spin+pulso de color). El
+   reemplazo, comprender-mark, trae su propia animación interna (incluye prefers-reduced-motion)
+   y se controla con atributos (phase/autoplay), no con estas clases. El detalle de qué clase
+   dispara qué atributo está junto a la definición de `el.dot`, más abajo. Ver MARCAVIVA01_INFORME.md. */
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 header .spacer{flex:1}
 .hbtn{
@@ -719,16 +705,13 @@ header .spacer{flex:1}
            fondo ni forma de botón -- ver CSS .logo). Wiring del click/teclado y la función
            irAHome() están más abajo en el JS, junto a nuevaSesion(). -->
       <span class="logo" id="logoHome" role="button" tabindex="0" aria-label="Volver a home">
-        <svg class="toro" id="dot" viewBox="0 0 40 40" aria-hidden="true">
-          <g fill="none" stroke="currentColor" stroke-linecap="round">
-            <ellipse cx="20" cy="20" rx="15" ry="15" stroke-width="1.2" opacity=".9"/>
-            <ellipse cx="20" cy="20" rx="15" ry="6"  stroke-width="1"   opacity=".55" transform="rotate(-20 20 20)"/>
-            <ellipse cx="20" cy="20" rx="15" ry="6"  stroke-width="1"   opacity=".4"  transform="rotate(20 20 20)"/>
-            <ellipse cx="20" cy="20" rx="6"  ry="15" stroke-width="1"   opacity=".4"  transform="rotate(-20 20 20)"/>
-            <ellipse cx="20" cy="20" rx="6"  ry="15" stroke-width="1"   opacity=".55" transform="rotate(20 20 20)"/>
-            <circle cx="20" cy="20" r="3.2" fill="currentColor" stroke="none" opacity=".95"/>
-          </g>
-        </svg>
+        <!-- MARCA-VIVA-01 (11/09): se reemplaza el glifo "toro" dibujado a mano por la marca viva
+             entregada (comprender-mark.js). El id="dot" se conserva -- el resto del código sigue
+             leyendo el.dot=$('dot') y activando/sacando las clases .busy/.principio exactamente
+             igual que antes; lo que cambia es que ahora una traducción central (más abajo, junto a
+             la definición de `el`) escucha esas clases y las convierte en la API real del
+             componente (atributos phase/autoplay) en vez de animación CSS. Ver MARCAVIVA01_INFORME.md. -->
+        <comprender-mark id="dot" variant="compact" size="30" phase="spiral_deployment" aria-hidden="true"></comprender-mark>
         <span class="lg-textos">
           <span class="lg-txt">Comprender <b>AI</b></span>
           <span class="lg-compy">Compy</span>
@@ -756,16 +739,11 @@ header .spacer{flex:1}
     <div id="modulosMenu"></div>
 
     <div id="welcome">
-      <svg class="toro-hero" viewBox="0 0 40 40" aria-hidden="true">
-        <g fill="none" stroke="currentColor" stroke-linecap="round">
-          <ellipse cx="20" cy="20" rx="15" ry="15" stroke-width=".8" opacity=".85"/>
-          <ellipse cx="20" cy="20" rx="15" ry="6"  stroke-width=".7" opacity=".5" transform="rotate(-20 20 20)"/>
-          <ellipse cx="20" cy="20" rx="15" ry="6"  stroke-width=".7" opacity=".35" transform="rotate(20 20 20)"/>
-          <ellipse cx="20" cy="20" rx="6"  ry="15" stroke-width=".7" opacity=".35" transform="rotate(-20 20 20)"/>
-          <ellipse cx="20" cy="20" rx="6"  ry="15" stroke-width=".7" opacity=".5" transform="rotate(20 20 20)"/>
-          <circle cx="20" cy="20" r="3" fill="currentColor" stroke="none" opacity=".9"/>
-        </g>
-      </svg>
+      <!-- MARCA-VIVA-01 (11/09): mismo reemplazo que el header -- phase="origin" es la fase que
+           el propio contrato de datos nombra "origin" (nace en el centro), que además ya trae
+           el pulso/respiración incorporado (ver STATE.origin.pulse en comprender-mark.js), así
+           que no hace falta re-simular el "latido" que tenía esta versión anterior. -->
+      <comprender-mark size="62" phase="origin" style="margin-bottom:22px" aria-hidden="true"></comprender-mark>
       <p class="compy-intro">Soy Compy, la presencia conversacional de Comprender AI</p>
       <h1>¿Qué querés comprender hoy?</h1>
       <p class="lema">Contanos una situación, problema, proyecto o decisión.</p>
@@ -2821,6 +2799,62 @@ const el = {
   modulosMenu: $('modulosMenu'), btnModulos: $('btnModulos'),
   logoHome: $('logoHome')
 };
+
+/* MARCA-VIVA-01 (11/09): el.dot ahora es <comprender-mark> (ver header, más arriba), no el <svg>
+   "toro" de antes. El resto del código sigue exactamente igual -- sigue haciendo
+   el.dot.classList.add/remove('busy'|'principio') en cada punto donde ya lo hacía -- porque acá
+   se traduce esa clase a la API real del componente (atributo phase) en vez de tocar cada uno de
+   esos puntos. Decisión de comportamiento (confirmada): mientras busy, recorre rápido las 6 fases
+   (representa "el organismo trabajando"); al iniciar (principio), phase="origin" un momento y a
+   los ~2.4s (mismo tiempo que tenía el latido viejo: 4 pulsos de .6s) se asienta en la fase de
+   reposo; en reposo, una sola fase fija, sin movimiento.
+   Nota técnica: el ciclado de "busy" NO usa el atributo autoplay del componente -- ese atributo
+   solo arranca su propio setInterval() dentro de connectedCallback() (una vez, al montarse); no
+   hay attributeChangedCallback que lo reinicie si se agrega/saca después de montado, así que
+   activarlo recién en tiempo de ejecución (como acá) no tendría efecto. En vez de tocar
+   comprender-mark.js, este bloque hace su propio recorrido de fases con setInterval + setAttribute
+   ('phase', ...), que sí dispara attributeChangedCallback -> _render() en cada paso (verificado
+   con Playwright real, sin mocks: ver MARCAVIVA01_INFORME.md). */
+if(el.dot){
+  (function(){
+    var TIMEOUT_PRINCIPIO_MS = 2400;
+    var FASE_REPOSO = 'spiral_deployment';
+    var FASES = ['origin','spiral_deployment','mirror_exchange','organization','return','dna_reorganization'];
+    var BUSY_SPEED_MS = 900;
+    var principioTimer = null;
+    var busyTimer = null;
+    function pararBusy(){ if(busyTimer){ clearInterval(busyTimer); busyTimer = null; } }
+    function aplicarEstadoDot(){
+      var busy = el.dot.classList.contains('busy');
+      var principio = el.dot.classList.contains('principio');
+      if(principio){
+        pararBusy();
+        el.dot.setAttribute('phase','origin');
+        clearTimeout(principioTimer);
+        principioTimer = setTimeout(function(){
+          if(el.dot.classList.contains('principio')) el.dot.setAttribute('phase', FASE_REPOSO);
+        }, TIMEOUT_PRINCIPIO_MS);
+        return;
+      }
+      clearTimeout(principioTimer);
+      if(busy){
+        if(!busyTimer){
+          var i = FASES.indexOf(el.dot.getAttribute('phase'));
+          if(i < 0) i = 0;
+          busyTimer = setInterval(function(){
+            i = (i + 1) % FASES.length;
+            el.dot.setAttribute('phase', FASES[i]);
+          }, BUSY_SPEED_MS);
+        }
+      }else{
+        pararBusy();
+        el.dot.setAttribute('phase', FASE_REPOSO);
+      }
+    }
+    new MutationObserver(aplicarEstadoDot).observe(el.dot, {attributes:true, attributeFilter:['class']});
+    aplicarEstadoDot();
+  })();
+}
 
 const FAM_LABEL = { espacio: 'Espacio', energia: 'Energía', trans: 'Transformación' };
 const TENSION_NOMBRE = {
