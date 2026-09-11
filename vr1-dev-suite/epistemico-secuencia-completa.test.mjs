@@ -1561,3 +1561,346 @@ test('NUEVACOMP02 + NUEVACOMP01: tras cerrar una lectura especializada en el mis
   const historyRecuperado = JSON.parse(vm.runInContext('JSON.stringify(state.history)', context));
   assert.deepEqual(historyRecuperado, historyOriginal, 'el Hilo completo (toda la conversación del turno de cierre) se recupera íntegro -- NUEVACOMP01 y NUEVACOMP02 conviven sin pisarse');
 });
+
+// ---------------------------------------------------------------------------------------------
+// DERIVACION01 (11/09) -- "Continuidad de acceso a especialidades". Defecto real reportado por
+// Javier durante la comprobación humana de NUEVACOMP01: el Core activa una lectura territorial
+// ([[DERIVAR:urban]] real del motor), mostrarDerivacion() ofrece "Abrir en Urbanismo →" y
+// marcarOrganismoDerivable() persiste org.derivable=['urban'] (todo esto YA existía, sin cambios,
+// desde OMV-F3) -- pero si el usuario pulsa "Nueva" ANTES de abrirla y después reabre el
+// organismo, la conversación y el principio se recuperan (NUEVACOMP01/NUEVACOMP02, sin cambios)
+// pero el botón desaparece.
+//
+// Fase A (auditoría, sin tocar código): el único contrato real de derivación motor-válida en toda
+// la app es [[DERIVAR:urban]] (SYSTEM_PROMPT, línea ~2645) -- no existe [[DERIVAR:negocio]] ni
+// [[DERIVAR:contexto]], y ningún camino productivo llama nunca a marcarOrganismoDerivable(org,
+// 'negocio'/'contexto') (grep exhaustivo sobre index.html). "Leer en Urbanismo/Negocios/Contextos"
+// (ofrecerDerivacionInterna(), acceso permanente basado en org.tipo) es un mecanismo DISTINTO,
+// siempre disponible, que no se ve afectado por este defecto -- no depende de una tarjeta pintada
+// una sola vez que sobreviva una reapertura, se reconstruye entera cada vez que se llama. La causa
+// raíz real, confirmada con ejecución real más abajo: abrirOrganismo() llama a
+// ofrecerContinuidadUrban(org) ANTES de intentar restaurarBorrador(org)/restaurarCheckpoint()
+// (esta última usada tanto por "Recuerdo guardado -> Retomar" como por "Sesiones anteriores ->
+// Restaurar") -- ambas hacen `el.stream.innerHTML = ''` para reconstruir la conversación desde
+// cero, lo que borra la tarjeta recién pintada en el mismo tick de JS (sin repintado del navegador
+// entre medio: el usuario nunca la ve). La corrección (ver index.html, comentarios "DERIVACION01"
+// junto a restaurarBorrador()/restaurarCheckpoint()/marcarOrganismoDerivable()) es exactamente esa
+// reconstrucción reordenada, más un mecanismo de consumo real (consumirDerivablePendiente()) para
+// que una derivación ya usada no vuelva a ofrecerse como "pendiente". Como Negocios y Contextos no
+// tienen hoy ningún contrato real que alguna vez escriba en org.derivable, extender
+// ofrecerContinuidadUrban() a esos dos tipos sería código especulativo sin ningún disparador real
+// contra el que probarlo con ejecución real (y, para Contextos en particular, hay dos destinos
+// reales distintos -- Contextos Universal vs. el producto standalone Pro -- cuya desambiguación no
+// está pedida ni es necesaria para este defecto) -- fuera de alcance de la modificación mínima
+// necesaria; el plumbing de datos (org.derivable, marcarOrganismoDerivable(org, tipo), ya genérico)
+// queda listo para sostenerlo el día que exista un contrato real equivalente.
+// Nota de arnés (mismo límite ya señalado en varios comentarios de este archivo, p.ej. junto a
+// AISLAMIENTO02 y sincronizacion-cola): FakeElement.innerHTML es una propiedad de texto plana --
+// asignarle '' (lo que restaurarBorrador()/restaurarCheckpoint() hacen de verdad para reconstruir
+// la conversación) NO vacía .children como sí lo haría un navegador real. Buscar un botón en TODO
+// el árbol de el.stream después de varias reaperturas dentro de la misma prueba, por lo tanto,
+// también encontraría cualquier nodo "viejo" que un navegador real ya habría eliminado --
+// falsos positivos que no distinguirían código roto de código corregido. Por eso estas pruebas NO
+// buscan en el.stream entero después de un punto de "limpieza" real (restaurarBorrador/
+// restaurarCheckpoint) -- buscan sólo en los hijos agregados A PARTIR de un índice capturado justo
+// antes de esa reconstrucción (el.stream.children.length en ese momento), que es exactamente lo
+// que un navegador real mostraría: sólo lo que se pintó después de la limpieza.
+const DERIVACION01_BUSCADORES_JS = `
+  function __buscarEnRango(nodos, prefijo, vistos){
+    vistos = vistos || new Set();
+    for(var i=0;i<nodos.length;i++){
+      var nodo = nodos[i];
+      if(!nodo || vistos.has(nodo)) continue;
+      vistos.add(nodo);
+      if(nodo.className && String(nodo.className).indexOf('btn') > -1 && nodo.textContent && nodo.textContent.indexOf(prefijo) === 0 && typeof nodo.onclick === 'function') return nodo;
+      var enHijos = __buscarEnRango(nodo.children || [], prefijo, vistos);
+      if(enHijos) return enHijos;
+    }
+    return null;
+  }
+  function __contarEnRango(nodos, prefijo, vistos){
+    vistos = vistos || new Set();
+    var n = 0;
+    for(var i=0;i<nodos.length;i++){
+      var nodo = nodos[i];
+      if(!nodo || vistos.has(nodo)) continue;
+      vistos.add(nodo);
+      if(nodo.className && String(nodo.className).indexOf('btn') > -1 && nodo.textContent && nodo.textContent.indexOf(prefijo) === 0) n++;
+      n += __contarEnRango(nodo.children || [], prefijo, vistos);
+    }
+    return n;
+  }
+`;
+const RAW_DERIVAR_URBAN = '[[DERIVAR:urban]]Este caso pertenece al dominio urbano-territorial y se beneficiaría de un diagnóstico completo en Comprender Urbanismo.';
+
+test('DERIVACION01: una derivación real ([[DERIVAR:urban]] del motor) sobrevive a "Nueva" (autoguardado NUEVACOMP02) y a la reapertura del organismo -- y se consume de verdad al abrir Urbanismo, sin reaparecer después', async () => {
+  const fetchImpl = async (recurso) => {
+    const url = String((recurso && recurso.url) ? recurso.url : recurso || '');
+    if (url.indexOf('/api/organismos') > -1) return { ok: true, status: 200, json: async () => ({ organismos: [] }), text: async () => '{}', headers: { get() { return null; } } };
+    return { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: RAW_DERIVAR_URBAN }] }) };
+  };
+  const { context, localStorage } = buildContext(fetchImpl, 'staging.comprenderai.com');
+  loadCoreScript(context);
+  await flush();
+  sembrarSesionYCreditos(localStorage);
+
+  // Emulación puntual, sólo acá, de la semántica real de `innerHTML=''` para el.stream: en un
+  // navegador real, restaurarBorrador() hace ese wipe DENTRO del mismo llamado sincrónico a
+  // abrirOrganismo() que ya pintó una tarjeta (el llamado temprano a ofrecerContinuidadUrban(), sin
+  // cambios de este corte) -- así que el nodo viejo se borra de verdad ANTES de que, con la
+  // corrección de este corte, restaurarBorrador() pinte uno nuevo al final. Sin esta emulación, la
+  // limitación ya documentada del arnés (FakeElement.innerHTML es una propiedad de texto plana sin
+  // efecto sobre .children -- ver nota junto a DERIVACION01_BUSCADORES_JS más arriba) dejaría
+  // ambos nodos "vivos" a la vez en .children dentro de un mismo llamado, dando un falso positivo
+  // de duplicación que no existe en un navegador real (a diferencia de la prueba de "Retomar" de
+  // abajo, acá los dos pintados ocurren dentro del MISMO llamado sincrónico a abrirOrganismo(), sin
+  // ningún punto intermedio donde el test pueda capturar un índice entre uno y otro). Se aplica
+  // sólo a esta instancia (el.stream) en el contexto propio de esta prueba -- no toca la clase
+  // FakeElement compartida ni ninguna otra prueba de este archivo.
+  vm.runInContext(`
+    (function(){
+      var actual = '';
+      Object.defineProperty(el.stream, 'innerHTML', {
+        configurable: true,
+        get: function(){ return actual; },
+        set: function(v){ actual = v; if(v === '') el.stream.children = []; }
+      });
+    })();
+  `, context);
+
+  vm.runInContext(`
+    state.organismo = { id: 'org-deriv-1', nombre: 'Barrio Derivación', tipo: 'ciudad', ficha: {}, principios: [], history: [] };
+    state.history = [];
+    state.principios = [];
+  `, context);
+
+  // Turno real: el motor emite [[DERIVAR:urban]] -- mostrarDerivacion()/marcarOrganismoDerivable()
+  // corren tal cual (nada de esto se reimplementa en la prueba).
+  await context.enviar('contame de este barrio, quiero avanzar');
+  await flush();
+
+  const orgTrasEnvio = JSON.parse(vm.runInContext(`JSON.stringify(cargarOrganismos().find(function(o){ return o.id === 'org-deriv-1'; }))`, context));
+  assert.deepEqual(orgTrasEnvio.derivable, ['urban'], 'marcarOrganismoDerivable() real persistió la derivación en el organismo, tal como hacía antes de este corte');
+
+  const tarjetaInicial = vm.runInContext(DERIVACION01_BUSCADORES_JS + `!!__buscarEnRango(el.stream.children, 'Abrir en Urbanismo →')`, context);
+  assert.equal(tarjetaInicial, true, 'mostrarDerivacion() pintó el botón apenas el motor emitió DERIVAR:urban -- sin cambios de este corte');
+
+  const historyPrevioANueva = JSON.parse(vm.runInContext('JSON.stringify(state.history)', context));
+
+  // "Nueva" real (autoguardado silencioso de NUEVACOMP02, sin cambios de este corte) ANTES de
+  // haber abierto Urbanismo -- exactamente la secuencia reportada por Javier.
+  vm.runInContext('alPulsarBtnNueva()', context);
+  await flush();
+  assert.equal(vm.runInContext('state.organismo', context), null, 'nuevaSesion() corrió tras el autoguardado, sin cambios de este corte');
+
+  // Reapertura real del organismo. Gracias a la emulación de innerHTML='' agregada arriba,
+  // el.stream.children ahora refleja de verdad sólo lo actualmente pintado (como en un navegador
+  // real), así que alcanza con buscar en el árbol completo -- sin necesidad de índices ni slicing.
+  vm.runInContext(`abrirOrganismo(cargarOrganismos().find(function(o){ return o.id === 'org-deriv-1'; }));`, context);
+  await flush();
+
+  const historyTrasReabrir = JSON.parse(vm.runInContext('JSON.stringify(state.history)', context));
+  assert.deepEqual(historyTrasReabrir, historyPrevioANueva, 'sanity: la conversación se recuperó íntegra (restaurarBorrador() real, sin cambios) -- mismo escenario exacto que reportó Javier');
+  assert.equal(vm.runInContext('state.modoUrban', context), false, 'la reconstrucción de la tarjeta nunca activa el modo Urban en el chat -- sólo ofrece la puerta, no reactiva ninguna lectura');
+
+  const trasReabrir = vm.runInContext(DERIVACION01_BUSCADORES_JS + `
+    (function(){
+      var b = __buscarEnRango(el.stream.children, 'Abrir en Urbanismo →');
+      globalThis.__btnDerivTrasReabrir = b;
+      return { presente: !!b, conteo: __contarEnRango(el.stream.children, 'Abrir en Urbanismo →') };
+    })()
+  `, context);
+  assert.equal(trasReabrir.presente, true, 'CORREGIDO: el botón "Abrir en Urbanismo →" sigue disponible tras Nueva + reapertura -- antes de DERIVACION01, restaurarBorrador() borraba la tarjeta que ofrecerContinuidadUrban() acababa de pintar, en el mismo tick, y nada la reemplazaba después');
+  assert.equal(trasReabrir.conteo, 1, 'no se duplica: exactamente un botón nuevo, pintado después de la reconstrucción real de la conversación');
+
+  // Consumo real: abrir Urbanismo de verdad desde la propia tarjeta (plan "gratis" por defecto ya
+  // habilita Urbanismo en prueba -- moduloHabilitado('urbanismo') real, sin mockear).
+  assert.equal(vm.runInContext(`moduloHabilitado('urbanismo')`, context), true, 'sanity: plan por defecto SÍ habilita Urbanismo (prueba en gratis)');
+  vm.runInContext('__btnDerivTrasReabrir.onclick()', context);
+  await flush();
+
+  const orgTrasClick = JSON.parse(vm.runInContext(`JSON.stringify(cargarOrganismos().find(function(o){ return o.id === 'org-deriv-1'; }))`, context));
+  assert.deepEqual(orgTrasClick.derivable, [], 'CONSUMIDA: tras abrir realmente Urbanismo desde la tarjeta, consumirDerivablePendiente() real retiró la derivación de org.derivable');
+
+  // Reabrir una vez más: la derivación ya consumida no debe reaparecer.
+  vm.runInContext(`abrirOrganismo(cargarOrganismos().find(function(o){ return o.id === 'org-deriv-1'; }));`, context);
+  await flush();
+  const trasConsumo = vm.runInContext(DERIVACION01_BUSCADORES_JS + `!!__buscarEnRango(el.stream.children, 'Abrir en Urbanismo →')`, context);
+  assert.equal(trasConsumo, false, 'no reaparece: una derivación ya consumida no vuelve a ofrecerse en una reapertura posterior');
+});
+
+test('DERIVACION01: si el plan no habilita Urbanismo, el clic en "Abrir en Urbanismo →" no consume la derivación pendiente -- respeta plan/permisos/módulos habilitados', async () => {
+  const fetchImpl = async (recurso) => {
+    const url = String((recurso && recurso.url) ? recurso.url : recurso || '');
+    if (url.indexOf('/api/organismos') > -1) return { ok: true, status: 200, json: async () => ({ organismos: [] }), text: async () => '{}', headers: { get() { return null; } } };
+    return { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: RAW_DERIVAR_URBAN }] }) };
+  };
+  const { context, localStorage } = buildContext(fetchImpl, 'staging.comprenderai.com');
+  loadCoreScript(context);
+  await flush();
+  sembrarSesionYCreditos(localStorage);
+
+  vm.runInContext(`
+    state.organismo = { id: 'org-deriv-bloqueado', nombre: 'Barrio Bloqueado', tipo: 'ciudad', ficha: {}, principios: [], history: [] };
+    state.history = [];
+    state.principios = [];
+  `, context);
+  await context.enviar('contame de este barrio');
+  await flush();
+
+  // Plan real fuera de ORDEN_PLANES (cuenta suspendida/vencida) -- moduloHabilitado('urbanismo')
+  // real debe bloquear, sin mockear la función.
+  localStorage.setItem('ag_core_plan', 'suspendido');
+  assert.equal(vm.runInContext(`moduloHabilitado('urbanismo')`, context), false, 'sanity: con este plan, moduloHabilitado() real bloquea Urbanismo');
+
+  const boton = vm.runInContext(DERIVACION01_BUSCADORES_JS + `
+    (function(){
+      var b = __buscarEnRango(el.stream.children, 'Abrir en Urbanismo →');
+      globalThis.__btnDerivBloqueado = b;
+      return !!b;
+    })()
+  `, context);
+  assert.ok(boton, 'sanity: la tarjeta se pintó igual (mostrarDerivacion() no gatea por plan, sólo abrirModulo() lo hace)');
+
+  vm.runInContext('__btnDerivBloqueado.onclick()', context);
+  await flush();
+
+  const orgTrasClick = JSON.parse(vm.runInContext(`JSON.stringify(cargarOrganismos().find(function(o){ return o.id === 'org-deriv-bloqueado'; }))`, context));
+  assert.deepEqual(orgTrasClick.derivable, ['urban'], 'la derivación pendiente NO se consume si el plan no permite abrir Urbanismo -- sigue disponible para cuando la cuenta tenga el plan que le falta');
+});
+
+test('DERIVACION01: la reconstrucción también funciona vía checkpoint ("Recuerdo guardado" -> "Retomar", restaurarCheckpoint() real, sin borrador de por medio)', async () => {
+  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ organismos: [] }), text: async () => '{}', headers: { get() { return null; } } });
+  const { context, localStorage } = buildContext(fetchImpl, 'staging.comprenderai.com');
+  loadCoreScript(context);
+  await flush();
+  sembrarSesionYCreditos(localStorage);
+
+  // Mismo patrón que ya usa la prueba "NUEVACOMP02: con conversación significativa..." para
+  // garantizar que o.borrador NUNCA se setea (sesión sembrada a mano, sin pasar por enviar()) --
+  // así la recuperación de "Abrir en Urbanismo →" depende EXCLUSIVAMENTE de restaurarCheckpoint(),
+  // no de restaurarBorrador() (ya cubierto por la prueba anterior).
+  vm.runInContext(`
+    state.organismo = { id: 'org-deriv-chk', nombre: 'Barrio Checkpoint', tipo: 'ciudad', ficha: { funcion: 'orientar' }, principios: [], history: [] };
+    state.history = [{role:'user', content:'hola'}, {role:'assistant', content:'ok, avancemos'}];
+    state.principios = [];
+  `, context);
+  // marcarOrganismoDerivable() real -- simula que el motor ya había emitido DERIVAR:urban en un
+  // turno anterior de esta misma sesión (no hace falta repetir el turno completo: la función bajo
+  // prueba acá es la reconstrucción al reabrir, no la emisión).
+  vm.runInContext(`marcarOrganismoDerivable(state.organismo, 'urban')`, context);
+  await flush();
+
+  const orgSembrado = JSON.parse(vm.runInContext(`JSON.stringify(cargarOrganismos().find(function(o){ return o.id === 'org-deriv-chk'; }))`, context));
+  assert.deepEqual(orgSembrado.derivable, ['urban']);
+  assert.equal(!!orgSembrado.borrador, false, 'a propósito, sin borrador -- la recuperación de abajo depende sólo del checkpoint');
+
+  vm.runInContext('alPulsarBtnNueva()', context);
+  await flush();
+  assert.equal(vm.runInContext('state.organismo', context), null, 'nuevaSesion() corrió tras el autoguardado (crea el checkpoint real)');
+
+  vm.runInContext(`abrirOrganismo(cargarOrganismos().find(function(o){ return o.id === 'org-deriv-chk'; }));`, context);
+  await flush();
+  assert.equal(vm.runInContext('state.history.length', context), 0, 'reabrir solo no restaura nada todavía -- "Recuerdo guardado" nunca restaura sola');
+
+  const antesDeRetomar = vm.runInContext(DERIVACION01_BUSCADORES_JS + `!!__buscarEnRango(el.stream.children, 'Abrir en Urbanismo →')`, context);
+  assert.equal(antesDeRetomar, true, 'la tarjeta ya está disponible ANTES de retomar el checkpoint -- pintada por la llamada temprana de abrirOrganismo(), que acá todavía no se borró (restaurarBorrador() no corrió, no había nada que reproducir)');
+
+  const bRetomarEncontrado = vm.runInContext(`
+    (function(){
+      function buscar(nodo, vistos){
+        vistos = vistos || new Set();
+        if(vistos.has(nodo)) return null; vistos.add(nodo);
+        if(nodo.textContent && nodo.textContent.indexOf('Retomar en') === 0 && typeof nodo.onclick === 'function') return nodo;
+        for(var i=0;i<(nodo.children||[]).length;i++){ var r = buscar(nodo.children[i], vistos); if(r) return r; }
+        return null;
+      }
+      globalThis.__bRetomarDeriv = buscar(el.stream);
+      return !!globalThis.__bRetomarDeriv;
+    })()
+  `, context);
+  assert.ok(bRetomarEncontrado, 'el checkpoint real ofrece "Retomar"');
+  // Índice capturado JUSTO ANTES del clic en "Retomar" -- restaurarCheckpoint() hace
+  // `el.stream.innerHTML = ''` para reconstruir la conversación, pero en este harness fake
+  // .innerHTML='' no vacía realmente .children (ver comentario junto a DERIVACION01_BUSCADORES_JS
+  // más arriba): todo lo pintado ANTES de este índice (la tarjeta original de abrirOrganismo(),
+  // ya verificada en `antesDeRetomar` de arriba) sigue viviendo en el array aunque un navegador
+  // real ya la habría borrado. Sólo lo pintado A PARTIR de este índice refleja lo que un navegador
+  // real mostraría tras el wipe-and-rebuild de restaurarCheckpoint().
+  const indiceAntesDeRetomar = vm.runInContext('el.stream.children.length', context);
+  vm.runInContext('__bRetomarDeriv.onclick()', context);
+  await flush();
+
+  const trasRetomar = vm.runInContext(DERIVACION01_BUSCADORES_JS + `
+    (function(){
+      var rango = el.stream.children.slice(${indiceAntesDeRetomar});
+      return { presente: !!__buscarEnRango(rango, 'Abrir en Urbanismo →'), conteo: __contarEnRango(rango, 'Abrir en Urbanismo →') };
+    })()
+  `, context);
+  assert.equal(trasRetomar.presente, true, 'CORREGIDO: restaurarCheckpoint() (vía "Retomar") también reconstruye la tarjeta -- antes de DERIVACION01 quedaba borrada por el mismo `el.stream.innerHTML = \'\'` que restaurarCheckpoint() hace para reconstruir la conversación');
+  assert.equal(trasRetomar.conteo, 1, 'no se duplica tampoco en este camino');
+});
+
+test('DERIVACION01: si el motor vuelve a emitir una derivación válida después de que la anterior ya se consumió, el botón vuelve a aparecer', async () => {
+  const fetchImpl = async (recurso) => {
+    const url = String((recurso && recurso.url) ? recurso.url : recurso || '');
+    if (url.indexOf('/api/organismos') > -1) return { ok: true, status: 200, json: async () => ({ organismos: [] }), text: async () => '{}', headers: { get() { return null; } } };
+    return { ok: true, status: 200, json: async () => ({ content: [{ type: 'text', text: RAW_DERIVAR_URBAN }] }) };
+  };
+  const { context, localStorage } = buildContext(fetchImpl, 'staging.comprenderai.com');
+  loadCoreScript(context);
+  await flush();
+  sembrarSesionYCreditos(localStorage);
+
+  vm.runInContext(`
+    state.organismo = { id: 'org-deriv-reemitida', nombre: 'Barrio Reemisión', tipo: 'ciudad', ficha: {}, principios: [], history: [] };
+  `, context);
+  // Simula una derivación anterior ya consumida (marcarOrganismoDerivable + consumirDerivablePendiente
+  // reales, sin pasar por un turno completo -- ambas funciones ya están certificadas por separado).
+  vm.runInContext(`marcarOrganismoDerivable(state.organismo, 'urban')`, context);
+  vm.runInContext(`consumirDerivablePendiente(state.organismo.id, 'urban')`, context);
+  const orgPreviaConsumida = JSON.parse(vm.runInContext(`JSON.stringify(cargarOrganismos().find(function(o){ return o.id === 'org-deriv-reemitida'; }))`, context));
+  assert.deepEqual(orgPreviaConsumida.derivable, [], 'sanity: la derivación anterior ya está consumida');
+
+  // Nueva sesión real sobre el mismo organismo (state.derivarAvisado se resetea a false, como
+  // siempre) y el motor vuelve a emitir DERIVAR:urban -- comportamiento legítimo y ya certificado
+  // de marcarOrganismoDerivable() (no duplica, pero sí re-agrega si ya no está).
+  vm.runInContext(`
+    state.organismo = cargarOrganismos().find(function(o){ return o.id === 'org-deriv-reemitida'; });
+    state.history = [];
+    state.principios = [];
+    state.derivarAvisado = false;
+  `, context);
+  await context.enviar('retomemos, quiero avanzar de nuevo');
+  await flush();
+
+  const orgTrasReemision = JSON.parse(vm.runInContext(`JSON.stringify(cargarOrganismos().find(function(o){ return o.id === 'org-deriv-reemitida'; }))`, context));
+  assert.deepEqual(orgTrasReemision.derivable, ['urban'], 'una nueva emisión real de DERIVAR:urban vuelve a marcar la derivación como pendiente');
+  const tarjetaReemitida = vm.runInContext(DERIVACION01_BUSCADORES_JS + `!!__buscarEnRango(el.stream.children, 'Abrir en Urbanismo →')`, context);
+  assert.equal(tarjetaReemitida, true, 'y el botón vuelve a aparecer de verdad, en el mismo turno');
+});
+
+test('DERIVACION01: la derivación pendiente de un organismo no contamina a otro -- reabrir un organismo sin derivación no ofrece "Abrir en Urbanismo →" aunque exista otro con la derivación pendiente', async () => {
+  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ organismos: [] }), text: async () => '{}', headers: { get() { return null; } } });
+  const { context, localStorage } = buildContext(fetchImpl, 'staging.comprenderai.com');
+  loadCoreScript(context);
+  await flush();
+  sembrarSesionYCreditos(localStorage);
+
+  vm.runInContext(`
+    guardarOrganismo({ id: 'org-deriv-A', nombre: 'Organismo A (con derivación)', tipo: 'ciudad', ficha: {}, principios: [], history: [] });
+    guardarOrganismo({ id: 'org-deriv-B', nombre: 'Organismo B (sin derivación)', tipo: 'ciudad', ficha: {}, principios: [], history: [] });
+    marcarOrganismoDerivable(cargarOrganismos().find(function(o){ return o.id === 'org-deriv-A'; }), 'urban');
+  `, context);
+  await flush();
+
+  vm.runInContext(`abrirOrganismo(cargarOrganismos().find(function(o){ return o.id === 'org-deriv-B'; }));`, context);
+  await flush();
+  const enB = vm.runInContext(DERIVACION01_BUSCADORES_JS + `!!__buscarEnRango(el.stream.children, 'Abrir en Urbanismo →')`, context);
+  assert.equal(enB, false, 'el organismo B, sin derivación propia, no ofrece la tarjeta de A -- sin contaminación entre organismos');
+
+  vm.runInContext(`abrirOrganismo(cargarOrganismos().find(function(o){ return o.id === 'org-deriv-A'; }));`, context);
+  await flush();
+  const enA = vm.runInContext(DERIVACION01_BUSCADORES_JS + `!!__buscarEnRango(el.stream.children, 'Abrir en Urbanismo →')`, context);
+  assert.equal(enA, true, 'y el organismo A, con su propia derivación pendiente, sí la ofrece -- cada uno con su propio estado, sin cruzarse');
+});
