@@ -16365,6 +16365,28 @@ function marcarOrganismoDerivable(org, tipo){
   guardarOrganismo(org);
 }
 
+// DERIVACION01 (11/09): retira `tipo` de org.derivable una vez que el usuario efectivamente abrió
+// el módulo real de la especialidad DESDE una tarjeta de derivación pendiente (mostrarDerivacion o
+// ofrecerContinuidadUrban) -- deja de ofrecerse como "acción pendiente" ya consumida, así no
+// reaparece en la próxima reapertura (requisito explícito: "una derivación consumida... no debe
+// reaparecer"). Relee cargarOrganismos() en vez de mutar el `org` que llegó por clausura (mismo
+// criterio de organismoActualizado()/OMV-F5.2: cualquier referencia capturada antes puede estar
+// desactualizada) -- nunca opera sobre state.organismo directamente, porque para cuando el usuario
+// hace clic, el organismo activo puede ya ser otro (mismo principio de identidad estable que ya
+// usa marcarOrganismoDerivable() vía clausura). No toca ninguna otra cosa: el acceso general
+// "Abrir en Urbanismo"/"Abrir en Negocios" de Ficha (esUrbano/esNegocio, ver mostrarFicha()) NO
+// depende de "pendiente" sino de elegibilidad permanente del organismo (derivable O tipo) -- eso
+// nunca se consume, es lo mismo que ya hacía antes de este corte.
+function consumirDerivablePendiente(orgId, tipo){
+  if(!orgId) return;
+  var org = cargarOrganismos().find(function(x){ return x.id === orgId; });
+  if(!org || !org.derivable) return;
+  var idx = org.derivable.indexOf(tipo);
+  if(idx === -1) return;
+  org.derivable.splice(idx, 1);
+  guardarOrganismo(org);
+}
+
 // OMV-F3 (22/08): recibe/captura el organismo que originó la derivación -- nunca lee
 // state.organismo en el momento del clic. Si para entonces el usuario ya cambió de organismo
 // activo (u.g. abrió otro desde Memoria), el handoff a Urbanismo tiene que seguir siendo ESTE
@@ -16390,7 +16412,16 @@ function mostrarDerivacion(orgOrigen){
   const bt = document.createElement('button'); bt.className = 'btn primary'; bt.textContent = 'Abrir en Urbanismo →';
   // abrirModulo ya gatea por plan: si no está habilitado, muestra la tarjeta de compra.
   // orgId queda capturado por clausura -- ver comentario de arriba.
-  bt.onclick = function(){ abrirModulo('urbanismo', orgId); };
+  // DERIVACION01 (11/09): sólo se consume la derivación pendiente si el plan realmente la deja
+  // abrir -- si moduloHabilitado('urbanismo') es false, abrirModulo() va a mostrar la tarjeta de
+  // compra en vez de navegar, y la acción pendiente tiene que seguir disponible para cuando la
+  // cuenta tenga el plan que le falta (requisito explícito: "deben respetarse plan, permisos y
+  // módulos habilitados"). Nunca decide por sí sola si navega o no -- eso lo sigue haciendo
+  // abrirModulo(), tal cual.
+  bt.onclick = function(){
+    if(moduloHabilitado('urbanismo')) consumirDerivablePendiente(orgId, 'urban');
+    abrirModulo('urbanismo', orgId);
+  };
   row.appendChild(bt);
   d.appendChild(row);
   el.stream.appendChild(d);
@@ -16419,7 +16450,12 @@ function ofrecerContinuidadUrban(org){
   const row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '8px';
   const bt = document.createElement('button'); bt.className = 'btn'; bt.textContent = 'Abrir en Urbanismo →';
   var orgId = org.id;
-  bt.onclick = function(){ abrirModulo('urbanismo', orgId); };
+  // DERIVACION01 (11/09): mismo criterio de consumo-sólo-si-el-plan-lo-permite que en
+  // mostrarDerivacion() (ver comentario ahí) -- misma función, mismo gate.
+  bt.onclick = function(){
+    if(moduloHabilitado('urbanismo')) consumirDerivablePendiente(orgId, 'urban');
+    abrirModulo('urbanismo', orgId);
+  };
   row.appendChild(bt);
   d.appendChild(row);
   el.stream.appendChild(d);
@@ -17462,6 +17498,16 @@ function restaurarBorrador(o){
   // quedaba para siempre arriba de la conversación ya retomada. El propio historial reproducido
   // justo encima ya deja evidente que se sigue donde quedó -- no hace falta una segunda
   // explicación permanente de interfaz para algo que el diálogo mismo ya muestra.
+  // DERIVACION01 (11/09): causa raíz del defecto reportado -- abrirOrganismo() ya llamaba a
+  // ofrecerContinuidadUrban(org) antes de intentar restaurarBorrador(org), pero esta última
+  // hace `el.stream.innerHTML = ''` un poco más arriba (para reconstruir la conversación desde
+  // cero) y eso borra, en el mismo tick de JS, la tarjeta "Abrir en Urbanismo →" recién pintada
+  // -- el usuario nunca llega a verla (no hay repintado del navegador entre medio). Se repite acá
+  // la misma llamada, AHORA QUE el.stream ya tiene el historial reproducido y no se va a volver a
+  // limpiar -- mismo criterio ya usado por abrirOrganismo() (no-op si org.derivable no tiene
+  // 'urban', no reactiva ninguna lectura cerrada, no muta nada: sólo pinta una tarjeta si
+  // corresponde). Ver DERIVACION01_INFORME.md.
+  ofrecerContinuidadUrban(o);
   scrollBottom();
   return true;
 }
@@ -17752,6 +17798,13 @@ function restaurarCheckpoint(org, modulo, indice){
   // usando `cardSesionesAnteriores()`/`cardRecuerdoGuardado()`, donde el nombre del módulo SÍ hace
   // falta para poder elegir qué restaurar (`ofrecerRecuerdoGuardado()`/`cardSesionesAnteriores()`
   // requieren una decisión humana explícita y no se tocaron).
+  // DERIVACION01 (11/09): mismo defecto y misma corrección que en restaurarBorrador() (ver el
+  // comentario largo ahí) -- restaurarCheckpoint() también hace `el.stream.innerHTML = ''` más
+  // arriba, así que cualquier tarjeta de continuidad pintada ANTES de llamar a esta función (el
+  // caso real: "Recuerdo guardado" -> "Retomar", o "Sesiones anteriores" -> "Restaurar", ambas
+  // disparadas después de que abrirOrganismo() ya pintó la tarjeta) queda borrada. Se reconstruye
+  // acá, con el mismo no-op si no corresponde.
+  ofrecerContinuidadUrban(org);
   scrollBottom();
   return true;
 }
