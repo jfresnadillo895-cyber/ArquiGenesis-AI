@@ -496,6 +496,21 @@ header header .cai-ham{flex-shrink:0}
   function borrar(){
     try{ localStorage.removeItem(LLAVE); }catch(e){}
     try{ localStorage.removeItem('ag_core_saldo'); }catch(e){}
+    /* AISLAMIENTO03 (11/09) -- propagación de AISLAMIENTO01 (index.html, 08/09): esta página
+       tiene su propio cierre de sesión (cerrarSesionComprender -> borrar) y su propio 401, y
+       ninguno de los dos limpiaba nada de esto. Confirmado con ejecución real (harness
+       AISLAMIENTO03, código real de este archivo, sin reimplementar): tras cerrar sesión acá,
+       una segunda cuenta que entra en el mismo navegador hereda organismos/propuestas/sesiones/
+       opiniones/contexto pendiente de la cuenta anterior. Se borran las mismas claves-Core que ya
+       borra index.html desde AISLAMIENTO01, más las que son handoff/contenido propio de ESTA
+       página (no las que son preferencia de este navegador). */
+    try{ localStorage.removeItem('ag_core_organismos'); }catch(e){}
+    try{ localStorage.removeItem('ag_core_propuestas'); }catch(e){}
+    try{ localStorage.removeItem('ag_core_sesiones'); }catch(e){}
+    try{ localStorage.removeItem('ag_marco_pendiente'); }catch(e){}
+    try{ localStorage.removeItem('ag_capa_contexto_pendiente_urbanismo'); }catch(e){}
+    try{ localStorage.removeItem('ag_export_pendiente_incorporar'); }catch(e){}
+    try{ localStorage.removeItem('ag_core_opiniones'); }catch(e){}
   }
   function desdeRespuesta(d){
     if(!d || !d.access_token) return null;

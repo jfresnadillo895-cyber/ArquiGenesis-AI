@@ -84,6 +84,18 @@
   function borrar(){
     try{ localStorage.removeItem(LLAVE); }catch(e){}
     try{ localStorage.removeItem('ag_core_saldo'); }catch(e){}
+    /* AISLAMIENTO03 (11/09) -- este candado es la plantilla de origen que gen_deploy.py inyecta
+       en index.html/urbanismo.html/negocios.html/contextos.html. index.html ya había divergido
+       de esta plantilla (AISLAMIENTO01, 08/09) borrando también ag_core_organismos/
+       ag_core_propuestas/ag_core_sesiones al cerrar sesión, porque dejarlas significa que la
+       cuenta que entre después, en el mismo navegador, hereda organismos/propuestas/sesiones de
+       la cuenta anterior. Esta plantilla nunca había recibido ese mismo ajuste, así que cada
+       página que parte de ella (salvo index.html, ya corregido aparte) seguía naciendo sin él.
+       Se agrega acá el mismo mínimo ya vigente en index.html -- no las claves que son
+       preferencia de este navegador. */
+    try{ localStorage.removeItem('ag_core_organismos'); }catch(e){}
+    try{ localStorage.removeItem('ag_core_propuestas'); }catch(e){}
+    try{ localStorage.removeItem('ag_core_sesiones'); }catch(e){}
   }
   function desdeRespuesta(d){
     if(!d || !d.access_token) return null;
