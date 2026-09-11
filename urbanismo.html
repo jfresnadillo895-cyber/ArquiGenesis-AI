@@ -3465,7 +3465,11 @@ function nuevaCiudad(){
     alert('El análisis está tardando más de lo esperado. Podés seguir esperando o intentarlo nuevamente en unos minutos.');
   }, 90000);
   if(!permitirOperacion('diagnostico')){ clearTimeout(timeoutId); mostrarCarga(false); return; }
-  llamarAPI(ciudad.trim(),'','','')
+  // URB-ROBUST 04 (11/09): mismo reintento automático y silencioso que ejecutar() -- ver el
+  // comentario junto a la definición de llamarAPIConReintentoUrbanismo() más abajo. nuevaCiudad()
+  // comparte el mismo llamarAPI() y por lo tanto el mismo riesgo puntual de fase cortada, así que
+  // queda con el mismo criterio, sin agregar ningún camino nuevo.
+  llamarAPIConReintentoUrbanismo(ciudad.trim(),'','','')
     .then(()=>clearTimeout(timeoutId))
     .catch(e=>{clearTimeout(timeoutId);mostrarCarga(false);alert(mensajeErrorUrbanismo(e).replace(/<[^>]*>/g,''));})
     .finally(()=>mostrarCarga(false));
@@ -3526,6 +3530,29 @@ function cerrarPasivo(inc){
   ejecutar();
 }
 
+/* URB-ROBUST 04 (11/09): un solo reintento automático y silencioso antes de mostrarle cualquier
+   error al usuario. Hasta este corte, la recuperación de una fase que el servidor ya había
+   resuelto pero el cliente no llegó a leer completa (el mismo fenómeno de siempre: 200 recibido,
+   cuerpo cortado después -- ver URB-ROBUST 02A/03 más abajo) sólo se disparaba si el usuario
+   veía el error y clickeaba "↻ Retomar análisis" a mano. El mecanismo en sí ya funciona --
+   confirmado por Javier en un caso real, donde retomar a mano resolvió el análisis -- pero exigía
+   que él viera primero una falla. Decisión de Javier (11/09, acotada a este archivo): Urbanismo
+   es una de las puertas principales del ecosistema y debe sentirse fluido, así que ese primer
+   reintento pasa a hacerse solo, detrás del mismo indicador de carga, sin mostrar nada; recién si
+   ESE reintento también falla se muestra el error de siempre, con el botón manual intacto como
+   última instancia. No se agrega ningún llamado nuevo ni se toca llamarAPI(): esta función sólo
+   envuelve la llamada de siempre y reusa, sin cambios, lo que llamarAPI() ya sabe reaprovechar
+   (checkpoint local de items/nucleo, y el resultado ya persistido en el servidor para la fase que
+   falló -- ver hayCheckpointResumible()/intentarRecuperarFaseUrbanismo() más abajo). */
+async function llamarAPIConReintentoUrbanismo(ciudad,pasivo,c2,ref){
+  try{
+    await llamarAPI(ciudad,pasivo,c2,ref);
+  }catch(ePrimerIntento){
+    console.error('URB-ROBUST 04: primer intento de llamarAPI() falló, reintentando una vez en silencio antes de mostrar error.', ePrimerIntento);
+    await llamarAPI(ciudad,pasivo,c2,ref);
+  }
+}
+
 async function ejecutar(){
   const ciudad=document.getElementById('city-inp').value.trim();
   const c2=document.getElementById('c2-txt')?.value?.trim()||'';
@@ -3550,7 +3577,7 @@ async function ejecutar(){
 
   if(!permitirOperacion('diagnostico')){ clearTimeout(timeoutId); mostrarCarga(false); setSt(false); return; }
   try{
-    await llamarAPI(ciudad,pasivoTxt,c2,'');
+    await llamarAPIConReintentoUrbanismo(ciudad,pasivoTxt,c2,'');
     clearTimeout(timeoutId);
   }catch(e){
     clearTimeout(timeoutId);
