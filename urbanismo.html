@@ -95,6 +95,31 @@
   function borrar(){
     try{ localStorage.removeItem(LLAVE); }catch(e){}
     try{ localStorage.removeItem('ag_core_saldo'); }catch(e){}
+    /* AISLAMIENTO03 (11/09) -- propagación de AISLAMIENTO01 (index.html, 08/09): esta página
+       tiene su propio cierre de sesión (cerrarSesionComprender -> borrar) y su propio 401, y
+       ninguno de los dos limpiaba nada de esto. Confirmado con ejecución real (harness
+       AISLAMIENTO03, código real de este archivo, sin reimplementar): tras cerrar sesión acá,
+       una segunda cuenta que entra en el mismo navegador ve, vía cargarOrganismosNegocio()-
+       equivalente y el handoff del Core, organismos/propuestas/sesiones/checkpoint/identidad
+       CX5-U/opiniones reales de la cuenta anterior. Se borran las mismas claves-Core que ya
+       borra index.html desde AISLAMIENTO01, más las que son organismo/historial/handoff propios
+       de ESTA página (no las que son preferencia de este navegador). ag_urb_ret01_envelopes_v1
+       queda afuera a propósito: su consumidor en index.html (rettransport01ConsumirPendientes)
+       sólo entrega un item si el organismId llega en la lista YA cargada de la cuenta activa, así
+       que un envelope de la cuenta anterior nunca se resuelve bajo la cuenta nueva -- no hace
+       falta borrarlo para que quede aislado. ag_urb_cx5u_identidades (el catálogo viejo) tampoco
+       se toca: ya es dato legacy que el propio código nunca vuelve a leer (ver comentario CX5-U-R1
+       más abajo), así que no expone nada. */
+    try{ localStorage.removeItem('ag_core_organismos'); }catch(e){}
+    try{ localStorage.removeItem('ag_core_propuestas'); }catch(e){}
+    try{ localStorage.removeItem('ag_core_sesiones'); }catch(e){}
+    try{ localStorage.removeItem('ag_marco_pendiente'); }catch(e){}
+    try{ localStorage.removeItem('ag_capa_contexto_pendiente_urbanismo'); }catch(e){}
+    try{ localStorage.removeItem('ag_export_pendiente_incorporar'); }catch(e){}
+    try{ localStorage.removeItem('ag_core_opiniones'); }catch(e){}
+    try{ localStorage.removeItem('ag_urb_organismo_activo_v1'); }catch(e){}
+    try{ localStorage.removeItem('ag_urb_checkpoint'); }catch(e){}
+    try{ localStorage.removeItem('ag_urb_cx5u_identidad_activa_v2'); }catch(e){}
   }
   function desdeRespuesta(d){
     if(!d || !d.access_token) return null;
