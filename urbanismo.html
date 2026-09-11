@@ -8935,7 +8935,15 @@ const CRED_PLANES = {
   estudio:     { nombre:'Pro · Estudio', creditos: 4500, ventana:'mes' },
   magister:    { nombre:'Magister',      creditos: 9000, ventana:'mes' }   /* 03/08: faltaba -- un suscriptor Magister caia en 'gratis' aca */
 };
-const CRED_COSTO = { diagnostico: 12, proyectivo: 8, refinamiento: 3, campo: 12 };
+// CAP-C1D (11/09): se saca 'proyectivo' de esta tabla -- decisión de Javier tras auditar el
+// hallazgo. El Abordaje Proyectivo nunca se cobró como operación aparte: llamarAPI() lo genera
+// siempre, sin excepción, dentro del mismo diagnóstico (ver receptivos_espiral en llamarAPI(),
+// urbanismo.html), bajo el único permitirOperacion('diagnostico') de 12 créditos -- ningún lugar
+// del archivo llamaba credAlcanza('proyectivo')/credConsumir('proyectivo'). Mantener la entrada
+// acá y en la tarjeta de créditos (credTarjeta(), más abajo) prometía un cobro de 8 créditos que
+// nunca ocurría. No cambia lo que se le cobra al usuario -- 12 créditos siguen cubriendo el
+// análisis completo, diagnóstico y proyectivo incluidos, como ya venía pasando en los hechos.
+const CRED_COSTO = { diagnostico: 12, refinamiento: 3, campo: 12 };
 /* D-06 · Se saco "Recargar" (29/07): era un simulacro que sumaba creditos directo en
    localStorage sin cobrar nada -- mas grave que el equivalente en el Core (ahi al menos
    intentaba un pago real, aunque tambien roto). CRED_RECARGA y credRecargar() se sacaron
@@ -8999,7 +9007,9 @@ function credTarjeta(){
   const p=document.createElement('p');
   p.textContent = 'Plan ' + c.plan.nombre + ' · Capacidad disponible · ' + pct + ' %, se renueva cada ' + c.renueva + '.';
   card.appendChild(h); card.appendChild(p);
-  const filas = [['Diagnóstico completo', CRED_COSTO.diagnostico],['Abordaje proyectivo', CRED_COSTO.proyectivo],['Refinamiento', CRED_COSTO.refinamiento]];
+  // CAP-C1D (11/09): 'Abordaje proyectivo' se saca de esta lista -- ver el comentario junto a
+  // CRED_COSTO más arriba. El diagnóstico ya lo incluye siempre, sin cobro aparte.
+  const filas = [['Diagnóstico completo (incluye Abordaje Proyectivo)', CRED_COSTO.diagnostico],['Refinamiento', CRED_COSTO.refinamiento]];
   for(const f of filas){
     const d=document.createElement('div');
     d.style.cssText='display:flex;justify-content:space-between;font-size:13px;color:#5C6B7D;padding:7px 0;border-bottom:1px solid #E2DFD8';
