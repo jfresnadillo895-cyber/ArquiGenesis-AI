@@ -3474,17 +3474,31 @@ function epistemicAdapter(){
 }
 
 var STAGING_HOSTNAME_INTEGRACION_EPISTEMICA = 'staging.comprenderai.com';
+/* PROMOAPP01 (12/09): autorizado por Javier -- se promueven a producción tanto Integración
+   Epistémica como 122.31, revirtiendo puntualmente la restricción "sólo staging, sin producción
+   ni main" que habíamos dejado anotada el 08/09 para 122.31 (decisión consciente, reconfirmada
+   hoy). El mecanismo elegido es sumar un segundo host habilitado, no sacar el gate: cualquier
+   otro host (local, previews de Vercel, dominios futuros) sigue sin ver ninguno de los dos
+   sistemas. STAGING_HOSTNAME_INTEGRACION_EPISTEMICA se deja intacto (sigue siendo el host de
+   staging real, usado tal cual en hostHabilitadoIntegracionEpistemica() de abajo) para no romper
+   ninguna referencia existente ni su nombre, que sigue siendo preciso. */
+var HOSTNAME_APP_PRODUCCION_INTEGRACION_EPISTEMICA = 'app.comprenderai.com';
+function hostHabilitadoIntegracionEpistemica(){
+  return location.hostname === STAGING_HOSTNAME_INTEGRACION_EPISTEMICA ||
+         location.hostname === HOSTNAME_APP_PRODUCCION_INTEGRACION_EPISTEMICA;
+}
 var PREF_INTEGRACION_EPISTEMICA_KEY = 'ag_core_pref_integracion_epistemica_staging';
 function preferenciaIntegracionEpistemicaHabilitada(){
   try{ return localStorage.getItem(PREF_INTEGRACION_EPISTEMICA_KEY) === '1'; }catch(e){ return false; }
 }
-/* §15: las TRES condiciones simultáneas -- host de staging exacto, preferencia local de ensayo, y
-   sesión válida. En cualquier otro host (incluido app.comprenderai.com) el valor efectivo es
-   SIEMPRE false, aunque la preferencia esté encendida. tokenVigente() es el mismo camino
-   autenticado que ya usa el resto de la aplicación (sincronizarSaldo(), el envoltorio de fetch
-   más abajo) -- no se inventa un segundo mecanismo de sesión. */
+/* §15: las TRES condiciones simultáneas -- host habilitado (staging o, desde PROMOAPP01,
+   producción), preferencia local de ensayo, y sesión válida. En cualquier OTRO host (local,
+   previews) el valor efectivo sigue SIEMPRE false, aunque la preferencia esté encendida.
+   tokenVigente() es el mismo camino autenticado que ya usa el resto de la aplicación
+   (sincronizarSaldo(), el envoltorio de fetch más abajo) -- no se inventa un segundo mecanismo
+   de sesión. */
 function integracionEpistemicaHabilitada(){
-  if(location.hostname !== STAGING_HOSTNAME_INTEGRACION_EPISTEMICA || !preferenciaIntegracionEpistemicaHabilitada()){
+  if(!hostHabilitadoIntegracionEpistemica() || !preferenciaIntegracionEpistemicaHabilitada()){
     return Promise.resolve(false);
   }
   return tokenVigente().then(function(t){ return !!t; });
@@ -3495,25 +3509,26 @@ function integracionEpistemicaHabilitada(){
    que sólo pudo haberse creado en su momento con el flag completo (incluida sesión) activo. Exigir
    una revalidación de sesión para una decisión puramente local de render sería inconsistente con
    cómo se renderiza cualquier otro dato ya cargado en memoria, y no debilita ninguna de las
-   garantías del §15: fuera de staging, o con la preferencia apagada, el valor sigue siendo
-   siempre false, ningún request se despacha, y la salida queda indistinguible del baseline 122.29. */
+   garantías del §15: fuera de los hosts habilitados, o con la preferencia apagada, el valor sigue
+   siendo siempre false, ningún request se despacha, y la salida queda indistinguible del baseline
+   122.29. */
 function integracionEpistemicaHabilitadaSync(){
-  return location.hostname === STAGING_HOSTNAME_INTEGRACION_EPISTEMICA && preferenciaIntegracionEpistemicaHabilitada();
+  return hostHabilitadoIntegracionEpistemica() && preferenciaIntegracionEpistemicaHabilitada();
 }
 
 /* ================= 122.31 · Continuidad cognitiva -- Modo Conversación / Modo Investigación ====
    Igual que integracionEpistemicaHabilitada() de arriba, TODO 122.31 vive exclusivamente en
-   STAGING_HOSTNAME_INTEGRACION_EPISTEMICA (constante reutilizada, sin duplicar) -- en cualquier
-   otro host, incluido app.comprenderai.com y cualquier deploy de producción, activo122_31() es
-   SIEMPRE false y la app se comporta byte a byte como el baseline 122.30, aunque este MISMO
-   archivo se sirviera ahí (autorizado por Javier el 08/09: "aplicar sólo en staging, sin
-   producción ni main"). No depende de integracionEpistemicaHabilitada(): 122.31 es una
-   reorganización de PRESENTACIÓN (qué se ve y cuándo), no otra puerta hacia el ledger
-   epistemológico -- ambos sistemas conviven en el mismo host de staging pero son ejes
+   hostHabilitadoIntegracionEpistemica() (staging + producción desde PROMOAPP01, constante y
+   función reutilizadas, sin duplicar) -- en cualquier OTRO host (local, previews de Vercel),
+   activo122_31() es SIEMPRE false y la app se comporta byte a byte como el baseline 122.30. En
+   producción, desde PROMOAPP01 (12/09, autorizado por Javier -- reemplaza la restricción "sólo
+   staging" del 08/09), se comporta igual que en staging. No depende de integracionEpistemicaHabilitada():
+   122.31 es una reorganización de PRESENTACIÓN (qué se ve y cuándo), no otra puerta hacia el
+   ledger epistemológico -- ambos sistemas conviven en los mismos hosts habilitados pero son ejes
    independientes (§4 del contrato: cambiar de modo "no modifica la inteligencia del motor, no
    borra registros y no acepta nada automáticamente"). */
 function activo122_31(){
-  return location.hostname === STAGING_HOSTNAME_INTEGRACION_EPISTEMICA;
+  return hostHabilitadoIntegracionEpistemica();
 }
 var PREF_MODO_INVESTIGACION_KEY = 'ag_core_pref_modo_investigacion_staging';
 /* Modo Investigación: apagado por defecto (§4.2 "Debe estar apagado por defecto"), opt-in local
