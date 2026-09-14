@@ -74,6 +74,16 @@ header{
 .lg-textos{display:flex;flex-direction:column;line-height:1.15;min-width:0}
 .lg-compy{font-family:'DM Sans',sans-serif;font-size:10px;color:var(--faint);letter-spacing:.06em;margin-top:1px}
 @media (max-width:560px){.lg-compy{display:none}}
+/* 124-M0.1 (13/09): "← Organismos" -- mismo criterio visual que .logo (sin apariencia de botón
+   salvo cursor+atenuación), pero como texto propio en vez de ícono -- ver sección 7.2 del brief
+   124-M0. Oculto por defecto (style inline en el HTML); el JS lo muestra/oculta en los mismos 7
+   puntos donde ya togglea #orgchip. Se retrae junto con #orgchip debajo de 380px (misma regla
+   más abajo) para no competir por espacio en el header angosto. */
+.volver-organismos{
+  font-family:'DM Mono',monospace;font-size:11.5px;letter-spacing:.03em;color:var(--dim);
+  cursor:pointer;transition:opacity .15s;flex-shrink:0;white-space:nowrap;
+}
+.volver-organismos:hover{opacity:.82;color:var(--text)}
 /* MARCA-VIVA-01 (11/09): .toro/.toro.busy/.toro.principio/.toro-hero + @keyframes girar/latido
    se retiran acá -- eran el CSS que animaba el glifo "toro" a mano (spin+pulso de color). El
    reemplazo, comprender-mark, trae su propia animación interna (incluye prefers-reduced-motion)
@@ -338,6 +348,22 @@ header .spacer{flex:1}
   white-space:nowrap;transition:opacity .2s;
 }
 #send:disabled{opacity:.3;cursor:default}
+/* 124-M0.1 (13/09, corrección post-entrega): control de Modo Investigación (122.31), reubicado
+   acá desde el header -- ver el comentario junto a pintarControlModoInvestigacion() en el JS.
+   flex-shrink:0 + white-space:nowrap para que nunca sea él quien se recorte o envuelva: en un
+   .cwrap angosto es #input (flex:1) quien cede espacio primero, igual que ya hace frente a #send. */
+.modo-investigacion-btn{
+  flex-shrink:0;white-space:nowrap;align-self:center;
+  font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.03em;
+  height:30px;padding:0 10px;border-radius:9px;
+  border:1px solid var(--line);background:var(--panel2);color:var(--dim);
+  cursor:pointer;transition:opacity .15s,border-color .15s,color .15s;
+}
+.modo-investigacion-btn:hover{opacity:.85}
+/* §4.2 "el modo activo debe ser perceptible": ya lo es -- actualizarControlModoInvestigacion()
+   (sin tocar, ver "conservar exactamente" del pedido) distingue el texto "Investigación" de
+   "Investigación: ON". No se agrega una segunda señal (color/ícono) porque eso exigiría que esa
+   función escribiera una clase o atributo nuevo, y el pedido fue conservarla exacta. */
 
 /* ---------- panel principios ---------- */
 /* UX-P1C (25/08): se retira por completo la columna derecha permanente como elemento de layout
@@ -483,6 +509,10 @@ header .spacer{flex:1}
 .orgexplic{font-size:11.5px;color:var(--faint);margin-top:8px;line-height:1.5}
 #orgchip{display:none;align-items:center;gap:7px;font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.08em;color:var(--dim);border:1px solid var(--line);border-radius:20px;padding:4px 12px;max-width:220px;overflow:hidden}
 #orgchip b{color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 124-M0.1 (13/09): tipo del organismo (org.tipo, sección 7.2 del brief 124-M0) -- reutiliza la
+   clase .otipo ya usada en los ítems de lista (.orgitem .otipo, scoped a esa regla, no afecta
+   ésta). Sólo texto, ningún dato ni persistencia nueva. */
+#orgchip .otipo{font-family:inherit;color:var(--faint);font-size:9.5px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .field{margin-bottom:14px}
 .field label{display:block;font-size:12px;color:var(--dim);margin-bottom:6px}
 .field input,.field select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
@@ -670,6 +700,7 @@ header .spacer{flex:1}
 }
 @media (max-width:380px){
   #orgchip{display:none!important}
+  .volver-organismos{display:none!important}
   .logo{font-size:13px;letter-spacing:.1em}
 }
 @media (prefers-reduced-motion:reduce){
@@ -717,7 +748,13 @@ header .spacer{flex:1}
           <span class="lg-compy">Compy</span>
         </span>
       </span>
-      <span id="orgchip"><b id="orgname"></b></span>
+      <!-- 124-M0.1 (13/09): "← Organismos" -- affordance de retorno al índice, visible SÓLO
+           mientras hay un organismo abierto (mismo criterio de visibilidad que #orgchip; ver los
+           7 puntos del JS donde ambos se togglean juntos). Reutiliza irAHome() -- nunca
+           nuevaSesion() -- no crea ruta ni borra organismo/historial/principios/modos (invariante
+           124-M0 #11). Sección 7.2 del brief 124-M0. -->
+      <span id="volverOrganismos" class="volver-organismos" role="button" tabindex="0" aria-label="Volver a Organismos" style="display:none">← Organismos</span>
+      <span id="orgchip"><b id="orgname"></b><span class="otipo" id="orgtipo"></span></span>
       <span class="spacer"></span>
       <button class="hbtn" id="btnFicha" style="display:none">Memoria</button>
       <button class="hbtn" id="btnPrincipios">Principios</button>
@@ -733,7 +770,10 @@ header .spacer{flex:1}
           <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
         </svg>
       </button>
-      <button class="hbtn" id="btnMenu">☰</button>
+      <!-- 124-M0.1 (13/09): título/aria-label legibles -- "Tus organismos" -- para que ☰ se lea
+           como el disparador del índice (Tu espacio), no sólo como un ícono sin nombre. No cambia
+           su función (abrirTuEspacio()/cerrarTuEspacio(), sin tocar). -->
+      <button class="hbtn" id="btnMenu" title="Tus organismos" aria-label="Tus organismos">☰</button>
     </header>
     <div id="menu"></div>
     <div id="modulosMenu"></div>
@@ -2793,7 +2833,8 @@ const el = {
   btnPrincipios: $('btnPrincipios'), btnGuardar: $('btnGuardar'),
   btnNueva: $('btnNueva'), btnAcerca: $('btnAcerca'),
   overlay: $('overlay'), cardContent: $('cardContent'),
-  orgchip: $('orgchip'), orgname: $('orgname'), btnFicha: $('btnFicha'),
+  orgchip: $('orgchip'), orgname: $('orgname'), orgtipo: $('orgtipo'), btnFicha: $('btnFicha'),
+  volverOrganismos: $('volverOrganismos'),
   orglist: $('orglist'), btnOrgNuevo: $('btnOrgNuevo'),
   menu: $('menu'), btnMenu: $('btnMenu'),
   modulosMenu: $('modulosMenu'), btnModulos: $('btnModulos'),
@@ -3561,25 +3602,35 @@ function debeMostrarInterrupcionesInmediatas122_31(){
 }
 
 /* §4.2: "el modo se enciende desde un control discreto de la conversación". Creado en JS, sólo en
-   staging, para no tocar el header estático que ven todos los hosts (mismo criterio que ya usa
-   lib/i18n.js con #comprenderIdioma, insertándose antes de #btnMenu). No hay recorte visual nuevo
-   que aprender: reutiliza la clase .hbtn ya existente en el resto del header. */
+   staging, para no tocar el header estático que ven todos los hosts.
+   124-M0.1 (13/09, corrección post-entrega): Javier reportó en el teléfono que, con el header ya
+   más ocupado (chip de organismo + "← Organismos" de este mismo corte), este botón -- que hasta
+   acá vivía en <header>, antes de #btnMenu -- empujaba el ☰ fuera de la pantalla a 390px.
+   Investigación gobierna el modo de la CONVERSACIÓN (§4.1/§4.2 del contrato 122.31), no la
+   navegación global, así que en vez de disputarle espacio al header se reubica dentro de .cwrap
+   (el composer), junto a #send -- misma ubicación en mobile y escritorio, un único lugar. No se
+   toca alternarModoInvestigacion122_31() ni actualizarControlModoInvestigacion(): ambas siguen
+   ubicando el botón exclusivamente por getElementById('btnModoInvestigacion'), sin depender de su
+   posición en el DOM, así que el cambio de acá no les afecta. Se cambia únicamente el contenedor
+   destino y la clase visual (.modo-investigacion-btn en vez de .hbtn, pensada para .cwrap, no para
+   el header). */
 function pintarControlModoInvestigacion(){
   if(!activo122_31()) return;
   var existente = document.getElementById('btnModoInvestigacion');
   if(existente){ actualizarControlModoInvestigacion(); return; }
-  var header = document.querySelector('header');
-  if(!header) return;
+  var cwrap = document.querySelector('.cwrap');
+  if(!cwrap) return;
   var b = document.createElement('button');
-  b.className = 'hbtn';
+  b.type = 'button';
+  b.className = 'modo-investigacion-btn';
   b.id = 'btnModoInvestigacion';
   b.title = 'Modo Investigación: muestra en línea comprensión candidata, evidencia y propuestas de memoria. Apagado por defecto.';
   b.addEventListener('click', function(){
     alternarModoInvestigacion122_31();
     actualizarControlModoInvestigacion();
   });
-  var menu = document.getElementById('btnMenu');
-  if(menu && menu.parentNode === header) header.insertBefore(b, menu); else header.appendChild(b);
+  var send = document.getElementById('send');
+  if(send && send.parentNode === cwrap) cwrap.insertBefore(b, send); else cwrap.appendChild(b);
   actualizarControlModoInvestigacion();
 }
 function actualizarControlModoInvestigacion(){
@@ -16285,7 +16336,9 @@ function abrirEnContext(org){
   state.modoUrban = false;
   state.modoContext = true;
   el.orgname.textContent = org.nombre;
+  el.orgtipo.textContent = org.tipo ? (' · ' + org.tipo) : '';
   el.orgchip.style.display = 'inline-flex';
+  el.volverOrganismos.style.display = 'inline-block';
   el.orgchip.classList.remove('urban');
   el.orgchip.classList.remove('negocio');
   el.orgchip.classList.add('context');
@@ -16926,7 +16979,9 @@ function abrirEnUrban(org){
   state.modoUrban = true;
   state.modoContext = false;
   el.orgname.textContent = org.nombre;
+  el.orgtipo.textContent = org.tipo ? (' · ' + org.tipo) : '';
   el.orgchip.style.display = 'inline-flex';
+  el.volverOrganismos.style.display = 'inline-block';
   el.orgchip.classList.remove('context');
   el.orgchip.classList.remove('negocio');
   el.orgchip.classList.add('urban');
@@ -16958,7 +17013,9 @@ function abrirEnNegocio(org){
   state.modoContext = false;
   state.modoNegocio = true;
   el.orgname.textContent = org.nombre;
+  el.orgtipo.textContent = org.tipo ? (' · ' + org.tipo) : '';
   el.orgchip.style.display = 'inline-flex';
+  el.volverOrganismos.style.display = 'inline-block';
   el.orgchip.classList.remove('urban');
   el.orgchip.classList.remove('context');
   el.orgchip.classList.remove('negocio');
@@ -17232,6 +17289,7 @@ function irAHome(){
   el.btnNueva.style.display = 'none';
   el.btnFicha.style.display = 'none';
   el.orgchip.style.display = 'none';
+  el.volverOrganismos.style.display = 'none';
   renderOrgList();
 }
 function nuevaSesion(){
@@ -17260,6 +17318,7 @@ function nuevaSesion(){
   document.getElementById('btnPromover').style.display = 'none';
   el.btnNueva.style.display = 'none';
   el.orgchip.style.display = 'none';
+  el.volverOrganismos.style.display = 'none';
   el.btnFicha.style.display = 'none';
   el.input.placeholder = 'Escribí acá qué está pasando…';
   renderOrgList();
@@ -17390,7 +17449,9 @@ function promoverAOrganismo(){
     guardarOrganismo(org);
     state.organismo = org;   // la conversación sigue: mismo historial, ahora con identidad
     el.orgname.textContent = org.nombre;
+    el.orgtipo.textContent = org.tipo ? (' · ' + org.tipo) : '';
     el.orgchip.style.display = 'inline-flex';
+    el.volverOrganismos.style.display = 'inline-block';
     el.btnFicha.style.display = 'inline-block';
   document.getElementById('btnPromover').style.display = 'none';
     cerrarOverlay();
@@ -17983,7 +18044,9 @@ function abrirOrganismo(orgParam){
   el.orgchip.classList.remove('context');
   el.orgchip.classList.remove('negocio');
   el.orgname.textContent = org.nombre;
+  el.orgtipo.textContent = org.tipo ? (' · ' + org.tipo) : '';
   el.orgchip.style.display = 'inline-flex';
+  el.volverOrganismos.style.display = 'inline-block';
   el.btnFicha.style.display = 'inline-block';
   renderChipPropuestas();
   document.getElementById('btnPromover').style.display = 'none';
@@ -18705,8 +18768,8 @@ el.btnGuardar.addEventListener('click', function(){
   if(activo122_31()) pintarRevisarYGuardar(); else ofrecerGuardado(null);
 });
 // 122.31 §4.2: control discreto de Modo Investigación -- se crea una sola vez acá (no-op fuera
-// de staging); el header ya existe en el DOM en este punto del parseo, igual que el resto de los
-// botones de arriba.
+// de staging). 124-M0.1 (13/09): vive en .cwrap (el composer), no en <header> -- ambos ya existen
+// en el DOM en este punto del parseo.
 if(typeof pintarControlModoInvestigacion === 'function') pintarControlModoInvestigacion();
 // 122.31 §9: Idioma se reubica de <header> a Panel lateral → Cuenta → Idioma. lib/i18n.js NO se
 // toca -- mountSwitch() no tiene gate propio y lo comparten Urbanismo/Contextos -- en vez de eso
@@ -18732,6 +18795,14 @@ el.btnNueva.addEventListener('click', alPulsarBtnNueva);
 // ver su propio comentario.
 el.logoHome.addEventListener('click', irAHome);
 el.logoHome.addEventListener('keydown', function(e){
+  if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); irAHome(); }
+});
+// 124-M0.1 (13/09): "← Organismos" -- mismo patrón de click+teclado que logoHome (arriba), misma
+// función (irAHome(), nunca nuevaSesion()). Visible sólo mientras hay un organismo abierto (ver
+// los 7 puntos donde se togglea junto con #orgchip) -- cuando está oculto, sigue en el DOM pero
+// sin alcance por tabulación real porque display:none lo saca del árbol de foco.
+el.volverOrganismos.addEventListener('click', irAHome);
+el.volverOrganismos.addEventListener('keydown', function(e){
   if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); irAHome(); }
 });
 el.btnAcerca.addEventListener('click', mostrarAyuda);
