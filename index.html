@@ -140,6 +140,21 @@ header .spacer{flex:1}
 }
 #modulosMenu.open{display:flex}
 #modulosMenu .vacio{padding:11px 14px;font-size:12.5px;color:var(--faint)}
+/* 124-M0.1-R3 (14/09): en pantallas muy angostas, panel contenido en vez de un popover anclado al
+   botón -- min-width:200px ya no tiene margen para respirar junto a los 12px de gutter a cada
+   lado. El JS que lo posiciona (más abajo, junto a el.btnModulos) detecta este mismo breakpoint y
+   deja left/right sin setear ahí para no pisar esta regla con un estilo inline. */
+@media (max-width:480px){
+  #modulosMenu{
+    position:fixed;
+    left:12px;
+    right:12px;
+    width:auto;
+    max-width:none;
+    max-height:calc(100dvh - 80px);
+    overflow-y:auto;
+  }
+}
 
 /* ---------- Tu espacio (barra lateral, reorganización 09/08) ----------
    Overlay a la izquierda, mismo patrón que #menu/#modulosMenu (position:fixed,
@@ -353,20 +368,31 @@ header .spacer{flex:1}
 #send:disabled{opacity:.3;cursor:default}
 /* 124-M0.1 (13/09, corrección post-entrega): control de Modo Investigación (122.31), reubicado
    acá desde el header -- ver el comentario junto a pintarControlModoInvestigacion() en el JS.
-   flex-shrink:0 + white-space:nowrap para que nunca sea él quien se recorte o envuelva: en un
-   .cwrap angosto es #input (flex:1) quien cede espacio primero, igual que ya hace frente a #send. */
+   flex-shrink:0 para que nunca sea él quien se recorte o envuelva: en un .cwrap angosto es #input
+   (flex:1) quien cede espacio primero, igual que ya hace frente a #send.
+   124-M0.1-R3 (14/09): pasa de botón de texto a ícono compacto ~36x36 (Javier: "ocupa demasiado
+   espacio en el compositor móvil"). position:relative para poder anclar .mi-dot en una esquina. */
 .modo-investigacion-btn{
-  flex-shrink:0;white-space:nowrap;align-self:center;
-  font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.03em;
-  height:30px;padding:0 10px;border-radius:9px;
+  flex-shrink:0;align-self:center;position:relative;
+  width:36px;height:36px;padding:0;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;
   border:1px solid var(--line);background:var(--panel2);color:var(--dim);
-  cursor:pointer;transition:opacity .15s,border-color .15s,color .15s;
+  cursor:pointer;transition:opacity .15s,border-color .15s,color .15s,background .15s;
 }
 .modo-investigacion-btn:hover{opacity:.85}
-/* §4.2 "el modo activo debe ser perceptible": ya lo es -- actualizarControlModoInvestigacion()
-   (sin tocar, ver "conservar exactamente" del pedido) distingue el texto "Investigación" de
-   "Investigación: ON". No se agrega una segunda señal (color/ícono) porque eso exigiría que esa
-   función escribiera una clase o atributo nuevo, y el pedido fue conservarla exacta. */
+/* Estado activo: se lee por [aria-pressed="true"] -- el mismo atributo que ya exige la
+   accesibilidad del control, sin duplicar el estado en una clase aparte. Dos señales, ninguna
+   sólo de color (§ "indicador adicional al color, por ejemplo un pequeño punto" del pedido):
+   1) el ícono entero cambia de fondo/borde/color (no sólo el trazo), 2) .mi-dot pasa de
+   invisible a visible -- una diferencia de FORMA (aparece/desaparece), no sólo de tono. */
+.modo-investigacion-btn[aria-pressed="true"]{
+  background:var(--accent);border-color:var(--accent);color:#FFFFFF;
+}
+.modo-investigacion-btn .mi-dot{
+  position:absolute;top:5px;right:5px;width:6px;height:6px;border-radius:50%;
+  background:currentColor;opacity:0;transition:opacity .15s;
+}
+.modo-investigacion-btn[aria-pressed="true"] .mi-dot{opacity:1}
 
 /* ---------- panel principios ---------- */
 /* UX-P1C (25/08): se retira por completo la columna derecha permanente como elemento de layout
@@ -670,6 +696,15 @@ header .spacer{flex:1}
   header .spacer{display:none}
   #btnGuardar,#btnNueva,#btnAcerca,#btnFicha,#btnPromover{display:none!important}
   #btnMenu{display:inline-block}
+  /* 124-M0.1-R3 (14/09): con header .spacer oculto acá arriba, sin este par de reglas el header
+     queda "empaquetado a la izquierda" -- #btnModulos (Aplicaciones) y #btnMenu (☰), los dos
+     únicos botones que siguen visibles en mobile, quedarían pegados justo después de #orgchip en
+     vez de anclados al borde derecho. margin-left:auto en #btnModulos recrea el espacio flexible
+     que el spacer ya no da; flex:0 0 auto en los dos evita que se compriman o se estiren. Orden
+     pedido por Javier: logo, "← Organismos", nombre del organismo, espacio flexible, Aplicaciones,
+     ☰ -- ya es el orden del HTML (ver el <header> más abajo), esto sólo asegura el espaciado. */
+  #btnModulos{margin-left:auto;flex:0 0 auto}
+  #btnMenu{flex:0 0 auto}
   /* 21/08: "Memoria" (#btnFicha) y "Guardar sesión" (#btnGuardar) -- historia completa de este
      ida y vuelta, para quien lea esto después. Primero se sacaron de esta regla (quedaban
      inalcanzables: sin puerta en el pie móvil, que está vacío, ni en "Tu espacio", ni en
@@ -3618,17 +3653,17 @@ function debeMostrarInterrupcionesInmediatas122_31(){
 
 /* §4.2: "el modo se enciende desde un control discreto de la conversación". Creado en JS, sólo en
    staging, para no tocar el header estático que ven todos los hosts.
-   124-M0.1 (13/09, corrección post-entrega): Javier reportó en el teléfono que, con el header ya
-   más ocupado (chip de organismo + "← Organismos" de este mismo corte), este botón -- que hasta
-   acá vivía en <header>, antes de #btnMenu -- empujaba el ☰ fuera de la pantalla a 390px.
-   Investigación gobierna el modo de la CONVERSACIÓN (§4.1/§4.2 del contrato 122.31), no la
-   navegación global, así que en vez de disputarle espacio al header se reubica dentro de .cwrap
-   (el composer), junto a #send -- misma ubicación en mobile y escritorio, un único lugar. No se
-   toca alternarModoInvestigacion122_31() ni actualizarControlModoInvestigacion(): ambas siguen
-   ubicando el botón exclusivamente por getElementById('btnModoInvestigacion'), sin depender de su
-   posición en el DOM, así que el cambio de acá no les afecta. Se cambia únicamente el contenedor
-   destino y la clase visual (.modo-investigacion-btn en vez de .hbtn, pensada para .cwrap, no para
-   el header). */
+   124-M0.1 (13/09, corrección post-entrega): reubicado de <header> a .cwrap, junto a #send.
+   alternarModoInvestigacion122_31() y actualizarControlModoInvestigacion() siguen ubicando el
+   control exclusivamente por getElementById(), sin depender de su posición en el DOM.
+   124-M0.1-R3 (14/09): pasa de botón de texto ("Investigación"/"Investigación: ON") a ícono
+   compacto -- Javier reportó que el texto ocupaba demasiado espacio en el compositor móvil. El
+   click YA NO alterna el modo directamente: abre una tarjeta explicativa (mostrarModoInvestigacion(),
+   reutiliza el overlay/tarjeta existente -- el.overlay/el.cardContent, el mismo que usan
+   mostrarAcerca()/cardSesionesAnteriores()/etc., no se crea ningún sistema nuevo de modales) con
+   el control real adentro. El cambio de estado en sí sigue pasando EXCLUSIVAMENTE por
+   alternarModoInvestigacion122_31() + actualizarControlModoInvestigacion() -- ninguna otra
+   función toca la preferencia ni la persistencia (PREF_MODO_INVESTIGACION_KEY, sin tocar). */
 function pintarControlModoInvestigacion(){
   if(!activo122_31()) return;
   var existente = document.getElementById('btnModoInvestigacion');
@@ -3639,19 +3674,76 @@ function pintarControlModoInvestigacion(){
   b.type = 'button';
   b.className = 'modo-investigacion-btn';
   b.id = 'btnModoInvestigacion';
-  b.title = 'Modo Investigación: muestra en línea comprensión candidata, evidencia y propuestas de memoria. Apagado por defecto.';
+  b.title = 'Modo Investigación';
+  b.setAttribute('aria-label', 'Modo Investigación');
+  b.setAttribute('aria-pressed', 'false');
+  // Ícono propio (documento + lupa) -- ni emoji ni palabra abreviada, tal como pidió Javier.
+  // currentColor: sigue el color del botón (var(--dim) apagado / #FFFFFF activo, ver CSS), sin
+  // necesidad de recolorearlo a mano acá.
+  b.innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+      '<path d="M13 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h8.5"></path>' +
+      '<path d="M13 3l4 4"></path>' +
+      '<path d="M13 3v4h4"></path>' +
+      '<line x1="9" y1="11" x2="13" y2="11"></line>' +
+      '<line x1="9" y1="14.5" x2="12" y2="14.5"></line>' +
+      '<circle cx="16.5" cy="16.5" r="3.1"></circle>' +
+      '<line x1="18.8" y1="18.8" x2="21" y2="21"></line>' +
+    '</svg>' +
+    '<span class="mi-dot" aria-hidden="true"></span>';
   b.addEventListener('click', function(){
-    alternarModoInvestigacion122_31();
-    actualizarControlModoInvestigacion();
+    mostrarModoInvestigacion();
   });
   var send = document.getElementById('send');
   if(send && send.parentNode === cwrap) cwrap.insertBefore(b, send); else cwrap.appendChild(b);
   actualizarControlModoInvestigacion();
 }
+/* Único punto que refleja modoInvestigacionActivo() en la interfaz -- el ícono del composer
+   (aria-pressed, que gobierna vía CSS el fondo/borde/color y .mi-dot) y, si la tarjeta de
+   mostrarModoInvestigacion() está abierta en este momento, su control interno
+   (#modoInvestigacionToggle). No cambia la persistencia ni la preferencia -- sólo pinta lo que
+   alternarModoInvestigacion122_31()/modoInvestigacionActivo() ya decidieron. */
 function actualizarControlModoInvestigacion(){
+  var activo = modoInvestigacionActivo();
   var b = document.getElementById('btnModoInvestigacion');
-  if(!b) return;
-  b.textContent = modoInvestigacionActivo() ? 'Investigación: ON' : 'Investigación';
+  if(b) b.setAttribute('aria-pressed', activo ? 'true' : 'false');
+  var toggle = document.getElementById('modoInvestigacionToggle');
+  if(toggle){
+    toggle.setAttribute('aria-pressed', activo ? 'true' : 'false');
+    toggle.textContent = activo ? 'Activado' : 'Desactivado';
+  }
+}
+/* Tarjeta explicativa de Modo Investigación -- reutiliza el.overlay/el.cardContent (el mismo
+   sistema de mostrarAcerca(), cardSesionesAnteriores(), etc.; ver cerrarOverlay() más abajo, sin
+   tocar). Contenido pedido por Javier verbatim. El control real vive ACÁ adentro -- el ícono del
+   composer sólo abre esta tarjeta, nunca alterna el modo por sí mismo. */
+function mostrarModoInvestigacion(){
+  el.cardContent.innerHTML = '';
+  var h = document.createElement('h3'); h.textContent = 'Modo Investigación';
+  el.cardContent.appendChild(h);
+  var p1 = document.createElement('p');
+  p1.textContent = 'Hace visibles durante la conversación las comprensiones candidatas, la evidencia considerada y las propuestas de Memoria.';
+  el.cardContent.appendChild(p1);
+  var p2 = document.createElement('p');
+  p2.textContent = 'No realiza una búsqueda externa por sí mismo ni modifica el funcionamiento general de Compy.';
+  el.cardContent.appendChild(p2);
+  var rowToggle = document.createElement('div'); rowToggle.className = 'cardrow'; rowToggle.style.marginTop = '10px';
+  var toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'btn';
+  toggle.id = 'modoInvestigacionToggle';
+  toggle.addEventListener('click', function(){
+    alternarModoInvestigacion122_31();
+    actualizarControlModoInvestigacion();
+  });
+  rowToggle.appendChild(toggle);
+  el.cardContent.appendChild(rowToggle);
+  actualizarControlModoInvestigacion();   // pinta el estado inicial de #modoInvestigacionToggle recién creado
+  var row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '8px';
+  var bCerrar = document.createElement('button'); bCerrar.className = 'btn primary'; bCerrar.textContent = 'Cerrar'; bCerrar.onclick = cerrarOverlay;
+  row.appendChild(bCerrar);
+  el.cardContent.appendChild(row);
+  el.overlay.classList.add('open');
 }
 
 var MAX_VISIBLE_TEXT_LEN_CLIENTE = 4000;   // debe coincidir con MAX_VISIBLE_TEXT_LEN de api/organismos.js (prueba de contrato)
@@ -19489,10 +19581,29 @@ el.btnModulos.addEventListener('click', function(e){
   // Posicion calculada en JS (no un right/top fijo como #menu): #btnModulos no esta
   // en el mismo lugar del header entre escritorio y mobile, y asi el panel siempre
   // cae debajo del icono real, sin depender de adivinar un offset por breakpoint.
+  // 124-M0.1-R3 (14/09): Javier reportó que la posición no puede depender de que el disparador
+  // esté siempre pegado al borde derecho -- antes se anclaba por `right` (distancia entre el
+  // borde derecho del botón y el borde derecho del viewport). Se ancla por `left`, con un margen
+  // seguro (gutter) que nunca deja el panel ni antes del borde izquierdo ni después del derecho.
+  // Se abre PRIMERO (.open, display:flex) para poder medir offsetWidth real -- oculto
+  // (display:none) mide 0 y el clamp de abajo quedaría mal.
+  el.modulosMenu.classList.add('open');
   const r = el.btnModulos.getBoundingClientRect();
   el.modulosMenu.style.top = (r.bottom + 8) + 'px';
-  el.modulosMenu.style.right = (window.innerWidth - r.right) + 'px';
-  el.modulosMenu.classList.add('open');
+  if(window.innerWidth <= 480){
+    // Panel contenido (ver @media max-width:480px, junto a la regla de #modulosMenu) -- ese
+    // bloque gobierna left/right/width; un estilo inline acá lo taparía sin necesidad.
+    el.modulosMenu.style.left = '';
+    el.modulosMenu.style.right = '';
+  } else {
+    const gutter = 12;
+    const left = Math.max(
+      gutter,
+      Math.min(r.left, window.innerWidth - el.modulosMenu.offsetWidth - gutter)
+    );
+    el.modulosMenu.style.left = left + 'px';
+    el.modulosMenu.style.right = 'auto';
+  }
 });
 document.addEventListener('click', function(e){
   if(el.modulosMenu.classList.contains('open') && !el.modulosMenu.contains(e.target) && e.target !== el.btnModulos && !el.btnModulos.contains(e.target)){
