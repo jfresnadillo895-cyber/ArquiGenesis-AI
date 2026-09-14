@@ -77,8 +77,11 @@ header{
 /* 124-M0.1 (13/09): "← Organismos" -- mismo criterio visual que .logo (sin apariencia de botón
    salvo cursor+atenuación), pero como texto propio en vez de ícono -- ver sección 7.2 del brief
    124-M0. Oculto por defecto (style inline en el HTML); el JS lo muestra/oculta en los mismos 7
-   puntos donde ya togglea #orgchip. Se retrae junto con #orgchip debajo de 380px (misma regla
-   más abajo) para no competir por espacio en el header angosto. */
+   puntos donde ya togglea #orgchip.
+   124-M0.1-R2 (14/09): NUNCA se oculta por ancho de pantalla (ver @media max-width:380px más
+   abajo) -- debe permanecer visible siempre que haya un organismo abierto, junto con el logo
+   gráfico y ☰. El espacio en el breakpoint más angosto se libera ocultando .lg-textos/.otipo en
+   vez de a éste. */
 .volver-organismos{
   font-family:'DM Mono',monospace;font-size:11.5px;letter-spacing:.03em;color:var(--dim);
   cursor:pointer;transition:opacity .15s;flex-shrink:0;white-space:nowrap;
@@ -338,7 +341,7 @@ header .spacer{flex:1}
 .cwrap:focus-within{box-shadow:0 2px 12px rgba(46,90,135,.12)}
 .cwrap:focus-within{border-color:var(--accent)}
 #input{
-  flex:1;background:none;border:none;outline:none;resize:none;color:var(--text);
+  flex:1;min-width:0;background:none;border:none;outline:none;resize:none;color:var(--text);
   font-size:14.5px;line-height:1.5;max-height:130px;
 }
 #input::placeholder{color:var(--faint)}
@@ -699,8 +702,20 @@ header .spacer{flex:1}
   .entradas{grid-template-columns:1fr}
 }
 @media (max-width:380px){
-  #orgchip{display:none!important}
-  .volver-organismos{display:none!important}
+  /* 124-M0.1-R2 (14/09, segunda corrección post-entrega): Javier pidió que "← Organismos" NO se
+     oculte más acá -- debe seguir visible junto con el logo gráfico y ☰, incluso en el punto más
+     angosto. El espacio que antes liberaba ocultar #orgchip/.volver-organismos por completo ahora
+     se libera ocultando primero .lg-textos (el nombre de marca en texto, "Comprender AI" +
+     "Compy" -- el glifo gráfico de .logo, comprender-mark, NO se toca, sigue siempre visible) y,
+     si todavía hace falta, .otipo dentro de #orgchip (el tipo del organismo; el nombre del
+     organismo en sí, #orgname, sigue mostrándose -- #orgchip ya viene con max-width:110px y
+     overflow:hidden desde la regla de 840px de más arriba, así que nunca desborda aunque no
+     quepa entero). Se aplican las dos en este único breakpoint (no hay un segundo breakpoint
+     intermedio) porque es el más angosto soportado y no hay forma de medir en CSS puro si la
+     primera ya alcanzó -- aplicar ambas es el criterio conservador que garantiza el resultado
+     pedido (☰ visible, sin desborde) en el peor caso. */
+  .lg-textos{display:none!important}
+  #orgchip .otipo{display:none!important}
   .logo{font-size:13px;letter-spacing:.1em}
 }
 @media (prefers-reduced-motion:reduce){
