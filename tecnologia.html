@@ -25,7 +25,8 @@
 body{background:var(--fondo);color:var(--texto);font-family:'IBM Plex Sans',sans-serif;font-weight:300;line-height:1.6;min-height:100vh;overflow-x:hidden;}
 h1,h2,h3{font-family:'Fraunces',serif;font-weight:500;}
 header{display:flex;align-items:center;gap:14px;padding:11px 18px;border-bottom:1px solid var(--linea);position:sticky;top:0;background:rgba(245,246,248,.94);backdrop-filter:blur(8px);z-index:20;overflow:hidden;min-width:0;}
-header .marca{font-family:'Fraunces',serif;font-weight:500;font-size:1.05rem;color:var(--oro);}
+header .marca{font-family:'Fraunces',serif;font-weight:500;font-size:1.05rem;color:var(--oro);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
 main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
 .pantalla{display:none;animation:aparecer .5s ease;}
 .pantalla.activa{display:block;}
@@ -91,19 +92,42 @@ main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
 .cai-item{text-align:left;padding:11px 14px;font-size:13.5px;color:var(--texto);border-radius:9px;
   background:none;border:none;cursor:pointer;font-family:inherit;transition:background .15s}
 .cai-item:hover{background:var(--acento-suave)}
+
+/* 124-M0.2-R2 -- "Tu espacio": mismo diseño (valores fijos, no la paleta propia de este
+   archivo) que urbanismo.html/negocios.html/contextos.html, portado verbatim. */
+#teFondo{position:fixed;inset:0;background:rgba(28,42,58,.28);z-index:99992;display:none}
+#teFondo.open{display:block}
+#tuEspacio{position:fixed;top:0;left:0;bottom:0;width:300px;max-width:86vw;background:#FFF;
+  border-right:1px solid #E2DFD8;box-shadow:0 12px 34px rgba(28,42,58,.16);z-index:99993;
+  display:flex;flex-direction:column;transform:translateX(-100%);transition:transform .22s ease}
+#tuEspacio.open{transform:none}
+#teTop{padding:16px 16px 12px;border-bottom:1px solid #E2DFD8;font-size:15px;font-weight:600;color:#1C2A3A}
+#teConfig{padding:6px;flex:1;overflow-y:auto;display:flex;flex-direction:column}
+@media (prefers-reduced-motion:reduce){ #tuEspacio{transition:none} }
 </style>
 </head>
 <body>
 
 <div id="modulosMenu"></div>
 
+<!-- 124-M0.2-R2: "Tu espacio" -- ver la nota de alcance junto a su JS (mismo diseño que
+     urbanismo.html/negocios.html/contextos.html). #hCorreo se retira del header (quedaba junto
+     al logotipo, sin protección de ancho); el correo activo ahora se muestra dentro de "Mi
+     cuenta", accesible desde el nuevo botón ☰. -->
+<div id="teFondo"></div>
+<div id="tuEspacio">
+  <div id="teTop">Comprender AI</div>
+  <div id="teConfig"></div>
+</div>
+
 <header>
   <!-- MARCA-VIVA-01 (11/09): esta página no tenía ícono, solo texto -- se suma acá para que
        quede consistente con el resto del ecosistema (decisión confirmada). -->
   <comprender-mark variant="compact" size="26" phase="spiral_deployment" aria-hidden="true"></comprender-mark>
   <span class="marca">Comprender · Tecnología</span>
-  <span id="hCorreo" class="hint" style="margin-left:auto;"></span>
+  <span style="flex:1"></span>
   <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
+  <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
 </header>
 
 <main>
@@ -2523,6 +2547,172 @@ window.TEC_RUNTIME_UNIVERSAL_CONTRACT = TEC_LOAD('vendor/universal-contract/cont
   window.organismPurposeFunctionCanonico_RO = organismPurposeFunctionCanonico_RO;
   window.organismPurposeFunctionEstado_RO = organismPurposeFunctionEstado_RO;
 })();
+
+/* ============================================================================
+   124-M0.2-R2 (14/09) · "Tu espacio" + "Mi cuenta", portado a Tecnología
+   ============================================================================
+   Contexto: esta página no tenía NINGUNA infraestructura de Cuenta -- el único acceso de
+   usuario era #hCorreo, un <span> de solo texto pegado al logotipo (sin protección de ancho),
+   y el único botón del header era "Módulos" (retorno al Core, patrón NAV-4ESP-01). Javier
+   confirmó explícitamente (124-M0.2-R2, respuesta a la pregunta de alcance) portar el panel
+   completo en vez de dejarlo como deuda técnica.
+   Alcance de lo portado, y por qué es "completo" para esta página en particular: el panel
+   "Mi cuenta" de index.html/urbanismo.html/negocios.html/contextos.html ofrece Cambiar
+   contraseña y Eliminar cuenta porque esos productos usan autenticación propia (correo +
+   contraseña, api/cuenta.js). Tecnología SOLO tiene autenticación Google (TecAuth, arriba) --
+   no existe contraseña que cambiar ni flujo de baja de cuenta acá (la cuenta real vive en el
+   Core). Ofrecer esos dos botones sería UI que aparenta hacer algo que no hace. Lo que SÍ es
+   real y se porta: correo de la cuenta activa, Idioma (el requisito concreto de 124-M0.2-R2) y
+   Cerrar sesión (nuevo: antes sólo existía borrar() interno, nunca conectado a un botón).
+   "Tu espacio" tampoco replica Ciclo/Ayuda/Tu opinión/Acerca de de los otros productos -- esas
+   funciones no existen en Tecnología y están fuera del alcance de 124-M0.2-R2 (Header, Cuenta e
+   Idioma). El panel lateral acá es, a propósito, sólo el punto de entrada a Cuenta.
+   Estilo: los tamaños/colores del panel y del modal son los mismos valores fijos (#fff, #ddd,
+   #1a1a1a, etc.) que usan los otros cuatro productos para "Mi cuenta" -- ese panel es, a
+   propósito, visualmente uniforme en toda la app (no sigue la paleta propia de cada producto,
+   a diferencia del resto de la página). El chip #teFondo/#tuEspacio reutiliza el mismo diseño
+   de urbanismo.html/negocios.html/contextos.html tal cual. */
+(function(){
+  function enlace(id, texto){
+    return '<div style="margin-top:12px;text-align:center;">' +
+      '<a href="#" id="' + id + '" style="font-size:13px;color:#777;text-decoration:underline;">' + texto + '</a></div>';
+  }
+  function botonSecundario(id, texto, peligro){
+    return '<button id="' + id + '" style="width:100%;padding:11px;font-size:14px;font-weight:600;' +
+      'border:1px solid ' + (peligro ? '#e3b3a3' : '#ddd') + ';border-radius:8px;cursor:pointer;' +
+      'background:#fff;color:' + (peligro ? '#b4441f' : '#1a1a1a') + ';margin-bottom:10px;">' + texto + '</button>';
+  }
+
+  var cuentaAbierta = false;
+  function mostrarCuenta(){
+    if(cuentaAbierta) return;
+    cuentaAbierta = true;
+
+    var capa = document.createElement('div');
+    capa.setAttribute('id','comprenderCuenta');
+    capa.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(251,250,248,.97);' +
+      'display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif;';
+    document.body.appendChild(capa);
+
+    var vistaC = 'inicio';
+
+    function cerrar(){ cuentaAbierta = false; capa.remove(); }
+
+    function marco(cuerpoHtml){
+      var correo = (TecSession.usuario && TecSession.usuario.email) || 'Cargando…';
+      return '<div style="width:100%;max-width:380px;background:#fff;border:1px solid #e2e0dc;' +
+        'border-radius:14px;padding:24px;position:relative;">' +
+          '<button id="ccCerrar" style="position:absolute;top:14px;right:14px;background:none;' +
+            'border:0;font-size:22px;line-height:1;color:#999;cursor:pointer;">&times;</button>' +
+          '<div style="font-size:17px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">Mi cuenta</div>' +
+          '<div style="font-size:13px;color:#666;margin-bottom:16px;">' + correo + '</div>' +
+          cuerpoHtml +
+        '</div>';
+    }
+
+    function pintar(){
+      var cuerpo;
+      if(vistaC === 'idioma'){
+        // 124-M0.2-R2: vista "Idioma" portada verbatim desde index.html (mostrarCuenta(), vista
+        // 'idioma') -- misma API pública de lib/i18n.js (ComprenderI18n.getLocale/setLocale), sin
+        // tocar ese archivo. Los endónimos (Español/English/Português) se dejan sin traducir.
+        var localeActualCC = (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.getLocale) ? ComprenderI18n.getLocale() : 'es';
+        var opcionesIdiomaCC = [['es','Español'], ['en','English'], ['pt','Português']];
+        cuerpo = opcionesIdiomaCC.map(function(o){
+          var activoCC = o[0] === localeActualCC;
+          return '<button id="ccIdioma_' + o[0] + '" style="width:100%;padding:11px;font-size:14px;' +
+            'font-weight:' + (activoCC ? '700' : '600') + ';border:1px solid ' + (activoCC ? '#1a1a1a' : '#ddd') + ';' +
+            'border-radius:8px;cursor:pointer;background:' + (activoCC ? '#f3f2ef' : '#fff') + ';' +
+            'color:#1a1a1a;margin-bottom:10px;text-align:left;">' + o[1] + (activoCC ? ' ✓' : '') + '</button>';
+        }).join('') + enlace('ccVolver','Volver');
+      } else {
+        cuerpo =
+          botonSecundario('ccIrIdioma','Idioma') +
+          enlace('ccSalir','Cerrar sesión');
+      }
+      capa.innerHTML = marco(cuerpo);
+      capa.querySelector('#ccCerrar').addEventListener('click', cerrar);
+      cablear();
+    }
+
+    function cablear(){
+      if(vistaC === 'inicio'){
+        var irIdioma = capa.querySelector('#ccIrIdioma');
+        if(irIdioma) irIdioma.addEventListener('click', function(){ vistaC='idioma'; pintar(); });
+        var salir = capa.querySelector('#ccSalir');
+        if(salir) salir.addEventListener('click', function(e){
+          e.preventDefault();
+          window.TecAuth.borrar();
+          location.reload();
+        });
+        return;
+      }
+      if(vistaC === 'idioma'){
+        capa.querySelector('#ccVolver').addEventListener('click', function(e){ e.preventDefault(); vistaC='inicio'; pintar(); });
+        ['es','en','pt'].forEach(function(loc){
+          var btnIdioma = capa.querySelector('#ccIdioma_' + loc);
+          if(btnIdioma) btnIdioma.addEventListener('click', function(){
+            if(typeof ComprenderI18n !== 'undefined' && ComprenderI18n.setLocale) ComprenderI18n.setLocale(loc);
+            pintar();
+          });
+        });
+      }
+    }
+
+    pintar();
+  }
+  window.mostrarCuentaComprender = mostrarCuenta;
+
+  // 124-M0.2-R2: Idioma se reubica de <header> a Cuenta → Idioma. lib/i18n.js NO se toca --
+  // mountSwitch() no tiene gate propio, así que en vez de eso se oculta acá el botón
+  // #comprenderIdioma que ese archivo ya montó, evitando un selector de idioma duplicado.
+  // Mismo patrón que index.html (122.31 §9): acá no existe activo122_31(), y en producción esa
+  // bandera ya evalúa verdadero, así que ocultarlo siempre reproduce el mismo resultado.
+  document.addEventListener('DOMContentLoaded', function(){
+    var sw = document.getElementById('comprenderIdioma');
+    if(sw) sw.style.display = 'none';
+  });
+
+  /* ---------- "Tu espacio": punto de entrada mínimo a Cuenta (ver nota de alcance arriba) ---------- */
+  function abrirTuEspacio(){
+    construirTuEspacioConfig();
+    document.getElementById('teFondo').classList.add('open');
+    document.getElementById('tuEspacio').classList.add('open');
+  }
+  function cerrarTuEspacio(){
+    document.getElementById('teFondo').classList.remove('open');
+    document.getElementById('tuEspacio').classList.remove('open');
+  }
+  function tuEspacioToggle(){
+    if(document.getElementById('tuEspacio').classList.contains('open')){ cerrarTuEspacio(); return; }
+    abrirTuEspacio();
+  }
+  window.tuEspacioToggle = tuEspacioToggle;
+  document.addEventListener('DOMContentLoaded', function(){
+    var fondo = document.getElementById('teFondo');
+    if(fondo) fondo.addEventListener('click', cerrarTuEspacio);
+  });
+  document.addEventListener('keydown', function(e){
+    var te = document.getElementById('tuEspacio');
+    if(e.key === 'Escape' && te && te.classList.contains('open')) cerrarTuEspacio();
+  });
+  function construirTuEspacioConfig(){
+    var cfg = document.getElementById('teConfig');
+    cfg.innerHTML = '';
+    var bCuenta = document.createElement('button');
+    bCuenta.className = 'cai-item';
+    var bCuentaTitulo = document.createElement('div');
+    bCuentaTitulo.textContent = 'Cuenta';
+    var bCuentaCorreo = document.createElement('div');
+    bCuentaCorreo.style.cssText = 'font-size:11px;color:var(--tenue);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    bCuentaCorreo.textContent = (TecSession.usuario && TecSession.usuario.email) || '';
+    bCuenta.appendChild(bCuentaTitulo);
+    bCuenta.appendChild(bCuentaCorreo);
+    bCuenta.addEventListener('click', function(){ cerrarTuEspacio(); mostrarCuenta(); });
+    cfg.appendChild(bCuenta);
+  }
+})();
+
 /* ============================================================================
    TEC-PROD-01 · tecnologia.html · Bloque APP (01/09)
    Orquestador determinístico + membrana conversacional + persistencia + wiring de

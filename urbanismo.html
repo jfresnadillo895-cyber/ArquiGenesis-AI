@@ -715,6 +715,16 @@
     location.reload();
   };
 
+  // 124-M0.2-R2: Idioma se reubica de <header> a Cuenta → Idioma (ver mostrarCuenta(), vista
+  // 'idioma', más abajo). lib/i18n.js NO se toca -- mountSwitch() no tiene gate propio, así que
+  // en vez de eso se oculta acá el botón #comprenderIdioma que ese archivo ya montó, evitando
+  // así un selector de idioma duplicado. Mismo patrón que index.html (122.31 §9), sin el gate de
+  // staging: acá no existe activo122_31(), y en producción esa bandera ya evalúa verdadero.
+  document.addEventListener('DOMContentLoaded', function(){
+    var sw = document.getElementById('comprenderIdioma');
+    if(sw) sw.style.display = 'none';
+  });
+
   /* ---------- boton fijo de cuenta + panel ----------
      El boton aparece solo mientras hay sesion (lo dispara sincronizarSaldo). El panel
      vive aca por la misma razon que el portal y los planes: es infraestructura, y asi
@@ -804,12 +814,30 @@
           botonSecundario('ccIrClave','Cambiar contraseña') +
           enlace('ccSalir','Cerrar sesión') +
           '<div id="ccAviso" style="font-size:13px;color:#2a7;margin-top:8px;min-height:18px;"></div>';
+      } else if(vistaC === 'idioma'){
+        // 124-M0.2-R2: vista "Idioma" portada verbatim desde index.html (mostrarCuenta(), vista
+        // 'idioma') -- misma API pública de lib/i18n.js (ComprenderI18n.getLocale/setLocale), sin
+        // tocar ese archivo. A diferencia de index.html (donde esta vista solo se ofrece bajo
+        // activo122_31()), acá se ofrece siempre: Urbanismo no tiene esa bandera de staging, y en
+        // producción activo122_31() ya evalúa verdadero, así que el comportamiento resultante es
+        // el mismo. Los endónimos (Español/English/Português) se dejan sin traducir a propósito.
+        var localeActualCC = (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.getLocale) ? ComprenderI18n.getLocale() : 'es';
+        var opcionesIdiomaCC = [['es','Español'], ['en','English'], ['pt','Português']];
+        cuerpo = opcionesIdiomaCC.map(function(o){
+          var activoCC = o[0] === localeActualCC;
+          return '<button id="ccIdioma_' + o[0] + '" style="width:100%;padding:11px;font-size:14px;' +
+            'font-weight:' + (activoCC ? '700' : '600') + ';border:1px solid ' + (activoCC ? '#1a1a1a' : '#ddd') + ';' +
+            'border-radius:8px;cursor:pointer;background:' + (activoCC ? '#f3f2ef' : '#fff') + ';' +
+            'color:#1a1a1a;margin-bottom:10px;text-align:left;">' + o[1] + (activoCC ? ' ✓' : '') + '</button>';
+        }).join('') + enlace('ccVolver','Volver');
       } else {
         // 10/08: "Comprensión disponible" solo aparece si la página define el hook -- en el
         // Core (index.html) sí; en Urbanismo/Contextos no (tienen su propio medidor, sin
         // tocar), así que ahí este botón simplemente no se dibuja.
         cuerpo =
           (window.comprenderVerCreditos ? botonSecundario('ccIrCreditos','Tu capacidad') : '') +
+          // 124-M0.2-R2: Idioma se reubica de <header> a Cuenta, igual que en index.html.
+          botonSecundario('ccIrIdioma','Idioma') +
           botonSecundario('ccIrClave','Cambiar contraseña') +
           botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
           enlace('ccSalir','Cerrar sesión');
@@ -826,6 +854,8 @@
         if(irCreditos) irCreditos.addEventListener('click', function(){ cerrar(); if(window.comprenderVerCreditos) window.comprenderVerCreditos(); });
         var irClave = capa.querySelector('#ccIrClave');
         if(irClave) irClave.addEventListener('click', function(){ vistaC='clave'; pintar(); });
+        var irIdioma = capa.querySelector('#ccIrIdioma');
+        if(irIdioma) irIdioma.addEventListener('click', function(){ vistaC='idioma'; pintar(); });
         var irEliminar = capa.querySelector('#ccIrEliminar');
         if(irEliminar) irEliminar.addEventListener('click', function(){ vistaC='eliminar'; pintar(); });
         var salir = capa.querySelector('#ccSalir');
@@ -928,6 +958,17 @@
               ocupado(false,'Eliminar mi cuenta');
               avisoEl.textContent = 'No se pudo conectar. Revisá tu conexión.';
             });
+          });
+        });
+      } else if(vistaC === 'idioma'){
+        // 124-M0.2-R2: portado verbatim desde index.html -- sin ccAviso/ccAccion propios, cada
+        // botón de idioma actúa directo. El wiring de #ccVolver de arriba (compartido con
+        // clave/eliminar) ya cubre "Volver".
+        ['es','en','pt'].forEach(function(loc){
+          var btnIdioma = capa.querySelector('#ccIdioma_' + loc);
+          if(btnIdioma) btnIdioma.addEventListener('click', function(){
+            if(typeof ComprenderI18n !== 'undefined' && ComprenderI18n.setLocale) ComprenderI18n.setLocale(loc);
+            pintar();   // repinta con el nuevo idioma marcado como activo
           });
         });
       }
@@ -2134,7 +2175,11 @@ canvas{animation:none !important}
 /* ===== TÍTULO DE MARCA — idéntico en los tres productos ===== */
 /* MARCA-VIVA-01 (11/09): .cai-toro + @keyframes girar se retiran -- el glifo ahora es
    <comprender-mark>, que trae su propia animación interna. Ver MARCAVIVA01_INFORME.md. */
-.cai-head{display:flex;align-items:center;gap:10px;flex:none;min-width:0}
+/* 124-M0.2-R2: flex:none -> flex:0 1 auto, igual que negocios.html/contextos.html -- así el
+   bloque de marca puede ceder ancho (junto con el ellipsis ya existente en .cai-titulo) en vez
+   de forzar overflow del header en viewports angostos, sin tocar la distribución validada en
+   M0.1-R3 (los botones .cai-ham siguen con flex-shrink:0, nunca se achican ni desaparecen). */
+.cai-head{display:flex;align-items:center;gap:10px;flex:0 1 auto;min-width:0}
 .cai-titulo{
   font-family:'DM Sans','Inter','IBM Plex Sans',system-ui,-apple-system,sans-serif !important;
   font-size:21px !important; font-weight:400 !important; line-height:1.15 !important;
