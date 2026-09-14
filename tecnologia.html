@@ -2549,30 +2549,54 @@ window.TEC_RUNTIME_UNIVERSAL_CONTRACT = TEC_LOAD('vendor/universal-contract/cont
 })();
 
 /* ============================================================================
-   124-M0.2-R2 (14/09) · "Tu espacio" + "Mi cuenta", portado a Tecnología
+   124-M0.2-R2 / R2.1 (14/09) · "Tu espacio" + "Mi cuenta", portado a Tecnología
    ============================================================================
-   Contexto: esta página no tenía NINGUNA infraestructura de Cuenta -- el único acceso de
+   Contexto (R2): esta página no tenía NINGUNA infraestructura de Cuenta -- el único acceso de
    usuario era #hCorreo, un <span> de solo texto pegado al logotipo (sin protección de ancho),
    y el único botón del header era "Módulos" (retorno al Core, patrón NAV-4ESP-01). Javier
    confirmó explícitamente (124-M0.2-R2, respuesta a la pregunta de alcance) portar el panel
    completo en vez de dejarlo como deuda técnica.
-   Alcance de lo portado, y por qué es "completo" para esta página en particular: el panel
-   "Mi cuenta" de index.html/urbanismo.html/negocios.html/contextos.html ofrece Cambiar
-   contraseña y Eliminar cuenta porque esos productos usan autenticación propia (correo +
-   contraseña, api/cuenta.js). Tecnología SOLO tiene autenticación Google (TecAuth, arriba) --
-   no existe contraseña que cambiar ni flujo de baja de cuenta acá (la cuenta real vive en el
-   Core). Ofrecer esos dos botones sería UI que aparenta hacer algo que no hace. Lo que SÍ es
-   real y se porta: correo de la cuenta activa, Idioma (el requisito concreto de 124-M0.2-R2) y
-   Cerrar sesión (nuevo: antes sólo existía borrar() interno, nunca conectado a un botón).
-   "Tu espacio" tampoco replica Ciclo/Ayuda/Tu opinión/Acerca de de los otros productos -- esas
-   funciones no existen en Tecnología y están fuera del alcance de 124-M0.2-R2 (Header, Cuenta e
-   Idioma). El panel lateral acá es, a propósito, sólo el punto de entrada a Cuenta.
+   Corrección R2.1: la sesión (localStorage 'comprender_sesion', ver TecAuth arriba) es
+   COMPARTIDA con el Core y las demás especialidades -- una sesión que llega acá puede venir de
+   un login con correo/contraseña hecho en index.html, no sólo de "Continuar con Google". R2
+   había asumido "autenticación exclusiva Google" por ser la única opción de login QUE OFRECE
+   ESTA PÁGINA, y por eso omitía Cambiar contraseña/Eliminar cuenta enteras -- Javier señaló
+   exactamente ese error (124-M0.2-R2.1: "no deducir el proveedor solamente porque la página
+   permita iniciar sesión con Google") y confirmó el criterio real, verificado en el código:
+     - index.html NO distingue proveedores en ningún lado (se comprobó por lectura directa --
+       ahí "Cambiar contraseña" se muestra siempre, sin condición). No había una condición
+       existente para copiar tal cual.
+     - El proveedor real de la sesión activa se lee del propio usuario de Supabase que YA
+       devuelve TecAuth.obtenerUsuario() (identities[].provider / app_metadata.providers) --
+       campo estándar de Supabase, no un endpoint nuevo.
+   Con eso: Idioma y Cerrar sesión se mantienen (R2, sin cambios). Cambiar contraseña se
+   muestra SÓLO si el usuario tiene un proveedor 'email' entre los suyos (si conviven 'email' y
+   'google', se muestra igual; si sólo hay proveedores externos, o no se puede determinar el
+   proveedor, se oculta -- ver puedeCambiarClave() más abajo) y, cuando se muestra, reutiliza
+   exactamente ingresar()+cambiarClave() (mismo PUT /auth/v1/user que index.html/urbanismo.html/
+   negocios.html/contextos.html -- ningún endpoint ni almacenamiento nuevo). Eliminar cuenta se
+   agrega SIEMPRE, sin condición de proveedor (POST /api/cuenta, accion:'eliminar'/'cancelar_baja'
+   -- el mismo endpoint, verificado: identifica al usuario por el Bearer token vía
+   /auth/v1/user, sin mirar el proveedor, así que una cuenta creada sólo con Google se elimina
+   exactamente igual que una con contraseña).
+   "Tu espacio" sigue sin replicar Ciclo/Ayuda/Tu opinión/Acerca de -- esas funciones no existen
+   en Tecnología y siguen fuera de alcance. El panel lateral acá es, a propósito, sólo el punto
+   de entrada a Cuenta.
    Estilo: los tamaños/colores del panel y del modal son los mismos valores fijos (#fff, #ddd,
-   #1a1a1a, etc.) que usan los otros cuatro productos para "Mi cuenta" -- ese panel es, a
-   propósito, visualmente uniforme en toda la app (no sigue la paleta propia de cada producto,
-   a diferencia del resto de la página). El chip #teFondo/#tuEspacio reutiliza el mismo diseño
-   de urbanismo.html/negocios.html/contextos.html tal cual. */
+   #1a1a1a, etc.) que usan los otros cuatro productos para "Mi cuenta" -- uniforme en toda la
+   app, no sigue la paleta propia de cada producto. */
 (function(){
+  var SB_URL = 'https://spavobqrigvbjabwyvbl.supabase.co';
+  var SB_KEY = 'sb_publishable_QbvJTscQJ63YjLasQ4p51w_0nLqwm6j';
+
+  function campo(id, tipo, placeholder, autoc){
+    return '<input id="' + id + '" type="' + tipo + '" autocomplete="' + autoc + '" placeholder="' + placeholder + '" ' +
+      'style="width:100%;padding:12px;font-size:16px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;box-sizing:border-box;">';
+  }
+  function boton(id, texto){
+    return '<button id="' + id + '" style="width:100%;padding:12px;font-size:16px;font-weight:600;color:#fff;' +
+      'background:#1a1a1a;border:0;border-radius:8px;cursor:pointer;margin-top:4px;">' + texto + '</button>';
+  }
   function enlace(id, texto){
     return '<div style="margin-top:12px;text-align:center;">' +
       '<a href="#" id="' + id + '" style="font-size:13px;color:#777;text-decoration:underline;">' + texto + '</a></div>';
@@ -2581,6 +2605,83 @@ window.TEC_RUNTIME_UNIVERSAL_CONTRACT = TEC_LOAD('vendor/universal-contract/cont
     return '<button id="' + id + '" style="width:100%;padding:11px;font-size:14px;font-weight:600;' +
       'border:1px solid ' + (peligro ? '#e3b3a3' : '#ddd') + ';border-radius:8px;cursor:pointer;' +
       'background:#fff;color:' + (peligro ? '#b4441f' : '#1a1a1a') + ';margin-bottom:10px;">' + texto + '</button>';
+  }
+
+  /* ---------- 124-M0.2-R2.1: detección real de proveedor (identities/app_metadata de
+     Supabase) -- ver la nota de alcance arriba. Nunca se deduce del botón de login que ofrece
+     esta página; si el proveedor no puede determinarse, se oculta Cambiar contraseña (falla
+     segura, a pedido explícito de Javier). */
+  function proveedoresDeUsuario(u){
+    if(!u) return null;
+    var provs = null;
+    if(Array.isArray(u.identities) && u.identities.length){
+      provs = u.identities.map(function(i){ return i && i.provider; }).filter(Boolean);
+    }
+    if((!provs || !provs.length) && u.app_metadata && Array.isArray(u.app_metadata.providers) && u.app_metadata.providers.length){
+      provs = u.app_metadata.providers.slice();
+    }
+    if((!provs || !provs.length) && u.app_metadata && u.app_metadata.provider){
+      provs = [u.app_metadata.provider];
+    }
+    return (provs && provs.length) ? provs : null;
+  }
+  function puedeCambiarClave(u){
+    var provs = proveedoresDeUsuario(u);
+    if(!provs) return false;   // proveedor indeterminado -> oculto, falla segura
+    return provs.indexOf('email') > -1;
+  }
+
+  /* ---------- Cambiar contraseña: portado verbatim desde urbanismo.html (ingresar()+
+     cambiarClave()), mismo SB_URL/SB_KEY (públicos, ya usados en TecAuth arriba), mismo
+     endpoint Supabase. Ningún flujo de autenticación nuevo. */
+  function auth(ruta, cuerpo){
+    return fetch(SB_URL + '/auth/v1/' + ruta, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify(cuerpo)
+    }).then(function(r){
+      return r.json().then(function(d){ return { ok: r.ok, estado: r.status, datos: d }; });
+    });
+  }
+  function desdeRespuestaCC(d){
+    if(!d || !d.access_token) return null;
+    return { token: d.access_token, refresco: d.refresh_token || '', vence: Date.now() + ((d.expires_in||3600)*1000), correo: (d.user && d.user.email) || '' };
+  }
+  function ingresar(correo, clave){
+    return auth('token?grant_type=password', { email: correo, password: clave })
+      .then(function(r){
+        if(!r.ok) return { ok:false, mensaje:'Contraseña actual incorrecta.' };
+        var s = desdeRespuestaCC(r.datos);
+        if(!s) return { ok:false, mensaje:'Respuesta inesperada del servidor.' };
+        window.TecAuth.guardar(s);
+        return { ok:true };
+      })
+      .catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor. Revisá tu conexión.' }; });
+  }
+  function cambiarClave(token, clave){
+    return fetch(SB_URL + '/auth/v1/user', {
+      method: 'PUT',
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ password: clave })
+    }).then(function(r){
+      return r.json().then(function(d){ return { ok:r.ok, estado:r.status, datos:d }; });
+    }).then(function(r){
+      if(!r.ok) return { ok:false, mensaje:'No se pudo guardar. Probá de nuevo en un momento.' };
+      return { ok:true };
+    }).catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor.' }; });
+  }
+
+  var perfilBajaProgramada = null;   // fecha ISO si hay una eliminación en curso, o null
+  function refrescarPerfil(alTerminar){
+    window.TecAuth.tokenVigente().then(function(t){
+      if(!t){ if(alTerminar) alTerminar(); return; }
+      fetch(SB_URL + '/rest/v1/perfiles?select=baja_programada', {
+        headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t }
+      }).then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(f){ perfilBajaProgramada = (f && f[0] && f[0].baja_programada) || null; })
+        .catch(function(){})
+        .then(function(){ if(alTerminar) alTerminar(); });
+    });
   }
 
   var cuentaAbierta = false;
@@ -2595,6 +2696,7 @@ window.TEC_RUNTIME_UNIVERSAL_CONTRACT = TEC_LOAD('vendor/universal-contract/cont
     document.body.appendChild(capa);
 
     var vistaC = 'inicio';
+    var mensajeCuenta = '';
 
     function cerrar(){ cuentaAbierta = false; capa.remove(); }
 
@@ -2606,13 +2708,43 @@ window.TEC_RUNTIME_UNIVERSAL_CONTRACT = TEC_LOAD('vendor/universal-contract/cont
             'border:0;font-size:22px;line-height:1;color:#999;cursor:pointer;">&times;</button>' +
           '<div style="font-size:17px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">Mi cuenta</div>' +
           '<div style="font-size:13px;color:#666;margin-bottom:16px;">' + correo + '</div>' +
+          (mensajeCuenta ? '<div style="font-size:13px;color:#2a7;margin-bottom:14px;">' + mensajeCuenta + '</div>' : '') +
           cuerpoHtml +
         '</div>';
     }
 
     function pintar(){
       var cuerpo;
-      if(vistaC === 'idioma'){
+      if(vistaC === 'clave'){
+        // 124-M0.2-R2.1: portado verbatim desde urbanismo.html (mostrarCuenta(), vista 'clave').
+        cuerpo =
+          campo('ccClaveActual','password','Contraseña actual','current-password') +
+          campo('ccClaveNueva','password','Contraseña nueva (mínimo 6 caracteres)','new-password') +
+          boton('ccAccion','Guardar') +
+          enlace('ccVolver','Cancelar') +
+          '<div id="ccAviso" style="font-size:13px;color:#b4441f;margin-top:8px;min-height:18px;"></div>';
+      } else if(vistaC === 'eliminar'){
+        // 124-M0.2-R2.1: portado verbatim desde urbanismo.html (mostrarCuenta(), vista
+        // 'eliminar') -- mismo texto, misma confirmación "ELIMINAR", mismo endpoint.
+        cuerpo =
+          '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
+            'Al confirmar, tu cuenta queda programada para eliminarse en 7 días. Podés cancelar el pedido en cualquier momento antes de esa fecha, desde este mismo panel.</div>' +
+          campo('ccConfirmar','text','Escribí ELIMINAR para confirmar','off') +
+          boton('ccAccion','Eliminar mi cuenta') +
+          enlace('ccVolver','Cancelar') +
+          '<div id="ccAviso" style="font-size:13px;color:#b4441f;margin-top:8px;min-height:18px;"></div>';
+      } else if(perfilBajaProgramada){
+        var fechaBaja = '';
+        try{ fechaBaja = new Date(perfilBajaProgramada).toLocaleDateString((typeof ComprenderI18n !== 'undefined' && ComprenderI18n.localeTag) ? ComprenderI18n.localeTag() : undefined, { day:'numeric', month:'long', year:'numeric' }); }
+        catch(e){ fechaBaja = perfilBajaProgramada; }
+        cuerpo =
+          '<div style="font-size:13px;color:#b4441f;margin-bottom:14px;line-height:1.5;">' +
+            'Tu cuenta está programada para eliminarse el ' + fechaBaja + '. Hasta entonces podés seguir usándola con normalidad.</div>' +
+          botonSecundario('ccCancelarBaja','Cancelar eliminación', true) +
+          (puedeCambiarClave(TecSession.usuario) ? botonSecundario('ccIrClave','Cambiar contraseña') : '') +
+          enlace('ccSalir','Cerrar sesión') +
+          '<div id="ccAviso" style="font-size:13px;color:#2a7;margin-top:8px;min-height:18px;"></div>';
+      } else if(vistaC === 'idioma'){
         // 124-M0.2-R2: vista "Idioma" portada verbatim desde index.html (mostrarCuenta(), vista
         // 'idioma') -- misma API pública de lib/i18n.js (ComprenderI18n.getLocale/setLocale), sin
         // tocar ese archivo. Los endónimos (Español/English/Português) se dejan sin traducir.
@@ -2628,8 +2760,13 @@ window.TEC_RUNTIME_UNIVERSAL_CONTRACT = TEC_LOAD('vendor/universal-contract/cont
       } else {
         cuerpo =
           botonSecundario('ccIrIdioma','Idioma') +
+          // 124-M0.2-R2.1: sólo si el usuario tiene un proveedor 'email' -- ver puedeCambiarClave().
+          (puedeCambiarClave(TecSession.usuario) ? botonSecundario('ccIrClave','Cambiar contraseña') : '') +
+          // 124-M0.2-R2.1: siempre disponible, sin condición de proveedor -- ver nota de alcance arriba.
+          botonSecundario('ccIrEliminar','Eliminar cuenta', true) +
           enlace('ccSalir','Cerrar sesión');
       }
+      mensajeCuenta = '';
       capa.innerHTML = marco(cuerpo);
       capa.querySelector('#ccCerrar').addEventListener('click', cerrar);
       cablear();
@@ -2637,16 +2774,54 @@ window.TEC_RUNTIME_UNIVERSAL_CONTRACT = TEC_LOAD('vendor/universal-contract/cont
 
     function cablear(){
       if(vistaC === 'inicio'){
+        var irClave = capa.querySelector('#ccIrClave');
+        if(irClave) irClave.addEventListener('click', function(){ vistaC='clave'; pintar(); });
         var irIdioma = capa.querySelector('#ccIrIdioma');
         if(irIdioma) irIdioma.addEventListener('click', function(){ vistaC='idioma'; pintar(); });
+        var irEliminar = capa.querySelector('#ccIrEliminar');
+        if(irEliminar) irEliminar.addEventListener('click', function(){ vistaC='eliminar'; pintar(); });
         var salir = capa.querySelector('#ccSalir');
         if(salir) salir.addEventListener('click', function(e){
           e.preventDefault();
           window.TecAuth.borrar();
           location.reload();
         });
+        var cancelarBaja = capa.querySelector('#ccCancelarBaja');
+        if(cancelarBaja){
+          cancelarBaja.addEventListener('click', function(){
+            var avisoEl2 = capa.querySelector('#ccAviso');
+            cancelarBaja.disabled = true; cancelarBaja.textContent = 'Cancelando…';
+            window.TecAuth.tokenVigente().then(function(t){
+              if(!t){
+                if(avisoEl2) avisoEl2.textContent = 'Tu sesión venció. Cerrá esto y volvé a entrar.';
+                cancelarBaja.disabled = false; cancelarBaja.textContent = 'Cancelar eliminación';
+                return;
+              }
+              fetch('/api/cuenta', {
+                method:'POST',
+                headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+                body: JSON.stringify({ accion:'cancelar_baja' })
+              }).then(function(r){
+                if(r.ok){
+                  perfilBajaProgramada = null;
+                  mensajeCuenta = 'Listo, tu cuenta ya no está programada para eliminarse.';
+                  pintar();
+                  return;
+                }
+                return r.json().catch(function(){ return {}; }).then(function(d){
+                  cancelarBaja.disabled = false; cancelarBaja.textContent = 'Cancelar eliminación';
+                  if(avisoEl2) avisoEl2.textContent = (d && d.error && d.error.message) || 'No se pudo cancelar.';
+                });
+              }).catch(function(){
+                cancelarBaja.disabled = false; cancelarBaja.textContent = 'Cancelar eliminación';
+                if(avisoEl2) avisoEl2.textContent = 'No se pudo conectar. Revisá tu conexión.';
+              });
+            });
+          });
+        }
         return;
       }
+
       if(vistaC === 'idioma'){
         capa.querySelector('#ccVolver').addEventListener('click', function(e){ e.preventDefault(); vistaC='inicio'; pintar(); });
         ['es','en','pt'].forEach(function(loc){
@@ -2656,10 +2831,70 @@ window.TEC_RUNTIME_UNIVERSAL_CONTRACT = TEC_LOAD('vendor/universal-contract/cont
             pintar();
           });
         });
+        return;
+      }
+
+      // 124-M0.2-R2.1: 'clave'/'eliminar' -- wiring portado verbatim desde urbanismo.html.
+      var avisoEl = capa.querySelector('#ccAviso');
+      var accion = capa.querySelector('#ccAccion');
+      capa.querySelector('#ccVolver').addEventListener('click', function(e){ e.preventDefault(); vistaC='inicio'; pintar(); });
+
+      function ocupado(si, texto){ accion.disabled = si; if(texto) accion.textContent = texto; }
+
+      if(vistaC === 'clave'){
+        var actual = capa.querySelector('#ccClaveActual'), nueva = capa.querySelector('#ccClaveNueva');
+        accion.addEventListener('click', function(){
+          var k1 = actual.value||'', k2 = nueva.value||'';
+          if(!k1||!k2){ avisoEl.textContent='Faltan datos.'; return; }
+          if(k2.length<6){ avisoEl.textContent='La contraseña nueva necesita al menos 6 caracteres.'; return; }
+          ocupado(true,'Guardando…'); avisoEl.textContent='';
+          var correoActual = (TecSession.usuario && TecSession.usuario.email) || '';
+          ingresar(correoActual, k1).then(function(r){
+            if(!r.ok){ ocupado(false,'Guardar'); avisoEl.textContent = r.mensaje || 'Contraseña actual incorrecta.'; return; }
+            var s = window.TecAuth.leer();
+            cambiarClave(s.token, k2).then(function(r2){
+              if(r2.ok){ mensajeCuenta = 'Contraseña actualizada.'; vistaC='inicio'; pintar(); }
+              else{ ocupado(false,'Guardar'); avisoEl.textContent = r2.mensaje; }
+            });
+          });
+        });
+      } else if(vistaC === 'eliminar'){
+        var confirmar = capa.querySelector('#ccConfirmar');
+        accion.addEventListener('click', function(){
+          if((confirmar.value||'').trim().toUpperCase() !== 'ELIMINAR'){
+            avisoEl.textContent = 'Escribí ELIMINAR, tal cual, para confirmar.'; return;
+          }
+          ocupado(true,'Eliminando…'); avisoEl.textContent='';
+          window.TecAuth.tokenVigente().then(function(t){
+            if(!t){ avisoEl.textContent='Tu sesión venció. Cerrá esto y volvé a entrar.'; ocupado(false,'Eliminar mi cuenta'); return; }
+            fetch('/api/cuenta', {
+              method:'POST',
+              headers:{ 'content-type':'application/json', Authorization:'Bearer ' + t },
+              body: JSON.stringify({ accion:'eliminar' })
+            }).then(function(r){
+              if(r.ok){
+                return r.json().catch(function(){ return {}; }).then(function(d){
+                  perfilBajaProgramada = (d && d.baja_programada) || null;
+                  mensajeCuenta = 'Listo, tu cuenta quedó programada para eliminarse en 7 días. Podés cancelarlo cuando quieras desde este panel.';
+                  vistaC = 'inicio';
+                  pintar();
+                });
+              }
+              return r.json().catch(function(){ return {}; }).then(function(d){
+                ocupado(false,'Eliminar mi cuenta');
+                avisoEl.textContent = (d && d.error && d.error.message) || 'No se pudo eliminar la cuenta.';
+              });
+            }).catch(function(){
+              ocupado(false,'Eliminar mi cuenta');
+              avisoEl.textContent = 'No se pudo conectar. Revisá tu conexión.';
+            });
+          });
+        });
       }
     }
 
-    pintar();
+    pintar();               // primer pintado inmediato ("Cargando…" si hace falta)
+    refrescarPerfil(function(){ if(vistaC === 'inicio') pintar(); });   // trae baja_programada real
   }
   window.mostrarCuentaComprender = mostrarCuenta;
 
