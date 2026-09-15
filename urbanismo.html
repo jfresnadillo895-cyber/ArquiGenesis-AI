@@ -2658,12 +2658,32 @@ canvas{animation:none !important}
 </div>
 
 <!-- ══ MODAL VALIDACIÓN ══ -->
+<!-- 124-GU-REV-02 · Bloque A, Corte 3: orden invertido respecto de antes -- Paso 1 ahora es
+     validar/ajustar los valores (6 posiciones por eje, derivadas de los 18 activos); Paso 2 ahora es
+     elegir la intención. Antes se pedía la intención primero (ver 124-GU-REV-01_FASE2_AUDITORIA.md
+     §1.1: eso dejaba, en el camino más común, un Abordaje Proyectivo generado sin intención
+     conocida). Los ids val-paso1/val-paso2 no se renombran -- sólo cambia qué contenido muestra
+     cada uno. -->
 <div class="modal" id="m-val">
   <div class="modal-card" style="max-width:640px">
     <button class="modal-close" onclick="document.getElementById('m-val').classList.remove('vis')" title="Cerrar">×</button>
 
-    <!-- PASO 1: INTENCIÓN -->
+    <!-- PASO 1: VALIDACIÓN DE VALORES (6 posiciones, una por eje) -->
     <div id="val-paso1">
+      <h3>¿Los valores reflejan la realidad del territorio?</h3>
+      <p class="msub">Ajustá los valores que no coincidan con tu conocimiento directo. Son 6 posiciones — una por eje — derivadas de los 18 indicadores activos ya evaluados.</p>
+      <div class="val-ejes" id="val-ejes"></div>
+      <div class="val-nota">
+        <label>Contexto adicional (opcional)</label>
+        <textarea id="val-nota-txt" placeholder="¿Hay algún aspecto que el sistema no captó? ¿Alguna corrección específica?"></textarea>
+      </div>
+      <div class="modal-btns">
+        <button class="btn-pri" onclick="irPasoIntencion()">Siguiente — Definir objetivo →</button>
+      </div>
+    </div>
+
+    <!-- PASO 2: INTENCIÓN -->
+    <div id="val-paso2" style="display:none">
       <h3>¿Cuál es el objetivo de este diagnóstico?</h3>
       <p class="msub">La intención orienta el Abordaje Proyectivo. El sistema priorizará las dimensiones más relevantes para tu objetivo específico.</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem" id="intencion-grid">
@@ -2673,24 +2693,9 @@ canvas{animation:none !important}
         <input type="text" id="intencion-libre" placeholder="Describí el objetivo del diagnóstico..." style="width:100%;padding:10px;font-size:13px;border:2px solid var(--azul);border-radius:8px">
       </div>
       <div class="modal-btns">
-        <button class="btn-sec" onclick="irPaso2('')">Continuar sin definir objetivo</button>
-        <button class="btn-pri" id="btn-paso2" onclick="irPaso2()" disabled>Siguiente — Ajustar valores →</button>
-      </div>
-    </div>
-
-    <!-- PASO 2: VALIDACIÓN DE VALORES -->
-    <div id="val-paso2" style="display:none">
-      <div id="intencion-display" style="background:var(--azul-c);border-radius:8px;padding:.6rem 1rem;margin-bottom:1rem;font-size:12px;color:var(--azul);font-weight:600"></div>
-      <h3>¿Los valores reflejan la realidad del territorio?</h3>
-      <p class="msub">Ajustá los valores que no coincidan con tu conocimiento directo. El sistema los incorporará al Abordaje Proyectivo.</p>
-      <div class="val-ejes" id="val-ejes"></div>
-      <div class="val-nota">
-        <label>Contexto adicional (opcional)</label>
-        <textarea id="val-nota-txt" placeholder="¿Hay algún aspecto que el sistema no captó? ¿Alguna corrección específica?"></textarea>
-      </div>
-      <div class="modal-btns">
-        <button class="btn-sec" onclick="volverPaso1()">← Cambiar objetivo</button>
-        <button class="btn-pri" onclick="cerrarVal(true)">Confirmar y ver Abordaje Proyectivo →</button>
+        <button class="btn-sec" onclick="volverPasoValidacion()">← Volver a ajustar valores</button>
+        <button class="btn-sec" onclick="cerrarVal(true)">Confirmar sin definir objetivo</button>
+        <button class="btn-pri" id="btn-paso2" onclick="cerrarVal(true)" disabled>Confirmar y ver Abordaje Proyectivo →</button>
       </div>
     </div>
   </div>
@@ -2791,8 +2796,15 @@ canvas{animation:none !important}
           </div>
         </div>
         <div class="card">
-          <div class="ctitle">Palancas de intervención</div>
+          <!-- 124-GU-REV-02 · Bloque A, Corte 2: antes decía "Palancas de intervención" y mostraba
+               calcularPalancas() (proyectiva, con acciones e intención) -- ahora muestra ciclos de
+               control (diagnóstico, sólo relación reguladora), ver relacionesReguladorasDiagnostico(). -->
+          <div class="ctitle">Ciclos de control</div>
           <div id="r-palancas"></div>
+        </div>
+        <div class="card">
+          <div class="ctitle">Zona de equilibrio</div>
+          <p style="font-size:13px;color:var(--texto2);line-height:1.8" id="r-zona-equilibrio"></p>
         </div>
         <div class="card">
           <div class="ctitle">Síntesis diagnóstica</div>
@@ -3055,6 +3067,20 @@ const ITEMS_36 = [
   {e:"HISTORIA",n:"Formación Física Urbana",a:"receptivo",nv:"Percepción Receptiva",g:"Estratos Físicos de la Urbanización",o:"Energía"},
   {e:"HISTORIA",n:"Medios de Transferencia",a:"receptivo",nv:"Percepción Receptiva",g:"Estratos Físicos de la Urbanización",o:"Transformación"},
 ];
+/* 124-GU-REV-02 · Bloque A, Corte 1 (15/09): separación explícita del repertorio de 36 en sus dos
+   mitades reales -- ITEMS_36 en sí NO se toca (ni se renombra, ni cambia de forma: sigue siendo el
+   catálogo canónico de 36, 18 activo + 18 receptivo, usado por el autotest de línea ~9544 y por
+   cualquier lectura que necesite el universo completo). Estas dos constantes derivadas son nuevas,
+   aditivas, y son el único punto de verdad de "cuáles son los 18 activos"/"cuáles son los 18
+   receptivos" de acá en más -- evita que cada consumidor tenga que repetir su propio .filter(). El
+   orden relativo por eje se preserva (ITEMS_36 ya viene en bloques fijos de 3 activo + 3 receptivo
+   por cada uno de los 6 ejes, ver comentario en la definición de ITEMS_36 más arriba).
+   Ver 124-GU-REV-01_FASE2_AUDITORIA.md (R0-R2) para el diagnóstico completo que motiva este corte:
+   antes de este cambio, buildPromptItems() pedía los 36 en una sola llamada de la fase diagnóstica
+   (evaluando también los 18 receptivos, que conceptualmente pertenecen al Abordaje Proyectivo), y
+   `renderDiag()`/`recalcularPonderacion()`/etc. promediaban por eje mezclando activo+receptivo. */
+const ITEMS_36_ACTIVOS = ITEMS_36.filter(function(it){ return it.a === 'activo'; });
+const ITEMS_36_RECEPTIVOS = ITEMS_36.filter(function(it){ return it.a === 'receptivo'; });
 const ECFG = {
   'CIVILIZACIÓN': {bg:'#E8F5E9',hd:'#2C6B5C',bar:'#2E7D32',int:'Interrelación Básica Universal · Energía Equilibrada del Presente',nivel:'Intuición', color:'#2E7D32'},
   'MENTE':        {bg:'#FFF8E1',hd:'#5D4037',bar:'#5C6B7D',int:'Intercambio con la Naturaleza · Absorber y Proyectar', nivel:'Intuición', color:'#5C6B7D'},
@@ -3095,6 +3121,11 @@ const CICLO_GENERATIVO = {
 };
 
 // Ciclos de control (cada eje controla al que está dos posiciones adelante)
+// Dirección: CICLO_CONTROL[controlador] = controlado. Verificado contra GeometriaUrbanaTII.pdf,
+// cap. 4.3.3 (pág. 58): "desequilibrio en la civilización... elemento anterior de la cadena, en
+// este caso las relaciones mentales" -> MENTE controla a CIVILIZACIÓN -> CICLO_CONTROL['MENTE'] ===
+// 'CIVILIZACIÓN'. Coincide. Ver 124-GU-REV-02_BLOQUE_A_INFORME.md para el detalle de esta
+// verificación y la separación (ciclos de control ≠ ciclo creativo) incorporada antes de este corte.
 const CICLO_CONTROL = {
   'CIVILIZACIÓN': 'CULTURA',
   'HISTORIA':     'EMOCIÓN',
@@ -3103,6 +3134,35 @@ const CICLO_CONTROL = {
   'MENTE':        'CIVILIZACIÓN',
   'CUERPO FÍSICO':'HISTORIA',
 };
+
+/* 124-GU-REV-02 · Bloque A, Corte 2 (15/09): lector DIAGNÓSTICO de ciclos de control --
+   estructuralmente independiente de calcularPalancas() (más abajo), que sigue siendo EXCLUSIVAMENTE
+   proyectiva y no se modifica en este corte. Aclaración obligatoria de Javier, incorporada antes de
+   escribir este código: "ciclos de control" (Abordaje Activo, cap. 4.3 del libro, función
+   diagnóstica) y "ciclo creativo" (Abordaje Proyectivo, cap. 5.1, función transformadora) NO son el
+   mismo mecanismo -- no comparten código, sólo leen los mismos datos estructurales fijos de los 6
+   ejes (CICLO_CONTROL/CICLO_GENERATIVO), que son propiedad de la topología de los 6 ejes, no lógica
+   de ninguno de los dos abordajes.
+   Esta función NUNCA lee `intencionSeleccionada`/parámetro de intención, NUNCA usa ACCIONES_CICLO,
+   NUNCA devuelve texto de acción proyectual -- sólo identifica, para cada eje con déficit entre los
+   18 activos, cuál es su eje REGULADOR real (quién lo controla, no a quién controla). Se usa
+   exclusivamente en el diagnóstico (renderDiag()); calcularPalancas() se usa exclusivamente en el
+   proyectivo (mostrarProyectivoInterno()) -- ninguna de las dos invoca a la otra. */
+function relacionesReguladorasDiagnostico(ponderados){
+  const ejePond = EJES.map(e=>({e, v:ponderados[e]||5})).sort((a,b)=>a.v-b.v);
+  const deficits = ejePond.slice(0,3);
+  return deficits.map(({e, v})=>{
+    // Búsqueda inversa: el regulador de "e" es el eje X tal que CICLO_CONTROL[X] === e (no
+    // CICLO_CONTROL[e], que da el eje que "e" mismo controla -- dirección opuesta).
+    const regulador = Object.keys(CICLO_CONTROL).find(function(x){ return CICLO_CONTROL[x] === e; }) || null;
+    return {
+      eje: e,
+      val: v,
+      tipo: v <= 4 ? 'déficit estructural' : v <= 6 ? 'en desarrollo' : 'potencial latente',
+      regulador,
+    };
+  });
+}
 
 // Acciones proyectuales por relación entre ejes
 const ACCIONES_CICLO = {
@@ -3278,9 +3338,9 @@ INSTRUCCIÓN CLAVE: Evaluá las RELACIONES entre dimensiones. La tensión entre 
    sin tocar código, pero con costo mensual) -- decisión suya, documentada acá. */
 function buildPromptItems(ciudad,pasivo,c2,ref){
   return `${promptEncabezado()}
-36 INDICADORES — evaluá los 36 en ESTE ORDEN EXACTO (n° | dimensión | indicador | grafo | grupo):
-${ITEMS_36.map((it,i)=>`${i+1}|${it.e}|${it.n}|${it.a}|${it.g}`).join('\n')}
-En "items" devolvé EXACTAMENTE 36 objetos en el mismo orden, SIN repetir nombres ni dimensiones: solo los campos de valor.
+18 INDICADORES (Abordaje Activo) — evaluá los 18 en ESTE ORDEN EXACTO (n° | dimensión | indicador | grafo | grupo):
+${ITEMS_36_ACTIVOS.map((it,i)=>`${i+1}|${it.e}|${it.n}|${it.a}|${it.g}`).join('\n')}
+En "items" devolvé EXACTAMENTE 18 objetos en el mismo orden, SIN repetir nombres ni dimensiones: solo los campos de valor.
 
 EJES: CIVILIZACIÓN(Institucional)·MENTE(Cognitiva)·CULTURA(Cultural)·EMOCIÓN(Social)·CUERPO FÍSICO(Física)·HISTORIA(Histórica)
 PONDERACIÓN PT×AP: AA=1.0 AM=0.75 AB=0.50 MA=0.75 MM=0.50 MB=0.30 BA=0.50 BM=0.30 BB=0.15
@@ -3306,7 +3366,7 @@ SUBTÍTULO BLOQUEADO (sb): Para cada ítem identificá cuál de los 9 subtítulo
    El campo "sb" debe contener SOLO el nombre del subtítulo más bloqueado para ese ítem específico en ${ciudad}.
 
 JSON compacto SOLO (sin espacios extra):
-{"ciudad":"...","descripcion":"...","items":[{"v":0,"pt":"A","ap":"A","conf":"A|M|B","sb":"subtítulo más bloqueado"},... 36 objetos en el orden indicado]}`;
+{"ciudad":"...","descripcion":"...","items":[{"v":0,"pt":"A","ap":"A","conf":"A|M|B","sb":"subtítulo más bloqueado"},... 18 objetos en el orden indicado]}`;
 }
 
 /* N3.0-URB-2 (12/08): buildPromptSintesis() (nucleo + receptivos + espiral en una sola
@@ -3319,8 +3379,12 @@ JSON compacto SOLO (sin espacios extra):
    recibe el nucleo ya resuelto como contexto (tension/sintesis), para que los receptivos y el
    espiral sigan coherentes con la lectura sistemica en vez de inventarla de nuevo. */
 function buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,itemsResueltos){
+  // 124-GU-REV-02 · Bloque A, Corte 2: itemsResueltos ya llega con 18 (Corte 1) -- se indexa contra
+  // ITEMS_36_ACTIVOS, no contra ITEMS_36 de 36 (ver Corte 1). Este realineamiento es puramente
+  // mecánico: qué se le pide a la IA en esta fase no cambiaba por sí solo con Corte 1, sólo la
+  // etiqueta dimensión/nombre de cada ítem.
   const resumenItems=(itemsResueltos||[]).map((it,i)=>{
-    const base=ITEMS_36[i]||ITEMS_36[0];
+    const base=ITEMS_36_ACTIVOS[i]||ITEMS_36_ACTIVOS[0];
     return `${i+1}|${base.e}|${base.n}|v=${it.v!=null?it.v:5}|pt=${it.pt||'M'}|ap=${it.ap||'M'}|conf=${it.conf||'M'}|sb=${it.sb||''}`;
   }).join('\n');
   return `${promptEncabezado()}
@@ -3331,44 +3395,80 @@ ${pasivo}
 `:''}${c2?'INFO LOCAL:\n'+c2+'\n':''}${ref?'REFINAMIENTO:\n'+ref+'\n':''}
 ${contextoApp === 'urban' ? 'Ciudad o territorio' : contextoApp === 'business' ? 'Organización o empresa' : 'Proyecto de investigación'}: ${ciudad}
 
-EVALUACIÓN DE LOS 36 INDICADORES YA REALIZADA (n°|dimensión|indicador|v=valor 0-10|pt=potencial|ap=apalancamiento|conf=confianza|sb=subtítulo bloqueado) — es la base real sobre la que tenés que construir la lectura sistémica, no la vuelvas a inventar, léela:
+EVALUACIÓN DE LOS 18 INDICADORES ACTIVOS YA REALIZADA (n°|dimensión|indicador|v=valor 0-10|pt=potencial|ap=apalancamiento|conf=confianza|sb=subtítulo bloqueado) — es la base real sobre la que tenés que construir la lectura sistémica, no la vuelvas a inventar, léela:
 ${resumenItems}
 
 ESPECIFICIDAD OBLIGATORIA para ${ciudad}, a partir de la evaluación de arriba:
 1. HAIKU: elementos concretos y únicos del territorio. NUNCA genérico.
-2. SÍNTESIS: nombrá la TENSIÓN RAÍZ del territorio (del repertorio del núcleo metodológico, en lenguaje llano) y la FUNCIÓN que la resuelve — la raíz es la que, resuelta, reordena a las demás. Desde esa raíz revelá el patrón sistémico, la paradoja y la oportunidad única del territorio. Mencioná específicamente los subtítulos bloqueados más críticos y qué función del ciclo (ser/relacionarse/transformarse) está más comprometida.
+2. ZONA DE EQUILIBRIO: a partir de los 18 activos, describí si el territorio tiende hacia la sobre-organización rígida, hacia la dispersión/el caos, o si está en una zona intermedia sana — y por qué (metodología Geometría Urbana, Abordaje Activo — Fuerza de Cohesión).
+3. SÍNTESIS: nombrá la TENSIÓN RAÍZ del territorio (del repertorio del núcleo metodológico, en lenguaje llano) y la FUNCIÓN que la resuelve — la raíz es la que, resuelta, reordena a las demás. IMPORTANTE: el punto de tensión real puede estar oculto detrás del síntoma más visible (el indicador con el valor más bajo no es necesariamente la causa raíz) — si difieren, señalá ambos explícitamente: cuál es el síntoma más visible y cuál el punto de tensión real. Desde esa raíz revelá el patrón sistémico, la paradoja y la oportunidad única del territorio. Mencioná específicamente los subtítulos bloqueados más críticos y qué función del ciclo (ser/relacionarse/transformarse) está más comprometida.
 
 JSON compacto SOLO (sin espacios extra):
-{"dims":[9nums],"tens":["t1","t2","t3","p1","p2"],"lagunas":[{"i":"nombre","q":"pregunta"},{"i":"...","q":"..."},{"i":"...","q":"..."}],"haiku":"v1·v2·v3","hexp":"...","da":0.0,"dh":0.0,"sust":"...","sint":"..."}`;
+{"dims":[9nums],"tens":["t1","t2","t3","p1","p2"],"lagunas":[{"i":"nombre","q":"pregunta"},{"i":"...","q":"..."},{"i":"...","q":"..."}],"haiku":"v1·v2·v3","hexp":"...","zonaEquilibrio":"...","da":0.0,"dh":0.0,"sust":"...","sint":"..."}`;
 }
 
-function buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,itemsResueltos,nucleo){
-  const resumenItems=(itemsResueltos||[]).map((it,i)=>{
-    const base=ITEMS_36[i]||ITEMS_36[0];
-    return `${i+1}|${base.e}|${base.n}|v=${it.v!=null?it.v:5}|sb=${it.sb||''}`;
-  }).join('\n');
+// 124-GU-REV-02 · Bloque A, Corte 5: esta función quedó sin ningún call site desde que Corte 4 sacó
+// la Llamada 3 de "Analizar" (ver el comentario en llamarAPI()) -- Corte 5 la reactiva como el ÚNICO
+// generador real del Abordaje Proyectivo (regenerarProyectivo() la invoca, más abajo, en vez de armar
+// su propio prompt inline como hacía hasta Corte 4). Dos cambios de fondo respecto de la versión
+// anterior a este corte:
+//   1. Firma nueva: 'itemsResueltos' (los 18 ACTIVOS, ya evaluados en la Llamada 1 -- no hace falta
+//      volver a listarlos acá) se reemplaza por 'ponderadosAjustados' (las 6 posiciones ya validadas
+//      por el profesional, Corte 3) + 'intencion'/'nota' explícitos como parámetros (antes 'intencion'
+//      se leía del global intencionSeleccionada -- correcto sólo por casualidad mientras esta función
+//      se llamaba desde dentro de "Analizar", donde esa intención todavía no existía; ver R1 punto 3/6
+//      de 124-GU-REV-01_FASE2_AUDITORIA.md).
+//   2. Recorre EXPRESAMENTE los 18 RECEPTIVOS por nombre (ITEMS_36_RECEPTIVOS, los 18 con a==='receptivo'
+//      de ITEMS_36) -- la versión anterior indexaba 'itemsResueltos[i]' (18 activos) contra
+//      'ITEMS_36[i]' con i=0..17, que en el array de 36 (bloques fijos de 3 activo+3 receptivo por
+//      eje) sólo cubre CIVILIZACIÓN/MENTE/CULTURA y nunca llega a EMOCIÓN/CUERPO FÍSICO/HISTORIA --
+//      el mismo tipo de desalineación índice-a-índice que Corte 1 corrigió en buildPromptItems()/el
+//      merge de llamarAPI(), acá sin efecto práctico hasta ahora porque la función nunca se llamaba
+//      con intención conocida. Se le pide a la IA un array 'elementos' con exactamente 18 entradas
+//      trazables {nombre, eje, nivel, aporte} -- una por cada receptivo listado, en el mismo orden --
+//      que R2 punto 3 pidió agregar sin romper "la UI sintetizada en tres niveles" (r1/r2/r3 siguen
+//      exactamente igual que siempre). Los campos haiku/hexp/da/dh/sust/sint y las instrucciones
+//      ANCLA CANÓNICA/ALCANCE se preservan tal cual los pedía el prompt inline de
+//      regenerarProyectivo() antes de este corte (esa función seguía recalculándolos siempre que se
+//      disparaba, sin condición) -- no es contenido nuevo de Corte 5, es el mismo pedido reubicado acá
+//      para que exista un único generador real, como pidió la autorización de Bloque A.
+function buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,ponderadosAjustados,nucleo,intencion,nota){
+  const resumenReceptivos=ITEMS_36_RECEPTIVOS.map((it,i)=>`${i+1}|${it.e}|${it.n}`).join('\n');
+  const valoresTxt=EJES.map(e=>nombreVisible(e)+' ('+e+'): '+((ponderadosAjustados&&ponderadosAjustados[e])||5)+'/10 — '
+    +((ponderadosAjustados&&ponderadosAjustados[e]>=7)?'fortaleza':(ponderadosAjustados&&ponderadosAjustados[e]>=5)?'en desarrollo':'déficit')
+  ).join('\n');
   const tensTxt=Array.isArray(nucleo&&nucleo.tens)?nucleo.tens.join(' · '):'';
+  const daVal=Math.min(...EJES.map(e=>(ponderadosAjustados&&ponderadosAjustados[e])||5)).toFixed(1);
+  const dhVal=Math.min(Number(daVal)+3,9).toFixed(1);
   return `${promptEncabezado()}
 ${pasivo?`ABORDAJE PASIVO — OBSERVACIÓN DIRECTA DEL TERRITORIO:
 ${pasivo}
-`:''}${c2?'INFO LOCAL:\n'+c2+'\n':''}${ref?'REFINAMIENTO:\n'+ref+'\n':''}${intencionSeleccionada?`INTENCIÓN DEL DIAGNÓSTICO: ${intencionSeleccionada}
-INSTRUCCIÓN: El Abordaje Proyectivo debe estar orientado específicamente hacia este objetivo. Priorizá las acciones más relevantes para "${intencionSeleccionada}". El proyectivo no es genérico — es intencionado.
+`:''}${c2?'INFO LOCAL:\n'+c2+'\n':''}${ref?'REFINAMIENTO:\n'+ref+'\n':''}${nota?'NOTA DEL PROFESIONAL:\n'+nota+'\n':''}${intencion?`INTENCIÓN DEL DIAGNÓSTICO: ${intencion}
+INSTRUCCIÓN: El Abordaje Proyectivo debe estar orientado específicamente hacia este objetivo. Priorizá las acciones más relevantes para "${intencion}". El proyectivo no es genérico — es intencionado.
 `:''}
 ${contextoApp === 'urban' ? 'Ciudad o territorio' : contextoApp === 'business' ? 'Organización o empresa' : 'Proyecto de investigación'}: ${ciudad}
 
-INDICADORES (n°|dimensión|indicador|valor|subtítulo bloqueado):
-${resumenItems}
+VALORES DEL DIAGNÓSTICO VALIDADOS POR EL PROFESIONAL (6 posiciones):
+${valoresTxt}
 
 LECTURA SISTÉMICA YA HECHA (base real para los receptivos y el espiral, no la reinterpretes de cero):
 Tensiones: ${tensTxt}
 Síntesis: ${(nucleo&&nucleo.sint)||''}
 
+LOS 18 RECEPTIVOS DEL ABORDAJE PROYECTIVO (n°|eje|nombre) — recorrelos EXPRESAMENTE, uno por uno, ninguno queda afuera:
+${resumenReceptivos}
+
+Con estos valores, genera el Abordaje Proyectivo completo.
+ANCLA CANÓNICA: el proyectivo deriva de la TENSIÓN RAÍZ identificada en la síntesis diagnóstica (la que, resuelta, reordena a las demás) y de la FUNCIÓN que la resuelve; la espiral (esp) ordena sus acciones por relación con esa raíz — las de corto plazo atacan su manifestación más accesible, las de largo plazo consolidan la función que la resuelve.
+ALCANCE: si NO hay capa de contexto cargada, este proyectivo es de alcance INTERNO (lee al organismo desde adentro) y así debe declararse; se vuelve INTEGRADO cuando se carga la evaluación de campo de Context.
+
 ESPECIFICIDAD OBLIGATORIA para ${ciudad}, a partir de la lectura de arriba:
-1. RECEPTIVOS: acciones específicas con instituciones y problemáticas reales de ${ciudad}, coherentes con la tensión raíz identificada.
-2. ESPIRAL: hoja de ruta concreta y secuencial para este territorio, que resuelva progresivamente esa misma tensión raíz.
+1. RECEPTIVOS: para cada uno de los 18 receptivos de la lista, un aporte concreto y específico (con instituciones y problemáticas reales de ${ciudad}) coherente con la tensión raíz identificada, y a cuál de los tres niveles sintetizados (1, 2 o 3) pertenece.
+2. NIVELES SINTETIZADOS: agrupá esos 18 aportes en los tres niveles de siempre (Intuición/Instinto/Percepción Receptiva), cada uno con su propia descripción y una lista de acciones.
+3. ESPIRAL: hoja de ruta concreta y secuencial para este territorio, que resuelva progresivamente esa misma tensión raíz.
 
 JSON compacto SOLO (sin espacios extra):
-{"r1t":"Intuición Receptiva","r1p":"Institucional↔Cognitivo","r1d":"...","r1a":["a1","a2","a3","a4"],"r2t":"Instinto Receptivo","r2p":"Social+Cultural↔Expresión","r2d":"...","r2a":["a1","a2","a3","a4"],"r3t":"Percepción Receptiva","r3p":"Histórico↔Físico","r3d":"...","r3a":["a1","a2","a3","a4"],"esp":[{"p":"...","s":"logrado|proceso|pendiente"},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."},{"p":"...","s":"..."}]}`;
+{"haiku":"v1·v2·v3","hexp":"explicación","r1t":"Intuición Receptiva","r1p":"Institucional↔Cognitivo","r1d":"descripción orientada al objetivo","r1a":["a1","a2","a3","a4"],"r2t":"Instinto Receptivo","r2p":"Social+Cultural↔Expresión","r2d":"descripción","r2a":["a1","a2","a3","a4"],"r3t":"Percepción Receptiva","r3p":"Histórico↔Físico","r3d":"descripción orientada al objetivo","r3a":["a1","a2","a3","a4"],"elementos":[{"nombre":"(nombre EXACTO de la lista de 18 receptivos de arriba)","eje":"EJE","nivel":1,"aporte":"..."}/*...EXACTAMENTE 18 objetos, uno por cada receptivo listado arriba, mismo orden...*/],"da":${daVal},"dh":${dhVal},"esp":[{"p":"acción concreta de corto plazo 1","s":"logrado|proceso|pendiente"},{"p":"acción concreta de corto plazo 2","s":"proceso|pendiente"},{"p":"acción de mediano plazo 1","s":"pendiente"},{"p":"acción de mediano plazo 2","s":"pendiente"},{"p":"acción de largo plazo 1","s":"pendiente"},{"p":"acción de largo plazo 2 — evaluación y relanzamiento del ciclo","s":"pendiente"}],"sust":"párrafo de sustentabilidad","sint":"síntesis actualizada con valores corregidos"}`;
 }
 
 /* ══════════════════════════════════════════
@@ -3378,8 +3478,9 @@ JSON compacto SOLO (sin espacios extra):
    con nivel2/nivel3 vacíos, y que regenerarProyectivo() podía tragar ese caso (y cualquier fallo
    real) en silencio, dejando en pantalla un Abordaje Proyectivo con tarjetas vacías como si fuera
    éxito. Este bloque NO fabrica contenido de relleno -- sólo decide si lo que la IA devolvió
-   alcanza para presentarse como completo. Se usa desde los DOS lugares que construyen
-   diagData.receptivos (llamarAPI() y regenerarProyectivo(), más abajo) y desde
+   alcanza para presentarse como completo. 124-GU-REV-02 · Bloque A, Corte 4: desde que la Llamada 3
+   se sacó de "Analizar", regenerarProyectivo() (más abajo) es el ÚNICO lugar que construye
+   diagData.receptivos -- llamarAPI() ya no lo toca. Se sigue usando también desde
    mostrarProyectivoInterno() (el render final), como segunda barrera defensiva. */
 function urbProyValid01NivelOk(n){
   if(!n || typeof n !== 'object') return false;
@@ -3399,11 +3500,30 @@ function urbProyValid01ReceptivosOk(receptivos){
 // solo lugar para no duplicar la forma. No decide si es válido: eso lo hace la función de arriba.
 function urbProyValid01ReceptivosDesdePlano(p){
   p = p || {};
-  return {
+  var out = {
     nivel1:{titulo:p.r1t||'',par:p.r1p||'',desc:p.r1d||'',acciones:p.r1a||[]},
     nivel2:{titulo:p.r2t||'',par:p.r2p||'',desc:p.r2d||'',acciones:p.r2a||[]},
     nivel3:{titulo:p.r3t||'',par:p.r3p||'',desc:p.r3d||'',acciones:p.r3a||[]}
   };
+  // 124-GU-REV-02 · Bloque A, Corte 5: trazabilidad ADITIVA -- si la respuesta trae 'elementos' (los
+  // 18 receptivos nombrados con su nivel/aporte, ver buildPromptReceptivosEspiral()), se preserva tal
+  // cual junto al shape nivel1/nivel2/nivel3 de siempre, sin reemplazarlo. Nunca se fabrica: si la
+  // respuesta no trajo 'elementos', esta clave directamente no se agrega (no un array vacío
+  // aparentando trazabilidad real que no existe).
+  if(Array.isArray(p.elementos)) out.elementos = p.elementos;
+  return out;
+}
+// 124-GU-REV-02 · Bloque A, Corte 5: gate ADITIVO para v2 -- exige, además de los tres niveles ya
+// obligatorios (urbProyValid01ReceptivosOk(), SIN modificar), que 'elementos' traiga EXACTAMENTE los
+// 18 receptivos nombrados. No reemplaza ni toca la barrera existente -- urbProyValid01ReceptivosOk()
+// sigue siendo la única que bloquea/desbloquea la transición al Abordaje Proyectivo en
+// mostrarProyectivoInterno(); esta función nueva sólo declara si, además, alcanza el nivel v2 de
+// trazabilidad completa (18/18). Deliberadamente NO se usa todavía para persistencia/schemaVersion/
+// exportación -- eso es Cortes 6/7 de R2 §9, fuera de este Bloque A ("no comenzar todavía
+// Persistencia/Exportación"). No toca CICLO_CONTROL/CICLO_GENERATIVO/calcularPalancas en absoluto.
+function urbProyValid01CompletoV2(receptivos){
+  if(!urbProyValid01ReceptivosOk(receptivos)) return false;
+  return Array.isArray(receptivos.elementos) && receptivos.elementos.length === 18;
 }
 
 // ══════════════════════════════════════════
@@ -3575,27 +3695,19 @@ function cerrarPasivo(inc){
   ejecutar();
 }
 
-/* URB-ROBUST 04 (11/09): un solo reintento automático y silencioso antes de mostrarle cualquier
-   error al usuario. Hasta este corte, la recuperación de una fase que el servidor ya había
-   resuelto pero el cliente no llegó a leer completa (el mismo fenómeno de siempre: 200 recibido,
-   cuerpo cortado después -- ver URB-ROBUST 02A/03 más abajo) sólo se disparaba si el usuario
-   veía el error y clickeaba "↻ Retomar análisis" a mano. El mecanismo en sí ya funciona --
-   confirmado por Javier en un caso real, donde retomar a mano resolvió el análisis -- pero exigía
-   que él viera primero una falla. Decisión de Javier (11/09, acotada a este archivo): Urbanismo
-   es una de las puertas principales del ecosistema y debe sentirse fluido, así que ese primer
-   reintento pasa a hacerse solo, detrás del mismo indicador de carga, sin mostrar nada; recién si
-   ESE reintento también falla se muestra el error de siempre, con el botón manual intacto como
-   última instancia. No se agrega ningún llamado nuevo ni se toca llamarAPI(): esta función sólo
-   envuelve la llamada de siempre y reusa, sin cambios, lo que llamarAPI() ya sabe reaprovechar
-   (checkpoint local de items/nucleo, y el resultado ya persistido en el servidor para la fase que
-   falló -- ver hayCheckpointResumible()/intentarRecuperarFaseUrbanismo() más abajo). */
+/* 124-BLOQ-URB-ABORT-02 (15/09): se ELIMINA el reintento ciego e inmediato de URB-ROBUST 04
+   (11/09) -- llamar a llamarAPI() una segunda vez, sin preguntar nada, apenas fallaba la
+   primera. La razón no es sólo "mejorarlo": 124-BLOQ-URB-ABORT-01_INFORME.md (15/09) confirmó
+   con tráfico real que ese reintento ciego era exactamente el mecanismo que multiplicaba el
+   riesgo de una segunda llamada paga a Anthropic para la misma fase -- disparaba un POST nuevo
+   a milisegundos del aborto, muy antes de que el servidor pudiera haber terminado de procesar
+   el primero. La recuperación con espera acotada ahora vive DENTRO de cada fase
+   (llamarFaseConRecuperacion/consultarRecuperacionConEspera, más arriba) y cubre las tres fases
+   por igual, incluida 'items' -- así que ya no hace falta ningún reintento por fuera de
+   llamarAPI(). Esta función queda como alias directo, sin lógica propia, para no tener que
+   tocar sus dos call sites (ejecutar()/nuevaCiudad()). */
 async function llamarAPIConReintentoUrbanismo(ciudad,pasivo,c2,ref){
-  try{
-    await llamarAPI(ciudad,pasivo,c2,ref);
-  }catch(ePrimerIntento){
-    console.error('URB-ROBUST 04: primer intento de llamarAPI() falló, reintentando una vez en silencio antes de mostrar error.', ePrimerIntento);
-    await llamarAPI(ciudad,pasivo,c2,ref);
-  }
+  return llamarAPI(ciudad,pasivo,c2,ref);
 }
 
 async function ejecutar(){
@@ -3825,11 +3937,57 @@ async function intentarRecuperarFaseUrbanismo(firma, fase){
   if(!firma || !fase) return null;
   try{
     var r=await fetch('/api/anthropic?firma='+encodeURIComponent(firma)+'&fase='+encodeURIComponent(fase));
+    // 124-BLOQ-URB-ABORT-02 (15/09): el servidor ahora distingue 202 (el POST original quedó
+    // reclamado y sigue procesándose -- vale la pena esperar) de 404 (no hay nada, ni reclamo ni
+    // resultado). Antes esto sólo sabía "ok o no" -- necesario para que consultarRecuperacionConEspera()
+    // pueda decidir si conviene esperar un poco antes del segundo intento.
+    if(r.status===202) return { estado:'processing' };
     if(!r.ok) return null;
     var data=await r.json();
     if(!data || !data.content) return null;
-    return data;
+    return { estado:'completed', content:data.content, usage:data.usage };
   }catch(e){ return null; }
+}
+
+/* 124-BLOQ-URB-ABORT-02 (15/09): reemplaza el par proactivo/reactivo de URB-ROBUST 03/03A
+   (que sólo consultaban cuando 'esReanudacion' ya era true, y nunca para 'items' -- ver
+   PENDIENTES.md, URB-ROBUST-03A, y 124-BLOQ-URB-ABORT-01_INFORME.md §6/§7 para la evidencia real
+   de por qué eso no alcanzaba). Ahora la consulta es SIEMPRE la misma, para las tres fases por
+   igual, y con una espera acotada -- no un sondeo sin límite: un GET inmediato y, sólo si el
+   servidor dice que la fase quedó reclamada y sigue procesándose (202), UNA espera fija seguida
+   de un segundo y último GET. Nunca dispara un POST por su cuenta -- eso lo decide, como antes,
+   quien la llama. */
+var URB_RECUP_ESPERA_MS = 4000;
+async function consultarRecuperacionConEspera(firma, fase){
+  var r1 = await intentarRecuperarFaseUrbanismo(firma, fase);
+  if(r1 && r1.estado === 'completed') return r1;
+  if(r1 && r1.estado === 'processing'){
+    mostrarEsperaRecuperacionUrb(true);
+    await new Promise(function(res){ setTimeout(res, URB_RECUP_ESPERA_MS); });
+    var r2 = await intentarRecuperarFaseUrbanismo(firma, fase);
+    mostrarEsperaRecuperacionUrb(false);
+    if(r2 && r2.estado === 'completed') return r2;
+  }
+  return null;
+}
+
+/* Reusa el texto del overlay de carga que ya existe (mostrarCarga/actualizarPasoCarga) en vez de
+   agregar UI nueva -- guarda lo que había para restaurarlo, no lo reemplaza a ciegas (el timer de
+   actualizarPasoCarga() sigue corriendo en paralelo y podría pisarlo de todos modos a los 5s; eso
+   es aceptable, sólo se busca mostrar la espera mientras dura). */
+var _urbEsperaTxtPrevio = null;
+function mostrarEsperaRecuperacionUrb(activo){
+  try{
+    var elTxt = document.getElementById('carga-txt');
+    if(!elTxt) return;
+    if(activo){
+      _urbEsperaTxtPrevio = elTxt.textContent;
+      elTxt.textContent = 'Recuperando el análisis…';
+    } else if(_urbEsperaTxtPrevio !== null){
+      elTxt.textContent = _urbEsperaTxtPrevio;
+      _urbEsperaTxtPrevio = null;
+    }
+  }catch(e){}
 }
 
 /* Envuelve una llamada de fase larga con el intento de recuperación server-side. Devuelve el
@@ -3845,28 +4003,17 @@ async function intentarRecuperarFaseUrbanismo(firma, fase){
    sola vez en llamarAPI(), con la misma señal que ya gobierna el botón "↻ Retomar análisis") --
    para una ejecución nueva de punta a punta esReanudacion es false y el comportamiento es
    idéntico al de antes de este corte: POST directo, sin ningún round-trip de más. */
-async function llamarFaseConRecuperacion(prompt, maxTokens, fase, etapa, firma, esReanudacion){
-  if(esReanudacion){
-    // Preflight: estamos retomando un análisis que ya venía de antes -- antes de gastar una
-    // llamada nueva a Claude para esta fase, preguntarle al servidor si ya la tiene resuelta.
-    var yaDisponible=await intentarRecuperarFaseUrbanismo(firma, fase);
-    if(yaDisponible){
-      reconciliarUsoRecuperado(fase, etapa, yaDisponible.usage);
-      return (yaDisponible.content||[]).map(function(i){ return i.text||''; }).join('');
-    }
-    // No había nada -- sigue de largo al camino normal, exactamente como si esReanudacion fuera
-    // false. No se repite la consulta: si esto tampoco estaba, hay que derivarla de una.
-  }
+async function llamarFaseConRecuperacion(prompt, maxTokens, fase, etapa, firma){
   try{
     return await llamarAnthropicUrbanismo(prompt, maxTokens, fase, etapa, firma);
   }catch(e){
-    if(!(e && typeof e._motivoUrb==='string' && e._motivoUrb.indexOf('body_')===0)){
-      throw e;
-    }
-    // Rescate reactivo (URB-ROBUST 03 original) -- se mantiene sin cambios como red de seguridad
-    // adicional: cubre el caso de que ESTA MISMA llamada, recién iniciada acá, sea la que termine
-    // en servidor pero se corte para el cliente antes de que exista un próximo "Retomar análisis".
-    var recuperado=await intentarRecuperarFaseUrbanismo(firma, fase);
+    // 124-BLOQ-URB-ABORT-02 (15/09): ya no depende de 'esReanudacion' (estructuralmente false
+    // para 'items' la primera vez -- el hueco que dejaba esa fase sin ninguna protección, ver
+    // 124-BLOQ-URB-ABORT-01_INFORME.md §2/§6/§7) ni de que el motivo empiece con 'body_' (un
+    // corte antes de encabezados tampoco garantiza que el POST no haya llegado a reclamarse en
+    // el servidor -- sólo garantiza que el cliente no vio la respuesta). Cualquier fallo de ESTA
+    // fase consulta siempre, con espera acotada, antes de decidir que hace falta un POST nuevo.
+    var recuperado = await consultarRecuperacionConEspera(firma, fase);
     if(!recuperado){ throw e; }
     reconciliarUsoRecuperado(fase, etapa, recuperado.usage);
     return (recuperado.content||[]).map(function(i){ return i.text||''; }).join('');
@@ -4067,22 +4214,15 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   // que esto es sólo la mitad "de dónde sale el ref", no el gate en sí.
   if(typeof cx5uSincronizarIdentidad === 'function') cx5uSincronizarIdentidad(organismoIdCap, firmaCap);
 
-  // URB-ROBUST 03A (26/08): "reanudación conocida" -- capturado UNA VEZ acá, con el estado del
-  // checkpoint tal como estaba al ARRANCAR esta llamada (antes de que cualquiera de las tres
-  // fases de más abajo pueda escribir en él). Si items o nucleo ya estaban resueltos de un
-  // intento anterior con esta MISMA firma, es la misma condición que ya decide si se muestra el
-  // botón "↻ Retomar análisis" (hayCheckpointResumible) -- se reusa tal cual, sin inventar una
-  // señal nueva. Se la pasa a llamarFaseConRecuperacion() para la fase que falte: le dice "antes
-  // de pedirle esto a Claude, preguntale primero al servidor si ya lo tiene" -- sólo en ese caso.
-  // Una ejecución nueva de punta a punta (esReanudacion=false, el caso normal y más frecuente)
-  // sigue yendo directo al POST, sin ningún round-trip de más -- exactamente el comportamiento de
-  // antes de este corte. 'items' en concreto SIEMPRE cae del lado "ejecución nueva": si items
-  // todavía no está resuelto, por construcción tampoco puede estarlo nucleo (nucleo depende de
-  // items ya parseado), así que esReanudacion es estructuralmente false en su propio turno -- no
-  // hay ninguna señal local disponible para distinguir "primer intento" de "primer intento otra
-  // vez, tras un fallo total" cuando no quedó nada guardado. Documentado como límite conocido y
-  // deliberado (ver PENDIENTES.md, URB-ROBUST 03A) -- no es lo que reportó la evidencia real.
-  const esReanudacion = !!(fasesPrevias.items || fasesPrevias.nucleo);
+  // 124-BLOQ-URB-ABORT-02 (15/09): 'esReanudacion' (URB-ROBUST 03A, 26/08) se elimina -- ya no
+  // hace falta. Era una señal LOCAL, calculada una sola vez acá, para decidir si valía la pena
+  // consultarle al servidor antes de pedir de nuevo -- y quedaba estructuralmente en false para
+  // 'items' en su propio turno, el hueco que documentaba PENDIENTES.md (URB-ROBUST-03A) y que
+  // 124-BLOQ-URB-ABORT-01_INFORME.md terminó confirmando con tráfico real. Ahora
+  // llamarFaseConRecuperacion() consulta siempre, para las tres fases por igual, dentro de su
+  // propio manejo de error -- no hace falta ninguna señal previa para decidir si preguntar.
+  // (La reutilización desde el checkpoint LOCAL de abajo, fasesPrevias.items/.nucleo, no cambia:
+  // sigue siendo válida y ortogonal a esto.)
 
   // ---- Llamada 1: los 36 indicadores ----
   let parsedItems;
@@ -4096,14 +4236,18 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
     // sale bien acá, es indistinguible de antes de este corte. Sólo entra en juego un intento de
     // recuperación server-side si ESTA llamada falla específicamente con el gap que cerró
     // URB-ROBUST 02A (headers 200 recibidos, cuerpo interrumpido después).
-    const rawItems=await llamarFaseConRecuperacion(buildPromptItems(ciudad,pasivo,c2,ref),2000,'items',etapaCap,firmaCap,esReanudacion);
+    const rawItems=await llamarFaseConRecuperacion(buildPromptItems(ciudad,pasivo,c2,ref),2000,'items',etapaCap,firmaCap);
     parsedItems=parsearJSONIA(rawItems);
 
     // Normalizar items (misma logica de siempre) ANTES de pasarlos a las otras dos llamadas, asi
     // leen los mismos valores normalizados que despues se van a renderizar.
     if(parsedItems.items&&parsedItems.items.length>0){
+      // 124-GU-REV-02 · Bloque A, Corte 1: buildPromptItems() ya sólo pide los 18 activos (ver
+      // ITEMS_36_ACTIVOS) -- este merge indexa contra ese mismo array de 18, no contra ITEMS_36 de
+      // 36. Antes de este corte, un ítem N de la respuesta se etiquetaba con ITEMS_36[N], que podía
+      // ser un elemento receptivo; ahora ITEMS_36_ACTIVOS[N] es siempre un elemento activo.
       parsedItems.items=parsedItems.items.map(function(it,ii){
-        var base=ITEMS_36[ii]||ITEMS_36[0];
+        var base=ITEMS_36_ACTIVOS[ii]||ITEMS_36_ACTIVOS[0];
         return {
           eje:  base.e,
           nombre: base.n,
@@ -4134,46 +4278,33 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   if(fasesPrevias.nucleo){
     parsedNucleo = fasesPrevias.nucleo;
   } else {
-    const rawNucleo=await llamarFaseConRecuperacion(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800,'nucleo',etapaCap,firmaCap,esReanudacion);
+    const rawNucleo=await llamarFaseConRecuperacion(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800,'nucleo',etapaCap,firmaCap);
     parsedNucleo=parsearJSONIA(rawNucleo);
     guardarFaseCheckpointUrbanismo(firmaCap, ciudad, organismoIdCap, etapaCap, 'nucleo', parsedNucleo);
   }
 
-  // Avanza a "Generando sintesis diagnostica" -- arranca la parte mas pesada (receptivos+espiral).
+  // 124-GU-REV-02 · Bloque A, Corte 4: la Llamada 3 (receptivos + espiral) se saca de "Analizar" --
+  // antes se ejecutaba acá, sin intención conocida (124-GU-REV-01_FASE2_AUDITORIA.md, R1 punto 3:
+  // "receptivos_espiral no debe ejecutarse durante Analizar"; punto 6: "el proyectivo debe recorrer
+  // expresamente los 18 receptivos después de la intención"). diagData llega ahora al diagnóstico
+  // SIN receptivos/espiral/haiku_exp de receptivos -- esos campos recién se completan cuando se
+  // cierra el Paso 2 de intención del modal de validación (ver cerrarVal(), más abajo), que a partir
+  // de este corte siempre dispara la generación real vía regenerarProyectivo(), ya con la intención
+  // conocida (aunque sea "" -- "Confirmar sin definir objetivo"). buildPromptReceptivosEspiral()
+  // (más arriba) queda definida pero sin ningún call site: no se borra (no es lo que pidió este
+  // corte, y regenerarProyectivo() ya arma su propio prompt inline, sin depender de ella) -- sólo
+  // deja de invocarse desde acá.
+  // Avanza el paso de carga hasta el último de "Analizar" (el texto sigue siendo válido: acá es
+  // donde se arma la síntesis diagnóstica a partir de items+núcleo, ya sin la llamada 3 de por medio).
   if(typeof actualizarPasoCarga==='function'){ cargaPasoActual=Math.max(cargaPasoActual,4); actualizarPasoCarga(cargaPasoActual); }
 
-  // ---- Llamada 3: receptivos + espiral, leyendo el nucleo ya resuelto como contexto ----
-  // (Esta fase nunca se resume desde checkpoint: es la última -- si llegó hasta acá con éxito, el
-  // análisis completo termina en este mismo llamado y el checkpoint se limpia más abajo.)
-  let rawRecEsp=await llamarFaseConRecuperacion(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200,'receptivos_espiral',etapaCap,firmaCap,esReanudacion);
-  let parsedRecEsp=parsearJSONIA(rawRecEsp);
-
-  // URB-PROY-VALID-01 (04/09): los niveles receptivos son obligatorios para presentar el Abordaje
-  // Proyectivo como completo (WEB-SMOKE-URB-02, FALLO 2: una respuesta sintácticamente válida
-  // puede traer nivel2/nivel3 vacíos). Como máximo UN reintento, con una llamada fresca (nunca
-  // resumida de un recorte de servidor previo, que sería el mismo contenido incompleto) al MISMO
-  // caso/objetivo/datos -- el prompt no cambia.
-  let receptivosCandidato = urbProyValid01ReceptivosDesdePlano(parsedRecEsp);
-  if(!urbProyValid01ReceptivosOk(receptivosCandidato)){
-    console.error('URB-PROY-VALID-01: niveles receptivos incompletos en el primer intento (receptivos_espiral) -- reintentando una vez.', receptivosCandidato);
-    try{
-      rawRecEsp=await llamarFaseConRecuperacion(buildPromptReceptivosEspiral(ciudad,pasivo,c2,ref,parsedItems.items,parsedNucleo),2200,'receptivos_espiral',etapaCap,firmaCap,false);
-      parsedRecEsp=parsearJSONIA(rawRecEsp);
-      receptivosCandidato = urbProyValid01ReceptivosDesdePlano(parsedRecEsp);
-    }catch(eReintentoRecEsp){
-      console.error('URB-PROY-VALID-01: el reintento de receptivos_espiral falló:', eReintentoRecEsp);
-    }
-    if(!urbProyValid01ReceptivosOk(receptivosCandidato)){
-      console.error('URB-PROY-VALID-01: niveles receptivos siguen incompletos tras el reintento -- no se fabrica contenido de relleno; el Abordaje Proyectivo queda marcado como no disponible hasta un nuevo intento.', receptivosCandidato);
-    }
-  }
-
-  // Análisis completo de punta a punta -- el checkpoint de ESTA firma ya cumplió su función.
+  // Análisis completo (items + núcleo) de punta a punta -- el checkpoint de ESTA firma ya cumplió su
+  // función para las dos fases que corren durante "Analizar" (nunca guardó 'receptivos_espiral' como
+  // fase resumible -- ver hayCheckpointResumible(), más arriba: sólo mira 'items'/'nucleo').
   limpiarCheckpointUrbanismo(firmaCap);
 
-  // Fusion: mismo objeto final que antes armaba una sola llamada -- todo el codigo de abajo
-  // (normalizacion de alias, render, refinamiento) queda exactamente igual.
-  const parsed=Object.assign({},parsedItems,parsedNucleo,parsedRecEsp);
+  // Fusion: mismo patrón que antes, ahora sólo con las dos fases que corren durante "Analizar".
+  const parsed=Object.assign({},parsedItems,parsedNucleo);
 
   if(parsed.dims&&!parsed.dimensiones) parsed.dimensiones=parsed.dims;
   if(parsed.tens&&!parsed.tensiones) parsed.tensiones=parsed.tens;
@@ -4182,13 +4313,12 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   if(parsed.hexp&&!parsed.haiku_exp) parsed.haiku_exp=parsed.hexp;
   if(parsed.da!==undefined&&!parsed.dist_actual) parsed.dist_actual=parsed.da;
   if(parsed.dh!==undefined&&!parsed.dist_horizonte) parsed.dist_horizonte=parsed.dh;
-  if(parsed.esp&&!parsed.espiral) parsed.espiral=parsed.esp.map(s=>({paso:s.p||s.paso,estado:s.s||s.estado}));
-  // URB-PROY-VALID-01 (04/09): NUNCA se fabrica contenido de relleno. Si tras el reintento los
-  // niveles siguen incompletos, parsed.receptivos queda en null (no un objeto con niveles vacíos)
-  // y parsed.receptivosIncompletos=true -- mostrarProyectivoInterno() (más abajo) usa ese flag
-  // para detener la transición al Proyectivo en vez de dibujar tarjetas vacías como si fuera éxito.
-  parsed.receptivos = urbProyValid01ReceptivosOk(receptivosCandidato) ? receptivosCandidato : null;
-  parsed.receptivosIncompletos = !urbProyValid01ReceptivosOk(receptivosCandidato);
+  // receptivos/espiral ya no se resuelven acá -- diagData.receptivos/diagData.espiral quedan
+  // undefined hasta que regenerarProyectivo() (disparado desde cerrarVal(), siempre después del
+  // Paso 2 de intención) los complete. urbProyValid01ReceptivosOk(undefined) ya devuelve false por
+  // construcción, así que mostrarProyectivoInterno() sigue bloqueando la transición al Proyectivo
+  // si todavía no se generaron -- misma barrera de siempre (URB-PROY-VALID-01), ahora es también la
+  // única puerta de entrada.
 
   diagData=parsed;
   setSt(false);
@@ -4295,11 +4425,15 @@ function copiarProyectivoParaCore(){
     txt += NL;
   }
 
-  // 3. Palancas de intervención
+  // 3. Palancas de intervención (proyectivo) o ciclos de control (diagnóstico, si el proyectivo
+  // todavía no existe). 124-GU-REV-02 · Bloque A, Corte 2: #r-palancas dejó de mostrar palancas
+  // prescriptivas en el diagnóstico -- ahora muestra ciclos de control (relación reguladora, sin
+  // acción sugerida), así que este resumen de texto etiqueta la fuente según corresponda.
   var pal = listaDe('ap-pal') || [];
-  if(!pal.length) pal = listaDe('r-palancas');
+  var palEsDiagnostico = false;
+  if(!pal.length){ pal = listaDe('r-palancas'); palEsDiagnostico = true; }
   if(pal.length){
-    txt += '════ PALANCAS DE INTERVENCIÓN ════' + NL;
+    txt += (palEsDiagnostico ? '════ CICLOS DE CONTROL (diagnóstico) ════' : '════ PALANCAS DE INTERVENCIÓN ════') + NL;
     pal.forEach(function(p,i){ txt += (i+1) + '. ' + p + NL; });
     txt += NL;
   }
@@ -4478,6 +4612,9 @@ function cerrarRef(rec){
 // ══════════════════════════════════════════
 // VALIDACIÓN — DOS PASOS
 // ══════════════════════════════════════════
+// 124-GU-REV-02 · Bloque A, Corte 3: selIntencion() ahora controla el botón FINAL de confirmación
+// (antes controlaba el botón que avanzaba de paso1 a paso2 -- el id btn-paso2 no cambió, sólo a qué
+// acción está ligado, ver el HTML del modal más arriba).
 function selIntencion(btn, valor){
   // Deseleccionar todos
   document.querySelectorAll('.intencion-btn').forEach(b=>b.classList.remove('sel'));
@@ -4499,28 +4636,16 @@ function selIntencion(btn, valor){
   }
 }
 
-function irPaso2(override){
-  if(override !== undefined) intencionSeleccionada = override;
-  // Si eligió "otro", leer el campo libre
-  if(!intencionSeleccionada){
-    const libre = document.getElementById('intencion-libre')?.value?.trim();
-    if(libre) intencionSeleccionada = libre;
-  }
+// Paso 1 (validación) -> Paso 2 (intención). Ya NO fija intencionSeleccionada acá -- eso pasa a
+// ocurrir exclusivamente en selIntencion()/el campo libre, dentro del Paso 2, que es donde
+// corresponde ahora. Tampoco toca ponderados/valAjustes -- eso lo sigue haciendo cerrarVal(), al
+// final, exactamente igual que antes (valAjustes ya quedó poblado durante el Paso 1).
+function irPasoIntencion(){
   document.getElementById('val-paso1').style.display='none';
   document.getElementById('val-paso2').style.display='block';
-  // Mostrar intención seleccionada
-  const display = document.getElementById('intencion-display');
-  if(intencionSeleccionada){
-    display.style.display='block';
-    display.textContent = '🎯 Objetivo: ' + intencionSeleccionada;
-  } else {
-    display.style.display='none';
-  }
-  // Renderizar sliders
-  renderSliders();
 }
 
-function volverPaso1(){
+function volverPasoValidacion(){
   document.getElementById('val-paso2').style.display='none';
   document.getElementById('val-paso1').style.display='block';
 }
@@ -4587,7 +4712,7 @@ function abrirValidacion(){
   document.getElementById('val-paso1').style.display='block';
   document.getElementById('val-paso2').style.display='none';
 
-  // Renderizar intenciones según contexto activo
+  // Renderizar intenciones según contexto activo (Paso 2 -- se prearma aunque empiece oculto)
   const wrap = document.getElementById('intencion-btns-wrap');
   const lista = INTENCIONES[contextoApp] || INTENCIONES.urban;
   wrap.innerHTML = lista.map(it => {
@@ -4596,6 +4721,10 @@ function abrirValidacion(){
     }
     return `<button class="intencion-btn" onclick="selIntencion(this,'${it.label}')">${it.icon} ${it.label}</button>`;
   }).join('');
+
+  // 124-GU-REV-02 · Bloque A, Corte 3: renderSliders() se dispara acá (Paso 1 ya es la validación),
+  // antes se disparaba recién al entrar al viejo paso2 (irPaso2()).
+  renderSliders();
 
   document.getElementById('m-val').classList.add('vis');
 }
@@ -4616,12 +4745,18 @@ function cerrarVal(ajustar){
 
   const nota = document.getElementById('val-nota-txt')?.value?.trim()||'';
 
-  // Si los cambios son significativos (>1.5 en algún eje), regenerar con API
-  if(ajustar && cambioMaximo > 1.5){
-    regenerarProyectivo(nota, intencionSeleccionada);
-  } else {
-    mostrarProyectivo(nota, intencionSeleccionada);
-  }
+  // 124-GU-REV-02 · Bloque A, Corte 4: generación única y unificada del proyectivo, siempre acá --
+  // antes se ramificaba entre mostrarProyectivo() (asumía receptivos ya generados durante "Analizar",
+  // SIN intención) y regenerarProyectivo() (sólo si el ajuste de sliders superaba 1.5, la única vía
+  // que sí generaba con intención). Con la Llamada 3 fuera de "Analizar" (Corte 4, más arriba),
+  // diagData.receptivos/espiral nunca existen antes de este punto -- regenerarProyectivo() es ahora
+  // el único generador real y se dispara siempre acá, siempre después del Paso 2 (intención ya
+  // conocida, sea la elegida o "" si se confirmó "sin definir objetivo"), sin importar si se tocaron
+  // los sliders. cambioMaximo se sigue calculando arriba porque ponderados[] igual necesita
+  // reflejar los ajustes del profesional antes de generar. mostrarProyectivo() (el enrutador que
+  // decide si corresponde el puente de Contextos Universal) sigue siendo invocado por
+  // regenerarProyectivo() al terminar -- no se toca esa función.
+  regenerarProyectivo(nota, intencionSeleccionada);
 }
 
 // ══════════════════════════════════════════
@@ -4735,19 +4870,24 @@ function renderDiag(d){
     `<div class="t-item"><span class="dot" style="background:${tc[i%5]}"></span><span>${t}</span></div>`
   ).join('');
 
-  // Palancas dinámicas
+  // 124-GU-REV-02 · Bloque A, Corte 2: el diagnóstico muestra CICLOS DE CONTROL (relación
+  // reguladora, sin acción prescriptiva ni intención) -- ya NO calcularPalancas(), que queda
+  // exclusiva del proyectivo (ver mostrarProyectivoInterno(), sin cambios). Ver aclaración
+  // obligatoria de Javier / relacionesReguladorasDiagnostico(), definida junto a CICLO_CONTROL.
   const ejePond=EJES.map(e=>({e,v:ponderados[e]||5})).sort((a,b)=>a.v-b.v);
-  const palancas = calcularPalancas(ponderados, intencionSeleccionada);
-  document.getElementById('r-palancas').innerHTML=palancas.map(p=>{
+  const ciclosControl = relacionesReguladorasDiagnostico(ponderados);
+  document.getElementById('r-palancas').innerHTML=ciclosControl.map(p=>{
     const cfg = ECFG[p.eje]||{hd:'#333',bg:'#f5f5f5'};
-    const cfgP = ECFG[p.ejePalanca]||{hd:'#1B4A6B'};
-    return `<div class="palanca" style="border-left-color:${cfg.hd}${p.esIntencion?';border-left-width:4px':''}">
-      <h5 style="color:${cfg.hd}">${getDim(p.eje)||p.eje} (${p.val}) — ${p.tipo}${p.esIntencion?' ⭐':''}</h5>
-      <p>Ciclo activo: <strong style="color:${cfgP.hd}">${p.palanca}</strong> → ${p.eje === 'CIVILIZACIÓN' || p.eje === 'MENTE' ? 'Ciclo generativo' : 'Ciclo de control'} — ${p.accion}</p>
+    const cfgR = ECFG[p.regulador]||{hd:'#1B4A6B'};
+    return `<div class="palanca" style="border-left-color:${cfg.hd}">
+      <h5 style="color:${cfg.hd}">${getDim(p.eje)||p.eje} (${p.val}) — ${p.tipo}</h5>
+      <p>Regulado por: <strong style="color:${cfgR.hd}">${p.regulador?(getDim(p.regulador)||p.regulador):'—'}</strong> (ciclo de control)</p>
     </div>`;
   }).join('');
 
   document.getElementById('r-sint').textContent=d.sintesis||'';
+  const rZonaEq = document.getElementById('r-zona-equilibrio');
+  if(rZonaEq) rZonaEq.textContent = d.zonaEquilibrio || '';
 
   // ── TENSIONES EN LAS CORRESPONDENCIAS MACRO/MICRO ──
   renderTransversal(items);
@@ -4896,11 +5036,17 @@ function renderDiag(d){
     thead.appendChild(th);
   }
 
+  // 124-GU-REV-02 · Bloque A, Corte 3: con el Corte 1 aplicado, diagData.items ya sólo trae los 18
+  // activos (abordaje siempre 'activo') -- esta tabla deja de iterar ['activo','proyectivo'] (el
+  // valor real nunca fue 'proyectivo', ver 124-GU-REV-01_FASE2_AUDITORIA.md §5.7: eso hacía que los
+  // 18 receptivos nunca aparecieran en ningún caso). Ahora itera sólo 'activo', que es lo único que
+  // puede existir en un diagnóstico nuevo -- resuelto por construcción, no por agregar una segunda
+  // sección de receptivos a ESTA tabla en particular (eso no es el rol de esta tabla).
   let tbH='',num=0;
-  ['activo','proyectivo'].forEach(ab=>{
+  ['activo'].forEach(ab=>{
     Object.values(grupos).filter(g=>g.abordaje===ab).forEach(g=>{
       const cfg=ECFG[g.eje]||{hd:'#333'};
-      tbH+=`<tr class="tbl-grupo" style="background:${cfg.bg}"><td colspan="8" style="color:${cfg.hd}">${ab==='activo'?'▶ ACTIVO':'◆ PROYECTIVO'} · ${g.nivel||''} · ${g.grupo||''}</td></tr>`;
+      tbH+=`<tr class="tbl-grupo" style="background:${cfg.bg}"><td colspan="8" style="color:${cfg.hd}">▶ ACTIVO · ${g.nivel||''} · ${g.grupo||''}</td></tr>`;
       g.items.forEach(it=>{
         num++;
         const isDeficit = deficit6.includes(num-1);
@@ -5007,40 +5153,25 @@ async function regenerarProyectivo(nota, intencion){
       const ciudad = diagData.ciudad;
       const c2 = document.getElementById('c2-txt')?.value?.trim()||'';
 
-      // Construir contexto con valores ajustados
-      const valoresAjustados = EJES.map(e=>
-        nombreVisible(e)+' ('+e+'): '+(ponderados[e]||5)+'/10 — '
-        +(ponderados[e]>=7?'fortaleza':ponderados[e]>=5?'en desarrollo':'déficit')
-      ).join('\n');
-      const pares = [['CIVILIZACIÓN','MENTE'],['CULTURA','EMOCIÓN'],['HISTORIA','CUERPO FÍSICO']];
-      const tensionesStr = pares.map(([m,mi])=>{
-        const b = Math.abs((ponderados[m]||5)-(ponderados[mi]||5));
-        return b>2 ? nombreVisible(m)+'↔'+nombreVisible(mi)+' (brecha '+Math.round(b*10)/10+')' : '';
-      }).filter(Boolean).join(', ');
-      const contextoAjustado = 'VALORES VALIDADOS POR EL PROFESIONAL:\n' + valoresAjustados
-        + (tensionesStr ? '\nTENSIONES: '+tensionesStr : '')
-        + (nota ? '\nNOTA: '+nota : '')
-        + (intencion ? '\nOBJETIVO: '+intencion : '');
-
-      const prompt = `Eres un experto en análisis urbano sistémico (metodología ArquiGenesis AI Urban).
-
-El profesional ha ajustado los valores del diagnóstico de ${ciudad} basándose en su conocimiento directo del territorio.
-${contextoAjustado}
-
-Con estos valores corregidos, genera el Abordaje Proyectivo completo.
-ANCLA CANÓNICA: el proyectivo deriva de la TENSIÓN RAÍZ identificada en la síntesis diagnóstica (la que, resuelta, reordena a las demás) y de la FUNCIÓN que la resuelve; la espiral (esp) ordena sus acciones por relación con esa raíz — las de corto plazo atacan su manifestación más accesible, las de largo plazo consolidan la función que la resuelve.
-ALCANCE: si NO hay capa de contexto cargada, este proyectivo es de alcance INTERNO (lee al organismo desde adentro) y así debe declararse; se vuelve INTEGRADO cuando se carga la evaluación de campo de Context.
-${intencion?`INTENCIÓN: El proyectivo debe estar orientado específicamente hacia "${intencion}".`:''}
-
-Responde SOLO JSON compacto:
-{"haiku":"v1·v2·v3","hexp":"explicación","r1t":"Intuición Receptiva","r1p":"Institucional↔Cognitivo","r1d":"descripción orientada al objetivo","r1a":["a1","a2","a3","a4"],"r2t":"Instinto Receptivo","r2p":"Social+Cultural↔Expresión","r2d":"descripción","r2a":["a1","a2","a3","a4"],"r3t":"Percepción Receptiva","r3p":"Histórico↔Físico","r3d":"descripción orientada al objetivo","r3a":["a1","a2","a3","a4"],"da":${Math.min(...EJES.map(e=>ponderados[e]||5)).toFixed(1)},"dh":${Math.min(Math.min(...EJES.map(e=>ponderados[e]||5))+3,9).toFixed(1)},"esp":[{"p":"acción concreta de corto plazo 1","s":"logrado|proceso|pendiente"},{"p":"acción concreta de corto plazo 2","s":"proceso|pendiente"},{"p":"acción de mediano plazo 1","s":"pendiente"},{"p":"acción de mediano plazo 2","s":"pendiente"},{"p":"acción de largo plazo 1","s":"pendiente"},{"p":"acción de largo plazo 2 — evaluación y relanzamiento del ciclo","s":"pendiente"}],"sust":"párrafo de sustentabilidad","sint":"síntesis actualizada con valores corregidos"}`;
+      // 124-GU-REV-02 · Bloque A, Corte 5: el prompt inline que armaba esta función se reemplaza por
+      // buildPromptReceptivosEspiral() (definida más arriba, junto a buildPromptItems()/
+      // buildPromptSintesisNucleo()) -- mismo contenido de fondo (valores validados, tensiones,
+      // ANCLA CANÓNICA/ALCANCE, mismo JSON pedido) más lo nuevo de este corte: recorre los 18
+      // receptivos por nombre y pide el array 'elementos' trazable. Un único generador real para
+      // todo el Abordaje Proyectivo, en vez de dos prompts paralelos (uno acá, otro en la función
+      // que Corte 4 dejó sin invocar).
+      const prompt = buildPromptReceptivosEspiral(ciudad, pasivoTxt, c2, refData, ponderados, {tens: diagData.tensiones, sint: diagData.sintesis}, intencion, nota);
 
       incrementarAPI('haiku');
       incrementarAPI('proy');
       const res = await fetch(apiEndpoint(),{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:3000,messages:[{role:'user',content:prompt}]})
+        // Corte 5: la respuesta ahora también incluye 'elementos' (18 objetos trazables) además de
+        // todo lo que ya se pedía -- se sube el techo de 3000 a 3800 (por debajo del
+        // MAX_TOKENS_TOPE=4000 real del servidor, mismo margen de seguridad que usan las otras
+        // llamadas de este archivo) para no truncar la respuesta más larga.
+        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:3800,messages:[{role:'user',content:prompt}]})
       });
 
       if(!res.ok){
@@ -5071,6 +5202,13 @@ Responde SOLO JSON compacto:
       if(parsed.haiku) diagData.haiku = parsed.haiku;
       if(parsed.hexp) diagData.haiku_exp = parsed.hexp;
       diagData.receptivos = receptivosCandidato;
+      // 124-GU-REV-02 · Bloque A, Corte 5: declara el gate v2 ADITIVO (urbProyValid01CompletoV2(),
+      // más arriba) -- true sólo si, además de los tres niveles, 'elementos' trajo los 18 receptivos
+      // completos. Campo puramente informativo en diagData: no bloquea ni habilita ninguna
+      // transición de UI (esa barrera sigue siendo sólo urbProyValid01ReceptivosOk()) y no se
+      // persiste ni exporta todavía (exportarHistorial() no lo incluye -- Persistencia/Exportación
+      // quedan fuera de este Bloque A).
+      diagData.proyectivo_completo = urbProyValid01CompletoV2(diagData.receptivos);
       if(parsed.da) diagData.dist_actual = parsed.da;
       if(parsed.dh) diagData.dist_horizonte = parsed.dh;
       if(parsed.esp) diagData.espiral = parsed.esp.map(s=>({paso:s.p||s.paso,estado:s.s||s.estado}));
