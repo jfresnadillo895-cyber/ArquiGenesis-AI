@@ -2777,6 +2777,13 @@ canvas{animation:none !important}
 
       <!-- Subtab 0: Resumen -->
       <div id="st0">
+        <!-- 124-GU-REV-03 · Bloque B-B1, puntos 3/4: badge de estado restaurado, sólo poblado y
+             mostrado por cargarHistorial() (ver esa función) al reabrir un diagnóstico del
+             historial -- nunca por un diagnóstico fresco (renderDiag() lo limpia/oculta siempre al
+             principio, sea cual sea el camino que la llamó). Para v1 (sin schemaVersion): rótulo
+             fijo "Diagnóstico histórico · metodología anterior". Para v2: resumen legible de
+             fase/cobertura/condición provisional tal como quedaron guardados, sin recalcular nada. -->
+        <div id="urbhist-badge" style="display:none"></div>
         <div id="resumen-ejecutivo" style="display:none" class="resumen-band"></div>
       <div class="desc-band" id="r-desc"></div>
       <div id="conf-resumen"></div>
@@ -4928,6 +4935,15 @@ function renderDiag(d){
   if(pondTabla) pondTabla.innerHTML = '';
   valAjustes = {};
 
+  // 124-GU-REV-03 · Bloque B-B1: renderDiag() es el punto de entrada común a TODO camino que
+  // pinta un diagnóstico -- fresco (Analizar/refinamiento) o reabierto del historial
+  // (cargarHistorial()). Se limpia/oculta acá SIEMPRE, incondicionalmente, al principio: así un
+  // diagnóstico fresco nunca hereda el badge "histórico"/de estado restaurado que hubiera quedado
+  // de una visita anterior al historial. cargarHistorial() es quien, después de llamar a esta
+  // función, lo vuelve a poblar y mostrar cuando corresponde -- ver esa función.
+  var badgeHistReset = document.getElementById('urbhist-badge');
+  if(badgeHistReset){ badgeHistReset.style.display = 'none'; badgeHistReset.innerHTML = ''; }
+
   const items=d.items.map(it=>({...it,coef:PM[it.PT+it.AP]||.5,vp:Math.round(it.valor*(PM[it.PT+it.AP]||.5)*10)/10,conf:it.conf||'M'}));
   window.pSin={}; const pSin=window.pSin;
   EJES.forEach(e=>{
@@ -6630,7 +6646,10 @@ function abrirComparativa(){
   const div = document.getElementById('comp-contenido');
   const territorios = [actual, anterior];
 
-  div.innerHTML = territorios.map((t,ti) => {
+  // 124-GU-REV-03 · Bloque B-B1, punto 5: advertir (no impedir) si el diagnóstico actual y el más
+  // reciente del historial no son de la misma metodología (uno v1 sin schemaVersion, el otro v2).
+  div.innerHTML = urbHist01AdvertenciaComparacionHtml(diagData, anterior.diagData);
+  div.innerHTML += territorios.map((t,ti) => {
     const color = ti === 0 ? 'var(--azul)' : 'var(--ocre, #F1EFEA)';
     return `<div>
       <div class="comp-header" style="background:${color}">
@@ -6673,6 +6692,60 @@ function abrirComparativa(){
 // ══════════════════════════════════════════
 // HISTORIAL
 // ══════════════════════════════════════════
+// 124-GU-REV-03 · Bloque B-B1 -- historial y compatibilidad v1/v2. Ningún dato se recalcula ni se
+// reinterpreta acá: guardarEnHistorial() ya clona diagData completo tal cual quedó (punto 1), y
+// estos helpers sólo LEEN ese clon para decidir qué mostrar. 'v1' = diagData sin 'schemaVersion'
+// -- mismo criterio ya establecido en llamarAPI() (Bloque A-R1): "SIN 'schemaVersion' se trata
+// como v1 (formato legado, sin separar activo/receptivo)".
+function urbHist01EsV1(d){
+  return !(d && d.schemaVersion);
+}
+// Rótulo EXACTO pedido por Javier (punto 3) -- una sola constante, usada tal cual en los tres
+// lugares donde puede aparecer (lista del historial x2, diagnóstico reabierto), para que el
+// traductor pasivo (lib/i18n.js) la reconozca siempre como la misma frase en los tres idiomas.
+var URBHIST01_ROTULO_V1 = 'Diagnóstico histórico · metodología anterior';
+// Punto 3: usado en los ítems de la lista del historial (actualizarHistorial()/filtrarHistorial()).
+function urbHist01BadgeListaHtml(d){
+  if(!urbHist01EsV1(d)) return '';
+  return '<div style="font-size:9px;font-weight:700;color:var(--ocre);background:rgba(176,138,62,.12);border-radius:5px;padding:2px 7px;display:inline-block;margin-top:4px">'+URBHIST01_ROTULO_V1+'</div>';
+}
+// Punto 4: "restaurar correctamente schemaVersion, fase, cobertura y condición provisional al
+// abrir un diagnóstico [del historial]". El dato en sí ya viaja intacto dentro de 'd' (clonado
+// completo, ver cargarHistorial() más abajo) -- esto sólo lo hace VISIBLE para el profesional al
+// reabrirlo, sin recalcular ni reinterpretar nada: lee 'fase'/'coberturaReceptiva'/
+// 'proyectivoProvisionalConfirmado' tal como quedaron guardados en ese momento.
+function urbHist01EstadoRestauradoHtml(d){
+  if(urbHist01EsV1(d)){
+    return '<div style="font-size:11px;font-weight:700;color:var(--ocre);background:rgba(176,138,62,.12);border:1px solid var(--ocre);border-radius:6px;padding:6px 10px;margin-bottom:.75rem">'+URBHIST01_ROTULO_V1+'</div>';
+  }
+  var fase = d && d.fase;
+  var cob = d && d.coberturaReceptiva;
+  var etiqueta;
+  if(fase === 'proyectivo_completo'){
+    etiqueta = cob ? ('Abordaje Proyectivo completo · '+cob.cubiertos+'/'+cob.total+' receptivos ('+cob.desarrollados+' desarrollados, '+cob.hipotesis+' con menor certeza)')
+      : 'Abordaje Proyectivo completo';
+  } else if(fase === 'proyectivo_provisional'){
+    etiqueta = cob ? ('Abordaje Proyectivo provisional (cobertura parcial confirmada) · '+cob.cubiertos+'/'+cob.total+' receptivos, '+cob.pendientes+' pendientes')
+      : 'Abordaje Proyectivo provisional (cobertura parcial confirmada)';
+  } else if(fase === 'validado'){
+    etiqueta = 'Diagnóstico validado (sin Abordaje Proyectivo generado)';
+  } else if(fase === 'diagnostico_activo'){
+    etiqueta = 'Diagnóstico activo (sin validar todavía)';
+  } else {
+    // fase ausente o desconocida en un diagData v2 -- no debería ocurrir, pero no se bloquea ni se
+    // inventa nada: se muestra el dato crudo tal cual está, en vez de fallar en silencio.
+    etiqueta = fase ? ('Diagnóstico (fase: '+fase+')') : 'Diagnóstico';
+  }
+  return '<div style="font-size:11px;font-weight:700;color:var(--azul);background:var(--azul-c);border-radius:6px;padding:6px 10px;margin-bottom:.75rem">'+etiqueta+'</div>';
+}
+// Punto 5: advertencia de compatibilidad al comparar -- nunca bloquea la comparación (Javier pidió
+// "advertir", no "impedir"), sólo dice explícitamente que los resultados no son metodológicamente
+// equivalentes cuando uno de los dos diagnósticos comparados es v1 y el otro v2.
+function urbHist01AdvertenciaComparacionHtml(dA, dB){
+  if(urbHist01EsV1(dA) === urbHist01EsV1(dB)) return '';
+  return '<div style="font-size:11px;font-weight:600;color:var(--rojo);background:rgba(193,85,63,.08);border:1px solid var(--rojo);border-radius:6px;padding:8px 10px;margin-bottom:1rem">⚠️ Uno de estos diagnósticos es histórico (metodología anterior) y el otro usa la metodología actual -- sus resultados no son metodológicamente equivalentes.</div>';
+}
+
 function toggleHistorial(){
   const panel = document.getElementById('hist-panel');
   panel.classList.toggle('vis');
@@ -6701,12 +6774,13 @@ function actualizarHistorial(){
     var ctxIcon = h.contexto==='business'?'💼':h.contexto==='research'?'🎓':'🏙️';
     var fechaSpan = h.fecha ? '<span style="font-size:9px;color:var(--texto3)">'+h.fecha+'</span>' : '';
     var sintDiv = h.sintesis ? '<div style="font-size:10px;color:var(--texto2);margin-top:4px;line-height:1.4">'+h.sintesis.slice(0,80)+'...</div>' : '';
+    var v1Badge = urbHist01BadgeListaHtml(h.diagData); // Bloque B-B1, punto 3
     return '<div class="hist-item">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'
       +'<div class="hist-item-ciudad" onclick="cargarHistorial('+idx+')" style="cursor:pointer">'+ctxIcon+' '+h.ciudad+'</div>'
       +'<div style="display:flex;gap:6px;align-items:center">'+fechaSpan
       +'<input type="checkbox" class="hist-check" data-idx="'+idx+'" onchange="toggleSeleccion(this)" style="cursor:pointer;accent-color:var(--azul)" title="Seleccionar para comparar">'
-      +'</div></div>'
+      +'</div></div>'+v1Badge
       +'<div class="hist-item-vals">'+vals+'</div>'+sintDiv+'</div>';
   }).reverse().join('');
 }
@@ -6726,13 +6800,26 @@ function cargarHistorial(idx){
   // es lo único que re-sincroniza la identidad de forma confiable.
   if(typeof cx5uLimpiarIdentidadActual === 'function') cx5uLimpiarIdentidadActual();
   if(typeof cx5uReiniciar === 'function') cx5uReiniciar();
-  diagData = h.diagData;
+  // 124-GU-REV-03 · Bloque B-B1, punto 1 ("conservar diagnósticos históricos exactamente como
+  // fueron guardados"): antes de este corte, 'diagData = h.diagData' apuntaba a la MISMA
+  // referencia que 'historial[idx].diagData' -- cualquier trabajo posterior sobre el diagnóstico
+  // reabierto (validar de nuevo, confirmar un provisional, etc., que mutan diagData EN el lugar)
+  // corrompía silenciosamente la entrada archivada. Se clona acá, igual que ya hace
+  // guardarEnHistorial() al guardar -- el historial queda protegido de cualquier edición futura
+  // sobre lo reabierto.
+  diagData = JSON.parse(JSON.stringify(h.diagData));
   ponderados = {...h.ponderados};
   intencionSeleccionada = h.intencion||'';
   renderDiag(diagData);
   document.getElementById('etapa-proy').style.display='none';
   document.getElementById('etapa-diag').style.display='block';
   setEtapa(0);
+  // Bloque B-B1, puntos 3/4: identificar un v1 como "metodología anterior", y para un v2 mostrar
+  // el estado con el que quedó archivado (fase/cobertura/condición provisional) -- sin recalcular
+  // nada, leyendo directamente el clon recién restaurado. renderDiag() ya limpió este badge al
+  // principio (por si el anterior había quedado poblado) -- acá se lo vuelve a poblar y mostrar.
+  var badgeHist = document.getElementById('urbhist-badge');
+  if(badgeHist){ badgeHist.innerHTML = urbHist01EstadoRestauradoHtml(diagData); badgeHist.style.display = 'block'; }
   toggleHistorial();
 }
 
@@ -7071,7 +7158,9 @@ function compararSeleccionados(){
     'EMOCIÓN':'#E05A5A','CUERPO FÍSICO':'#9B6ED4','HISTORIA':'#E8943A'
   };
 
-  var html = '';
+  // 124-GU-REV-03 · Bloque B-B1, punto 5: advertir (no impedir) si los dos diagnósticos
+  // seleccionados no son de la misma metodología.
+  var html = urbHist01AdvertenciaComparacionHtml(h1.diagData, h2.diagData);
 
   // Encabezado con ciudades
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1.25rem">';
@@ -7315,6 +7404,16 @@ function mostrarLineaTiempo(){
     html += '<div style="margin-bottom:1.5rem">';
     html += '<div style="font-size:13px;font-weight:700;color:var(--azul);font-family:var(--mono);margin-bottom:.75rem">🏙️ ' + ciudad + ' — ' + diags.length + ' diagnóstico(s)</div>';
 
+    // 124-GU-REV-03 · Bloque B-B1, punto 5: esta tabla calcula un Δ (delta) entre el primer y el
+    // último diagnóstico de la ciudad, tratándolos como puntos comparables de una misma evolución
+    // -- si esa serie mezcla un diagnóstico v1 (metodología anterior) con uno v2, el delta no es
+    // metodológicamente válido. Se advierte, sin dejar de mostrar la tabla (Javier pidió advertir,
+    // no impedir).
+    var mismaVersion = diags.every(function(d){ return urbHist01EsV1(d.diagData) === urbHist01EsV1(diags[0].diagData); });
+    if(!mismaVersion){
+      html += '<div style="font-size:10.5px;font-weight:600;color:var(--rojo);background:rgba(193,85,63,.08);border:1px solid var(--rojo);border-radius:5px;padding:6px 9px;margin-bottom:.6rem">⚠️ Esta serie mezcla diagnósticos históricos (metodología anterior) con diagnósticos de la metodología actual -- los Δ (delta) no son metodológicamente equivalentes.</div>';
+    }
+
     // Tabla de evolución
     html += '<div style="overflow-x:auto"><table class="lt-tabla"><thead><tr>';
     html += '<th>Dimensión</th>';
@@ -7521,6 +7620,7 @@ function filtrarHistorial(query){
       +'<div class="hist-item-ciudad">'+ctxIcon+' '+h.ciudad+'</div>'
       +(h.fecha?'<span style="font-size:9px;color:var(--texto3)">'+h.fecha+'</span>':'')
       +'</div>'
+      +urbHist01BadgeListaHtml(h.diagData) // Bloque B-B1, punto 3
       +'<div class="hist-item-vals">'+vals+'</div>'
       +(h.sintesis?'<div style="font-size:10px;color:var(--texto2);margin-top:4px;line-height:1.4">'+h.sintesis.slice(0,80)+'...</div>':'')
       +'</div>';
