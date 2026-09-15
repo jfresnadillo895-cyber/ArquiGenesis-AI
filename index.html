@@ -13564,33 +13564,75 @@ function retgov01ResumenContenido(envelope){
   if(Array.isArray(p.acciones) && p.acciones.length) return p.acciones.map(retgov01ExtraerTexto).filter(Boolean).join('; ');
   try{ return JSON.stringify(p).slice(0,200); }catch(e){ return '(contenido no legible)'; }
 }
+/* 124-M0.4-R1 (15/09) -- capa de presentación de retgov01RenderBandeja(): SOLO traduce lo visible
+   (encabezado/especialidad/tipo/procedencia/estado/botones/confirmaciones/advertencias vía t()).
+   Nunca toca registro.estado/envelope/payload/fingerprints/dedup/gobernanza -- retgov01ResolverRegistro(),
+   RETGOV01_GOBERNABLES, retgov01CargarInbox/GuardarInbox (arriba) siguen intactos y son la única
+   fuente de verdad; esta capa sólo decide qué texto mostrar sobre esos mismos datos reales.
+   retgov01ResumenContenido() (contenido de usuario/payload) y la procedencia técnica
+   (generatedBy/método) se marcan data-i18n-ignore -- mismo mecanismo que protege el JSON/síntesis
+   en urbRet01Render() (urbanismo.html) -- para que el traductor pasivo de lib/i18n.js nunca los
+   toque (brief punto 11: no traducir contenido del usuario ni valores/payloads reales). */
+function retgov01T(es){ return (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.t) ? ComprenderI18n.t(es) : es; }
+/* Reutiliza EXACTAMENTE las mismas 4 etiquetas de tipo que urbRet01TipoLabel() (urbanismo.html)
+   para las 4 returnClass que Urbanismo puede producir -- mismo concepto visible en ambos lados de
+   un mismo aporte. Agrega etiquetas para las 6 returnClass restantes (otras especialidades); el
+   mapa técnico RETGOV01_CLASE_LABEL de arriba permanece intacto como fallback. */
+var RETGOV01_TIPO_LABEL_ES_R1 = {
+  specialized_interpretation:'Lectura general',
+  relevant_tension_candidate:'Tensiones adicionales',
+  next_step_candidate:'Próximos pasos posibles',
+  longitudinal_memory_candidate:'Cierre con proyección',
+  relevant_capability_or_gap:'Capacidad o brecha detectada',
+  structural_risk_or_dependency:'Riesgo o dependencia estructural',
+  principle_candidate:'Principio propuesto',
+  human_decision_reference:'Decisión de referencia',
+  learning_candidate:'Aprendizaje propuesto',
+  cross_specialty_request:'Pedido entre especialidades'
+};
+function retgov01TipoLabelR1(returnClass){ return retgov01T(RETGOV01_TIPO_LABEL_ES_R1[returnClass] || retgov01EtiquetaClase(returnClass)); }
 function retgov01RenderBandeja(o){
   var cont = document.createElement('div');
   var pendientes = o ? retgov01ListarPendientes(o.id) : [];
   if(!pendientes.length) return cont;
   cont.style.marginTop = '14px';
   var t = document.createElement('div'); t.style.cssText = 'font-size:12px;opacity:.65;letter-spacing:.04em;margin-bottom:6px';
-  t.textContent = 'Retornos especializados pendientes';
+  t.textContent = retgov01T('Aportes pendientes');
   cont.appendChild(t);
   pendientes.forEach(function(reg){
+    // Punto 8 del brief: 3 clases gobernables (RETGOV01_GOBERNABLES, sin tocar) -> Incorporar/No
+    // incorporar; el resto (sólo referencia) -> Conservar como referencia/No conservar. Ambos
+    // botones siguen llamando exactamente a retgov01OnClickAceptar/Rechazar -- mismo circuito real
+    // (proponerFicha()->resolverPropuesta() para gobernables; accepted_as_reference para el resto) --
+    // sólo cambia la etiqueta visible.
+    var esGobernable = RETGOV01_GOBERNABLES.indexOf(reg.returnClass) !== -1;
     var card = document.createElement('div'); card.className = 'card'; card.style.marginTop = '8px';
     var linea1 = document.createElement('div'); linea1.style.cssText = 'font-size:13px;font-weight:600';
-    linea1.textContent = retgov01EtiquetaEspecialidad(reg.specialtyId) + ' · ' + retgov01EtiquetaClase(reg.returnClass);
+    linea1.textContent = retgov01T(retgov01EtiquetaEspecialidad(reg.specialtyId)) + ' · ' + retgov01TipoLabelR1(reg.returnClass);
     var linea2 = document.createElement('div'); linea2.style.cssText = 'font-size:12.5px;opacity:.8;margin-top:4px;white-space:pre-wrap';
+    linea2.setAttribute('data-i18n-ignore', '');
     linea2.textContent = retgov01ResumenContenido(reg.envelope);
     var provTxt = reg.provenance ? [reg.provenance.generatedBy, reg.provenance.metodo].filter(Boolean).join(' · ') : '';
     var linea3 = document.createElement('div'); linea3.style.cssText = 'font-size:11.5px;opacity:.6;margin-top:4px';
-    linea3.textContent = 'Procedencia: ' + (provTxt || 'sin detalle') + ' · recibido ' + new Date(reg.recibidoEn).toLocaleString();
-    card.appendChild(linea1); card.appendChild(linea2); card.appendChild(linea3);
+    linea3.appendChild(document.createTextNode(retgov01T('Procedencia') + ': '));
+    var spanProc = document.createElement('span'); spanProc.setAttribute('data-i18n-ignore', '');
+    spanProc.textContent = provTxt || retgov01T('sin detalle');
+    linea3.appendChild(spanProc);
+    linea3.appendChild(document.createTextNode(' · ' + retgov01T('recibido') + ' ' + new Date(reg.recibidoEn).toLocaleString()));
+    var linea4 = document.createElement('div'); linea4.style.cssText = 'font-size:11.5px;opacity:.6;margin-top:2px';
+    linea4.textContent = retgov01T('Estado') + ': ' + retgov01T('Pendiente');
+    card.appendChild(linea1); card.appendChild(linea2); card.appendChild(linea3); card.appendChild(linea4);
     if(reg.possible_legacy_duplication){
       var avisoDup = document.createElement('div'); avisoDup.style.cssText = 'font-size:11.5px;color:#b5793a;margin-top:4px';
-      avisoDup.textContent = 'Aviso: ya existe una importación reciente de esta especialidad para este organismo -- revisar antes de aceptar.';
+      avisoDup.textContent = retgov01T('Este aporte podría coincidir con información ya existente en el organismo. Revisalo antes de decidir.');
       card.appendChild(avisoDup);
     }
     var rowBtns = document.createElement('div'); rowBtns.className = 'cardrow'; rowBtns.style.marginTop = '6px';
-    var bAceptar = document.createElement('button'); bAceptar.className = 'btn'; bAceptar.textContent = 'Aceptar';
+    var bAceptar = document.createElement('button'); bAceptar.className = 'btn';
+    bAceptar.textContent = retgov01T(esGobernable ? 'Incorporar' : 'Conservar como referencia');
     bAceptar.onclick = function(){ retgov01OnClickAceptar(reg.receivedId); };
-    var bRechazar = document.createElement('button'); bRechazar.className = 'btn'; bRechazar.textContent = 'Rechazar';
+    var bRechazar = document.createElement('button'); bRechazar.className = 'btn';
+    bRechazar.textContent = retgov01T(esGobernable ? 'No incorporar' : 'No conservar');
     bRechazar.onclick = function(){ retgov01OnClickRechazar(reg.receivedId); };
     rowBtns.appendChild(bAceptar); rowBtns.appendChild(bRechazar);
     card.appendChild(rowBtns);
@@ -13602,14 +13644,21 @@ async function retgov01OnClickAceptar(receivedId){
   var actorId = '';
   try{ if(typeof window.obtenerCorreoActivoComprender === 'function') actorId = await window.obtenerCorreoActivoComprender(); }catch(e){ actorId = ''; }
   var r = retgov01ResolverRegistro(receivedId, 'aceptar', { actorId: actorId });
-  if(!r.ok){ cardMensaje('No se pudo aceptar el retorno', r.motivo || 'No se pudo preparar una propuesta a partir de este contenido.'); return; }
+  if(!r.ok){ cardMensaje(retgov01T('No se pudo aceptar el retorno'), r.motivo && r.motivo.indexOf('RETGOV01_') !== 0 ? r.motivo : retgov01T('No se pudo preparar una propuesta a partir de este contenido.')); return; }
   mostrarFicha();
+  // Punto 9 del brief: la confirmación se deriva del estado REAL devuelto por
+  // retgov01ResolverRegistro() (r.estado, que a su vez viene de resolverPropuesta()/accepted_as_reference
+  // ya ejecutados arriba) -- nunca se muestra éxito antes de obtenerlo.
+  cardMensaje(retgov01T(r.estado === 'accepted' ? 'Incorporado a la Memoria' : 'Conservado como referencia'), '');
 }
 async function retgov01OnClickRechazar(receivedId){
+  var registroPrevio = retgov01BuscarPorId(receivedId);
+  var esGobernable = registroPrevio ? (RETGOV01_GOBERNABLES.indexOf(registroPrevio.returnClass) !== -1) : true;
   var actorId = '';
   try{ if(typeof window.obtenerCorreoActivoComprender === 'function') actorId = await window.obtenerCorreoActivoComprender(); }catch(e){ actorId = ''; }
   retgov01ResolverRegistro(receivedId, 'rechazar', { actorId: actorId });
   mostrarFicha();
+  cardMensaje(retgov01T(esGobernable ? 'No incorporado' : 'No conservado'), '');
 }
 
 window.retgov01RecibirEnvelope = retgov01RecibirEnvelope;

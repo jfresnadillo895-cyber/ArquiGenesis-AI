@@ -8388,43 +8388,153 @@ function urbRet01PrepararTodos(actorId){
   return { ok:true, envelopes: generados };
 }
 
-/* ---- UX: caja mínima, texto explícito de que es un retorno PREPARADO/EXPORTABLE, nunca "ya
-   incorporado al Core". Reusa el mismo vocabulario CSS de este archivo (.card/.ctitle/.btn-sec/
-   .btn-sml), sin pestaña ni pantalla nueva. ---- */
+/* ---- UX (124-M0.4-R1, 15/09): presentación comprensible del retorno -- SÓLO cambia cómo se
+   muestra, nunca qué se genera/envía/guarda. urbRet01PrepararTodos()/rtp01Encolar()/el envelope/
+   el fingerprint quedan intactos; esto sólo lee lo que ya existe y lo traduce a texto para la
+   persona. Reusa el mismo vocabulario CSS de este archivo (.card/.ctitle/.btn-sec/.btn-sml), sin
+   pestaña ni pantalla nueva. Auditoría de referencia: 124-M0.4-Fase1_INFORME.md, secciones 1-3. */
 function urbRet01EscapeHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+function urbRet01T(es){
+  return (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.t) ? ComprenderI18n.t(es) : es;
+}
+/* Rótulo visible por tipo -- mismo criterio documentado en la auditoría (Sección 3): nombre
+   orientado a persona, nunca el returnClass técnico crudo. Los 4 son los únicos que Urbanismo
+   genera realmente hoy (urbRet01PrepararTodos()); el fallback cubre cualquier clase futura sin
+   romper si algún día se agrega un constructor de contenido nuevo. */
+var URBRET01_TIPO_LABEL_ES = {
+  specialized_interpretation: 'Lectura general',
+  relevant_tension_candidate: 'Tensiones adicionales',
+  next_step_candidate: 'Próximos pasos posibles',
+  longitudinal_memory_candidate: 'Cierre con proyección'
+};
+function urbRet01TipoLabel(returnClass){
+  var es = URBRET01_TIPO_LABEL_ES[returnClass] || returnClass;
+  return urbRet01T(es);
+}
+var URBRET01_METODO_LABEL_ES = {
+  'lectura-territorial-324': 'Lectura territorial',
+  'abordaje-proyectivo': 'Abordaje proyectivo',
+  'diagnostico-y-proyectivo-cerrados': 'Diagnóstico y proyección cerrados'
+};
+/* Separado en {label, ciudad} a propósito -- label es texto de interfaz (traducible por t());
+   ciudad es valor territorial real (payload.ciudad), NUNCA se traduce (punto 11 del brief) y se
+   protege con data-i18n-ignore al insertarlo, igual que el resto del contenido real más abajo. */
+function urbRet01ProcedenciaPartes(env){
+  var metodo = env && env.provenance && env.provenance.metodo;
+  var label = urbRet01T(URBRET01_METODO_LABEL_ES[metodo] || metodo || '');
+  var ciudad = (env && env.payload && env.payload.ciudad) || '';
+  return { label: label, ciudad: ciudad };
+}
+/* Síntesis determinista -- función PURA de presentación (Sección 3 de la auditoría, tabla
+   Tipo/Rótulo/Campos usados/Fallback seguro). Sólo LEE env.payload, tal como está: nunca
+   modifica el envelope, nunca completa campos ausentes, nunca llama IA, nunca genera otro
+   diagnóstico, nunca convierte hipótesis en hecho. Si falta el campo real, usa el fallback
+   seguro documentado -- jamás inventa contenido. */
+function urbRet01SintesisTexto(env){
+  var p = (env && env.payload) || {};
+  var rc = env && env.returnClass;
+  if(rc === 'specialized_interpretation'){
+    if(typeof p.sintesis === 'string' && p.sintesis.trim()) return p.sintesis.trim();
+    if(typeof p.tensionRaiz === 'string' && p.tensionRaiz.trim()) return p.tensionRaiz.trim();
+    return urbRet01T('Interpretación sin resumen disponible — ver JSON');
+  }
+  if(rc === 'relevant_tension_candidate'){
+    var tensiones = (Array.isArray(p.tensiones) ? p.tensiones : []).filter(function(s){ return typeof s === 'string' && s.trim(); });
+    if(tensiones.length) return tensiones.join('; ');
+    return urbRet01T('Sin tensiones adicionales con texto — ver JSON');
+  }
+  if(rc === 'next_step_candidate'){
+    var acciones = (Array.isArray(p.acciones) ? p.acciones : []).filter(function(s){ return typeof s === 'string' && s.trim(); });
+    if(acciones.length) return acciones.join('; ');
+    return urbRet01T('Sin acciones con texto — ver JSON');
+  }
+  if(rc === 'longitudinal_memory_candidate'){
+    if(typeof p.sintesis === 'string' && p.sintesis.trim()){
+      var txt = p.sintesis.trim();
+      if(p.cerradoConProyectivo === true) txt += ' (' + urbRet01T('cerrado con proyección') + ')';
+      return txt;
+    }
+    return urbRet01T('Cierre registrado sin síntesis — ver JSON');
+  }
+  return urbRet01T('Interpretación sin resumen disponible — ver JSON');
+}
+/* Estado de envío REAL -- se reconstruye leyendo la outbox existente (RETTRANSPORT01_STORAGE_
+   LLAVE) por fingerprint+organismo, nunca desde una clave de memoria propia (ese era el defecto
+   documentado en la auditoría, Caso 10: el estado visual se perdía al recargar aunque el dato
+   real seguía correctamente deduplicado). No se crea ninguna clave de almacenamiento nueva --
+   rtp01CargarOutbox()/rtp01Fingerprint() son las mismas funciones reales de RET-TRANSPORT-01,
+   sin tocar. 'pending'/'delivered'/'invalid' son los 3 estados reales que ya existían del lado
+   del transporte; "sin item" es el cuarto estado real (todavía no se encoló nada). */
+function urbRet01EstadoEnvioReal(env){
+  var outbox = rtp01CargarOutbox();
+  var huella = rtp01Fingerprint(env);
+  var organismId = env && env.organismRef && env.organismRef.id;
+  var item = outbox.items.find(function(it){ return it.fingerprint === huella && it.organismId === organismId; });
+  if(!item) return 'listo';
+  if(item.estadoEntrega === 'pending') return 'enviado';
+  if(item.estadoEntrega === 'delivered') return 'ya_enviado';
+  if(item.estadoEntrega === 'invalid') return 'fallo';
+  return 'listo';
+}
+var URBRET01_ESTADO_LABEL_ES = {
+  listo: 'Listo para enviar',
+  enviado: 'Enviado',
+  ya_enviado: 'Ya enviado',
+  fallo: 'No se pudo enviar'
+};
 function urbRet01Render(){
   var caja = document.getElementById('urbRet01Caja');
   if(!caja) return;
   if(!urbRet01PuedePreparar()){ caja.style.display = 'none'; caja.innerHTML = ''; return; }
   caja.style.display = 'block';
   var existentes = urbRet01LeerPorEstudio(CX5U.organismId, CX5U.specialtyStudyRef);
+  var hayAlgunEnviado = false;
   var listaHtml = existentes.length ? existentes.map(function(env, i){
-    // MIG-URB-01 (02/09): "Enviar a Comprender" es la única acción humana explícita de envío,
-    // separada de "Copiar JSON" -- reutiliza el envelope real ya certificado tal cual está en
-    // pantalla (nunca reconstruye otro). El estado (enviado/duplicado) se recuerda en memoria
-    // por índice+organismo+estudio para que sobreviva a los re-render de esta caja.
-    var claveEnvio = urbRet01ClaveEnvio(i);
-    var estadoEnvio = _urbRet01EnviosEnCurso[claveEnvio];
-    var botonEnviarHtml = estadoEnvio === 'enviado'
-      ? '<button class="btn-sml" disabled>Enviado a Comprender ✓</button>'
-      : (estadoEnvio === 'duplicado'
-        ? '<button class="btn-sml" disabled>Ya estaba en camino a Comprender</button>'
-        : '<button class="btn-sml" onclick="urbRet01Enviar(' + i + ')">Enviar a Comprender</button>');
+    var estado = urbRet01EstadoEnvioReal(env);
+    if(estado !== 'listo') hayAlgunEnviado = true;
+    // Punto 5/point 4 del brief: el botón nunca invita a reenviar cuando el contrato real
+    // (dedup por fingerprint+organismo en rtp01Encolar) ya lo impediría -- sólo se ofrece la
+    // acción de envío en el único estado donde de verdad no hay nada encolado todavía.
+    var accionHtml = estado === 'listo'
+      ? '<button class="btn-sml" onclick="urbRet01Enviar(' + i + ')">' + urbRet01EscapeHtml(urbRet01T('Enviar a Comprender')) + '</button>'
+      : '';
+    var procedencia = urbRet01ProcedenciaPartes(env);
+    // data-i18n-ignore protege la síntesis (contenido real del payload -- diagData del usuario)
+    // y la ciudad (valor territorial) para que el traductor pasivo de lib/i18n.js NUNCA los toque
+    // -- mismo mecanismo exacto que corrigió 124-M0.3-R1.1 para el nombre del organismo en el
+    // badge de continuidad. Los rótulos de interfaz (tipo/"Procedencia"/método/"Estado"/estado)
+    // quedan FUERA de data-i18n-ignore a propósito: ya se tradujeron con urbRet01T() al construir
+    // esta tarjeta, y dejarlos alcanzables no rompe nada (un texto ya traducido no vuelve a
+    // matchear una clave en español).
     return '<div class="card" style="margin-top:.5rem">' +
-      '<div class="ctitle" style="font-size:12px">' + urbRet01EscapeHtml(env.returnClass) + '</div>' +
-      '<pre style="white-space:pre-wrap;font-size:10px;max-height:180px;overflow:auto;background:#f7f7f7;padding:8px;border-radius:8px">' + urbRet01EscapeHtml(JSON.stringify(env, null, 2)) + '</pre>' +
-      '<button class="btn-sml" onclick="urbRet01Copiar(' + i + ')">Copiar JSON</button> ' +
-      botonEnviarHtml +
+      '<div class="ctitle" style="font-size:12px">' + urbRet01EscapeHtml(urbRet01TipoLabel(env.returnClass)) + '</div>' +
+      '<p style="font-size:12px;margin:4px 0"><span data-i18n-ignore>' + urbRet01EscapeHtml(urbRet01SintesisTexto(env)) + '</span></p>' +
+      '<p style="font-size:11px;color:var(--texto3);margin:2px 0">' + urbRet01EscapeHtml(urbRet01T('Procedencia')) + ': ' + urbRet01EscapeHtml(procedencia.label) +
+        (procedencia.ciudad ? (' · <span data-i18n-ignore>' + urbRet01EscapeHtml(procedencia.ciudad) + '</span>') : '') + '</p>' +
+      '<p style="font-size:11px;color:var(--texto3);margin:2px 0 6px">' + urbRet01EscapeHtml(urbRet01T('Estado')) + ': ' + urbRet01EscapeHtml(urbRet01T(URBRET01_ESTADO_LABEL_ES[estado])) + '</p>' +
+      accionHtml +
+      '<details style="margin-top:8px">' +
+        '<summary style="cursor:pointer;font-size:11px;color:var(--texto3)">' + urbRet01EscapeHtml(urbRet01T('Ver detalle técnico')) + '</summary>' +
+        '<pre data-i18n-ignore style="white-space:pre-wrap;font-size:10px;max-height:180px;overflow:auto;background:#f7f7f7;padding:8px;border-radius:8px">' + urbRet01EscapeHtml(JSON.stringify(env, null, 2)) + '</pre>' +
+        '<button class="btn-sml" onclick="urbRet01Copiar(' + i + ')">' + urbRet01EscapeHtml(urbRet01T('Copiar JSON')) + '</button>' +
+      '</details>' +
       '</div>';
-  }).join('') : '<p style="font-size:11px;color:var(--texto3)">Todavía no se preparó ningún retorno para este análisis.</p>';
+  }).join('') : '<p style="font-size:11px;color:var(--texto3)">' + urbRet01EscapeHtml(urbRet01T('Todavía no se preparó ningún retorno para este análisis.')) + '</p>';
+  // Punto 4 del brief: sólo aparece después de enviar al menos un aporte real -- reutiliza
+  // EXCLUSIVAMENTE irAIncorporarEnCore() (mismo mecanismo ?organismo=<id>, mismo identificador
+  // __organismoIdCoreUrbanismo), nunca reenvía ni incorpora, sólo navega.
+  var volverHtml = hayAlgunEnviado
+    ? '<button class="btn-sec btn-sml" style="margin-top:10px" onclick="irAIncorporarEnCore()">' + urbRet01EscapeHtml(urbRet01T('Volver al organismo en Comprender')) + '</button>'
+    : '';
   caja.innerHTML =
     '<div class="card" style="margin-top:1rem">' +
-      '<div class="ctitle">Retorno hacia el Core (comprender.specialty-return.v1)</div>' +
-      '<p style="font-size:11px;color:var(--texto3)">Esto prepara un retorno EXPORTABLE, no una incorporación automática. El Core todavía debe aceptarlo del otro lado.</p>' +
-      '<button class="btn-sec btn-sml" onclick="urbRet01OnClickPreparar()">Preparar retorno</button>' +
+      '<div class="ctitle">' + urbRet01EscapeHtml(urbRet01T('Llevar esta comprensión al organismo')) + '</div>' +
+      '<p style="font-size:11px;color:var(--texto3)">' + urbRet01EscapeHtml(urbRet01T('Elegí qué aportes de esta lectura querés enviar a Comprender. Allí podrás revisarlos antes de incorporarlos a la Memoria del organismo o conservarlos como referencia.')) + '</p>' +
+      '<button class="btn-sec btn-sml" onclick="urbRet01OnClickPreparar()">' + urbRet01EscapeHtml(urbRet01T('Preparar retorno')) + '</button>' +
       '<div id="urbRet01Lista">' + listaHtml + '</div>' +
+      volverHtml +
     '</div>';
 }
 async function urbRet01OnClickPreparar(){
@@ -8444,24 +8554,17 @@ function urbRet01Copiar(indice){
   if(!env) return;
   try{ navigator.clipboard.writeText(JSON.stringify(env, null, 2)); }catch(e){ /* silencioso, no bloquea */ }
 }
-/* MIG-URB-01 (02/09): estado en memoria (no persistido) de qué índices ya se enviaron/estaban
-   duplicados en esta sesión de pantalla -- puramente cosmético para el botón; la verdad real de
-   qué se envió vive en RETTRANSPORT01_STORAGE_LLAVE (ret_transport01_outbox_v1), no acá. */
-var _urbRet01EnviosEnCurso = {};
-function urbRet01ClaveEnvio(indice){
-  return (CX5U.organismId || '') + '|' + (CX5U.specialtyStudyRef || '') + '|' + indice;
-}
 /* Única acción humana explícita de envío (mismo brief RET-TRANSPORT-01 ya certificado en
    Sustentabilidad/Tecnología): reutiliza el envelope real tal cual está en pantalla (nunca
    reconstruye otro), y deja specialtyStudyRef = CX5U.specialtyStudyRef (urbanctx_* real, NUNCA
-   la firma de checkpoint) como metadata del item de outbox -- no forma parte del envelope en sí. */
+   la firma de checkpoint) como metadata del item de outbox -- no forma parte del envelope en sí.
+   124-M0.4-R1: ya no guarda nada en memoria propia -- el re-render lee el estado real de la
+   outbox (urbRet01EstadoEnvioReal()), así que sobrevive a un F5 sin necesitar otra clave. */
 function urbRet01Enviar(indice){
   var existentes = urbRet01LeerPorEstudio(CX5U.organismId, CX5U.specialtyStudyRef);
   var env = existentes[indice];
   if(!env) return;
-  var r = rtp01Encolar(env, { specialtyStudyRef: CX5U.specialtyStudyRef });
-  var clave = urbRet01ClaveEnvio(indice);
-  _urbRet01EnviosEnCurso[clave] = (r && r.ok) ? (r.duplicado ? 'duplicado' : 'enviado') : null;
+  rtp01Encolar(env, { specialtyStudyRef: CX5U.specialtyStudyRef });
   urbRet01Render();
 }
 
