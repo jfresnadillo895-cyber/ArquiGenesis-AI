@@ -3544,18 +3544,28 @@ var NIVEL_POR_EJE_RECEPTIVO = { 'CIVILIZACIÓN':1, 'MENTE':1, 'CULTURA':2, 'EMOC
 function urbProyValid01ActivoRelacionado(activos, canon){
   return (activos || []).find(function(a){ return a && a.eje === canon.e && a.orientacion === canon.o; }) || null;
 }
-// Un elemento con aporte real queda 'desarrollado' salvo que su activo relacionado tenga
-// confianza baja (conf==='B') o sustento insuficiente (sin 'sb', el subtítulo más bloqueado que
-// sostiene ese activo) -- en cualquiera de esos dos casos queda 'hipotesis': el contenido es real
-// (no se descarta ni se reescribe), pero su nivel de certeza es menor porque el activo que lo
-// sostiene está poco fundamentado. Sin aporte, siempre 'pendiente' (punto 4) -- nunca se fabrica.
+// 124-GU-REV-02 · Bloque A-R1.3, puntos 2/3/4 (corrección de Javier sobre R1.2: "eliminar
+// cualquier uso de sb para asignar estado:'hipotesis'" / "asignar hipotesis solamente cuando
+// exista aporte y el activo correspondiente tenga conf==='B'" / "mantener desarrollado para
+// aportes relacionados con activos conf==='A' o conf==='M'"). R1.2 leía 'sb' (el subtítulo más
+// bloqueado) como una señal adicional de "sustento insuficiente" -- eso queda eliminado por
+// completo: 'sb' ya NO participa de esta decisión (sigue existiendo como campo del activo, para
+// otros usos de UI -- lectura transversal, etc. -- pero esta función no lo lee más). Un elemento
+// con aporte real queda 'desarrollado' si su activo relacionado tiene confianza 'A' o 'M', e
+// 'hipotesis' únicamente si tiene confianza 'B'. Sin aporte, siempre 'pendiente' (punto 5,
+// heredado de R1.2 sin cambios) -- nunca se fabrica.
+// Caso límite no cubierto explícitamente por el pedido de Javier: si no aparece NINGÚN activo
+// relacionado (activoRel === null -- no debería ocurrir en un diagnóstico real, ya que los 18
+// activos y 18 receptivos comparten exactamente los mismos ejes/orientaciones, pero es
+// estructuralmente posible con datos incompletos/de prueba). Se mantiene acá el mismo criterio
+// conservador que ya traía R1.2 (tratarlo como confianza baja): sin activo que lo sostenga, el
+// aporte queda 'hipotesis'. Suposición a confirmar con Javier -- ver informe de cierre.
 function urbProyValid01EstadoDeElemento(el, canon, activos){
   var aporteTexto = (el && el.aporte) ? String(el.aporte).trim() : '';
   if(!aporteTexto) return { estado: 'pendiente', aporte: null };
   var activoRel = urbProyValid01ActivoRelacionado(activos, canon);
   var confianzaBaja = !activoRel || (activoRel.conf || 'M') === 'B';
-  var sustentoInsuficiente = !activoRel || !activoRel.sb;
-  return { estado: (confianzaBaja || sustentoInsuficiente) ? 'hipotesis' : 'desarrollado', aporte: aporteTexto };
+  return { estado: confianzaBaja ? 'hipotesis' : 'desarrollado', aporte: aporteTexto };
 }
 // Mismo objeto {nivel1,nivel2,nivel3} que antes armaban por separado llamarAPI() y
 // regenerarProyectivo() a partir de las claves planas r1t/r1p/r1d/r1a, r2t.../r3a -- ahora en un
@@ -5468,23 +5478,24 @@ function mostrarPanelDecisionCobertura(nota, intencion){
   }
   document.getElementById('m-cobertura').classList.add('vis');
 }
-// 124-GU-REV-02 · Bloque A-R1.2, puntos 9/10 (corrección de Javier sobre R1.1: "'Revisar y
-// completar' debe regresar al refinamiento o validación sin disparar ninguna llamada API" /
-// "la regeneración sólo ocurre después de incorporar o confirmar nuevamente información"). Antes
-// (R1.1) este botón volvía a llamar regenerarProyectivo() de inmediato, con la misma nota/
-// intención -- un reintento automático disfrazado de decisión humana. Ahora sólo devuelve al
-// profesional a la etapa de diagnóstico y reabre el modal de validación (mismo #m-val de siempre,
-// Paso 1 de ajuste de valores) para que pueda reincorporar información (ajustar un valor, agregar
-// una nota) -- la regeneración real ocurre recién cuando vuelve a cerrar esa validación
-// (cerrarVal() -> regenerarProyectivo(), el mismo camino de siempre), nunca automáticamente desde
-// acá. Cero llamadas a /api/anthropic en esta función.
+// 124-GU-REV-02 · Bloque A-R1.3, puntos 6/7/8 (corrección de Javier sobre R1.2: "'Revisar y
+// completar' debe abrir el flujo existente de refinamiento (mostrarRef() o su entrada
+// equivalente), no directamente el modal de seis sliders" / "si existen diagData.lagunas, mostrar
+// esas preguntas; si no, abrir el refinamiento general disponible" / "el clic debe producir 0
+// POST"). R1.2 reabría #m-val (la validación de seis sliders) -- Javier señala que eso no es "el
+// flujo existente de refinamiento": ese flujo ya existe, completo, como volverRefinamiento()
+// (más abajo, sección REFINAMIENTO) -- la misma función que usa el botón "Volver a refinamiento"
+// del propio Abordaje Proyectivo. volverRefinamiento() ya hace exactamente lo pedido: vuelve a
+// etapa-diag y abre mostrarRef(diagData.lagunas) si hay lagunas, o el panel de refinamiento
+// general (sólo campo de documento) si no las hay -- ninguna de las dos rutas llama a la API
+// (mostrarRef() sólo arma el modal; la llamada real recién ocurre en cerrarRef(), cuando el
+// profesional confirma con contenido -- ver esa función). Acá sólo se agrega la limpieza propia
+// del panel de cobertura parcial (cerrar #m-cobertura, descartar el pendiente) antes de delegar.
+// Cero llamadas a /api/anthropic en esta función.
 function revisarYCompletarProyectivo(){
   document.getElementById('m-cobertura').classList.remove('vis');
   URB_R11_pendienteCobertura = null;
-  document.getElementById('etapa-proy').style.display='none';
-  document.getElementById('etapa-diag').style.display='block';
-  setEtapa(1);
-  abrirValidacion();
+  volverRefinamiento();
 }
 function confirmarProyectivoProvisional(){
   if(!diagData || !diagData.receptivos) return;
