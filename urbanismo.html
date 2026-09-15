@@ -2701,6 +2701,22 @@ canvas{animation:none !important}
   </div>
 </div>
 
+<!-- 124-GU-REV-02 · Bloque A-R1.1: panel de decisión humana cuando nivel1/2/3 están completos
+     pero 'elementos' quedó con cobertura parcial (ver mostrarPanelDecisionCobertura()/
+     regenerarProyectivo()). Nunca se abre para el bloqueo técnico (nivel1/2/3 incompletos) -- ahí
+     sigue el alert de siempre. -->
+<div class="modal" id="m-cobertura">
+  <div class="modal-card" style="max-width:640px">
+    <button class="modal-close" onclick="document.getElementById('m-cobertura').classList.remove('vis')" title="Cerrar">×</button>
+    <h3>El Abordaje Proyectivo quedó con cobertura parcial</h3>
+    <p class="msub" id="cobertura-msub"></p>
+    <div class="modal-btns">
+      <button class="btn-sec" onclick="revisarYCompletarProyectivo()">Revisar y completar</button>
+      <button class="btn-pri" onclick="confirmarProyectivoProvisional()">Continuar con un proyectivo provisional</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ RESULTADOS ══ -->
 <div id="p-res">
   <div class="topbar">
@@ -3511,7 +3527,7 @@ function urbProyValid01ReceptivosOk(receptivos){
 }
 // Mismo objeto {nivel1,nivel2,nivel3} que antes armaban por separado llamarAPI() y
 // regenerarProyectivo() a partir de las claves planas r1t/r1p/r1d/r1a, r2t.../r3a -- ahora en un
-// solo lugar para no duplicar la forma. No decide si es válido: eso lo hace la función de arriba.
+// solo lugar para no duplicar la forma. No decide si es válido: eso lo hace la función de abajo.
 function urbProyValid01ReceptivosDesdePlano(p){
   p = p || {};
   var out = {
@@ -3519,49 +3535,69 @@ function urbProyValid01ReceptivosDesdePlano(p){
     nivel2:{titulo:p.r2t||'',par:p.r2p||'',desc:p.r2d||'',acciones:p.r2a||[]},
     nivel3:{titulo:p.r3t||'',par:p.r3p||'',desc:p.r3d||'',acciones:p.r3a||[]}
   };
-  // 124-GU-REV-02 · Bloque A, Corte 5, ampliado por Bloque A-R1 punto 3 (corrección bloqueante de
-  // Javier: "completar las siete propiedades de receptivos.elementos"). La IA sólo devuelve
-  // {nombre, nivel, aporte} por elemento (ver buildPromptReceptivosEspiral()) -- pedirle que
-  // también reescriba eje/grupo/orientación arriesga que invente o desalinee un dato que YA
-  // conocemos con certeza (están en ITEMS_36_RECEPTIVOS, la fuente canónica). Acá se ENRIQUECE
-  // cada elemento devuelto con los datos canónicos de ese receptivo por nombre exacto, más 'par'
-  // (tomado del mismo nivel1/2/3.par ya armado arriba -- el mismo vocabulario Institucional↔
-  // Cognitivo/etc. que ya usan r1p/r2p/r3p, sin inventar una taxonomía nueva), llegando a las
-  // siete propiedades: {nombre, eje, grupo, orientacion, nivel, par, aporte}. Si un nombre no
-  // matchea ningún receptivo canónico (la IA se equivocó de nombre), eje/grupo/orientacion quedan
-  // vacíos en vez de fabricados -- nunca se inventa un dato que no se puede verificar. Nunca se
-  // fabrica el array entero: si la respuesta no trajo 'elementos', esta clave directamente no se
-  // agrega (no un array vacío aparentando trazabilidad real que no existe).
+  var parPorNivel = { 1: out.nivel1.par, 2: out.nivel2.par, 3: out.nivel3.par };
+  var recibidosPorNombre = {};
   if(Array.isArray(p.elementos)){
-    var parPorNivel = { 1: out.nivel1.par, 2: out.nivel2.par, 3: out.nivel3.par };
-    out.elementos = p.elementos.map(function(el){
+    p.elementos.forEach(function(el){
       el = el || {};
       var nombre = el.nombre || '';
-      var canon = ITEMS_36_RECEPTIVOS.find(function(it){ return it.n === nombre; }) || null;
-      return {
-        nombre: nombre,
-        eje: (canon && canon.e) || '',
-        grupo: (canon && canon.g) || '',
-        orientacion: (canon && canon.o) || '',
-        nivel: el.nivel || null,
-        par: parPorNivel[el.nivel] || '',
-        aporte: el.aporte || ''
-      };
+      if(nombre && !recibidosPorNombre[nombre]) recibidosPorNombre[nombre] = el;
     });
   }
+  // 124-GU-REV-02 · Bloque A, Corte 5, ampliado por Bloque A-R1 punto 3 y RE-ampliado por
+  // Bloque A-R1.1 punto 4 (corrección de Javier: "normalizar receptivos.elementos contra los 18
+  // elementos canónicos"). Antes (R1) 'elementos' era sólo lo que la IA devolvía, potencialmente
+  // incompleto y sin lugar fijo por receptivo. Desde R1.1, 'elementos' SIEMPRE tiene 18 entradas
+  // -- una por cada receptivo de ITEMS_36_RECEPTIVOS, en orden canónico -- construidas acá mismo:
+  // la IA sólo devuelve {nombre, nivel, aporte} por elemento (ver buildPromptReceptivosEspiral())
+  // -- pedirle que también reescriba eje/grupo/orientación arriesga que invente o desalinee un
+  // dato que YA conocemos con certeza. Para cada receptivo canónico: si la IA lo devolvió (match
+  // exacto por nombre), se ENRIQUECE con eje/grupo/orientacion canónicos + 'par' (del mismo
+  // nivel1/2/3.par ya armado arriba) y queda estado:'desarrollado'. Si la IA NO lo devolvió,
+  // NUNCA se fabrica contenido (punto 5): queda con nivel:null, par:'', aporte:null,
+  // estado:'pendiente', y una 'pregunta' generada por plantilla fija (no inventada por la IA) que
+  // sirve de guía para completarlo después.
+  out.elementos = ITEMS_36_RECEPTIVOS.map(function(canon){
+    var el = recibidosPorNombre[canon.n];
+    if(el){
+      return {
+        nombre: canon.n, eje: canon.e, grupo: canon.g, orientacion: canon.o,
+        nivel: el.nivel || null, par: parPorNivel[el.nivel] || '',
+        aporte: el.aporte || '', estado: 'desarrollado', pregunta: null
+      };
+    }
+    return {
+      nombre: canon.n, eje: canon.e, grupo: canon.g, orientacion: canon.o,
+      nivel: null, par: '', aporte: null, estado: 'pendiente',
+      pregunta: '¿Cómo se expresa "'+canon.n+'" en este territorio? (eje '+canon.e+', '+canon.o+')'
+    };
+  });
   return out;
 }
-// 124-GU-REV-02 · Bloque A, Corte 5, corregido por Bloque A-R1 punto 2 (corrección bloqueante de
-// Javier): exige, además de los tres niveles ya obligatorios (urbProyValid01ReceptivosOk(), SIN
-// modificar), que 'elementos' traiga EXACTAMENTE los 18 receptivos nombrados. Hasta Corte 5 este
-// gate era aditivo/informativo únicamente; desde Bloque A-R1 es el gate REAL: tanto
-// intentoRegenerarProyectivo() (dentro de regenerarProyectivo()) como mostrarProyectivoInterno()
-// lo usan para aceptar/bloquear, en vez de urbProyValid01ReceptivosOk() a secas. No toca
-// CICLO_CONTROL/CICLO_GENERATIVO/calcularPalancas en absoluto -- ver el punto 6 de la misma
-// corrección, aplicado exclusivamente dentro de calcularPalancas().
+// 124-GU-REV-02 · Bloque A, Corte 5, corregido por Bloque A-R1 punto 2, y de nuevo por Bloque
+// A-R1.1 punto 2 (corrección de Javier sobre la corrección anterior): "completo" (v2) sigue
+// exigiendo nivel1/2/3 (urbProyValid01ReceptivosOk(), sin modificar) Y que los 18 'elementos'
+// estén realmente desarrollados -- pero ya NO alcanza con que el array tenga 18 posiciones
+// (desde R1.1, urbProyValid01ReceptivosDesdePlano() siempre normaliza a 18, reales o pendientes):
+// ahora se exige además que NINGUNO haya quedado con estado:'pendiente'. Esta función sigue
+// siendo el criterio de "proyectivo_completo" (Punto 12: 18/18 real, sin pasar por ninguna
+// decisión humana) -- para la cobertura parcial, ver urbProyValid01Cobertura(), más abajo, y el
+// flujo de decisión humana en regenerarProyectivo()/mostrarProyectivoInterno().
 function urbProyValid01CompletoV2(receptivos){
   if(!urbProyValid01ReceptivosOk(receptivos)) return false;
-  return Array.isArray(receptivos.elementos) && receptivos.elementos.length === 18;
+  return Array.isArray(receptivos.elementos) && receptivos.elementos.length === 18
+    && receptivos.elementos.every(function(e){ return e && e.estado === 'desarrollado'; });
+}
+// 124-GU-REV-02 · Bloque A-R1.1, punto 10 (corrección de Javier: "calcular y conservar
+// cobertura_receptiva"). No decide nada por sí sola -- sólo cuenta. 'completos' son los
+// elementos con estado:'desarrollado' (nunca cuenta 'hipotesis' como si fuera cobertura nueva --
+// ver confirmarProyectivoProvisional(), más abajo, que es la única función que produce ese
+// estado). Se usa tanto para decidir si un intento es 'completo'/'parcial' (regenerarProyectivo())
+// como para el texto del panel de decisión humana (mostrarPanelDecisionCobertura()).
+function urbProyValid01Cobertura(receptivos){
+  var elementos = (receptivos && Array.isArray(receptivos.elementos)) ? receptivos.elementos : [];
+  var completos = elementos.filter(function(e){ return e && e.estado === 'desarrollado'; }).length;
+  return { completos: completos, total: 18, pendientes: 18 - completos };
 }
 
 // ══════════════════════════════════════════
@@ -4367,12 +4403,14 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   // especialidades (Negocios, Sustentabilidad) sin colisionar. Un diagData/entrada de historial
   // SIN 'schemaVersion' se trata como v1 (formato legado, sin separar activo/receptivo) -- ver
   // 5.9 de 124-GU-REV-01_FASE2_AUDITORIA.md: eso NO se recalcula nunca, ni acá ni en
-  // cargarHistorial() (ver ese call site, más abajo). 'fase' es puramente informativo -- ningún
-  // gate existente lo lee (todos usan sus propios gates: urbProyValid01ReceptivosOk(),
-  // diagData.items.length, etc.) -- arranca en 'diagnostico_activo' apenas termina "Analizar"
-  // (items+núcleo, 18 activos, aún sin validar); cerrarVal() la avanza a 'validado'; y
-  // regenerarProyectivo() la avanza a 'proyectivo' recién cuando el Abordaje Proyectivo se generó
-  // con éxito (ver esos call sites).
+  // cargarHistorial() (ver ese call site, más abajo). 'fase' arranca en 'diagnostico_activo' apenas
+  // termina "Analizar" (items+núcleo, 18 activos, aún sin validar); cerrarVal() la avanza a
+  // 'validado'; y regenerarProyectivo() la avanza a 'proyectivo' cuando el Abordaje Proyectivo se
+  // generó con cobertura completa (18/18 real), o a 'proyectivo_provisional' cuando el profesional
+  // decide explícitamente continuar con cobertura parcial (Bloque A-R1.1, puntos 8/9 -- ver
+  // confirmarProyectivoProvisional()). Desde R1.1, 'fase' YA NO es puramente informativo:
+  // mostrarProyectivoInterno() la lee (junto con diagData.proyectivoProvisionalConfirmado) para
+  // permitir la transición a un proyectivo provisional sin volver a exigir cobertura completa.
   parsed.schemaVersion = 'urbanismo.diagnostico.v2';
   parsed.fase = 'diagnostico_activo';
 
@@ -4813,8 +4851,9 @@ function cerrarVal(ajustar, sinObjetivo){
 
   // 124-GU-REV-02 · Bloque A-R1, punto 1: 'fase' avanza a 'validado' acá -- el profesional ya
   // cerró el Paso 1/Paso 2 del modal (ajustó o no valores, definió o no objetivo) y está por
-  // disparar la generación real del proyectivo. Se pisa con 'proyectivo' recién si
-  // regenerarProyectivo() termina con éxito (ver ese call site).
+  // disparar la generación real del proyectivo. Se pisa con 'proyectivo' (18/18 real) o con
+  // 'proyectivo_provisional' (cobertura parcial confirmada por el profesional, Bloque A-R1.1)
+  // recién si regenerarProyectivo() lo permite (ver ese call site y confirmarProyectivoProvisional()).
   if(diagData) diagData.fase = 'validado';
 
   // 124-GU-REV-02 · Bloque A, Corte 4: generación única y unificada del proyectivo, siempre acá --
@@ -5281,54 +5320,73 @@ async function regenerarProyectivo(nota, intencion){
       // corte, 'elementos' incompleto no bloqueaba nada (era aditivo/informativo) -- eso queda
       // revertido explícitamente por la corrección de Javier.
       var receptivosCandidato = urbProyValid01ReceptivosDesdePlano(parsed);
-      if(!urbProyValid01CompletoV2(receptivosCandidato)){
-        console.error('URB-PROY-VALID-01/V2: intento '+numeroIntento+'/2 de regenerarProyectivo() incompleto -- '
-          +(urbProyValid01ReceptivosOk(receptivosCandidato)
-            ? 'niveles 1/2/3 ok pero "elementos" no trae los 18 receptivos trazables.'
-            : 'niveles receptivos incompletos.'), receptivosCandidato);
-        return false;
+      // 124-GU-REV-02 · Bloque A-R1.1, punto 2/3 (corrección de Javier sobre la corrección
+      // anterior): el bloqueo TÉCNICO absoluto queda reservado exclusivamente para cuando
+      // nivel1/2/3 no están completos (urbProyValid01ReceptivosOk() == false) -- eso sigue
+      // reintentando automáticamente una vez (mismo mecanismo de siempre) y, si tampoco alcanza,
+      // el Abordaje Proyectivo NO se muestra. Con nivel1/2/3 completos, una cobertura de
+      // 'elementos' parcial YA NO cuenta como intento fallido: es un resultado VÁLIDO con
+      // cobertura incompleta, que se acepta y se devuelve tal cual para que decida un humano (ver
+      // más abajo) -- nunca se reintenta ni se rechaza en silencio.
+      if(!urbProyValid01ReceptivosOk(receptivosCandidato)){
+        console.error('URB-PROY-VALID-01: intento '+numeroIntento+'/2 de regenerarProyectivo() incompleto -- niveles receptivos incompletos.', receptivosCandidato);
+        return 'incompleto';
       }
 
-      // Recién acá, con receptivos ya validado (v2: niveles + 18 elementos), se actualiza diagData
-      // -- de punta a punta.
+      // Recién acá, con nivel1/2/3 ya validado, se actualiza diagData -- de punta a punta. La
+      // cobertura de 'elementos' (18 canónicos, normalizados por urbProyValid01ReceptivosDesdePlano
+      // -- ver esa función) decide si esto es un proyectivo completo o de cobertura parcial, pero
+      // en ambos casos el contenido generado es real y se acepta (nunca se descarta un resultado
+      // válido de nivel1/2/3 sólo porque 'elementos' quedó incompleto).
       if(parsed.haiku) diagData.haiku = parsed.haiku;
       if(parsed.hexp) diagData.haiku_exp = parsed.hexp;
       diagData.receptivos = receptivosCandidato;
-      diagData.proyectivo_completo = true;   // urbProyValid01CompletoV2() ya se exigió arriba
-      // 124-GU-REV-02 · Bloque A-R1, punto 1: 'fase' llega a 'proyectivo' recién acá -- el
-      // Abordaje Proyectivo se generó con éxito (v2 completo) y va a mostrarse.
-      diagData.fase = 'proyectivo';
       if(parsed.da) diagData.dist_actual = parsed.da;
       if(parsed.dh) diagData.dist_horizonte = parsed.dh;
       if(parsed.esp) diagData.espiral = parsed.esp.map(s=>({paso:s.p||s.paso,estado:s.s||s.estado}));
       if(parsed.sust) diagData.sustentabilidad = parsed.sust;
       if(parsed.sint) diagData.sintesis = parsed.sint;
-      return true;
+
+      var cobertura = urbProyValid01Cobertura(receptivosCandidato);
+      diagData.coberturaReceptiva = cobertura;
+      if(cobertura.pendientes === 0){
+        // 124-GU-REV-02 · Bloque A-R1.1, punto 12: 18/18 real sigue el mismo camino directo de
+        // siempre -- proyectivo_completo, fase 'proyectivo', sin pasar por ninguna decisión humana.
+        diagData.proyectivo_completo = true;
+        diagData.fase = 'proyectivo';
+        return 'completo';
+      }
+      diagData.proyectivo_completo = false;
+      console.warn('URB-PROY-VALID-01/V2: intento '+numeroIntento+'/2 de regenerarProyectivo() con cobertura parcial -- '
+        +cobertura.completos+'/'+cobertura.total+' receptivos con contenido real. Queda pendiente de decisión humana.', receptivosCandidato);
+      return 'parcial';
 
     } catch(e){
       console.error('URB-PROY-VALID-01: error regenerando proyectivo (intento '+numeroIntento+'/2):', e);
       // CAP-M1 (26/08): si llegamos hasta acá SIN haber registrado nada (fetch() ni siquiera
       // respondió, o el body no se pudo leer), es el único lugar que se entera del fallo.
       if(!_regProy) registrarUso('urbanismo', {}, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:false });
-      return false;
+      return 'incompleto';
     }
   }
 
-  // URB-PROY-VALID-01 (04/09): como máximo 2 intentos totales (1 reintento) -- mismo
-  // caso/objetivo/datos, el prompt no cambia. Ningún fallo se traga en silencio: cada intento ya
-  // quedó trazado en consola dentro de intentoRegenerarProyectivo(); acá sólo se decide si
-  // reintentar y qué mostrar al final.
-  let receptivosOk = await intentoRegenerarProyectivo(1);
-  if(!receptivosOk) receptivosOk = await intentoRegenerarProyectivo(2);
+  // URB-PROY-VALID-01 (04/09), ajustado por Bloque A-R1.1: el reintento automático (2 intentos
+  // totales) queda reservado para el bloqueo TÉCNICO ('incompleto' -- nivel1/2/3 no alcanzó). Un
+  // resultado 'parcial' (nivel1/2/3 ok, 'elementos' incompleto) NO dispara un segundo intento
+  // automático -- se corta acá y se le ofrece la decisión al humano (ver más abajo); si el humano
+  // pide "Revisar y completar", eso es lo que dispara un nuevo llamado completo a
+  // regenerarProyectivo(), con su propio par de intentos.
+  let resultado = await intentoRegenerarProyectivo(1);
+  if(resultado === 'incompleto') resultado = await intentoRegenerarProyectivo(2);
 
   mostrarCarga(false);
 
-  if(!receptivosOk){
-    // Se agotaron los intentos: no se fabrica contenido, no se presenta el Proyectivo como
-    // válido. diagData.receptivos NUNCA se sobreescribió con algo incompleto (sigue como estaba
-    // antes de este llamado) -- se detiene la transición, se vuelve al diagnóstico ya validado
-    // (que sigue intacto) y se avisa con un error visible, sin romper la sesión.
-    console.error('URB-PROY-VALID-01/V2: abordaje proyectivo NO se muestra -- no alcanzó nivel1/2/3 + 18 elementos trazables tras 2 intentos.');
+  if(resultado === 'incompleto'){
+    // Se agotaron los intentos sin siquiera alcanzar nivel1/2/3: no se fabrica contenido, no se
+    // presenta el Proyectivo como válido. diagData.receptivos NUNCA se sobreescribió con algo
+    // incompleto (sigue como estaba antes de este llamado) -- se detiene la transición, se vuelve
+    // al diagnóstico ya validado (que sigue intacto) y se avisa con un error visible.
+    console.error('URB-PROY-VALID-01: abordaje proyectivo NO se muestra -- no alcanzó nivel1/2/3 tras 2 intentos.');
     document.getElementById('etapa-proy').style.display='none';
     document.getElementById('etapa-diag').style.display='block';
     setEtapa(1);
@@ -5336,7 +5394,65 @@ async function regenerarProyectivo(nota, intencion){
     return;
   }
 
+  if(resultado === 'parcial'){
+    // 124-GU-REV-02 · Bloque A-R1.1, punto 2/7: nivel1/2/3 ok pero 'elementos' con cobertura
+    // incompleta -- ya NO es un bloqueo técnico. Se vuelve al diagnóstico y se ofrece la decisión
+    // humana (revisar y completar, o continuar con un proyectivo provisional) -- nunca se avanza
+    // sola a la pantalla de Proyectivo.
+    document.getElementById('etapa-proy').style.display='none';
+    document.getElementById('etapa-diag').style.display='block';
+    setEtapa(1);
+    mostrarPanelDecisionCobertura(nota, intencion);
+    return;
+  }
+
   mostrarProyectivo(nota, intencion);
+}
+
+// 124-GU-REV-02 · Bloque A-R1.1, puntos 7/8 (corrección de Javier): panel de decisión humana --
+// se abre únicamente cuando nivel1/2/3 están completos pero 'elementos' quedó con cobertura
+// parcial (nunca ante un bloqueo técnico, que sigue siendo el alert de siempre). Guarda
+// nota/intencion para que "Revisar y completar" pueda volver a llamar a regenerarProyectivo() con
+// los mismos datos -- mismo patrón que URBCTXFLOW01_pendienteProyectivo, más abajo.
+var URB_R11_pendienteCobertura = null;
+function mostrarPanelDecisionCobertura(nota, intencion){
+  URB_R11_pendienteCobertura = { nota: nota, intencion: intencion };
+  var cob = (diagData && diagData.coberturaReceptiva) || urbProyValid01Cobertura(diagData && diagData.receptivos);
+  var msub = document.getElementById('cobertura-msub');
+  if(msub){
+    msub.textContent = 'El Abordaje Proyectivo generó '+cob.completos+' de '+cob.total+' receptivos con contenido real. '
+      +'Los '+cob.pendientes+' restantes quedaron pendientes -- podés pedir que el sistema los complete, '
+      +'o continuar con un proyectivo provisional que deja esos receptivos marcados como pendientes.';
+  }
+  document.getElementById('m-cobertura').classList.add('vis');
+}
+function revisarYCompletarProyectivo(){
+  document.getElementById('m-cobertura').classList.remove('vis');
+  var pend = URB_R11_pendienteCobertura || {nota:'', intencion:''};
+  URB_R11_pendienteCobertura = null;
+  regenerarProyectivo(pend.nota, pend.intencion);
+}
+function confirmarProyectivoProvisional(){
+  if(!diagData || !diagData.receptivos) return;
+  document.getElementById('m-cobertura').classList.remove('vis');
+  // 124-GU-REV-02 · Bloque A-R1.1, punto 8: la continuación provisional se acepta SÓLO por esta
+  // decisión humana explícita (este click) -- nunca automáticamente. Se registra en diagData tanto
+  // el hecho de la confirmación (para que mostrarProyectivoInterno() la reconozca) como el momento
+  // en que ocurrió. Los elementos que sí se desarrollaron pasan de 'desarrollado' a 'hipotesis'
+  // (punto 6: todo el lote queda con menor grado de certeza porque no se validó con cobertura
+  // completa); los que faltan quedan 'pendiente' tal como ya estaban -- nunca se fabrica contenido
+  // para ellos, ni siquiera al confirmar la continuación provisional.
+  diagData.receptivos.elementos = (diagData.receptivos.elementos||[]).map(function(el){
+    return (el && el.estado === 'desarrollado') ? Object.assign({}, el, {estado:'hipotesis'}) : el;
+  });
+  diagData.proyectivoProvisionalConfirmado = true;
+  diagData.proyectivoProvisionalConfirmadoEn = new Date().toISOString();
+  // 124-GU-REV-02 · Bloque A-R1.1, punto 9: nuevo valor de 'fase', distinto de 'proyectivo' (ese
+  // sigue significando exclusivamente 18/18 real -- punto 12).
+  diagData.fase = 'proyectivo_provisional';
+  var pend = URB_R11_pendienteCobertura || {nota:'', intencion:''};
+  URB_R11_pendienteCobertura = null;
+  mostrarProyectivo(pend.nota, pend.intencion);
 }
 
 // CTX-URB-FLOW-01 (04/09): mostrarProyectivo() pasa a ser un enrutador -- decide si corresponde
@@ -5377,8 +5493,17 @@ function mostrarProyectivoInterno(nota, intencion){
   // exige v2 antes de llegar acá -- esta sigue siendo la segunda barrera defensiva, ahora
   // consistente con la primera. No afecta diagnósticos históricos v1: cargarHistorial() nunca
   // llama a esta función automáticamente (siempre abre en la pantalla de diagnóstico).
-  if(!diagData || !urbProyValid01CompletoV2(diagData.receptivos)){
-    console.error('URB-PROY-VALID-01/V2: se intentó mostrar el Abordaje Proyectivo sin alcanzar nivel1/2/3 + 18 elementos trazables -- transición bloqueada.', diagData && diagData.receptivos);
+  // 124-GU-REV-02 · Bloque A-R1.1, punto 2/3 (corrección de Javier sobre la corrección anterior):
+  // el bloqueo TÉCNICO duro (alert + no transición) queda reservado exclusivamente para cuando
+  // nivel1/2/3 no están completos (urbProyValid01ReceptivosOk() == false) -- eso nunca se puede
+  // sortear. Con nivel1/2/3 completos, la transición también se permite cuando ya hay una decisión
+  // humana registrada de continuar con un proyectivo provisional (diagData.fase ===
+  // 'proyectivo_provisional' Y diagData.proyectivoProvisionalConfirmado === true -- ver
+  // confirmarProyectivoProvisional()), aun si algunos 'elementos' quedaron 'pendiente'.
+  var receptivosParaGate = diagData && diagData.receptivos;
+  var provisionalConfirmado = !!(diagData && diagData.fase === 'proyectivo_provisional' && diagData.proyectivoProvisionalConfirmado);
+  if(!diagData || !urbProyValid01ReceptivosOk(receptivosParaGate) || (!urbProyValid01CompletoV2(receptivosParaGate) && !provisionalConfirmado)){
+    console.error('URB-PROY-VALID-01/V2: se intentó mostrar el Abordaje Proyectivo sin alcanzar nivel1/2/3, y sin una decisión humana de continuar provisional -- transición bloqueada.', diagData && diagData.receptivos);
     alert('No se pudo completar el abordaje proyectivo. Intentá nuevamente.');
     return;
   }
