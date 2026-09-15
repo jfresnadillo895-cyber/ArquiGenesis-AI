@@ -2247,7 +2247,7 @@ canvas{animation:none !important}
        clic que ya tienen Contextos y Negocios Pro. -->
   <div style="padding:.5rem .75rem;border-bottom:1px solid var(--borde);display:flex;flex-direction:column;gap:6px">
     <button class="btn-comp" onclick="exportarHistorial()" style="width:100%">⇩ Exportar historial (JSON)</button>
-    <button class="btn-comp" onclick="irAIncorporarEnCore()" style="width:100%">→ Volver a Comprender AI e incorporar</button>
+    <button class="btn-comp" id="btn-volver-comprender-core" onclick="irAIncorporarEnCore()" style="width:100%">→ Volver a Comprender AI</button>
   </div>
   <div class="hist-list" id="hist-list">
     <div class="hist-empty">Todavía no hay diagnósticos anteriores.<br>Analizá otra ciudad con el botón "+ Nueva ciudad".</div>
@@ -5776,10 +5776,14 @@ function procesarContextoJSON(txt){
         + ((c.marco&&c.marco.abierto||[]).length)+' tensión(es) abierta(s)'
         + '<br><span style="font-size:10px;color:var(--texto3)">Orienta el diagnóstico como comprensión previa del Sujeto; no reemplaza el diagnóstico interno.</span>';
       document.getElementById('ctx-quitar').style.display = 'inline-block';
-      const ind = document.getElementById('contexto-indicador');
-      ind.style.display = 'block';   // UX-P3A (25/08): línea propia, próxima al encabezado (antes 'inline')
-      // 14/08: frase unificada con Contextos/Negocios Pro -- misma etiqueta en los tres Pro.
-      ind.textContent = '↺ Continuidad del organismo «'+(marcoOrganismoNombre||c.investigacion||'—')+'»';
+      // 124-M0.3-R1 (14/09): se delega el badge a pintarContinuidadUrbanismo() -- única función
+      // de render, misma que se usa en la recepción fresca y tras recargar (ver bloque C-06 más
+      // abajo). Antes acá se armaba el texto aparte y caía a c.investigacion si no había
+      // __organismoIdCoreUrbanismo -- eso podía sugerir continuidad con el Core a partir de un
+      // JSON pegado a mano, sin un vínculo real. pintarContinuidadUrbanismo() sólo muestra el
+      // badge cuando __organismoIdCoreUrbanismo existe de verdad (mismo criterio que pide la
+      // auditoría: "no inventar un vínculo" cuando Urbanismo no vino del Core).
+      pintarContinuidadUrbanismo();
       // UX-P3A (25/08): ya está la continuidad automática resuelta -- la carga manual sigue
       // disponible como fallback (no se toca su onclick ni su lógica), pero baja un escalón de
       // peso visual para no competir con la línea de continuidad de arriba.
@@ -6786,8 +6790,14 @@ function dejarListoParaIncorporarEnCoreUrbanismo(payload){
     }));
   }catch(e){}
 }
+/* 124-M0.3-R1 (14/09): antes abría 'index.html' a secas, sin llevarse ningún dato -- el botón
+   prometía "incorporar" pero no pasaba el organismo. Se corrige para reutilizar EXCLUSIVAMENTE
+   el mecanismo ?organismo=<id> que index.html ya tiene (Corte I, intentarAbrirOrganismoDesdeURL())
+   -- no se crea ninguna ruta, identificador ni persistencia nueva. Si no hay organismo vinculado
+   (Urbanismo abierto directo), el destino sigue siendo 'index.html' a secas, igual que antes. */
 function irAIncorporarEnCore(){
-  try{ window.open('index.html', '_blank'); }catch(e){ location.href = 'index.html'; }
+  var destino = 'index.html' + (__organismoIdCoreUrbanismo ? ('?organismo=' + encodeURIComponent(__organismoIdCoreUrbanismo)) : '');
+  try{ window.open(destino, '_blank'); }catch(e){ location.href = destino; }
 }
 
 // ══════════════════════════════════════════
@@ -9161,7 +9171,56 @@ function permitirOperacion(tipo){
    El Core guarda el marco del organismo activo al abrir este módulo.
    Se toma una sola vez y se descarta, para no reaplicarlo en cada recarga. */
 var __organismoIdCoreUrbanismo = null;   // 14/08: capturado acá para el handoff automático de vuelta
-var marcoOrganismoNombre = null;   // 14/08: capturado para la etiqueta "Continuidad del organismo «X»"
+var marcoOrganismoNombre = null;   // 14/08: capturado para la etiqueta de continuidad
+
+/* 124-M0.3-R1 (14/09): única función que pinta el botón de regreso y el badge de continuidad --
+   se llama tanto en la recepción fresca como en la recuperación tras recargar (misma fuente de
+   verdad: __organismoIdCoreUrbanismo/marcoOrganismoNombre, sin ninguna clave de localStorage
+   nueva). Antes el badge sólo se pintaba dentro de procesarContextoJSON(), que sólo corría en el
+   camino de handoff fresco -- por eso desaparecía al recargar aunque el vínculo funcional seguía
+   intacto (brecha detectada en la auditoría 124-M0.3-Fase1, Sección 6.2). Reutiliza t() y el
+   diccionario existente de lib/i18n.js; el nombre del organismo nunca se traduce.
+   124-M0.3-R1.1 (14/09), hallazgo real (no simulado -- reproducido con Playwright/Chromium real
+   contra el archivo servido tal cual): #contexto-indicador NO estaba en la lista de exclusión
+   ignored() de lib/i18n.js (esa lista sólo cubre #stream/.msg.user/.msg.motor/[data-user-content]/
+   etc.), así que el traductor PASIVO (el MutationObserver que retraduce el DOM en cada mutación,
+   no sólo la carga inicial) volvía a pasar sobre el textContent que esta función acababa de pintar
+   -- incluido el nombre propio del organismo. Cuando ese nombre contenía una palabra que sí es
+   clave de diccionario (p.ej. un organismo llamado "... Urbanismo"), el traductor la reemplazaba
+   a mitad de string (dynamicPatterns/phraseReplace de lib/i18n.js no distinguen "nombre propio
+   incrustado" de "texto de interfaz"): "Trabajando sobre: Prueba derivación Urbanismo" terminaba
+   mostrando "Working on: Prueba derivación Urbanism" en inglés. No alcanza con traducir la
+   etiqueta acá adentro con t() -- el traductor pasivo corre DESPUÉS, sobre cualquier mutación del
+   DOM, así que también hay que blindar el nombre contra ÉL. Se arma el badge con DOM real (no
+   innerHTML) y el nombre queda en su propio <span data-i18n-ignore> -- el mismo atributo que
+   ignored() ya reconoce como frontera de "no tocar" -- para que ninguna pasada, presente o futura,
+   del traductor pasivo vuelva a tocarlo. La etiqueta ("Trabajando sobre:") queda FUERA de ese span
+   a propósito: sigue traduciéndose (por t() acá, y por el traductor pasivo si el idioma cambia en
+   caliente sin recargar). No se toca la otra escritura de #contexto-indicador (línea ~5817, capa
+   de Contextos pegada a mano) -- pertenece a una función distinta, ajena a la continuidad con el
+   Core, y queda fuera del alcance de esta corrección. */
+function pintarContinuidadUrbanismo(){
+  try{
+    var t = (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.t) ? ComprenderI18n.t : function(s){ return s; };
+    var btn = document.getElementById('btn-volver-comprender-core');
+    if(btn) btn.textContent = '→ ' + (__organismoIdCoreUrbanismo ? t('Volver al organismo') : t('Volver a Comprender AI'));
+    var ind = document.getElementById('contexto-indicador');
+    if(!ind) return;
+    if(!__organismoIdCoreUrbanismo){ ind.style.display = 'none'; return; }
+    ind.style.display = 'block';
+    ind.innerHTML = '';
+    if(marcoOrganismoNombre){
+      ind.appendChild(document.createTextNode(t('Trabajando sobre:') + ' '));
+      var nombreSpan = document.createElement('span');
+      nombreSpan.setAttribute('data-i18n-ignore', '');   // nombre propio: blindado contra el traductor pasivo (ver comentario arriba)
+      nombreSpan.textContent = marcoOrganismoNombre;
+      ind.appendChild(nombreSpan);
+    } else {
+      ind.textContent = t('Trabajando sobre un organismo de Comprender');
+    }
+  }catch(e){}
+}
+
 (function(){
   try{
     var raw = localStorage.getItem('ag_marco_pendiente');
@@ -9174,14 +9233,16 @@ var marcoOrganismoNombre = null;   // 14/08: capturado para la etiqueta "Continu
         var activo = cx5uCargarOrganismoActivoPersistido();
         if(activo){ __organismoIdCoreUrbanismo = activo.organismo_id; marcoOrganismoNombre = activo.organismo_nombre || null; }
       }
+      pintarContinuidadUrbanismo();   // 124-M0.3-R1: reconstruye el badge también tras recargar
       return;
     }
     localStorage.removeItem('ag_marco_pendiente');
     var p = JSON.parse(raw);
-    if(!p || !p.marco) return;
+    if(!p || !p.marco){ pintarContinuidadUrbanismo(); return; }
     __organismoIdCoreUrbanismo = p.marco.organismo_id || null;
     marcoOrganismoNombre = p.organismo || null;
     if(typeof cx5uGuardarOrganismoActivo === 'function') cx5uGuardarOrganismoActivo(__organismoIdCoreUrbanismo, marcoOrganismoNombre);
+    pintarContinuidadUrbanismo();
     var texto = JSON.stringify(p.marco, null, 2);
     window.addEventListener('load', function(){
       setTimeout(function(){
@@ -9195,7 +9256,7 @@ var marcoOrganismoNombre = null;   // 14/08: capturado para la etiqueta "Continu
         }catch(e){}
       }, 400);
     });
-  }catch(e){}
+  }catch(e){ pintarContinuidadUrbanismo(); }
 })();
 
 /* Handoff automático directo Contextos -> Urbanismo (14/08), sin pasar por el Core -- espejo del

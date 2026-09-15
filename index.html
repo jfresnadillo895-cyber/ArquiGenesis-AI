@@ -16606,19 +16606,25 @@ function consumirDerivablePendiente(orgId, tipo){
 function mostrarDerivacion(orgOrigen){
   var org = orgOrigen || state.organismo;
   var orgId = (org && typeof org === 'object') ? org.id : org;
+  // 124-M0.3-R1 (14/09): mismo copy factual de siempre (confirma un acontecimiento recién
+  // producido -- no se unifica con el texto de ofrecerContinuidadUrban(), que ofrece retomar algo
+  // ya disponible; son dos momentos distintos), ahora traducido vía t()/diccionario de
+  // lib/i18n.js -- esta tarjeta vive dentro de #stream, zona que el traductor pasivo excluye a
+  // propósito (ignored() en lib/i18n.js), así que sin esto quedaba siempre en español.
+  var t = (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.t) ? ComprenderI18n.t : function(s){ return s; };
   const d = document.createElement('div');
   d.className = 'msg motor';
   const n = document.createElement('div');
   n.className = 'derivacion';
-  const b1 = document.createElement('b'); b1.textContent = 'Lectura territorial activada. ';
+  const b1 = document.createElement('b'); b1.textContent = t('Lectura territorial activada.') + ' ';
   n.appendChild(b1);
-  n.appendChild(document.createTextNode('Este caso pertenece al dominio urbano. Para el diagnóstico completo — los 36 indicadores, el campo de fuerzas y el informe de presentación — el organismo está listo para llevarse a '));
-  const b2 = document.createElement('b'); b2.textContent = 'Comprender · Urbanismo';
+  n.appendChild(document.createTextNode(t('Este caso pertenece al dominio urbano. Para el diagnóstico completo — los 36 indicadores, el campo de fuerzas y el informe de presentación — el organismo está listo para llevarse a') + ' '));
+  const b2 = document.createElement('b'); b2.textContent = 'Comprender · Urbanismo';   // nombre propio del producto -- no se traduce
   n.appendChild(b2);
   n.appendChild(document.createTextNode('.'));
   d.appendChild(n);
   const row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '8px';
-  const bt = document.createElement('button'); bt.className = 'btn primary'; bt.textContent = 'Abrir en Urbanismo →';
+  const bt = document.createElement('button'); bt.className = 'btn primary'; bt.textContent = t('Abrir en Urbanismo →');
   // abrirModulo ya gatea por plan: si no está habilitado, muestra la tarjeta de compra.
   // orgId queda capturado por clausura -- ver comentario de arriba.
   // DERIVACION01 (11/09): sólo se consume la derivación pendiente si el plan realmente la deja
@@ -16645,19 +16651,23 @@ function mostrarDerivacion(orgOrigen){
 // en la misma sesión): la puerta a Urbanismo tiene que seguir estando ahí igual.
 function ofrecerContinuidadUrban(org){
   if(!org || !org.derivable || org.derivable.indexOf('urban') === -1) return;
+  // 124-M0.3-R1 (14/09): texto canónico nuevo (reemplaza "Continuidad especializada...") --
+  // ofrece retomar una profundización ya disponible, a diferencia de mostrarDerivacion() que
+  // confirma un acontecimiento recién producido; se mantienen como dos mensajes distintos a
+  // propósito. Traducido vía t()/diccionario de lib/i18n.js (misma razón que en
+  // mostrarDerivacion(): #stream queda fuera del traductor pasivo).
+  var t = (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.t) ? ComprenderI18n.t : function(s){ return s; };
   const d = document.createElement('div');
   d.className = 'msg motor';
   const n = document.createElement('div');
   n.className = 'derivacion';
-  const b1 = document.createElement('b'); b1.textContent = 'Continuidad especializada. ';
+  const b1 = document.createElement('b'); b1.textContent = t('Continuar en Urbanismo');
   n.appendChild(b1);
-  n.appendChild(document.createTextNode('Este organismo ya tiene una lectura territorial pertinente en '));
-  const b2 = document.createElement('b'); b2.textContent = 'Comprender · Urbanismo';
-  n.appendChild(b2);
-  n.appendChild(document.createTextNode('.'));
+  n.appendChild(document.createElement('br'));
+  n.appendChild(document.createTextNode(t('Este organismo puede profundizar su relación con el territorio sin perder la comprensión ya construida.')));
   d.appendChild(n);
   const row = document.createElement('div'); row.className = 'cardrow'; row.style.marginTop = '8px';
-  const bt = document.createElement('button'); bt.className = 'btn'; bt.textContent = 'Abrir en Urbanismo →';
+  const bt = document.createElement('button'); bt.className = 'btn'; bt.textContent = t('Abrir en Urbanismo →');
   var orgId = org.id;
   // DERIVACION01 (11/09): mismo criterio de consumo-sólo-si-el-plan-lo-permite que en
   // mostrarDerivacion() (ver comentario ahí) -- misma función, mismo gate.
