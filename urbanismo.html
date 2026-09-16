@@ -7606,16 +7606,29 @@ function filtrarHistorial(query){
   if(!list) return;
   const q = query.toLowerCase().trim();
   if(!q){ actualizarHistorial(); return; }
-  const filtrados = historial.filter(h=>(h.ciudad||'').toLowerCase().includes(q));
+  // 124-GU-REV-03 · Bloque B-B1.1: bug preexistente encontrado y reportado en el informe de B1,
+  // ahora corregido -- antes 'filtrados' perdía el índice REAL dentro de 'historial' (el .filter()
+  // devuelve un arreglo nuevo, reindexado desde 0), y el onclick de cada resultado usaba esa
+  // posición dentro del arreglo FILTRADO ('i' del .map() de más abajo) para llamar
+  // cargarHistorial(i). Con una búsqueda que no devuelve todo el historial en el mismo orden, eso
+  // podía abrir un diagnóstico distinto del que se ve en pantalla -- silenciosamente, sin ningún
+  // error. Se corrige adjuntando el índice original ANTES de filtrar (mismo criterio que pidió
+  // Javier), así cada resultado, venga de donde venga dentro del arreglo filtrado, sigue apuntando
+  // a su propia posición real en 'historial'. No se toca ningún otro comportamiento: mismo texto,
+  // mismo orden visual (.reverse() se preserva tal cual), mismos filtros, mismo diseño.
+  const filtrados = historial
+    .map(function(entrada, indiceOriginal){ return { entrada: entrada, indiceOriginal: indiceOriginal }; })
+    .filter(function(par){ return (par.entrada.ciudad||'').toLowerCase().includes(q); });
   if(filtrados.length===0){
     list.innerHTML='<div class="hist-empty">No se encontró "'+query+'".</div>';
     return;
   }
-  list.innerHTML = filtrados.map((h,i)=>{
+  list.innerHTML = filtrados.map(function(par){
+    const h = par.entrada, idx = par.indiceOriginal;
     const vals = Object.entries(h.ponderados||{}).map(([e,v])=>nombreVisible(e)+': '+v).join(' · ');
     const ctxIcons = {urban:'🏙️',business:'💼',research:'🎓'};
     const ctxIcon = ctxIcons[h.contexto||'urban']||'🏙️';
-    return '<div class="hist-item" onclick="cargarHistorial('+i+')">'
+    return '<div class="hist-item" onclick="cargarHistorial('+idx+')">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'
       +'<div class="hist-item-ciudad">'+ctxIcon+' '+h.ciudad+'</div>'
       +(h.fecha?'<span style="font-size:9px;color:var(--texto3)">'+h.fecha+'</span>':'')
