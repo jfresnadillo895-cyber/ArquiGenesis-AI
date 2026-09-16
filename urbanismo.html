@@ -2751,6 +2751,13 @@ canvas{animation:none !important}
         <div style="font-size:48px;font-weight:900;color:#1B4A6B;line-height:1.1;margin-bottom:.5cm" id="pdf-ciudad-titulo">—</div>
         <div style="font-size:18px;color:#555;margin-bottom:2cm" id="pdf-contexto-titulo">Diagnóstico Urbano Sistémico</div>
         <div style="width:60px;height:4px;background:#1B4A6B;margin-bottom:2cm"></div>
+        <!-- 124-GU-REV-03 · Bloque B2, punto 4: identificación visible de metodología histórica
+             (v1) o fase alcanzada + cobertura receptiva (v2), siempre poblada por confirmarPDF()
+             a partir del diagData vivo -- funciona igual para un diagnóstico fresco que para uno
+             reabierto del historial, sin depender de qué subtab esté activa en pantalla (a
+             diferencia de #urbhist-badge de Bloque B-B1, que sólo vive en la subtab "Resumen" y
+             por eso no sirve para esto: #pdf-portada es lo único que SIEMPRE se imprime). -->
+        <div id="pdf-condicion" style="max-width:14cm;margin-bottom:.5cm"></div>
         <div style="font-size:13px;color:#333;line-height:1.8;max-width:14cm" id="pdf-desc-portada"></div>
       </div>
       <div>
@@ -6746,6 +6753,52 @@ function urbHist01AdvertenciaComparacionHtml(dA, dB){
   return '<div style="font-size:11px;font-weight:600;color:var(--rojo);background:rgba(193,85,63,.08);border:1px solid var(--rojo);border-radius:6px;padding:8px 10px;margin-bottom:1rem">⚠️ Uno de estos diagnósticos es histórico (metodología anterior) y el otro usa la metodología actual -- sus resultados no son metodológicamente equivalentes.</div>';
 }
 
+// ══════════════════════════════════════════
+// 124-GU-REV-03 · Bloque B2 -- condición real en las salidas (PDF y enlace compartido).
+// Reutiliza el mismo criterio v1/v2 (urbHist01EsV1) y la misma constante de rótulo
+// (URBHIST01_ROTULO_V1) que Bloque B-B1 -- nunca se duplica el criterio de detección. Difiere de
+// urbHist01EstadoRestauradoHtml() (pensada para el badge breve de la lista del historial) en que
+// acá SIEMPRE se desglosan desarrollados/hipótesis/pendientes cuando hay coberturaReceptiva --
+// Bloque B2, punto 4, lo exige explícitamente para el PDF ("cantidades de desarrollados, hipótesis
+// y pendientes"). No recalcula nada: sólo lee schemaVersion/fase/coberturaReceptiva tal como están
+// en el diagData vivo, reabierto, o en el payload mínimo de un enlace compartido.
+function urbExp01FraseCondicion(d){
+  if(urbHist01EsV1(d)) return URBHIST01_ROTULO_V1;
+  var fase = d && d.fase;
+  var cob = d && d.coberturaReceptiva;
+  if(fase === 'proyectivo_completo'){
+    return cob
+      ? ('Abordaje Proyectivo completo · '+cob.cubiertos+'/'+cob.total+' receptivos cubiertos ('+cob.desarrollados+' desarrollados, '+cob.hipotesis+' con menor certeza, '+cob.pendientes+' pendientes)')
+      : 'Abordaje Proyectivo completo';
+  }
+  if(fase === 'proyectivo_provisional'){
+    return cob
+      ? ('Abordaje Proyectivo provisional (cobertura parcial confirmada) · '+cob.cubiertos+'/'+cob.total+' receptivos cubiertos ('+cob.desarrollados+' desarrollados, '+cob.hipotesis+' con menor certeza, '+cob.pendientes+' pendientes)')
+      : 'Abordaje Proyectivo provisional (cobertura parcial confirmada)';
+  }
+  if(fase === 'validado') return 'Diagnóstico validado (sin Abordaje Proyectivo generado)';
+  if(fase === 'diagnostico_activo') return 'Diagnóstico activo (sin validar todavía)';
+  return fase ? ('Diagnóstico (fase: '+fase+')') : 'Diagnóstico';
+}
+// Envoltorio visual para la frase de arriba -- usado en el PDF (siempre) y en el modo lectura del
+// enlace compartido (sólo cuando el payload trae 'fase', ver mostrarModoLectura()). Mismo criterio
+// de color que urbHist01EstadoRestauradoHtml(): ocre para v1, azul para v2.
+function urbExp01CondicionHtml(d){
+  var esV1 = urbHist01EsV1(d);
+  var color = esV1 ? 'var(--ocre)' : 'var(--azul)';
+  var fondo = esV1 ? 'rgba(176,138,62,.12)' : 'var(--azul-c)';
+  var borde = esV1 ? 'border:1px solid var(--ocre);' : '';
+  return '<div style="font-size:11px;font-weight:700;color:'+color+';background:'+fondo+';'+borde+'border-radius:6px;padding:6px 10px;margin-bottom:.75rem">'+urbExp01FraseCondicion(d)+'</div>';
+}
+// Bloque B2, punto 4: advertencia EXACTA pedida por Javier para un proyectivo provisional, para que
+// nunca se confunda con uno definitivo. Sólo aparece cuando fase==='proyectivo_provisional' -- para
+// cualquier otra fase (incluido v1) esta función no agrega nada.
+var URBEXP01_ADVERTENCIA_PROVISIONAL = 'Proyectivo provisional construido con cobertura receptiva parcial y continuado mediante confirmación humana.';
+function urbExp01AdvertenciaProvisionalHtml(d){
+  if(!d || d.fase !== 'proyectivo_provisional') return '';
+  return '<div style="font-size:11px;font-weight:600;color:var(--rojo);background:rgba(193,85,63,.08);border:1px solid var(--rojo);border-radius:6px;padding:8px 10px;margin-bottom:.75rem">⚠️ '+URBEXP01_ADVERTENCIA_PROVISIONAL+'</div>';
+}
+
 function toggleHistorial(){
   const panel = document.getElementById('hist-panel');
   panel.classList.toggle('vis');
@@ -6863,6 +6916,17 @@ function compartirDiagnostico(){
     tensiones: diagData.tensiones,
     perfil: perfilTerritorio
   };
+  // 124-GU-REV-03 · Bloque B2, punto 5: metadatos MÍNIMOS para conservar versión metodológica,
+  // fase y condición provisional en el enlace -- nunca los 18 elementos de diagData.receptivos (el
+  // enlace no los necesita para el modo lectura) ni diagData.espiral completo. Cada campo se agrega
+  // SÓLO si existe realmente en el diagnóstico que se está compartiendo -- un v1 (sin
+  // schemaVersion) sigue generando exactamente el mismo payload que antes de este corte, sin
+  // ningún campo nuevo agregado ni inventado. 'coberturaReceptiva' ya es en sí un resumen de 5
+  // números (desarrollados/hipotesis/pendientes/cubiertos/total) -- no la lista de elementos.
+  if(diagData.schemaVersion) payload.schemaVersion = diagData.schemaVersion;
+  if(diagData.fase) payload.fase = diagData.fase;
+  if(diagData.coberturaReceptiva) payload.coberturaReceptiva = diagData.coberturaReceptiva;
+  if(diagData.proyectivoProvisionalConfirmado) payload.proyectivoProvisionalConfirmado = true;
 
   try {
     var json = JSON.stringify(payload);
@@ -6934,6 +6998,18 @@ function mostrarModoLectura(data){
   html += '<div style="font-size:40px;font-weight:700;color:var(--ocre);font-family:var(--mono);margin:12px 0;line-height:1">'+score+'</div>';
   html += '<div style="font-size:9px;color:var(--texto3);font-family:var(--mono);letter-spacing:.2em">PUNTAJE GLOBAL</div>';
   html += '</div>';
+
+  // 124-GU-REV-03 · Bloque B2, punto 5: reconstruir ÚNICAMENTE lo que fue efectivamente
+  // compartido. 'data.fase' sólo existe en enlaces generados por compartirDiagnostico() DESPUÉS de
+  // este corte -- un enlace legacy (de antes de B2, o cualquiera sin 'fase') no muestra nada acá,
+  // exactamente como se veía antes de este corte: la ausencia de 'fase' nunca se interpreta como
+  // "es v1", sólo como "este enlace no trae esa información" (no hay forma de distinguir ambos
+  // casos desde el payload solo, y no corresponde adivinar). Misma función urbExp01FraseCondicion()
+  // que usa el PDF -- una sola fuente de verdad para el texto.
+  if(data.fase){
+    html += urbExp01CondicionHtml({schemaVersion:data.schemaVersion, fase:data.fase, coberturaReceptiva:data.coberturaReceptiva});
+    if(data.proyectivoProvisionalConfirmado) html += urbExp01AdvertenciaProvisionalHtml({fase:data.fase});
+  }
 
   // Tarjetas dimensiones
   html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:1.25rem">';
@@ -7266,7 +7342,22 @@ function exportarHistorial(){
           tensiones: h.diagData.tensiones,
           haiku: h.diagData.haiku,
           hexp: h.diagData.hexp,
-          ciudad: h.diagData.ciudad
+          ciudad: h.diagData.ciudad,
+          // 124-GU-REV-03 · Bloque B2, puntos 3/6: campos aditivos -- cada uno sólo aparece en el
+          // JSON exportado si existe REALMENTE en el diagnóstico archivado. JSON.stringify() omite
+          // automáticamente las claves con valor 'undefined', así que no hace falta ningún 'if'
+          // por campo: un v1 (sin schemaVersion) o un v2 todavía en 'diagnostico_activo'/'validado'
+          // (sin proyectivo generado) exportan exactamente estas mismas 6 claves de siempre, sin
+          // ninguna de las nuevas. Se lee tal cual de h.diagData (ya clonado íntegro por
+          // guardarEnHistorial()/cargarHistorial(), Bloque B-B1) -- nunca se recalcula nada acá.
+          schemaVersion: h.diagData.schemaVersion,
+          fase: h.diagData.fase,
+          receptivos: h.diagData.receptivos,
+          espiral: h.diagData.espiral,
+          coberturaReceptiva: h.diagData.coberturaReceptiva,
+          proyectivoProvisionalConfirmado: h.diagData.proyectivoProvisionalConfirmado,
+          proyectivoProvisionalConfirmadoEn: h.diagData.proyectivoProvisionalConfirmadoEn,
+          intencionOmitida: h.diagData.intencionOmitida
         }
       };
     })
@@ -7553,6 +7644,13 @@ function confirmarPDF(){
   const intEl = document.getElementById('pdf-intencion-portada');
   if(intencionSeleccionada) intEl.textContent = '🎯 Objetivo: ' + intencionSeleccionada;
   else intEl.textContent = '';
+
+  // 124-GU-REV-03 · Bloque B2, punto 4: condición real del diagnóstico que se está imprimiendo --
+  // metodología histórica (v1), o fase + cobertura receptiva (v2) -- más la advertencia exacta
+  // cuando es un proyectivo provisional, para que nunca se lea como definitivo. Se lee tal cual de
+  // 'diagData' en el momento de imprimir -- no se recalcula ni se completa nada.
+  const pdfCondEl = document.getElementById('pdf-condicion');
+  if(pdfCondEl) pdfCondEl.innerHTML = urbExp01CondicionHtml(diagData) + urbExp01AdvertenciaProvisionalHtml(diagData);
 
   // Capturar imagen del campo de fuerzas
   const canvasDiag = document.getElementById('c-diag');
