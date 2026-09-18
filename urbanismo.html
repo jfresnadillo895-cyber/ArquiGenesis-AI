@@ -3726,6 +3726,13 @@ function back(){
    no le atribuye la falla a ninguna causa que no se pueda confirmar. */
 function clasificarErrorUrbanismo(e){
   if(!e) return 'desconocido';
+  // 124-BLOQ-URB-ABORT-02 (18/09): marcador propio, puesto por llamarAnthropicUrbanismo() cuando
+  // el servidor responde 202 (otra ejecución con esta misma clave ya está en curso -- ver
+  // reclamarOperacionUrbanismo() en api/anthropic.js) y consultarRecuperacionConEspera() agota su
+  // ventana de espera sin encontrar un resultado. Se revisa ANTES que 'abortado' porque este
+  // error, aunque puede tener name/message genéricos según cómo se construyó, siempre trae este
+  // campo puesto explícitamente -- nunca hay que adivinarlo por texto.
+  if(e._motivoUrb === 'reclamo_en_curso') return 'procesando_en_servidor';
   var nombre = (e.name||'').toLowerCase();
   var msg = (e.message||'').toLowerCase();
   if(nombre === 'aborterror' || msg.indexOf('abort') !== -1) return 'abortado';
@@ -3739,6 +3746,12 @@ function mensajeErrorUrbanismo(e, conDetalle){
   if(tipo === 'abortado') base = 'El análisis se interrumpió antes de completarse. Podés intentarlo nuevamente.';
   else if(tipo === 'red') base = 'No se pudo contactar al servidor. Verificá tu conexión e intentá nuevamente.';
   else if(tipo === 'servidor') base = 'El servidor no pudo completar el análisis. Intentá nuevamente en unos minutos.';
+  // 124-BLOQ-URB-ABORT-02 (18/09): distinto de 'abortado' a propósito -- acá SÍ sabemos, con
+  // certeza (no una suposición), que el servidor sigue procesando esta misma operación: es lo que
+  // significa un 202 de reclamarOperacionUrbanismo(). El texto no dice "se interrumpió" (sería
+  // falso) ni promete un resultado inmediato -- sólo confirma que sigue en curso y que un nuevo
+  // intento no va a duplicar nada (el servidor ya lo protege).
+  else if(tipo === 'procesando_en_servidor') base = 'El análisis sigue procesando en el servidor. Esperá un momento y volvé a intentar -- no se va a generar de nuevo.';
   else base = 'No se pudo completar el análisis. Intentá nuevamente.';
   if(conDetalle && e && e.message) return base + '<br><small>'+e.message+'</small>';
   return base;
@@ -3845,6 +3858,18 @@ async function llamarAPIConReintentoUrbanismo(ciudad,pasivo,c2,ref){
 }
 
 async function ejecutar(){
+  // 124-BLOQ-URB-ABORT-02 (18/09), brief punto 7: "deshabilitar acciones repetidas mientras una
+  // unidad lógica esté activa, para evitar dobles clics". btn-go ya se deshabilitaba al arrancar
+  // (línea de abajo) pero sólo se volvía a habilitar al FINAL -- eso ya cubría el botón "Analizar"
+  // en sí, pero no el botón "↻ Retomar análisis" que setErr() inserta dinámicamente dentro del
+  // mensaje de error (mismo onclick="ejecutar()", elemento del DOM distinto): un clic doble rápido
+  // sobre ESE botón, antes de que esta función llegara a deshabilitar btn-go, podía disparar dos
+  // llamadas concurrentes. Esta guarda de reentrada, agregada al principio, cubre cualquier
+  // llamador (botón normal, Retomar, o lo que sea) con una sola condición: si ya hay un análisis
+  // en curso, un segundo llamado no hace nada. Defensa en profundidad -- el reclamo atómico del
+  // servidor (reclamarOperacionUrbanismo(), api/anthropic.js) ya evita que esto duplique un cobro
+  // aunque igualmente se disparen dos llamados, pero evitarlo acá también ahorra el round-trip.
+  if(document.getElementById('btn-go').disabled) return;
   const ciudad=document.getElementById('city-inp').value.trim();
   const c2=document.getElementById('c2-txt')?.value?.trim()||'';
   document.getElementById('btn-go').disabled=true;
@@ -3996,12 +4021,32 @@ function registrarUso(tipo, data, extra){
    temporalmente el resultado si Anthropic responde bien, de forma que si ESTA MISMA llamada
    pierde igual la lectura del cuerpo más abajo, el resultado no se pierde del todo: puede
    recuperarse después vía un GET a /api/anthropic (ver llamarFaseConRecuperacion()). */
+/* 124-BLOQ-URB-ABORT-02 (18/09): hash corto, sincrónico, NO criptográfico (FNV-1a de 32 bits) del
+   prompt real que se manda -- viaja como header x-comprender-urb-payload-hash, sólo cuando ya
+   viaja 'firma' (mismas 3 fases largas de siempre). El servidor lo usa EXCLUSIVAMENTE para
+   detectar que la misma clave (perfil,firma,fase) nunca ejecute en silencio un contenido
+   distinto del que reclamó primero (brief, punto 4) -- ver reclamarOperacionUrbanismo() en
+   api/anthropic.js. No hace falta que sea criptográfico: sólo tiene que distinguir "mismo texto"
+   de "texto distinto" con probabilidad de colisión despreciable para este propósito. */
+function urbHashPayload(str){
+  var s = String(str||'');
+  var h = 0x811c9dc5;
+  for(var i=0;i<s.length;i++){
+    h ^= s.charCodeAt(i);
+    h = (h + ((h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24))) >>> 0;
+  }
+  return h.toString(16);
+}
 async function llamarAnthropicUrbanismo(prompt,maxTokens,fase,etapa,firma){
   const t0=Date.now();
   let res;
   try{
     var headersUrb={'Content-Type':'application/json'};
-    if(firma){ headersUrb['x-comprender-urb-firma']=firma; headersUrb['x-comprender-urb-fase']=fase; }
+    if(firma){
+      headersUrb['x-comprender-urb-firma']=firma;
+      headersUrb['x-comprender-urb-fase']=fase;
+      headersUrb['x-comprender-urb-payload-hash']=urbHashPayload(prompt);
+    }
     res=await fetch(apiEndpoint(),{
       method:'POST',
       headers:headersUrb,
@@ -4012,6 +4057,20 @@ async function llamarAnthropicUrbanismo(prompt,maxTokens,fase,etapa,firma){
     // intento fallido (sin tokens, porque no hay data.usage posible acá).
     registrarUso('urbanismo', {}, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:false, motivo:'red_pre_headers' });
     throw eRed;
+  }
+  // 124-BLOQ-URB-ABORT-02 (18/09): 202 = reclamarOperacionUrbanismo() (api/anthropic.js) encontró
+  // que esta misma clave (firma,fase) ya está reclamada por OTRA ejecución que sigue procesando --
+  // el servidor, a propósito, NO llamó a Anthropic de nuevo para este POST. `res.ok` es true para
+  // 202 (es un 2xx), así que hay que interceptarlo ANTES del chequeo `!res.ok` de abajo -- si no,
+  // el código de más abajo intentaría leer `data.content` de un cuerpo que no lo tiene. No se
+  // registra como fallo en ag_core_uso (no fue un intento fallido: fue el servidor evitando
+  // correctamente una llamada de más) -- se lanza un error propio, clasificado, para que
+  // llamarFaseConRecuperacion() lo atrape y dispare el mismo camino de espera/consulta que ya usa
+  // para cualquier otro fallo de esta función.
+  if(res.status===202){
+    var eProcesando=new Error('operacion_en_curso');
+    eProcesando._motivoUrb='reclamo_en_curso';
+    throw eProcesando;
   }
   if(!res.ok){
     const e=await res.json().catch(()=>({}));
@@ -4083,26 +4142,52 @@ async function intentarRecuperarFaseUrbanismo(firma, fase){
   }catch(e){ return null; }
 }
 
-/* 124-BLOQ-URB-ABORT-02 (15/09): reemplaza el par proactivo/reactivo de URB-ROBUST 03/03A
+/* 124-BLOQ-URB-ABORT-02 (18/09): reemplaza el par proactivo/reactivo de URB-ROBUST 03/03A
    (que sólo consultaban cuando 'esReanudacion' ya era true, y nunca para 'items' -- ver
    PENDIENTES.md, URB-ROBUST-03A, y 124-BLOQ-URB-ABORT-01_INFORME.md §6/§7 para la evidencia real
    de por qué eso no alcanzaba). Ahora la consulta es SIEMPRE la misma, para las tres fases por
-   igual, y con una espera acotada -- no un sondeo sin límite: un GET inmediato y, sólo si el
-   servidor dice que la fase quedó reclamada y sigue procesándose (202), UNA espera fija seguida
-   de un segundo y último GET. Nunca dispara un POST por su cuenta -- eso lo decide, como antes,
-   quien la llama. */
+   igual, y con un SONDEO ACOTADO -- no un sondeo sin límite ni un único reintento: un GET
+   inmediato y, mientras el servidor siga diciendo 'processing' (202 -- reclamado por OTRA
+   ejecución que sigue corriendo), reintentos cada URB_RECUP_ESPERA_MS hasta agotar
+   URB_RECUP_VENTANA_MS en total. Nunca dispara un POST por su cuenta -- eso lo decide, como
+   antes, quien la llama.
+   Por qué una ventana y no un único reintento (124-BLOQ-URB-ABORT-01_INFORME.md documentó
+   latencias reales de Anthropic de 15+ segundos, y api/anthropic.js corre bajo el límite duro de
+   60s de maxDuration de Vercel -- ver vercel.json): un solo reintento a los 4s de la versión
+   anterior de esta función sistemáticamente encontraba la fase todavía 'processing' en cualquier
+   corrida que tardara más de esos 4s (es decir, casi siempre), y devolvía null -- lo que hacía
+   caer al mensaje de error/​"Retomar análisis" AUNQUE el servidor fuera a terminar bien poco
+   después. Con 4000ms de intervalo, 70000ms de ventana total cubren cómodamente el peor caso
+   real (60s de maxDuration + margen) sin bloquear la interfaz de forma indefinida: si se agota la
+   ventana sin resultado, esta función igual devuelve null -- el resultado sigue "processing" del
+   lado servidor (no se pierde ni se cancela nada ahí), simplemente el cliente deja de esperar acá
+   y dispara el mismo camino visible de siempre (mensajeErrorUrbanismo → botón "↻ Retomar
+   análisis", ver ejecutar()), que el usuario puede usar para volver a consultar más tarde (brief,
+   punto 7: "al agotar espera: conservar pendiente, ofrecer 'Retomar análisis', no iniciar otra
+   ejecución automática"). Si en algún punto del sondeo el servidor responde que la fase YA NO
+   está 'processing' sin haber completado (falla terminal, o el reclamo venció sin que nadie lo
+   retomara), tampoco tiene sentido seguir esperando -- se corta el sondeo ahí mismo en vez de
+   agotar la ventana completa sin necesidad. */
 var URB_RECUP_ESPERA_MS = 4000;
+var URB_RECUP_VENTANA_MS = 70000;
 async function consultarRecuperacionConEspera(firma, fase){
   var r1 = await intentarRecuperarFaseUrbanismo(firma, fase);
   if(r1 && r1.estado === 'completed') return r1;
-  if(r1 && r1.estado === 'processing'){
-    mostrarEsperaRecuperacionUrb(true);
-    await new Promise(function(res){ setTimeout(res, URB_RECUP_ESPERA_MS); });
-    var r2 = await intentarRecuperarFaseUrbanismo(firma, fase);
+  if(!r1 || r1.estado !== 'processing') return null;
+  mostrarEsperaRecuperacionUrb(true);
+  try{
+    var transcurridoMs = 0;
+    while(transcurridoMs < URB_RECUP_VENTANA_MS){
+      await new Promise(function(res){ setTimeout(res, URB_RECUP_ESPERA_MS); });
+      transcurridoMs += URB_RECUP_ESPERA_MS;
+      var rN = await intentarRecuperarFaseUrbanismo(firma, fase);
+      if(rN && rN.estado === 'completed') return rN;
+      if(!rN || rN.estado !== 'processing') return null;
+    }
+    return null;
+  } finally {
     mostrarEsperaRecuperacionUrb(false);
-    if(r2 && r2.estado === 'completed') return r2;
   }
-  return null;
 }
 
 /* Reusa el texto del overlay de carga que ya existe (mostrarCarga/actualizarPasoCarga) en vez de
@@ -4116,7 +4201,13 @@ function mostrarEsperaRecuperacionUrb(activo){
     if(!elTxt) return;
     if(activo){
       _urbEsperaTxtPrevio = elTxt.textContent;
-      elTxt.textContent = 'Recuperando el análisis…';
+      // 124-BLOQ-URB-ABORT-02 (18/09): texto ajustado -- durante este sondeo el servidor todavía
+      // está procesando (o puede estarlo); "recuperando" describe mejor sólo el instante en el que
+      // YA se encontró un resultado completo y se lo está aplicando (eso es instantáneo, no pasa
+      // por este overlay). Brief punto 9 pide distinguir "servidor sigue procesando" de
+      // "recuperando resultado" -- con cambio visual mínimo (reutilizar el mismo overlay de carga
+      // existente) este texto cubre el estado real de esta espera sin agregar UI nueva.
+      elTxt.textContent = 'El servidor sigue procesando tu análisis… esperá un momento.';
     } else if(_urbEsperaTxtPrevio !== null){
       elTxt.textContent = _urbEsperaTxtPrevio;
       _urbEsperaTxtPrevio = null;
@@ -4265,6 +4356,29 @@ var UC_LLAVE = 'ag_urb_checkpoint';
    se mezcle con el análisis de otro (validación 5 del brief). */
 function firmaCheckpointUrbanismo(ciudad, organismoId, pasivo, c2, ref){
   return [String(ciudad||''), String(organismoId||''), String(pasivo||''), String(c2||''), String(ref||'')].join('|');
+}
+
+/* 124-BLOQ-URB-ABORT-02 (18/09): firma específica para receptivos_espiral (Abordaje Proyectivo) --
+   análoga a firmaCheckpointUrbanismo() (arriba), pero con dos diferencias necesarias:
+   1) incorpora 'nota'/'intencion' -- insumos propios de este llamado que firmaCheckpointUrbanismo
+      no conoce (no participan de items/núcleo);
+   2) incorpora 'numeroIntento' (1 o 2, ver intentoRegenerarProyectivo() más abajo). Sin esto, el
+      segundo intento -- que existe justamente para volver a intentar cuando el primero dio un
+      resultado técnicamente incompleto, ver urbProyValid01ReceptivosOk() -- calcularía LA MISMA
+      firma que el primero. Bajo el reclamo atómico server-side nuevo (reclamarOperacionUrbanismo()
+      en api/anthropic.js), el segundo POST encontraría la clave (perfil,firma,fase) ya reclamada
+      por el primero: si el primero todavía estuviera 'processing', el segundo esperaría el MISMO
+      resultado (que ya se sabe insuficiente) en vez de disparar una ejecución realmente nueva; si
+      el primero ya está 'completed' (el caso típico: el intento 1 sí respondió, sólo que con
+      contenido incompleto), el segundo simplemente recibiría DE VUELTA ese mismo resultado
+      incompleto (transparente, mismo contrato 200 que ve cualquier reclamo perdido) -- rompiendo
+      en silencio el mecanismo de reintento por calidad que ya existía (lógica de validación de
+      contenido que este corte tiene prohibido tocar, ver el brief, punto 8). Con numeroIntento en
+      la firma, cada intento reclama su propia clave -- el intento 2 siempre dispara una ejecución
+      nueva de Anthropic, exactamente como hacía antes de este corte. */
+function firmaProyectivoUrbanismo(ciudad, organismoId, pasivo, c2, ref, nota, intencion, numeroIntento){
+  return ['proy', String(ciudad||''), String(organismoId||''), String(pasivo||''), String(c2||''),
+    String(ref||''), String(nota||''), String(intencion||''), String(numeroIntento||'')].join('|');
 }
 function cargarCheckpointUrbanismo(){
   try{
@@ -5336,9 +5450,6 @@ async function regenerarProyectivo(nota, intencion){
   // fabrica contenido de relleno (si no es válido, no lo asigna). Cualquier fallo (red, status no
   // ok, JSON inválido) se traza en consola acá mismo -- ya no se traga en silencio.
   async function intentoRegenerarProyectivo(numeroIntento){
-    var _t0Proy = Date.now();   // CAP-M1 (26/08) -- declarado antes del try para poder registrar
-                                // también si fetch() ni siquiera llega a responder (catch de abajo)
-    var _regProy = false;       // evita registrar dos veces el mismo fallo (acá y en res.ok===false)
     try{
       const ciudad = diagData.ciudad;
       const c2 = document.getElementById('c2-txt')?.value?.trim()||'';
@@ -5352,27 +5463,28 @@ async function regenerarProyectivo(nota, intencion){
       // que Corte 4 dejó sin invocar).
       const prompt = buildPromptReceptivosEspiral(ciudad, pasivoTxt, c2, refData, ponderados, {tens: diagData.tensiones, sint: diagData.sintesis}, intencion, nota);
 
+      // 124-BLOQ-URB-ABORT-02 (18/09): receptivos_espiral pasa a llamar por el mismo camino
+      // protegido que ya usan items/núcleo (llamarFaseConRecuperacion -> llamarAnthropicUrbanismo),
+      // en vez de un fetch() directo sin firma/fase/recuperación -- era la única de las tres fases
+      // largas sin ningún resguardo (ver 124-BLOQ-URB-ABORT-01_INFORME.md: el mismo hueco
+      // estructural que 'items' tenía, sin excepción documentada acá tampoco). El registro de uso
+      // (registrarUso, éxito y fallo) ya lo hace llamarAnthropicUrbanismo() puertas adentro --
+      // exactamente el mismo contrato que items/núcleo (ver llamarAPI(), más arriba: tampoco
+      // registran nada por su cuenta) -- por eso este intento ya no llama a registrarUso()
+      // manualmente ni distingue res.ok/data.content: eso queda encapsulado en la función
+      // compartida. firmaProyectivoUrbanismo() (junto a firmaCheckpointUrbanismo, más arriba)
+      // incluye numeroIntento a propósito -- ver el comentario ahí.
+      const organismoIdProy = (typeof __organismoIdCoreUrbanismo!=='undefined' && __organismoIdCoreUrbanismo) || null;
+      const firmaProy = firmaProyectivoUrbanismo(ciudad, organismoIdProy, pasivoTxt, c2, refData, nota, intencion, numeroIntento);
+      const etapaProy = 'intento'+numeroIntento;
+
       incrementarAPI('haiku');
       incrementarAPI('proy');
-      const res = await fetch(apiEndpoint(),{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        // Corte 5: la respuesta ahora también incluye 'elementos' (18 objetos trazables) además de
-        // todo lo que ya se pedía -- se sube el techo de 3000 a 3800 (por debajo del
-        // MAX_TOKENS_TOPE=4000 real del servidor, mismo margen de seguridad que usan las otras
-        // llamadas de este archivo) para no truncar la respuesta más larga.
-        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:3800,messages:[{role:'user',content:prompt}]})
-      });
-
-      if(!res.ok){
-        registrarUso('urbanismo', {}, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:false });
-        _regProy = true;
-        throw new Error('Error API '+res.status);
-      }
-      const data = await res.json();
-      registrarUso('urbanismo', data, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:true });
-      _regProy = true;
-      const raw = data.content.map(i=>i.text||'').join('');
+      // Corte 5: la respuesta ahora también incluye 'elementos' (18 objetos trazables) además de
+      // todo lo que ya se pedía -- se sube el techo de 3000 a 3800 (por debajo del
+      // MAX_TOKENS_TOPE=4000 real del servidor, mismo margen de seguridad que usan las otras
+      // llamadas de este archivo) para no truncar la respuesta más larga.
+      const raw = await llamarFaseConRecuperacion(prompt, 3800, 'receptivos_espiral', etapaProy, firmaProy);
       const m = raw.match(/\{[\s\S]*\}/);
       if(!m) throw new Error('JSON inválido');
       const parsed = JSON.parse(m[0]);
@@ -5445,9 +5557,15 @@ async function regenerarProyectivo(nota, intencion){
 
     } catch(e){
       console.error('URB-PROY-VALID-01: error regenerando proyectivo (intento '+numeroIntento+'/2):', e);
-      // CAP-M1 (26/08): si llegamos hasta acá SIN haber registrado nada (fetch() ni siquiera
-      // respondió, o el body no se pudo leer), es el único lugar que se entera del fallo.
-      if(!_regProy) registrarUso('urbanismo', {}, { fase:'proyectivo', duracionMs:Date.now()-_t0Proy, exito:false });
+      // 124-BLOQ-URB-ABORT-02 (18/09): ya no hay un registrarUso() de respaldo acá -- desde que el
+      // fetch pasa por llamarFaseConRecuperacion()/llamarAnthropicUrbanismo() (ver más arriba), el
+      // registro de cualquier fallo real (red antes de headers, HTTP, cuerpo interrumpido) ya
+      // ocurrió puertas adentro de esa función, con el mismo contrato que usan items/núcleo (que
+      // tampoco tienen un registro de respaldo acá -- ver llamarAPI()). La única excepción a
+      // propósito es 'reclamo_en_curso' agotado (el servidor sigue procesando y la espera acotada
+      // de consultarRecuperacionConEspera() se agotó sin resultado): eso nunca se registra como
+      // fallo, en ningún punto -- exactamente el mismo criterio que items/núcleo, porque no fue un
+      // intento fallido del cliente, fue el servidor evitando correctamente una llamada de más.
       return 'incompleto';
     }
   }
