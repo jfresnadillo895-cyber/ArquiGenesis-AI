@@ -3724,6 +3724,15 @@ function back(){
      corresponde pedir que verifique su conexión -- es el único caso real de eso.
    Cualquier otro caso (JSON inválido, etc.) cae en 'desconocido' y usa un mensaje neutro que
    no le atribuye la falla a ninguna causa que no se pueda confirmar. */
+/* 124-BLOQ-URB-ABORT-02-R1: wrapper local para el traductor ES/EN/PT existente (lib/i18n.js) --
+   mismo patrón ya establecido en este archivo (ver urbRet01T(), más abajo): traduce sólo si
+   ComprenderI18n está cargado, si no devuelve el texto en español tal cual (nunca rompe el flujo
+   si el script no llegó a cargar). Se usa acá para los ÚNICOS textos NUEVOS de la familia
+   mensajeErrorUrbanismo() (brief R1, punto 6) -- los demás mensajes de esta función son
+   preexistentes a este corte y quedan sin tocar, fuera de alcance. */
+function urbAbortT(es){
+  return (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.t) ? ComprenderI18n.t(es) : es;
+}
 function clasificarErrorUrbanismo(e){
   if(!e) return 'desconocido';
   // 124-BLOQ-URB-ABORT-02 (18/09): marcador propio, puesto por llamarAnthropicUrbanismo() cuando
@@ -3733,6 +3742,12 @@ function clasificarErrorUrbanismo(e){
   // error, aunque puede tener name/message genéricos según cómo se construyó, siempre trae este
   // campo puesto explícitamente -- nunca hay que adivinarlo por texto.
   if(e._motivoUrb === 'reclamo_en_curso') return 'procesando_en_servidor';
+  // 124-BLOQ-URB-ABORT-02-R1 (brief punto 4): 409 -- la misma clave (operationId+fase) ya está
+  // reclamada con un payload DISTINTO (ver reclamarOperacionUrbanismo() en api/anthropic.js).
+  // Se revisa ANTES que la clasificación genérica por texto porque, igual que 'reclamo_en_curso',
+  // siempre trae el status puesto explícitamente (ver llamarAnthropicUrbanismo()) -- nunca hay que
+  // adivinarlo parseando el mensaje.
+  if(e._httpStatusUrb === 409) return 'conflicto';
   var nombre = (e.name||'').toLowerCase();
   var msg = (e.message||'').toLowerCase();
   if(nombre === 'aborterror' || msg.indexOf('abort') !== -1) return 'abortado';
@@ -3751,7 +3766,15 @@ function mensajeErrorUrbanismo(e, conDetalle){
   // significa un 202 de reclamarOperacionUrbanismo(). El texto no dice "se interrumpió" (sería
   // falso) ni promete un resultado inmediato -- sólo confirma que sigue en curso y que un nuevo
   // intento no va a duplicar nada (el servidor ya lo protege).
-  else if(tipo === 'procesando_en_servidor') base = 'El análisis sigue procesando en el servidor. Esperá un momento y volvé a intentar -- no se va a generar de nuevo.';
+  // 124-BLOQ-URB-ABORT-02-R1 (brief punto 6): mensaje NUEVO de este corte -- pasa por urbAbortT()
+  // para que se traduzca a EN/PT con el mecanismo i18n existente (ver el diccionario agregado en
+  // lib/i18n.js). Los mensajes preexistentes de esta función (arriba) quedan tal cual, sin tocar.
+  else if(tipo === 'procesando_en_servidor') base = urbAbortT('El análisis sigue procesando en el servidor. Esperá un momento y volvé a intentar -- no se va a generar de nuevo.');
+  // 124-BLOQ-URB-ABORT-02-R1 (brief puntos 4 y 6): 409 -- nunca se intentó recuperar contenido de
+  // esta clave (ver llamarFaseConRecuperacion()); el mensaje lo deja explícito para que la persona
+  // no interprete esto como "se perdió mi análisis" -- es lo opuesto: el servidor protegió el
+  // payload original de esta clave de que se pisara con datos distintos.
+  else if(tipo === 'conflicto') base = urbAbortT('Hay otro análisis en curso con estos mismos datos de partida. Esperá a que termine antes de reintentar.');
   else base = 'No se pudo completar el análisis. Intentá nuevamente.';
   if(conDetalle && e && e.message) return base + '<br><small>'+e.message+'</small>';
   return base;
@@ -4075,7 +4098,15 @@ async function llamarAnthropicUrbanismo(prompt,maxTokens,fase,etapa,firma){
   if(!res.ok){
     const e=await res.json().catch(()=>({}));
     registrarUso('urbanismo', {}, { fase:fase, etapa:etapa, duracionMs:Date.now()-t0, exito:false, motivo:'http' });
-    throw new Error('Error '+res.status+': '+(e.error?.message||''));
+    // 124-BLOQ-URB-ABORT-02-R1 (brief punto 4): status HTTP real, puesto explícitamente en el
+    // error -- para que llamarFaseConRecuperacion() pueda distinguir un código de negocio
+    // DEFINITIVO (400/401/402/403/409: el servidor ya respondió de forma sincrónica e inequívoca,
+    // no hay ninguna ambigüedad de conexión que valga la pena sondear) de un fallo ambiguo (red
+    // antes de headers, cuerpo interrumpido, 5xx) donde SÍ tiene sentido consultar antes de
+    // rendirse.
+    const eHttp=new Error('Error '+res.status+': '+(e.error?.message||''));
+    eHttp._httpStatusUrb=res.status;
+    throw eHttp;
   }
   // URB-ROBUST 02A (26/08) -- cierre del gap de observabilidad documentado en URB-ROBUST 02:
   // `res.ok` sólo confirma que llegaron los encabezados/status (acá, 200) -- leer el cuerpo con
@@ -4130,16 +4161,26 @@ async function intentarRecuperarFaseUrbanismo(firma, fase){
   if(!firma || !fase) return null;
   try{
     var r=await fetch('/api/anthropic?firma='+encodeURIComponent(firma)+'&fase='+encodeURIComponent(fase));
-    // 124-BLOQ-URB-ABORT-02 (15/09): el servidor ahora distingue 202 (el POST original quedó
-    // reclamado y sigue procesándose -- vale la pena esperar) de 404 (no hay nada, ni reclamo ni
-    // resultado). Antes esto sólo sabía "ok o no" -- necesario para que consultarRecuperacionConEspera()
-    // pueda decidir si conviene esperar un poco antes del segundo intento.
+    // 124-BLOQ-URB-ABORT-02 (15/09): el servidor distingue 202 (el POST original quedó reclamado y
+    // sigue procesándose -- vale la pena esperar) de 404 (nada recuperable). 124-BLOQ-URB-ABORT-
+    // 02-R1 (brief puntos 1 y 4) profundiza esa distinción del lado 404: el servidor ahora separa,
+    // dentro del 404, "todavía no hay nada" (codigo:'no_encontrado' -- AMBIGUO, puede ser que el
+    // reclamo esté en camino: vale la pena seguir consultando) de "hubo una falla real confirmada"
+    // (codigo:'fallo_terminal' -- NUNCA vale la pena seguir consultando, ver
+    // manejarRecuperacionUrbanismo() en api/anthropic.js). 'ausente' cubre también cualquier otra
+    // respuesta no-ok/no-parseable y el catch de red de más abajo -- todas son, desde acá, la
+    // MISMA ambigüedad ("no sabemos todavía"), nunca una confirmación de fallo.
     if(r.status===202) return { estado:'processing' };
-    if(!r.ok) return null;
+    if(r.status===404){
+      var cuerpoErr = await r.json().catch(function(){ return null; });
+      if(cuerpoErr && cuerpoErr.error && cuerpoErr.error.codigo === 'fallo_terminal') return { estado:'fallo_terminal' };
+      return { estado:'ausente' };
+    }
+    if(!r.ok) return { estado:'ausente' };
     var data=await r.json();
-    if(!data || !data.content) return null;
+    if(!data || !data.content) return { estado:'ausente' };
     return { estado:'completed', content:data.content, usage:data.usage };
-  }catch(e){ return null; }
+  }catch(e){ return { estado:'ausente' }; }
 }
 
 /* 124-BLOQ-URB-ABORT-02 (18/09): reemplaza el par proactivo/reactivo de URB-ROBUST 03/03A
@@ -4173,7 +4214,16 @@ var URB_RECUP_VENTANA_MS = 70000;
 async function consultarRecuperacionConEspera(firma, fase){
   var r1 = await intentarRecuperarFaseUrbanismo(firma, fase);
   if(r1 && r1.estado === 'completed') return r1;
-  if(!r1 || r1.estado !== 'processing') return null;
+  // 124-BLOQ-URB-ABORT-02-R1 (brief punto 4): 'fallo_terminal' es una CONFIRMACIÓN real -- nunca
+  // vale la pena seguir sondeando (a diferencia de 'ausente'/'processing', ver abajo).
+  if(r1 && r1.estado === 'fallo_terminal') return null;
+  // 124-BLOQ-URB-ABORT-02-R1 (brief punto 1): antes, un primer resultado que no fuera 'processing'
+  // ni 'completed' (típicamente un 404 temprano -- el reclamo puede estar en camino, apenas
+  // milisegundos después de abortar) cerraba la recuperación de inmediato, en el primer intento.
+  // Ahora 'processing' Y 'ausente' se tratan IGUAL -- ambos ameritan seguir sondeando dentro de la
+  // misma ventana total: desde acá no hay forma de distinguir "recién se está por reclamar" de
+  // "sigue procesando", y en ningún caso corresponde rendirse en el primer chequeo.
+  if(!r1 || (r1.estado !== 'processing' && r1.estado !== 'ausente')) return null;
   mostrarEsperaRecuperacionUrb(true);
   try{
     var transcurridoMs = 0;
@@ -4182,7 +4232,8 @@ async function consultarRecuperacionConEspera(firma, fase){
       transcurridoMs += URB_RECUP_ESPERA_MS;
       var rN = await intentarRecuperarFaseUrbanismo(firma, fase);
       if(rN && rN.estado === 'completed') return rN;
-      if(!rN || rN.estado !== 'processing') return null;
+      if(rN && rN.estado === 'fallo_terminal') return null;
+      if(!rN || (rN.estado !== 'processing' && rN.estado !== 'ausente')) return null;
     }
     return null;
   } finally {
@@ -4207,7 +4258,9 @@ function mostrarEsperaRecuperacionUrb(activo){
       // por este overlay). Brief punto 9 pide distinguir "servidor sigue procesando" de
       // "recuperando resultado" -- con cambio visual mínimo (reutilizar el mismo overlay de carga
       // existente) este texto cubre el estado real de esta espera sin agregar UI nueva.
-      elTxt.textContent = 'El servidor sigue procesando tu análisis… esperá un momento.';
+      // 124-BLOQ-URB-ABORT-02-R1 (brief punto 6): texto nuevo de este corte -- traducido vía
+      // urbAbortT()/lib/i18n.js, igual que los mensajes nuevos de mensajeErrorUrbanismo().
+      elTxt.textContent = urbAbortT('El servidor sigue procesando tu análisis… esperá un momento.');
     } else if(_urbEsperaTxtPrevio !== null){
       elTxt.textContent = _urbEsperaTxtPrevio;
       _urbEsperaTxtPrevio = null;
@@ -4228,16 +4281,27 @@ function mostrarEsperaRecuperacionUrb(activo){
    sola vez en llamarAPI(), con la misma señal que ya gobierna el botón "↻ Retomar análisis") --
    para una ejecución nueva de punta a punta esReanudacion es false y el comportamiento es
    idéntico al de antes de este corte: POST directo, sin ningún round-trip de más. */
+// 124-BLOQ-URB-ABORT-02-R1 (brief punto 4): códigos HTTP de negocio DEFINITIVOS -- el servidor ya
+// respondió de forma sincrónica e inequívoca (nunca una desconexión/aborto ambiguos), así que
+// jamás corresponde consultar-y-esperar acá: no hay ningún resultado nuevo que vaya a aparecer.
+// 409 en particular es el caso explícito del brief: "un 409 por payload distinto debe propagarse
+// sin recuperar contenido de esa clave" -- si se dejara pasar a consultarRecuperacionConEspera(),
+// en el mejor caso el GET devolvería 'ausente'/'processing' del OTRO reclamo (que no es el
+// resultado de ESTE intento) y en el peor caso, si esa otra operación ya completó, se devolvería
+// SU contenido como si fuera el de este payload -- exactamente lo que el 409 existe para evitar.
+var URB_SIN_RECUPERACION_HTTP = [400,401,402,403,409];
 async function llamarFaseConRecuperacion(prompt, maxTokens, fase, etapa, firma){
   try{
     return await llamarAnthropicUrbanismo(prompt, maxTokens, fase, etapa, firma);
   }catch(e){
+    if(e && URB_SIN_RECUPERACION_HTTP.indexOf(e._httpStatusUrb) !== -1){ throw e; }
     // 124-BLOQ-URB-ABORT-02 (15/09): ya no depende de 'esReanudacion' (estructuralmente false
     // para 'items' la primera vez -- el hueco que dejaba esa fase sin ninguna protección, ver
     // 124-BLOQ-URB-ABORT-01_INFORME.md §2/§6/§7) ni de que el motivo empiece con 'body_' (un
     // corte antes de encabezados tampoco garantiza que el POST no haya llegado a reclamarse en
-    // el servidor -- sólo garantiza que el cliente no vio la respuesta). Cualquier fallo de ESTA
-    // fase consulta siempre, con espera acotada, antes de decidir que hace falta un POST nuevo.
+    // el servidor -- sólo garantiza que el cliente no vio la respuesta). Cualquier OTRO fallo de
+    // ESTA fase (ambiguo: red, aborto, 5xx) consulta siempre, con espera acotada, antes de decidir
+    // que hace falta un POST nuevo.
     var recuperado = await consultarRecuperacionConEspera(firma, fase);
     if(!recuperado){ throw e; }
     reconciliarUsoRecuperado(fase, etapa, recuperado.usage);
@@ -4353,9 +4417,61 @@ var UC_LLAVE = 'ag_urb_checkpoint';
    cambia entre un intento y el siguiente (el usuario editó el abordaje pasivo, la info local, o
    es directamente otra ciudad/organismo), las fases guardadas ya no son fieles a lo que se está
    por pedir -- no se reutilizan. Esto es lo que impide que el checkpoint de una ciudad/organismo
-   se mezcle con el análisis de otro (validación 5 del brief). */
+   se mezcle con el análisis de otro (validación 5 del brief).
+   124-BLOQ-URB-ABORT-02-R1 (brief punto 3): esta firma queda de uso EXCLUSIVAMENTE LOCAL desde
+   este corte -- decide qué fases son reusables del checkpoint de ESTE navegador, pero YA NO viaja
+   al servidor (ni como header, ni queda guardada en la base): lo que efectivamente se manda es el
+   operationId opaco (ver asegurarOperationIdUrbanismo(), unas líneas más abajo), mucho más
+   compacto que concatenar ciudad+pasivo+c2+ref -- que puede ser texto libre arbitrariamente largo
+   -- evitando transportar texto territorial completo en headers y en la base (antes de este corte,
+   esta MISMA cadena viajaba tal cual como x-comprender-urb-firma y quedaba escrita en
+   urb_resultados_pendientes.firma). */
 function firmaCheckpointUrbanismo(ciudad, organismoId, pasivo, c2, ref){
   return [String(ciudad||''), String(organismoId||''), String(pasivo||''), String(c2||''), String(ref||'')].join('|');
+}
+
+/* 124-BLOQ-URB-ABORT-02-R1 (brief punto 2): identificador opaco por CORRIDA, independiente del
+   contenido de los insumos -- lo que distingue "estoy retomando la misma corrida interrumpida"
+   (mismo operationId, aunque haya pasado por un aborto/recarga) de "esto es un análisis nuevo,
+   aunque los insumos sean idénticos a uno anterior ya terminado" (operationId nuevo). No
+   criptográfico -- sólo necesita ser único dentro de este navegador/sesión. */
+function generarOperationIdUrbanismo(){
+  try{
+    if(typeof crypto !== 'undefined' && crypto.randomUUID) return 'op_' + crypto.randomUUID();
+  }catch(e){}
+  // Fallback para entornos sin crypto.randomUUID (navegadores viejos, o contextos no seguros
+  // donde randomUUID no está expuesto) -- no crítico, sólo necesita suficiente unicidad práctica.
+  return 'op_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
+}
+
+/* 124-BLOQ-URB-ABORT-02-R1 (brief punto 2): asegura que exista un operationId PERSISTIDO para
+   esta firma de insumos ANTES del primer POST -- no sólo después de que una fase complete (eso es
+   lo que ya hacía guardarFaseCheckpointUrbanismo(), pero llegaba demasiado tarde: si la
+   PRIMERÍSIMA llamada de 'items' se aborta antes de responder, antes de este corte no había
+   ningún checkpoint todavía al que anclar un reintento con identidad estable -- el servidor no
+   tenía forma de reconocer que un segundo POST, con una firma recién inventada en ese momento,
+   correspondía a la MISMA operación).
+   Si ya hay un checkpoint vigente para esta MISMA firma de insumos, reusa su operationId -- esto
+   es lo que hace que "↻ Retomar análisis" y una recarga de página (el checkpoint vive en
+   localStorage, sobrevive al reload) reutilicen el mismo ID. Si no -- primera vez con esta firma,
+   la firma cambió, o el checkpoint anterior ya se había limpiado porque ese análisis anterior
+   COMPLETÓ (ver limpiarCheckpointUrbanismo(), más abajo) -- arranca uno nuevo, con un operationId
+   nuevo, y lo persiste de inmediato. Esto es lo que hace que un "Analizar" genuinamente nuevo,
+   aunque los insumos sean idénticos a un análisis ya completado antes, obtenga un operationId
+   distinto: no queda ningún checkpoint del análisis anterior al que anclarse. */
+function asegurarOperationIdUrbanismo(firma, ciudad, organismoId, etapa){
+  var ck = cargarCheckpointUrbanismo();
+  if(ck && ck.firma === firma && ck.operationId){
+    return ck.operationId;
+  }
+  var nuevoId = generarOperationIdUrbanismo();
+  var nuevoCk = { version:2, firma:firma, operationId:nuevoId, ciudad:ciudad, organismoId:organismoId, etapa:etapa, fases:{}, actualizado:new Date().toISOString() };
+  try{ localStorage.setItem(UC_LLAVE, JSON.stringify(nuevoCk)); }catch(e){
+    /* Si falla el guardado (localStorage lleno/bloqueado), esta corrida simplemente no queda
+       anclada de antemano -- degrada al comportamiento pre-R1 (identidad recién estable después
+       de la primera fase completada vía guardarFaseCheckpointUrbanismo), no rompe el flujo. */
+  }
+  return nuevoId;
 }
 
 /* 124-BLOQ-URB-ABORT-02 (18/09): firma específica para receptivos_espiral (Abordaje Proyectivo) --
@@ -4379,6 +4495,51 @@ function firmaCheckpointUrbanismo(ciudad, organismoId, pasivo, c2, ref){
 function firmaProyectivoUrbanismo(ciudad, organismoId, pasivo, c2, ref, nota, intencion, numeroIntento){
   return ['proy', String(ciudad||''), String(organismoId||''), String(pasivo||''), String(c2||''),
     String(ref||''), String(nota||''), String(intencion||''), String(numeroIntento||'')].join('|');
+}
+// 124-BLOQ-URB-ABORT-02-R1 (brief punto 3): igual que firmaCheckpointUrbanismo() para items/núcleo,
+// firmaProyectivoUrbanismo() (arriba) queda de uso EXCLUSIVAMENTE LOCAL desde este corte -- sólo
+// para decidir si dos llamadas corresponden a la MISMA corrida de Abordaje Proyectivo (incluye
+// nota/intención, texto libre potencialmente largo). Lo que efectivamente viaja al servidor es el
+// operationId opaco (ver asegurarOperationIdProyectivoUrbanismo(), acá abajo).
+// 124-BLOQ-URB-ABORT-02-R1 (brief punto 2): "refinamiento y proyectivo poseen sus propias
+// corridas" -- Proyectivo usa su PROPIO slot de persistencia (UC_LLAVE_PROY), separado del de
+// items/núcleo (UC_LLAVE): son corridas independientes, que pueden convivir (ej. mientras se relee
+// un diagnóstico ya completo, el usuario puede estar regenerando el Proyectivo por separado).
+var UC_LLAVE_PROY = 'ag_urb_checkpoint_proy';
+function cargarOperationIdProyectivoUrbanismo(){
+  try{
+    var raw = JSON.parse(localStorage.getItem(UC_LLAVE_PROY) || 'null');
+    if(!raw || typeof raw !== 'object' || !raw.firma || !raw.operationId) return null;
+    return raw;
+  }catch(e){ return null; }
+}
+/* Mismo criterio que asegurarOperationIdUrbanismo() (items/núcleo): reusa el operationId si el
+   checkpoint de Proyectivo vigente coincide EXACTO en firma (incluye numeroIntento -- ver el
+   comentario junto a firmaProyectivoUrbanismo()) -- eso es lo que hace que un reintento de RED del
+   MISMO intento (no un intento nuevo por calidad de contenido) reutilice el mismo operationId. Un
+   numeroIntento distinto (el mecanismo de reintento por calidad, ya existente) es, a propósito,
+   una firma distinta -- reclama su propia clave nueva, nunca colisiona con el intento anterior. */
+function asegurarOperationIdProyectivoUrbanismo(firma){
+  var ck = cargarOperationIdProyectivoUrbanismo();
+  if(ck && ck.firma === firma && ck.operationId) return ck.operationId;
+  var nuevoId = generarOperationIdUrbanismo();
+  try{ localStorage.setItem(UC_LLAVE_PROY, JSON.stringify({ firma:firma, operationId:nuevoId, actualizado:new Date().toISOString() })); }catch(e){}
+  return nuevoId;
+}
+/* "completar o abandonar explícitamente lo cierra" (brief punto 2) -- se llama una vez que
+   intentoRegenerarProyectivo() ya obtuvo una respuesta parseable del servidor para ESTE intento
+   (completo, parcial, o contenido inválido que no pasa validación): en cualquiera de esos casos la
+   corrida de red para este operationId ya terminó, no tiene sentido seguir anclado a él. Un
+   reintento de RED (aborto/timeout, nunca llega a haber respuesta) NO pasa por acá -- ver el catch
+   de intentoRegenerarProyectivo(): ese caso debe seguir reclamando la MISMA clave. */
+function limpiarOperationIdProyectivoUrbanismo(firma){
+  try{
+    if(firma){
+      var ck = cargarOperationIdProyectivoUrbanismo();
+      if(ck && ck.firma !== firma) return;
+    }
+    localStorage.removeItem(UC_LLAVE_PROY);
+  }catch(e){}
 }
 function cargarCheckpointUrbanismo(){
   try{
@@ -4409,8 +4570,15 @@ function guardarFaseCheckpointUrbanismo(firma, ciudad, organismoId, etapa, fase,
       // Firma nueva -- primer intento de este análisis, o cambiaron insumos/organismo respecto
       // del checkpoint anterior. Se arranca uno nuevo (el viejo, si había, queda reemplazado: ya
       // no describe el análisis que se está corriendo ahora).
-      ck = { version:1, firma:firma, ciudad:ciudad, organismoId:organismoId, etapa:etapa, fases:{} };
+      // 124-BLOQ-URB-ABORT-02-R1: no debería pasar en el flujo normal -- asegurarOperationIdUrbanismo()
+      // ya crea el checkpoint (CON operationId) ANTES del primer POST de esta firma, ver
+      // llamarAPI(). Esta rama es sólo una red de contención: mejor guardar la fase con un
+      // operationId nuevo que perder el resultado.
+      ck = { version:2, firma:firma, operationId:generarOperationIdUrbanismo(), ciudad:ciudad, organismoId:organismoId, etapa:etapa, fases:{} };
     }
+    // 124-BLOQ-URB-ABORT-02-R1: si ck YA existía y coincidía en firma, ck.operationId se preserva
+    // tal cual (nunca se regenera acá) -- es lo que hace que dos fases de la MISMA corrida
+    // (items/núcleo) compartan un único operationId, como pide el brief punto 2.
     ck.fases[fase] = resultado;
     ck.actualizado = new Date().toISOString();
     localStorage.setItem(UC_LLAVE, JSON.stringify(ck));
@@ -4452,6 +4620,14 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   const firmaCap = firmaCheckpointUrbanismo(ciudad, organismoIdCap, pasivo, c2, ref);
   const fasesPrevias = fasesResumiblesDeCheckpoint(firmaCap);
 
+  // 124-BLOQ-URB-ABORT-02-R1 (brief punto 2): operationId persistido ACÁ, ANTES del primer POST de
+  // 'items' -- no después de que la fase complete. Items y núcleo comparten este MISMO
+  // operationId (se diferencian entre sí por 'fase', que sigue viajando como header aparte, igual
+  // que siempre) -- es lo que efectivamente viaja al servidor como firma (brief punto 3, ver los
+  // dos call sites de llamarFaseConRecuperacion() más abajo), en vez de firmaCap (que queda de uso
+  // puramente local, ver el comentario junto a firmaCheckpointUrbanismo()).
+  const operationIdCap = asegurarOperationIdUrbanismo(firmaCap, ciudad, organismoIdCap, etapaCap);
+
   // CX5-U (01/09): sincroniza la identidad técnica CX de este análisis -- get-or-create, keyed
   // por la MISMA 'firma' que ya distingue "mismo análisis" de "análisis nuevo" para el checkpoint
   // (ver guardarFaseCheckpointUrbanismo, unas líneas más abajo: "Firma nueva -- primer intento...
@@ -4484,7 +4660,10 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
     // sale bien acá, es indistinguible de antes de este corte. Sólo entra en juego un intento de
     // recuperación server-side si ESTA llamada falla específicamente con el gap que cerró
     // URB-ROBUST 02A (headers 200 recibidos, cuerpo interrumpido después).
-    const rawItems=await llamarFaseConRecuperacion(buildPromptItems(ciudad,pasivo,c2,ref),2000,'items',etapaCap,firmaCap);
+    // 124-BLOQ-URB-ABORT-02-R1 (brief punto 3): se manda operationIdCap -- compacto y opaco --
+    // no firmaCap (texto territorial completo). firmaCap sigue existiendo, pero sólo para decidir
+    // localmente si hay fases reusables (fasesResumiblesDeCheckpoint(), más arriba).
+    const rawItems=await llamarFaseConRecuperacion(buildPromptItems(ciudad,pasivo,c2,ref),2000,'items',etapaCap,operationIdCap);
     parsedItems=parsearJSONIA(rawItems);
 
     // Normalizar items (misma logica de siempre) ANTES de pasarlos a las otras dos llamadas, asi
@@ -4526,7 +4705,9 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   if(fasesPrevias.nucleo){
     parsedNucleo = fasesPrevias.nucleo;
   } else {
-    const rawNucleo=await llamarFaseConRecuperacion(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800,'nucleo',etapaCap,firmaCap);
+    // 124-BLOQ-URB-ABORT-02-R1 (brief punto 3): mismo operationIdCap que 'items' -- comparten
+    // corrida (brief punto 2), se diferencian por 'fase' (header aparte).
+    const rawNucleo=await llamarFaseConRecuperacion(buildPromptSintesisNucleo(ciudad,pasivo,c2,ref,parsedItems.items),1800,'nucleo',etapaCap,operationIdCap);
     parsedNucleo=parsearJSONIA(rawNucleo);
     guardarFaseCheckpointUrbanismo(firmaCap, ciudad, organismoIdCap, etapaCap, 'nucleo', parsedNucleo);
   }
@@ -5476,6 +5657,13 @@ async function regenerarProyectivo(nota, intencion){
       // incluye numeroIntento a propósito -- ver el comentario ahí.
       const organismoIdProy = (typeof __organismoIdCoreUrbanismo!=='undefined' && __organismoIdCoreUrbanismo) || null;
       const firmaProy = firmaProyectivoUrbanismo(ciudad, organismoIdProy, pasivoTxt, c2, refData, nota, intencion, numeroIntento);
+      // 124-BLOQ-URB-ABORT-02-R1 (brief puntos 2 y 3): operationId propio de Proyectivo, persistido
+      // ANTES de este POST -- reusa el mismo ID si un intento de RED anterior de este MISMO
+      // numeroIntento se abortó (mismo firmaProy exacto); un numeroIntento distinto (reintento por
+      // calidad, mecanismo ya existente) reclama su propia clave nueva. Es lo que efectivamente
+      // viaja al servidor -- firmaProy queda de uso puramente local (texto libre potencialmente
+      // largo: nota/intención).
+      const operationIdProy = asegurarOperationIdProyectivoUrbanismo(firmaProy);
       const etapaProy = 'intento'+numeroIntento;
 
       incrementarAPI('haiku');
@@ -5484,7 +5672,15 @@ async function regenerarProyectivo(nota, intencion){
       // todo lo que ya se pedía -- se sube el techo de 3000 a 3800 (por debajo del
       // MAX_TOKENS_TOPE=4000 real del servidor, mismo margen de seguridad que usan las otras
       // llamadas de este archivo) para no truncar la respuesta más larga.
-      const raw = await llamarFaseConRecuperacion(prompt, 3800, 'receptivos_espiral', etapaProy, firmaProy);
+      const raw = await llamarFaseConRecuperacion(prompt, 3800, 'receptivos_espiral', etapaProy, operationIdProy);
+      // 124-BLOQ-URB-ABORT-02-R1 (brief punto 2): "completar... lo cierra" -- llegar hasta acá con
+      // una respuesta parseable significa que la corrida de RED para este operationId terminó (ya
+      // sea que el contenido resulte completo/parcial/incompleto más abajo); un reintento de este
+      // MISMO numeroIntento a partir de acá no tendría sentido -- el mecanismo de reintento por
+      // calidad siempre avanza a un numeroIntento nuevo, nunca repite éste. Sólo el catch() de más
+      // abajo (fallo de RED antes de tener respuesta) debe dejar esto sin limpiar, para que un
+      // reintento genuino de conexión reutilice el mismo operationId.
+      limpiarOperationIdProyectivoUrbanismo(firmaProy);
       const m = raw.match(/\{[\s\S]*\}/);
       if(!m) throw new Error('JSON inválido');
       const parsed = JSON.parse(m[0]);
