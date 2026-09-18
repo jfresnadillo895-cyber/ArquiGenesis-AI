@@ -172,9 +172,19 @@ async function identificar(token, secreta) {
 // muta -- eso ahora es responsabilidad exclusiva de reclamarOperacionUrbanismo(), del lado POST)
 // la fila de (usuario de la sesión, firma, fase) en `urb_resultados_pendientes` y responde según
 // su 'estado':
-//   - sin fila, o 'failed_terminal', o 'processing' ya vencido (huérfano): 404 -- "no hay nada
-//     que recuperar todavía"; el cliente cae al mismo camino de siempre (puede terminar en un
-//     POST nuevo, que si corresponde va a poder reclamar de verdad vía la RPC).
+//   - sin fila, o 'processing' ya vencido (huérfano): 404 con codigo:'no_encontrado' -- AMBIGUO a
+//     propósito: puede ser que esta clave nunca se haya reclamado todavía (el POST que la reclama
+//     está en camino, o el cliente consulta apenas milisegundos después de abortar, antes de que
+//     el reclamo llegue a existir), no necesariamente que "no haya nada que recuperar nunca". El
+//     cliente (124-BLOQ-URB-ABORT-02-R1, ver consultarRecuperacionConEspera() en urbanismo.html)
+//     sondea de nuevo durante su ventana de espera ante este código -- un 404 inmediato después de
+//     abortar YA NO cierra la recuperación en el primer intento (brief R1, punto 1).
+//   - 'failed_terminal': 404 con codigo:'fallo_terminal' -- a diferencia del caso de arriba, esto
+//     SÍ es una confirmación: la operación se ejecutó y falló de verdad (ver finalizarFalloUrb()
+//     en el handler POST). El cliente NO debe seguir sondeando ante este código (brief R1, punto
+//     4: "no ejecutar recuperación ante... fallas terminales confirmadas") -- un reintento real
+//     (POST nuevo) sí puede reclamar de nuevo esta clave (ver la condición de reapertura en la RPC
+//     urb_reclamar_operacion), pero eso lo decide el usuario, no un sondeo automático.
 //   - 'processing' vigente: 202 -- la operación original sigue en curso en el servidor, vale la
 //     pena esperar (ver consultarRecuperacionConEspera() en urbanismo.html).
 //   - 'completed': 200 con { content, usage } -- el mismo shape que ya consumen
@@ -187,14 +197,19 @@ async function identificar(token, secreta) {
 //     CLAIM_TTL_COMPLETADO_SEG).
 //
 // AISLAMIENTO: el WHERE siempre incluye perfil=<usuario de ESTA sesión, vía identificar(token)>
-// -- nunca se puede reclamar la fila de otro usuario. La firma ya trae adentro el
-// organismo/ciudad/insumos (ver firmaCheckpointUrbanismo() en urbanismo.html).
+// -- nunca se puede reclamar la fila de otro usuario. La firma que llega acá ya es la firma
+// COMPACTA basada en operationId (124-BLOQ-URB-ABORT-02-R1, brief punto 3 -- ver
+// asegurarOperationIdUrbanismo()/firmaServidorUrbanismo() en urbanismo.html): este archivo no le
+// asigna ningún significado especial a su contenido, sólo la usa como clave exacta de
+// comparación, así que el cambio de "texto territorial concatenado" a "operationId opaco" no
+// requiere ningún ajuste de este lado -- sigue siendo, como siempre, un valor de texto arbitrario.
 function filtroPgExacto(valor) {
   // PostgREST interpreta una coma o un paréntesis sin escapar dentro del VALOR de un filtro como
-  // sintaxis propia -- 'firma' se arma en el cliente con texto libre del usuario (ciudad, pasivo,
-  // info local), así que puede legítimamente contener cualquiera de esos caracteres. Encerrarlo
-  // entre comillas dobles (con las internas escapadas) le dice a PostgREST "tratalo como
-  // literal", evitando falsos negativos o errores 400 con una firma en los hechos correcta.
+  // sintaxis propia -- la firma podría en principio traer cualquier caracter (aunque desde
+  // 124-BLOQ-URB-ABORT-02-R1 es, en la práctica, un operationId opaco corto, no texto territorial
+  // libre). Encerrarlo entre comillas dobles (con las internas escapadas) le dice a PostgREST
+  // "tratalo como literal", evitando falsos negativos o errores 400 con una firma en los hechos
+  // correcta.
   return 'eq."' + String(valor).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 }
 async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
@@ -204,17 +219,17 @@ async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
   } catch (e) {
     console.error(JSON.stringify({ evento: 'base_inalcanzable', detalle: String((e && e.message) || e) }));
     return res.status(503).json({
-      error: { message: bi(req, 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.', 'The service is unavailable right now. Try again in a few minutes.'), codigo: 'servicio_no_disponible' },
+      error: { message: bi(req, 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.', 'The service is unavailable right now. Try again in a few minutes.', 'O serviço não está disponível neste momento. Tente novamente em alguns minutos.'), codigo: 'servicio_no_disponible' },
     });
   }
   if (!perfil) {
-    return res.status(401).json({ error: { message: bi(req, 'Sesion vencida o invalida. Volve a iniciar sesion.', 'Your session has expired or is invalid. Sign in again.'), codigo: 'sesion_invalida' } });
+    return res.status(401).json({ error: { message: bi(req, 'Sesion vencida o invalida. Volve a iniciar sesion.', 'Your session has expired or is invalid. Sign in again.', 'Sua sessão expirou ou é inválida. Entre novamente.'), codigo: 'sesion_invalida' } });
   }
 
   const firma = String((req.query && req.query.firma) || '').trim();
   const fase = String((req.query && req.query.fase) || '').trim();
   if (!firma || FASES_LARGAS_URB.indexOf(fase) === -1) {
-    return res.status(400).json({ error: { message: bi(req, 'Falta firma o fase invalida.', 'Missing signature or invalid phase.') } });
+    return res.status(400).json({ error: { message: bi(req, 'Falta firma o fase invalida.', 'Missing signature or invalid phase.', 'Falta a assinatura ou a fase é inválida.') } });
   }
 
   try {
@@ -230,7 +245,7 @@ async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
     if (!r.ok) throw new Error('consulta devolvio ' + r.status);
     const filas = await r.json();
     const fila = Array.isArray(filas) ? filas[0] : null;
-    const sinNada = () => res.status(404).json({ error: { message: bi(req, 'No hay nada para recuperar.', 'There is nothing to recover.'), codigo: 'no_encontrado' } });
+    const sinNada = () => res.status(404).json({ error: { message: bi(req, 'No hay nada para recuperar.', 'There is nothing to recover.', 'Não há nada para recuperar.'), codigo: 'no_encontrado' } });
 
     if (!fila) return sinNada();
     if (fila.estado === 'completed') {
@@ -241,13 +256,21 @@ async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
     }
     if (fila.estado === 'processing') {
       // Vencido y huérfano (la ejecución que lo reclamó nunca llegó a finalizarlo, p.ej. la
-      // función serverless murió a mitad de camino): tratarlo igual que "no hay nada" -- un POST
-      // nuevo va a poder reclamarlo de verdad vía la RPC (ver CLAIM_TTL_PROCESANDO_SEG).
+      // función serverless murió a mitad de camino): tratarlo igual que "no hay nada todavía" --
+      // AMBIGUO, no una falla confirmada -- un POST nuevo va a poder reclamarlo de verdad vía la
+      // RPC (ver CLAIM_TTL_PROCESANDO_SEG).
       if (fila.expira && new Date(fila.expira) < new Date()) return sinNada();
       return res.status(202).json({ estado: 'processing' });
     }
-    // 'failed_terminal' u otro valor inesperado: nada recuperable -- un POST nuevo puede reclamar
-    // de verdad (ver la condición de reapertura en la RPC urb_reclamar_operacion).
+    if (fila.estado === 'failed_terminal') {
+      // 124-BLOQ-URB-ABORT-02-R1 (brief punto 4): a diferencia de sinNada() (ambiguo -- "todavía
+      // no hay nada"), esto SÍ es una confirmación real de que la operación se ejecutó y falló.
+      // codigo distinto a propósito para que el cliente pueda dejar de sondear de inmediato en vez
+      // de gastar toda su ventana de espera esperando un resultado que no va a aparecer.
+      return res.status(404).json({ error: { message: bi(req, 'La operacion fallo y no quedo nada para recuperar.', 'The operation failed and there is nothing to recover.', 'A operação falhou e não restou nada para recuperar.'), codigo: 'fallo_terminal' } });
+    }
+    // Valor de 'estado' inesperado (no debería pasar -- el constraint de la migración sólo permite
+    // processing/completed/failed_terminal): tratarlo como ambiguo, no como falla confirmada.
     return sinNada();
   } catch (e) {
     console.error(JSON.stringify({
@@ -256,7 +279,7 @@ async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
       fase,
       detalle: String((e && e.message) || e),
     }));
-    return res.status(503).json({ error: { message: bi(req, 'No se pudo recuperar. Volve a intentar.', 'Could not recover the result. Try again.'), codigo: 'servicio_no_disponible' } });
+    return res.status(503).json({ error: { message: bi(req, 'No se pudo recuperar. Volve a intentar.', 'Could not recover the result. Try again.', 'Não foi possível recuperar. Tente novamente.'), codigo: 'servicio_no_disponible' } });
   }
 }
 
@@ -387,20 +410,20 @@ async function liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog) {
 export default async function handler(req, res) {
   if (req.method !== 'POST' && req.method !== 'GET') {
     res.setHeader('Allow', 'GET, POST');
-    return res.status(405).json({ error: { message: bi(req, 'Metodo no permitido. Usa POST o GET.', 'Method not allowed. Use POST or GET.') } });
+    return res.status(405).json({ error: { message: bi(req, 'Metodo no permitido. Usa POST o GET.', 'Method not allowed. Use POST or GET.', 'Método não permitido. Use POST ou GET.') } });
   }
 
   const secreta = process.env.SUPABASE_SECRET_KEY;
   const urlBase = process.env.SUPABASE_URL;
   if (!secreta || !urlBase) {
-    return res.status(500).json({ error: { message: bi(req, 'Falta SUPABASE_URL o SUPABASE_SECRET_KEY. El proxy no atiende sin base.', 'Server configuration is incomplete.') } });
+    return res.status(500).json({ error: { message: bi(req, 'Falta SUPABASE_URL o SUPABASE_SECRET_KEY. El proxy no atiende sin base.', 'Server configuration is incomplete.', 'Configuração do servidor incompleta.') } });
   }
 
   // --- Token (comun a GET y POST) ---
   const cabecera = String(req.headers['authorization'] || '');
   const token = cabecera.toLowerCase().startsWith('bearer ') ? cabecera.slice(7).trim() : '';
   if (!token) {
-    return res.status(401).json({ error: { message: bi(req, 'Falta la sesion. Inicia sesion para continuar.', 'Missing session. Sign in to continue.'), codigo: 'sin_sesion' } });
+    return res.status(401).json({ error: { message: bi(req, 'Falta la sesion. Inicia sesion para continuar.', 'Missing session. Sign in to continue.', 'Falta a sessão. Entre para continuar.'), codigo: 'sin_sesion' } });
   }
 
   // URB-ROBUST 03 (26/08): GET recupera una fase larga de Urbanismo -- ver
@@ -411,7 +434,7 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: { message: bi(req, 'Falta ANTHROPIC_API_KEY en el servidor.', 'Server configuration is incomplete.') } });
+  if (!apiKey) return res.status(500).json({ error: { message: bi(req, 'Falta ANTHROPIC_API_KEY en el servidor.', 'Server configuration is incomplete.', 'Configuração do servidor incompleta.') } });
 
   const modulo = String(req.headers['x-comprender-modulo'] || 'core').trim().toLowerCase() || 'core';
 
@@ -442,7 +465,7 @@ export default async function handler(req, res) {
     usuario = await identificar(token, secreta);
     _tlog('identificar_listo');
     if (!usuario) {
-      return res.status(401).json({ error: { message: bi(req, 'Sesion vencida o invalida. Volve a iniciar sesion.', 'Your session has expired or is invalid. Sign in again.'), codigo: 'sesion_invalida' } });
+      return res.status(401).json({ error: { message: bi(req, 'Sesion vencida o invalida. Volve a iniciar sesion.', 'Your session has expired or is invalid. Sign in again.', 'Sua sessão expirou ou é inválida. Entre novamente.'), codigo: 'sesion_invalida' } });
     }
   } catch (e) {
     _tlog('identidad_fallo');
@@ -450,7 +473,7 @@ export default async function handler(req, res) {
     console.error(JSON.stringify({ evento: 'base_inalcanzable', detalle: String((e && e.message) || e) }));
     return res.status(503).json({
       error: {
-        message: bi(req, 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.', 'The service is unavailable right now. Try again in a few minutes.'),
+        message: bi(req, 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.', 'The service is unavailable right now. Try again in a few minutes.', 'O serviço não está disponível neste momento. Tente novamente em alguns minutos.'),
         codigo: 'servicio_no_disponible',
       },
     });
@@ -480,7 +503,7 @@ export default async function handler(req, res) {
       console.error(JSON.stringify({ evento: 'URB_RECLAMO_FALLO', usuario: String(usuario).slice(0, 8), fase: faseUrb, detalle: String((e && e.message) || e) }));
       return res.status(503).json({
         error: {
-          message: bi(req, 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.', 'The service is unavailable right now. Try again in a few minutes.'),
+          message: bi(req, 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.', 'The service is unavailable right now. Try again in a few minutes.', 'O serviço não está disponível neste momento. Tente novamente em alguns minutos.'),
           codigo: 'servicio_no_disponible',
         },
       });
@@ -493,7 +516,7 @@ export default async function handler(req, res) {
       if (reclamo && reclamo.conflicto) {
         return res.status(409).json({
           error: {
-            message: bi(req, 'Esta operacion ya se esta ejecutando con datos distintos. Volve a intentar en unos minutos.', 'This operation is already running with different data. Try again in a few minutes.'),
+            message: bi(req, 'Esta operacion ya se esta ejecutando con datos distintos. Volve a intentar en unos minutos.', 'This operation is already running with different data. Try again in a few minutes.', 'Esta operação já está em execução com dados diferentes. Tente novamente em alguns minutos.'),
             codigo: 'operacion_en_conflicto',
           },
         });
@@ -526,7 +549,7 @@ export default async function handler(req, res) {
     await finalizarFalloUrb();
     return res.status(503).json({
       error: {
-        message: bi(req, 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.', 'The service is unavailable right now. Try again in a few minutes.'),
+        message: bi(req, 'El servicio no esta disponible en este momento. Volve a intentar en unos minutos.', 'The service is unavailable right now. Try again in a few minutes.', 'O serviço não está disponível neste momento. Tente novamente em alguns minutos.'),
         codigo: 'servicio_no_disponible',
       },
     });
@@ -535,14 +558,14 @@ export default async function handler(req, res) {
   if (!permiso || !permiso.permitido) {
     const motivo = (permiso && permiso.motivo) || 'no_autorizado';
     const mapa = {
-      sin_saldo:          [402, bi(req, 'Te quedaste sin creditos.', 'You have run out of credits.')],
-      requiere_plan:      [403, bi(req, 'Tu plan no incluye este modulo.', 'Your plan does not include this module.')],
-      modulo_inactivo:    [403, bi(req, 'Este modulo no esta disponible.', 'This module is not available.')],
-      perfil_inexistente: [401, bi(req, 'No encontramos tu cuenta. Volve a iniciar sesion.', 'We could not find your account. Sign in again.')],
-      cuenta_pausada:     [403, bi(req, 'Tu cuenta esta pausada. Escribinos si crees que es un error.', 'Your account is paused. Contact us if you think this is a mistake.')],
-      cuenta_cancelada:   [403, bi(req, 'Tu cuenta esta cancelada y no tiene un plan activo. Suscribite de nuevo para seguir generando.', 'Your account is canceled and has no active plan. Subscribe again to continue generating.')],
+      sin_saldo:          [402, bi(req, 'Te quedaste sin creditos.', 'You have run out of credits.', 'Você ficou sem créditos.')],
+      requiere_plan:      [403, bi(req, 'Tu plan no incluye este modulo.', 'Your plan does not include this module.', 'Seu plano não inclui este módulo.')],
+      modulo_inactivo:    [403, bi(req, 'Este modulo no esta disponible.', 'This module is not available.', 'Este módulo não está disponível.')],
+      perfil_inexistente: [401, bi(req, 'No encontramos tu cuenta. Volve a iniciar sesion.', 'We could not find your account. Sign in again.', 'Não encontramos sua conta. Entre novamente.')],
+      cuenta_pausada:     [403, bi(req, 'Tu cuenta esta pausada. Escribinos si crees que es un error.', 'Your account is paused. Contact us if you think this is a mistake.', 'Sua conta está pausada. Escreva para nós se achar que isso é um erro.')],
+      cuenta_cancelada:   [403, bi(req, 'Tu cuenta esta cancelada y no tiene un plan activo. Suscribite de nuevo para seguir generando.', 'Your account is canceled and has no active plan. Subscribe again to continue generating.', 'Sua conta está cancelada e não tem um plano ativo. Assine novamente para continuar gerando.')],
     };
-    const [codigo, mensaje] = mapa[motivo] || [403, bi(req, 'No autorizado.', 'Unauthorized.')];
+    const [codigo, mensaje] = mapa[motivo] || [403, bi(req, 'No autorizado.', 'Unauthorized.', 'Não autorizado.')];
     await finalizarFalloUrb();
     return res.status(codigo).json({
       error: {
@@ -572,12 +595,12 @@ export default async function handler(req, res) {
   if (!body || !Array.isArray(body.messages)) {
     await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
     await finalizarFalloUrb();
-    return res.status(400).json({ error: { message: bi(req, 'Cuerpo invalido: se esperaba { model, max_tokens, messages }.', 'Invalid request body: expected { model, max_tokens, messages }.') } });
+    return res.status(400).json({ error: { message: bi(req, 'Cuerpo invalido: se esperaba { model, max_tokens, messages }.', 'Invalid request body: expected { model, max_tokens, messages }.', 'Corpo inválido: esperava-se { model, max_tokens, messages }.') } });
   }
   if (MODELOS_PERMITIDOS && MODELOS_PERMITIDOS.indexOf(body.model) === -1) {
     await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
     await finalizarFalloUrb();
-    return res.status(400).json({ error: { message: bi(req, 'Modelo no permitido.', 'Model not allowed.') } });
+    return res.status(400).json({ error: { message: bi(req, 'Modelo no permitido.', 'Model not allowed.', 'Modelo não permitido.') } });
   }
   if (typeof body.max_tokens === 'number' && body.max_tokens > MAX_TOKENS_TOPE) {
     body.max_tokens = MAX_TOKENS_TOPE;
@@ -607,7 +630,7 @@ export default async function handler(req, res) {
     await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
     await finalizarFalloUrb();
     return res.status(502).json({
-      error: { message: bi(req, 'No se pudo contactar al proveedor de IA.', 'Could not contact the AI provider.'), detalle: String((e && e.message) || e) },
+      error: { message: bi(req, 'No se pudo contactar al proveedor de IA.', 'Could not contact the AI provider.', 'Não foi possível contatar o provedor de IA.'), detalle: String((e && e.message) || e) },
     });
   }
 
