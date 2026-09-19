@@ -2775,6 +2775,13 @@ canvas{animation:none !important}
   <div class="wrap">
     <!-- ETAPA 1: DIAGNÓSTICO -->
     <div id="etapa-diag">
+      <!-- 124-BLOQ-URB-ABORT-02-R2.1b (punto 4 del brief): caja de error propia de Resultados,
+           visible en Diagnóstico/Validación (esta etapa) sin depender de volver a #p-inicio.
+           #err-box (más abajo, dentro de #p-inicio) queda intacta y sigue siendo la correcta
+           para ejecutar()/nuevaCiudad() -- esos SÍ vuelven a mostrar #p-inicio antes de escribir
+           el mensaje. regenerarProyectivo() nunca vuelve a #p-inicio (se queda dentro de #p-res,
+           alternando etapa-proy/etapa-diag): ver setErrRes() y sus dos call sites más abajo. -->
+      <div class="err-box" id="err-box-res"></div>
       <div class="subtabs">
         <button class="subtab on" onclick="subtab(0)">Resumen</button>
         <button class="subtab" onclick="subtab(1)">36 Indicadores</button>
@@ -3675,6 +3682,13 @@ function subtab(n){
 }
 function setSt(v,t){const s=document.getElementById('st-box');s.classList.toggle('vis',v);if(t)document.getElementById('st-txt').textContent=t}
 function setErr(m){const e=document.getElementById('err-box');e.innerHTML=m;e.classList.toggle('vis',!!m)}
+// 124-BLOQ-URB-ABORT-02-R2.1b (punto 4 del brief): mismo patrón que setErr(), pero escribe en
+// #err-box-res (dentro de #etapa-diag/#p-res) en vez de #err-box (dentro de #p-inicio). Usar SIEMPRE
+// que el mensaje deba quedar visible sin volver al inicio -- hoy, los dos caminos de
+// regenerarProyectivo() que vuelven a etapa-diag sin pasar por #p-inicio ('pendiente_transporte'
+// y 'fallo_terminal', ver más abajo). setErr() (arriba) sigue siendo la correcta para ejecutar()/
+// nuevaCiudad(), que sí muestran #p-inicio antes de escribir el mensaje.
+function setErrRes(m){const e=document.getElementById('err-box-res');if(!e)return;e.innerHTML=m;e.classList.toggle('vis',!!m)}
 function setEtapa(n){
   document.querySelectorAll('.etapa').forEach((e,i)=>{
     e.classList.toggle('activa',i===n);
@@ -5323,6 +5337,13 @@ function renderDiag(d){
   var badgeHistReset = document.getElementById('urbhist-badge');
   if(badgeHistReset){ badgeHistReset.style.display = 'none'; badgeHistReset.innerHTML = ''; }
 
+  // 124-BLOQ-URB-ABORT-02-R2.1b (punto 4, reset defensivo): renderDiag() es el punto de entrada
+  // común a TODO diagnóstico (fresco o reabierto) que vuelve a mostrar #etapa-diag -- sin este
+  // reset, un mensaje de error dejado por un intento fallido anterior de regenerarProyectivo()
+  // (que escribe en #err-box-res, dentro de esta misma etapa) podía seguir visible sobre un
+  // diagnóstico nuevo que no tiene nada que ver con ese error.
+  setErrRes('');
+
   const items=d.items.map(it=>({...it,coef:PM[it.PT+it.AP]||.5,vp:Math.round(it.valor*(PM[it.PT+it.AP]||.5)*10)/10,conf:it.conf||'M'}));
   window.pSin={}; const pSin=window.pSin;
   EJES.forEach(e=>{
@@ -5737,6 +5758,10 @@ async function regenerarProyectivo(nota, intencion){
   setEtapa(2);
   mostrarCarga(true, null, 'proyectivo');
   document.getElementById('ap-desc').innerHTML = '';
+  // 124-BLOQ-URB-ABORT-02-R2.1b (punto 4): limpia cualquier mensaje que haya quedado de un
+  // intento anterior (p.ej. "Retomar análisis" -> este mismo llamado) antes de arrancar uno
+  // nuevo -- nunca queda un error viejo visible sobre un intento que todavía no falló.
+  setErrRes('');
   window.scrollTo(0,0);
   // 124-BLOQ-URB-ABORT-02-R2.1 (Corte 4): guarda la excepción real del intento que terminó en
   // 'pendiente_transporte' o 'fallo_terminal', para poder mostrar el mensaje correspondiente
@@ -5932,7 +5957,10 @@ async function regenerarProyectivo(nota, intencion){
     // motivo que el botón equivalente de ejecutar(), más arriba.
     var msgTransporte = mensajeErrorUrbanismo(errorProyPendiente, true)
       + '<div style="margin-top:8px"><button type="button" class="btn-comp" onclick="retomarProyectivoPendiente()">↻ '+urbAbortT('Retomar análisis')+'</button></div>';
-    setErr(msgTransporte);
+    // 124-BLOQ-URB-ABORT-02-R2.1b (punto 4): setErrRes(), no setErr() -- esta rama nunca vuelve a
+    // mostrar #p-inicio (se queda dentro de #p-res, mostrando etapa-diag), así que #err-box (dentro
+    // de #p-inicio) quedaría escrito pero invisible. Ver el diagnóstico de solo lectura, punto 6.
+    setErrRes(msgTransporte);
     return;
   }
 
@@ -5944,7 +5972,10 @@ async function regenerarProyectivo(nota, intencion){
     document.getElementById('etapa-proy').style.display='none';
     document.getElementById('etapa-diag').style.display='block';
     setEtapa(1);
-    setErr(mensajeErrorUrbanismo(errorProyPendiente, true));
+    // 124-BLOQ-URB-ABORT-02-R2.1b (punto 4): mismo motivo que arriba -- setErrRes(), no setErr().
+    // Sin botón "Retomar análisis" acá a propósito (mensajeErrorUrbanismo() no lo agrega para
+    // 'fallo_terminal_confirmado' -- confirmado, no hay nada ambiguo que reintentar sondeando).
+    setErrRes(mensajeErrorUrbanismo(errorProyPendiente, true));
     return;
   }
 
@@ -6091,6 +6122,11 @@ function mostrarProyectivoInterno(nota, intencion){
   setEtapa(2);
   document.getElementById('etapa-diag').style.display='none';
   document.getElementById('etapa-proy').style.display='block';
+  // 124-BLOQ-URB-ABORT-02-R2.1b (punto 4, reset defensivo): llegar hasta acá es, por construcción,
+  // un éxito (el gate de más arriba ya cortó toda salida sin diagnóstico completo) -- cualquier
+  // mensaje que hubiera quedado en #err-box-res de un intento anterior fallido no debe reaparecer
+  // si el usuario vuelve más tarde a #etapa-diag.
+  setErrRes('');
   window.scrollTo(0,0);
 
   const d=diagData;
