@@ -242,7 +242,33 @@ function filtroPgExacto(valor) {
   // libre). Encerrarlo entre comillas dobles (con las internas escapadas) le dice a PostgREST
   // "tratalo como literal", evitando falsos negativos o errores 400 con una firma en los hechos
   // correcta.
+  //
+  // 124-BLOQ-URB-ABORT-02-R2.1b (punto 1-2 del brief): DEJA DE USARSE para filtrar `firma` (ver
+  // firmaUrbValida()/las dos llamadas más abajo) -- queda definida acá sólo por si algún llamador
+  // externo a este corte todavía la referencia; nadie en este archivo la invoca ya. El diagnóstico
+  // de solo lectura (124-BLOQ-URB-ABORT-02-R2.1b_DIAGNOSTICO.md, punto 1) confirmó con una
+  // comparación directa contra la fila 32 de `urb_resultados_pendientes` que el valor almacenado
+  // coincide con la firma SIN comillas -- la construcción `eq."valor"` que esta función produce no
+  // encontraba la fila, pese a que ésta existía. No se identificó una causa única y cerrada del
+  // porqué (parseo de PostgREST, algún paso de decodificación intermedio, u otra cosa), así que en
+  // vez de seguir dependiendo de un escapado cuyo comportamiento real no se pudo confirmar, se
+  // reemplaza por algo más simple y verificable: validar que `firma` tenga el formato opaco que el
+  // cliente realmente genera (ver OPERATION_ID_URB_RE) y compararla directo, sin envolver.
   return 'eq."' + String(valor).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+}
+
+// 124-BLOQ-URB-ABORT-02-R2.1b (punto 2 del brief): `firma` para las fases largas de Urbanismo es
+// siempre un operationId OPACO generado del lado cliente -- 'op_' + crypto.randomUUID(), o
+// 'op_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,12) como respaldo sin
+// crypto.randomUUID (ver la función que genera el operationId en urbanismo.html) -- nunca texto
+// territorial libre desde 124-BLOQ-URB-ABORT-02-R1. Validar el formato ANTES de usarlo en
+// cualquier filtro sirve dos propósitos a la vez: permite comparar directo sin necesitar el
+// escapado de filtroPgExacto() (el valor validado nunca puede traer coma/paréntesis/comilla), y
+// rechaza con 400 cualquier valor que no venga de ese generador -- nunca se llega a reservar
+// crédito ni a llamar a Anthropic con una firma que no tiene esta forma.
+const OPERATION_ID_URB_RE = /^op_[a-z0-9_-]{6,80}$/;
+function firmaUrbValida(valor) {
+  return OPERATION_ID_URB_RE.test(String(valor || ''));
 }
 async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
   let perfil;
@@ -263,11 +289,19 @@ async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
   if (!firma || FASES_LARGAS_URB.indexOf(fase) === -1) {
     return res.status(400).json({ error: { message: bi(req, 'Falta firma o fase invalida.', 'Missing signature or invalid phase.', 'Falta a assinatura ou a fase é inválida.') } });
   }
+  // 124-BLOQ-URB-ABORT-02-R2.1b (punto 2): mismo criterio que el lado POST (ver firmaUrbValida())
+  // -- un GET con una firma que no tiene la forma que el cliente genera nunca llega a construir un
+  // filtro (directo o escapado) contra la base.
+  if (!firmaUrbValida(firma)) {
+    return res.status(400).json({ error: { message: bi(req, 'Identificador de operacion invalido.', 'Invalid operation identifier.', 'Identificador de operação inválido.'), codigo: 'firma_invalida' } });
+  }
 
   try {
+    // 124-BLOQ-URB-ABORT-02-R2.1b (punto 2): comparación directa, no filtroPgExacto() -- ver el
+    // comentario junto a esa función y OPERATION_ID_URB_RE más arriba.
     const ruta = '/rest/v1/urb_resultados_pendientes' +
       '?perfil=eq.' + encodeURIComponent(perfil) +
-      '&firma=' + encodeURIComponent(filtroPgExacto(firma)) +
+      '&firma=eq.' + encodeURIComponent(firma) +
       '&fase=eq.' + encodeURIComponent(fase) +
       '&select=estado,resultado,usage,expira';
     const r = await fetch(urlBase + ruta, {
@@ -388,6 +422,17 @@ async function reclamarOperacionUrbanismo(usuario, firma, fase, payloadHash, sec
 // (Supabase lento/caído), NO se le niega la respuesta al usuario -- en el peor caso se pierde la
 // chance futura de recuperar/deduplicar ESTA fila puntual (el reclamo queda 'processing' hasta que
 // venza por TTL), que es el mismo riesgo residual que ya existía en URB-ROBUST 03, no uno nuevo.
+// 124-BLOQ-URB-ABORT-02-R2.1b (punto 3 del brief): el diagnóstico de solo lectura encontró un
+// caso real de producción donde esta función corrió sin error (el log de tiempos mostró la fase
+// 'urb_operacion_completada' sin ningún URB_OPERACION_NO_FINALIZADA) y sin embargo la fila
+// correspondiente en `urb_resultados_pendientes` NUNCA quedó 'completed' -- siguió 'processing',
+// con `usage` NULL y `resultado` presente pero vacío. La causa directa: `Prefer: return=minimal`
+// hace que un PATCH cuyo WHERE no matchea ninguna fila devuelva igual 2xx (PostgREST no trata
+// "cero filas afectadas" como error) -- `if (!r.ok)` nunca podía detectar ese caso. Se cambia a
+// `Prefer: return=representation` (el PATCH devuelve las filas que sí modificó) y se verifica
+// explícitamente que haya exactamente una, con el `estado` final esperado, antes de considerar la
+// finalización confirmada. Devuelve true/false de forma explícita -- ver los dos call sites más
+// abajo, que ahora sólo registran 'urb_operacion_completada' cuando esto devuelve true.
 async function finalizarOperacionUrbanismo(usuario, firma, fase, estado, data, secreta) {
   try {
     const cuerpo = { estado: estado };
@@ -396,24 +441,40 @@ async function finalizarOperacionUrbanismo(usuario, firma, fase, estado, data, s
       cuerpo.usage = (data && data.usage) || null;
       cuerpo.expira = new Date(Date.now() + CLAIM_TTL_COMPLETADO_SEG * 1000).toISOString();
     }
+    // 124-BLOQ-URB-ABORT-02-R2.1b (punto 2): comparación directa, no filtroPgExacto() -- mismo
+    // criterio que el GET (ver manejarRecuperacionUrbanismo()). `firma` acá llega ya validada por
+    // firmaUrbValida() en el handler principal (ver esFaseLargaUrb) antes de que se pudiera llegar
+    // a este punto, así que no hace falta revalidar acá.
     const ruta = '/rest/v1/urb_resultados_pendientes' +
       '?perfil=eq.' + encodeURIComponent(usuario) +
-      '&firma=' + encodeURIComponent(filtroPgExacto(firma)) +
+      '&firma=eq.' + encodeURIComponent(firma) +
       '&fase=eq.' + encodeURIComponent(fase) +
-      '&estado=eq.processing';
+      '&estado=eq.processing' +
+      '&select=id,estado';
     const r = await pedirASupabase(ruta, {
       method: 'PATCH',
       headers: {
         apikey: secreta,
         Authorization: 'Bearer ' + secreta,
         'content-type': 'application/json',
-        Prefer: 'return=minimal',
+        Prefer: 'return=representation',
       },
       body: JSON.stringify(cuerpo),
     }, 3000, 0);
     if (!r.ok) {
       console.error(JSON.stringify({ evento: 'URB_OPERACION_NO_FINALIZADA', usuario: String(usuario).slice(0, 8), fase, estado, http: r.estado }));
+      return false;
     }
+    const filas = Array.isArray(r.datos) ? r.datos : [];
+    const finalizada = filas.length === 1 && filas[0] && filas[0].estado === estado;
+    if (!finalizada) {
+      // Contrato del brief (punto 3): cero filas afectadas -- o una fila con un `estado` final
+      // distinto del esperado, que no debería poder pasar dado el WHERE, pero se verifica igual en
+      // vez de asumirlo -- nunca se registra como éxito.
+      console.error(JSON.stringify({ evento: 'URB_OPERACION_NO_FINALIZADA', usuario: String(usuario).slice(0, 8), fase, estado, filas_afectadas: filas.length }));
+      return false;
+    }
+    return true;
   } catch (e) {
     console.error(JSON.stringify({
       evento: 'URB_OPERACION_NO_FINALIZADA',
@@ -421,6 +482,7 @@ async function finalizarOperacionUrbanismo(usuario, firma, fase, estado, data, s
       fase, estado,
       detalle: String((e && e.message) || e),
     }));
+    return false;
   }
 }
 
@@ -483,6 +545,14 @@ export default async function handler(req, res) {
   const faseUrb = String(req.headers['x-comprender-urb-fase'] || '').trim();
   const payloadHashUrb = String(req.headers['x-comprender-urb-payload-hash'] || '').trim();
   const esFaseLargaUrb = modulo === 'urbanismo' && !!firmaUrb && FASES_LARGAS_URB.indexOf(faseUrb) > -1;
+  // 124-BLOQ-URB-ABORT-02-R2.1b (punto 2 del brief): una firma presente pero con formato distinto
+  // del que genera el cliente (ver OPERATION_ID_URB_RE) se rechaza acá, ANTES de reservar crédito o
+  // reclamar nada -- nunca se llega a construir un filtro (directo o escapado) contra la base con
+  // un valor no confiable, y nunca se cae silenciosamente al camino de "no es fase larga" con una
+  // firma que el cliente sí mandó con intención de idempotencia.
+  if (esFaseLargaUrb && !firmaUrbValida(firmaUrb)) {
+    return res.status(400).json({ error: { message: bi(req, 'Identificador de operacion invalido.', 'Invalid operation identifier.', 'Identificador de operação inválido.'), codigo: 'firma_invalida' } });
+  }
 
   /* Instrumentacion de tiempos (12/08): Javier reporto timeouts de 60s en Vercel Hobby que
      persistian incluso reduciendo mucho el tamano del pedido a la IA (de una llamada gigante a
@@ -699,8 +769,15 @@ export default async function handler(req, res) {
     // sin cambios de este corte) y una recuperación posterior debe poder servir ese mismo contenido
     // sin volver a golpear a Anthropic, no descartarlo como si nada se hubiera generado.
     if (esFaseLargaUrb) {
-      await finalizarOperacionUrbanismo(usuario, firmaUrb, faseUrb, 'completed', data, secreta);
-      _tlog('urb_operacion_completada');
+      // 124-BLOQ-URB-ABORT-02-R2.1b (punto 3): la fase 'urb_operacion_completada' del log de
+      // tiempos ahora refleja la finalización REAL -- sólo se registra cuando el PATCH confirmó
+      // una fila afectada con el estado esperado (ver finalizarOperacionUrbanismo()). Si no,
+      // 'urb_operacion_no_confirmada' dice explícitamente que la respuesta que está por salir para
+      // el cliente es buena, pero que la copia recuperable del lado servidor no quedó asentada --
+      // exactamente el caso que el diagnóstico encontró en producción, ahora visible en el propio
+      // log de tiempos en vez de sólo inferible por su ausencia.
+      const finalizada = await finalizarOperacionUrbanismo(usuario, firmaUrb, faseUrb, 'completed', data, secreta);
+      _tlog(finalizada ? 'urb_operacion_completada' : 'urb_operacion_no_confirmada');
     }
 
     try {
