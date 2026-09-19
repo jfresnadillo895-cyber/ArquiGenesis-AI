@@ -94,10 +94,18 @@ const ESPERA_MS = 400;
 // POST) que podian divergir con el tiempo. Nombres reales, tal como los manda urbanismo.html
 // (ver llamarFaseConRecuperacion()/regenerarProyectivo() ahi).
 const FASES_LARGAS_URB = ['items', 'nucleo', 'receptivos_espiral'];
-// TTL de un reclamo 'processing': generoso frente al maxDuration real de esta funcion (60s,
-// vercel.json) -- si una ejecucion ganadora se cae sin llegar a finalizar (crash, funcion matada),
-// el reclamo queda huerfano como maximo este tiempo antes de que un reclamo nuevo pueda reabrirlo.
-const CLAIM_TTL_PROCESANDO_SEG = 120;
+// TTL de un reclamo 'processing': generoso frente al maxDuration real de esta funcion (300s,
+// vercel.json, 124-BLOQ-URB-ABORT-02-R2.1 -- antes 60s/120s) -- si una ejecucion ganadora se cae
+// sin llegar a finalizar (crash, funcion matada), el reclamo queda huerfano como maximo este
+// tiempo antes de que un reclamo nuevo pueda reabrirlo. 124-BLOQ-URB-ABORT-02-R2.1: subido de 120
+// a 360 para que quede SIEMPRE por encima del maxDuration real (300s) -- con el valor anterior
+// (120s) una ejecucion legitima que tardara mas de 120s (posible incluso antes de este corte, y
+// ahora posible hasta 300s) podia ser tratada como huerfana y reclamada de nuevo por otra
+// ejecucion MIENTRAS la original todavia estaba corriendo de verdad -- exactamente el escenario
+// que el diagnostico R2 encontro cerca de producirse (el GET de recuperacion de las 12:12:09 UTC
+// llego a la fila con menos de 60s de margen antes de expira). Nunca debe volver a quedar por
+// debajo del maxDuration configurado.
+const CLAIM_TTL_PROCESANDO_SEG = 360;
 // TTL de un reclamo ya 'completed': mucho mas largo -- un resultado completado es válido y
 // reutilizable indefinidamente en la práctica (brief, punto 5: "duplicado despues de completar:
 // devuelve el mismo resultado"); este TTL no es una fecha de caducidad del resultado en sí, es
@@ -105,6 +113,30 @@ const CLAIM_TTL_PROCESANDO_SEG = 120;
 // podido aceptar un resultado igual utilizable (ver informe, límite documentado sobre parseo),
 // un reclamo puede reabrirse en vez de quedar bloqueado para siempre.
 const CLAIM_TTL_COMPLETADO_SEG = 24 * 60 * 60;
+
+// --- 124-BLOQ-URB-ABORT-02-R2.1 (Corte 6) -------------------------------------
+// Trazabilidad acotada, no sensible, compartida entre el reclamo (POST) y la recuperación (GET) --
+// el diagnóstico R2 encontró un primer GET de recuperación devolviendo 404 mientras la fila
+// todavía no había vencido (ver el informe adjunto), y no se pudo confirmar la causa exacta sin
+// poder ver, del lado servidor, qué encontró realmente cada consulta. `firma` acá es siempre el
+// operationId OPACO que ya viaja en el header (ver asegurarOperationIdUrbanismo()/
+// asegurarOperationIdProyectivoUrbanismo() en urbanismo.html) -- nunca el texto libre de
+// nota/intención ni ningún contenido territorial. `perfil` se trunca a 8 caracteres, igual que el
+// resto de este archivo (ver String(usuario).slice(0,8) en los catch existentes). Nunca recibe
+// token, prompt, ni el contenido de `resultado`/`usage` -- sólo su presencia/ausencia.
+function _trazaUrbResultado(evento, perfil, firma, fase, estado, expira, detalle) {
+  try {
+    console.log(JSON.stringify({
+      evento: evento,
+      perfil: perfil ? String(perfil).slice(0, 8) : null,
+      firma: firma || null,
+      fase: fase || null,
+      estado: estado || 'sin_fila',
+      expira: expira || null,
+      detalle: detalle || undefined,
+    }));
+  } catch (e) {}
+}
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -245,6 +277,9 @@ async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
     if (!r.ok) throw new Error('consulta devolvio ' + r.status);
     const filas = await r.json();
     const fila = Array.isArray(filas) ? filas[0] : null;
+    // 124-BLOQ-URB-ABORT-02-R2.1 (Corte 6): traza no sensible de lo que esta consulta encontró
+    // realmente -- ver _trazaUrbResultado() para el detalle de qué campos incluye/excluye.
+    _trazaUrbResultado('GET_recuperacion_consultado', perfil, firma, fase, fila ? fila.estado : null, fila ? fila.expira : null);
     const sinNada = () => res.status(404).json({ error: { message: bi(req, 'No hay nada para recuperar.', 'There is nothing to recover.', 'Não há nada para recuperar.'), codigo: 'no_encontrado' } });
 
     if (!fila) return sinNada();
@@ -481,7 +516,7 @@ export default async function handler(req, res) {
 
   // Cierra el reclamo como fallido en cualquier salida posterior que decida NO seguir hasta
   // Anthropic (reserva denegada, cuerpo inválido, modelo no permitido) -- sin esto, esas salidas
-  // dejarían la fila en 'processing' hasta que venza sola por CLAIM_TTL_PROCESANDO_SEG (120s), en
+  // dejarían la fila en 'processing' hasta que venza sola por CLAIM_TTL_PROCESANDO_SEG (360s), en
   // vez de quedar reabrible de inmediato para un reintento legítimo (p.ej. después de comprar más
   // créditos). No-op cuando esta llamada no es una fase larga de Urbanismo.
   const finalizarFalloUrb = async () => {
@@ -508,6 +543,11 @@ export default async function handler(req, res) {
         },
       });
     }
+
+    // 124-BLOQ-URB-ABORT-02-R2.1 (Corte 6): traza no sensible del resultado del reclamo -- mismo
+    // criterio que la traza del GET (ver _trazaUrbResultado()). La RPC no devuelve `expira`, así
+    // que ese campo queda null acá (sí se ve en la traza del GET, que sí lo selecciona).
+    _trazaUrbResultado('POST_reclamo_resuelto', usuario, firmaUrb, faseUrb, reclamo ? reclamo.estado : null, null, reclamo ? { ganado: !!reclamo.ganado, conflicto: !!reclamo.conflicto } : null);
 
     if (!reclamo || !reclamo.ganado) {
       // No se ganó el reclamo: otra ejecución (u otra ya completada) tiene esta misma clave. Se
