@@ -318,6 +318,24 @@ async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
 
     if (!fila) return sinNada();
     if (fila.estado === 'completed') {
+      // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 3): un resultado persistido como 'completed' puede
+      // arrastrar una respuesta truncada por max_tokens de ANTES de este corte (confirmado en
+      // producción -- filas reales 32 y 40, ver 124-BLOQ-URB-ABORT-02-R2.1c-R1_DIAGNOSTICO_
+      // PRODUCTIVO.md) -- servirla acá como si fuera un éxito funcional repite el problema para
+      // cualquier cliente que la recupere después. Se detecta leyendo el propio
+      // `resultado.stop_reason` ya almacenado -- ninguna fila legacy se toca, corrige ni migra para
+      // esto: el chequeo cubre las filas viejas exactamente igual que una nueva. Nunca se vuelve a
+      // llamar a Anthropic ni se genera un consumo nuevo -- un GET nunca hizo ninguna de las dos
+      // cosas, y sigue sin hacerlo.
+      if (fila.resultado && fila.resultado.stop_reason === 'max_tokens') {
+        _trazaUrbResultado('GET_recuperacion_rechazada_truncada', perfil, firma, fase, fila.estado, fila.expira);
+        return res.status(422).json({
+          error: {
+            message: bi(req, 'El abordaje no llego a completarse. No se descontaron creditos.', 'The analysis could not be completed. No credits were charged.', 'A abordagem não pôde ser concluída. Nenhum crédito foi cobrado.'),
+            codigo: 'salida_truncada',
+          },
+        });
+      }
       return res.status(200).json({
         content: (fila.resultado && fila.resultado.content) || [],
         usage: fila.usage || null,
@@ -632,6 +650,22 @@ export default async function handler(req, res) {
         });
       }
       if (reclamo && reclamo.estado === 'completed') {
+        // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 3): mismo criterio que el GET (ver
+        // manejarRecuperacionUrbanismo() más arriba) -- un POST duplicado (doble clic, "Retomar
+        // análisis" reutilizando el mismo operationId, reintento silencioso del navegador) que
+        // encuentra la clave ya 'completed' con una respuesta truncada por max_tokens NUNCA se
+        // devuelve como éxito, nunca llama de nuevo a Anthropic (ya no llegaba a hacerlo antes de
+        // este corte tampoco) y nunca genera un consumo nuevo (este camino nunca reserva ni cobra
+        // crédito, con o sin este chequeo).
+        if (reclamo.resultado && reclamo.resultado.stop_reason === 'max_tokens') {
+          _trazaUrbResultado('POST_reclamo_rechazado_truncado', usuario, firmaUrb, faseUrb, reclamo.estado, null);
+          return res.status(422).json({
+            error: {
+              message: bi(req, 'El abordaje no llego a completarse. No se descontaron creditos.', 'The analysis could not be completed. No credits were charged.', 'A abordagem não pôde ser concluída. Nenhum crédito foi cobrado.'),
+              codigo: 'salida_truncada',
+            },
+          });
+        }
         // Transparente para el cliente: misma forma {content,usage} que una respuesta fresca de
         // Anthropic -- llamarAnthropicUrbanismo() en urbanismo.html no necesita saber que esto
         // vino de una clave ya resuelta en vez de una llamada nueva.
@@ -759,6 +793,52 @@ export default async function handler(req, res) {
   // analisis completo.
   if (r.ok && data && data.usage) {
     const u = data.usage;
+
+    // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 2) -- CAUSA PRIMARIA confirmada por
+    // 124-BLOQ-URB-ABORT-02-R2.1c-R1_DIAGNOSTICO_PRODUCTIVO.md: una respuesta de Anthropic cortada
+    // por el tope de tokens (`stop_reason:"max_tokens"`) llegaba hasta acá exactamente igual que
+    // una respuesta completa -- `r.ok && data.usage` es true en los dos casos por igual, así que el
+    // camino de abajo la guardaba como 'completed', la cobraba, y la devolvía como éxito funcional,
+    // aunque el JSON generado estuviera truncado a mitad de un valor y fuera, en los hechos,
+    // inutilizable (filas reales 32 y 40, mismo `payload_hash`, las dos truncadas en
+    // exactamente 3800/3800 tokens de salida, las dos cobradas). Esto se detecta ACÁ, ANTES de
+    // marcar 'completed', ANTES de llamar a consumir() y ANTES de responder como éxito -- alcanza
+    // (y sólo alcanza) a las tres fases largas de Urbanismo (esFaseLargaUrb): son las únicas que
+    // pasan por reclamo/finalización atómica y las únicas para las que existe un contrato de
+    // "resultado persistido recuperable" que este chequeo protege; Core/Negocios/Contextos y las
+    // llamadas standalone de Urbanismo (detalle/inercia/haiku/recomendacion_urgente) no tienen ese
+    // contrato y quedan fuera de este chequeo, sin cambio de comportamiento respecto de antes.
+    const truncadoPorLimiteUrb = esFaseLargaUrb && data.stop_reason === 'max_tokens';
+    if (truncadoPorLimiteUrb) {
+      _tlog('urb_salida_truncada');
+      // Evento no sensible -- mismo criterio que _trazaUrbResultado(): nunca prompt/contenido, sólo
+      // firma opaca, fase, motivo y los contadores de tokens que Anthropic ya informó.
+      console.log(JSON.stringify({
+        evento: 'URB_SALIDA_TRUNCADA',
+        usuario: String(usuario).slice(0, 8),
+        fase: faseUrb,
+        firma: firmaUrb,
+        stop_reason: data.stop_reason,
+        output_tokens: u.output_tokens || null,
+      }));
+      // Se cierra el reclamo como 'failed_terminal' -- NO 'completed' (nunca se persiste el
+      // contenido parcial como resultado utilizable) -- estado ya soportado por el esquema y por la
+      // condición de reapertura de la RPC urb_reclamar_operacion (una fila 'failed_terminal' es
+      // reclamable de nuevo de inmediato), así que un reintento real explícito del usuario puede
+      // reclamar esta misma clave sin quedar bloqueado hasta que venza el TTL de 'completed'
+      // (24hs) -- no hizo falta ninguna migración nueva.
+      await finalizarOperacionUrbanismo(usuario, firmaUrb, faseUrb, 'failed_terminal', null, secreta);
+      // No se ejecuta consumir(): se libera íntegra la reserva -- una salida truncada e inutilizable
+      // nunca cobra crédito.
+      await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
+      _tlog('respondiendo_al_cliente');
+      return res.status(422).json({
+        error: {
+          message: bi(req, 'El abordaje no llego a completarse. No se descontaron creditos.', 'The analysis could not be completed. No credits were charged.', 'A abordagem não pôde ser concluída. Nenhum crédito foi cobrado.'),
+          codigo: 'salida_truncada',
+        },
+      });
+    }
 
     // 124-BLOQ-URB-ABORT-02 (18/09): reemplaza a guardarResultadoPendienteUrbanismo() (URB-ROBUST
     // 03, 26/08) -- si esta es una fase larga de Urbanismo, la fila YA existe en 'processing'
