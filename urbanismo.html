@@ -3518,8 +3518,22 @@ ESPECIFICIDAD OBLIGATORIA para ${ciudad}, a partir de la lectura de arriba:
 2. NIVELES SINTETIZADOS: agrupá esos 18 aportes en los tres niveles de siempre (Intuición/Instinto/Percepción Receptiva), cada uno con su propia descripción y una lista de acciones.
 3. ESPIRAL: hoja de ruta concreta y secuencial para este territorio, que resuelva progresivamente esa misma tensión raíz.
 
+LÍMITES DE EXTENSIÓN OBLIGATORIOS (124-BLOQ-URB-ABORT-02-R2.2, Corte 1 -- el contrato de salida
+tiene que entrar con margen en el presupuesto de tokens; no se elimina ningún receptivo, nivel,
+paso de espiral, sustentabilidad ni síntesis, se pide la misma cobertura completa pero más breve):
+- Cada "aporte" de receptivo (elementos[].aporte): máximo 20-25 palabras.
+- Cada descripción de nivel (r1d/r2d/r3d): máximo 45 palabras.
+- Cada acción de nivel (r1a/r2a/r3a, ítems del array): máximo 12-15 palabras cada una, máximo 4
+  acciones por nivel.
+- Cada paso de espiral (esp[].p): máximo 15-18 palabras.
+- Sustentabilidad (sust): máximo 70 palabras.
+- Síntesis (sint): máximo 90 palabras.
+- Explicación del haiku (hexp): máximo 45 palabras.
+- Ninguna introducción, reiteración del enunciado ni texto fuera del JSON pedido -- sólo el objeto
+  JSON, nada antes ni después.
+
 JSON compacto SOLO (sin espacios extra):
-{"haiku":"v1·v2·v3","hexp":"explicación","r1t":"Intuición Receptiva","r1p":"Institucional↔Cognitivo","r1d":"descripción orientada al objetivo","r1a":["a1","a2","a3","a4"],"r2t":"Instinto Receptivo","r2p":"Social+Cultural↔Expresión","r2d":"descripción","r2a":["a1","a2","a3","a4"],"r3t":"Percepción Receptiva","r3p":"Histórico↔Físico","r3d":"descripción orientada al objetivo","r3a":["a1","a2","a3","a4"],"elementos":[{"nombre":"(nombre EXACTO de la lista de 18 receptivos de arriba, sin alterarlo)","nivel":1,"aporte":"..."}/*...EXACTAMENTE 18 objetos, uno por cada receptivo listado arriba, mismo orden -- eje/grupo/orientación NO se piden acá porque ya se conocen con certeza y se completan por código a partir del nombre, evitando que la IA los reescriba o desalinee...*/],"da":${daVal},"dh":${dhVal},"esp":[{"p":"acción concreta de corto plazo 1","s":"logrado|proceso|pendiente"},{"p":"acción concreta de corto plazo 2","s":"proceso|pendiente"},{"p":"acción de mediano plazo 1","s":"pendiente"},{"p":"acción de mediano plazo 2","s":"pendiente"},{"p":"acción de largo plazo 1","s":"pendiente"},{"p":"acción de largo plazo 2 — evaluación y relanzamiento del ciclo","s":"pendiente"}],"sust":"párrafo de sustentabilidad","sint":"síntesis actualizada con valores corregidos"}`;
+{"haiku":"v1·v2·v3","hexp":"explicación (máx. 45 palabras)","r1t":"Intuición Receptiva","r1p":"Institucional↔Cognitivo","r1d":"descripción orientada al objetivo (máx. 45 palabras)","r1a":["a1 (máx. 12-15 palabras)","a2","a3","a4"],"r2t":"Instinto Receptivo","r2p":"Social+Cultural↔Expresión","r2d":"descripción (máx. 45 palabras)","r2a":["a1 (máx. 12-15 palabras)","a2","a3","a4"],"r3t":"Percepción Receptiva","r3p":"Histórico↔Físico","r3d":"descripción orientada al objetivo (máx. 45 palabras)","r3a":["a1 (máx. 12-15 palabras)","a2","a3","a4"],"elementos":[{"nombre":"(nombre EXACTO de la lista de 18 receptivos de arriba, sin alterarlo)","aporte":"... (máx. 20-25 palabras)"}/*...EXACTAMENTE 18 objetos, uno por cada receptivo listado arriba, mismo orden -- eje/grupo/orientación/nivel NO se piden acá porque ya se conocen con certeza y se completan por código a partir del nombre (124-BLOQ-URB-ABORT-02-R2.2, Corte 1: 'nivel' se retira del pedido -- ningún consumidor del lado cliente lee el 'nivel' que devolvía la IA por elemento, se deriva siempre canónicamente, ver NIVEL_POR_EJE_RECEPTIVO/urbProyValid01ReceptivosDesdePlano()), evitando que la IA los reescriba o desalinee...*/],"da":${daVal},"dh":${dhVal},"esp":[{"p":"acción concreta de corto plazo 1 (máx. 15-18 palabras)","s":"logrado|proceso|pendiente"},{"p":"acción concreta de corto plazo 2","s":"proceso|pendiente"},{"p":"acción de mediano plazo 1","s":"pendiente"},{"p":"acción de mediano plazo 2","s":"pendiente"},{"p":"acción de largo plazo 1","s":"pendiente"},{"p":"acción de largo plazo 2 — evaluación y relanzamiento del ciclo","s":"pendiente"}],"sust":"párrafo de sustentabilidad (máx. 70 palabras)","sint":"síntesis actualizada con valores corregidos (máx. 90 palabras)"}`;
 }
 
 /* ══════════════════════════════════════════
@@ -3762,6 +3776,16 @@ function clasificarErrorUrbanismo(e){
   // donde no hay confirmación posible). Se revisa acá mismo, junto a los otros marcadores propios,
   // por la misma razón: nunca hay que adivinarlo por texto.
   if(e._motivoUrb === 'fallo_terminal') return 'fallo_terminal_confirmado';
+  // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 2/3): mismo criterio -- marcador propio o status HTTP 422
+  // puesto explícitamente cuando el servidor confirma que la respuesta se cortó por max_tokens
+  // (ver api/anthropic.js: la detección al recibir la respuesta fresca, o al recuperar una fila ya
+  // persistida así -- GET o POST duplicado). Nunca se adivina por texto.
+  if(e._motivoUrb === 'salida_truncada' || e._httpStatusUrb === 422) return 'salida_truncada';
+  // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 4): marcador propio para un JSON que el cliente no pudo
+  // interpretar (match de llaves fallido, o JSON.parse() rechazándolo) -- distinto de
+  // 'salida_truncada' (ahí el SERVIDOR ya confirmó max_tokens; acá sólo sabemos que el contenido
+  // recibido no se pudo leer, la causa puede ser otra).
+  if(e._motivoUrb === 'incompleto_contenido') return 'incompleto_contenido';
   // 124-BLOQ-URB-ABORT-02-R1 (brief punto 4): 409 -- la misma clave (operationId+fase) ya está
   // reclamada con un payload DISTINTO (ver reclamarOperacionUrbanismo() en api/anthropic.js).
   // Se revisa ANTES que la clasificación genérica por texto porque, igual que 'reclamo_en_curso',
@@ -3808,6 +3832,18 @@ function mensajeErrorUrbanismo(e, conDetalle){
   // no interprete esto como "se perdió mi análisis" -- es lo opuesto: el servidor protegió el
   // payload original de esta clave de que se pisara con datos distintos.
   else if(tipo === 'conflicto') base = urbAbortT('Hay otro análisis en curso con estos mismos datos de partida. Esperá a que termine antes de reintentar.');
+  // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 2, brief punto 8): mensaje NUEVO -- el servidor confirmó que
+  // la respuesta se cortó por el tope de tokens y, a propósito, informa explícitamente que no se
+  // descontó crédito por eso (api/anthropic.js: ninguno de los tres caminos que producen este
+  // estado -- respuesta fresca, GET de recuperación, POST duplicado -- cobra ni deja la fila como
+  // 'completed' funcional cuando esto ocurre).
+  else if(tipo === 'salida_truncada') base = urbAbortT('El abordaje no llegó a completarse. No se descontaron créditos.');
+  // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 4): mensaje NUEVO -- contenido recibido pero no interpretable
+  // (JSON inválido/incompleto) que YA NO dispara un segundo POST automático (ver
+  // urbClasificarResultadoIntentoProyectivo()/regenerarProyectivo(), más abajo) -- a diferencia de
+  // 'salida_truncada', acá no hay una confirmación del servidor de que no se cobró, así que el
+  // mensaje no lo afirma.
+  else if(tipo === 'incompleto_contenido') base = urbAbortT('El servidor respondió, pero no se pudo interpretar el contenido generado. Podés intentarlo nuevamente.');
   // 124-BLOQ-URB-ABORT-02-R2.1a (punto 3): mensaje neutro de imposibilidad de completar -- mismo
   // criterio que los tres de arriba, envuelto por la misma razón (nunca llega ya traducido en el
   // DOM al momento en que el traductor pasivo recorre la página).
@@ -4215,6 +4251,15 @@ async function intentarRecuperarFaseUrbanismo(firma, fase){
       if(cuerpoErr && cuerpoErr.error && cuerpoErr.error.codigo === 'fallo_terminal') return { estado:'fallo_terminal' };
       return { estado:'ausente' };
     }
+    // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 3): el GET puede confirmar, igual que 'fallo_terminal', que
+    // la fila SÍ terminó pero con una salida truncada por max_tokens (ver
+    // manejarRecuperacionUrbanismo() en api/anthropic.js) -- otra confirmación real: nunca vale la
+    // pena seguir sondeando ni reintentar la misma clave automáticamente.
+    if(r.status===422){
+      var cuerpoTrunc = await r.json().catch(function(){ return null; });
+      if(cuerpoTrunc && cuerpoTrunc.error && cuerpoTrunc.error.codigo === 'salida_truncada') return { estado:'salida_truncada' };
+      return { estado:'ausente' };
+    }
     if(!r.ok) return { estado:'ausente' };
     var data=await r.json();
     if(!data || !data.content) return { estado:'ausente' };
@@ -4282,6 +4327,9 @@ async function consultarRecuperacionConEspera(firma, fase){
   // corte de transporte. Ahora se devuelve un resultado explícito y distinguible -- nunca se
   // infiere por texto, se propaga como dato.
   if(r1 && r1.estado === 'fallo_terminal') return { estado: 'fallo_terminal' };
+  // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 3): mismo criterio -- 'salida_truncada' es otra confirmación
+  // real (el servidor terminó, pero con una respuesta cortada por max_tokens), nunca ambigua.
+  if(r1 && r1.estado === 'salida_truncada') return { estado: 'salida_truncada' };
   // 124-BLOQ-URB-ABORT-02-R1 (brief punto 1): antes, un primer resultado que no fuera 'processing'
   // ni 'completed' (típicamente un 404 temprano -- el reclamo puede estar en camino, apenas
   // milisegundos después de abortar) cerraba la recuperación de inmediato, en el primer intento.
@@ -4301,15 +4349,32 @@ async function consultarRecuperacionConEspera(firma, fase){
     // el límite se calcula contra un deadline de reloj real (Date.now()), así que la ventana
     // termina en el tiempo real prometido pase lo que pase con el throttling de timers.
     var limiteRecup = Date.now() + URB_RECUP_VENTANA_MS;
-    while(Date.now() < limiteRecup){
+    // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 5) -- CORRECCIÓN DE ORDEN, confirmada por
+    // 124-BLOQ-URB-ABORT-02-R2.1c-R1_DIAGNOSTICO_PRODUCTIVO.md: la versión anterior de este bucle
+    // esperaba con setTimeout y, si al despertar Date.now() ya había superado el deadline, hacía
+    // `break` SIN llegar a consultar una última vez -- un timer que despierta tarde (throttling de
+    // pestaña en segundo plano, carga del hilo principal, lo que sea) podía abandonar la espera sin
+    // comprobar si el servidor había completado la operación DURANTE esa espera. Es exactamente lo
+    // que muestran los logs reales del incidente: un único GET a los 60s (estado "processing"), sin
+    // ningún sondeo posterior, mientras el servidor completaba ~18.5s después -- 19s DENTRO de la
+    // ventana de 70s medida desde ese GET, tiempo de sobra que el bucle nunca llegó a aprovechar.
+    // Ahora el orden es: esperar -> consultar SIEMPRE (incluso si el reloj ya cruzó el deadline
+    // durante la espera) -> recién DESPUÉS de esa consulta, si no hay resultado firme, decidir si la
+    // ventana venció. Nunca se convierte en sondeo infinito: el deadline se sigue respetando, sólo
+    // que la comprobación final ya no se salta la última consulta.
+    while(true){
       var restanteRecup = limiteRecup - Date.now();
+      if(restanteRecup <= 0) break; // resguardo: no debería entrar acá ya vencido, ver más abajo.
       await new Promise(function(res){ setTimeout(res, Math.min(URB_RECUP_ESPERA_MS, restanteRecup)); });
-      if(Date.now() >= limiteRecup) break;
       var rN = await intentarRecuperarFaseUrbanismo(firma, fase);
       if(rN && rN.estado === 'completed') return rN;
       // 124-BLOQ-URB-ABORT-02-R2.1a (punto 2): mismo criterio que el primer chequeo, arriba --
       // devolver la confirmación explícita, no null.
       if(rN && rN.estado === 'fallo_terminal') return { estado: 'fallo_terminal' };
+      if(rN && rN.estado === 'salida_truncada') return { estado: 'salida_truncada' };
+      // Recién ACÁ, después de haber hecho la consulta, se decide si la ventana venció -- nunca
+      // antes (ver el comentario de Corte 5, arriba).
+      if(Date.now() >= limiteRecup) break;
       if(!rN || (rN.estado !== 'processing' && rN.estado !== 'ausente')) return null;
     }
     return null;
@@ -4323,6 +4388,12 @@ async function consultarRecuperacionConEspera(firma, fase){
    actualizarPasoCarga() sigue corriendo en paralelo y podría pisarlo de todos modos a los 5s; eso
    es aceptable, sólo se busca mostrar la espera mientras dura). */
 var _urbEsperaTxtPrevio = null;
+// 124-BLOQ-URB-ABORT-02-R2.2 (Corte 6): true exclusivamente mientras retomarProyectivoPendiente()
+// está en curso -- ver esa función, más abajo. Cuando está activo, el sondeo de recuperación usa un
+// texto propio del "retomar" ("El servidor todavía está completando el abordaje…") en vez del
+// genérico que usan items/núcleo/receptivos_espiral en cualquier otra circunstancia -- no cambia el
+// mecanismo de espera en sí, sólo el texto mostrado, y sólo durante un Retomar explícito.
+var _urbProyRetomarActivo = false;
 function mostrarEsperaRecuperacionUrb(activo){
   try{
     var elTxt = document.getElementById('carga-txt');
@@ -4337,7 +4408,12 @@ function mostrarEsperaRecuperacionUrb(activo){
       // existente) este texto cubre el estado real de esta espera sin agregar UI nueva.
       // 124-BLOQ-URB-ABORT-02-R1 (brief punto 6): texto nuevo de este corte -- traducido vía
       // urbAbortT()/lib/i18n.js, igual que los mensajes nuevos de mensajeErrorUrbanismo().
-      elTxt.textContent = urbAbortT('El servidor sigue procesando tu análisis… esperá un momento.');
+      // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 6): durante un Retomar explícito del Abordaje Proyectivo,
+      // el texto es el que pide el brief -- deja claro que se está retomando/esperando la MISMA
+      // operación, no evaluando los 36 indicadores de nuevo.
+      elTxt.textContent = _urbProyRetomarActivo
+        ? urbAbortT('El servidor todavía está completando el abordaje…')
+        : urbAbortT('El servidor sigue procesando tu análisis… esperá un momento.');
     } else if(_urbEsperaTxtPrevio !== null){
       elTxt.textContent = _urbEsperaTxtPrevio;
       _urbEsperaTxtPrevio = null;
@@ -4366,7 +4442,11 @@ function mostrarEsperaRecuperacionUrb(activo){
 // en el mejor caso el GET devolvería 'ausente'/'processing' del OTRO reclamo (que no es el
 // resultado de ESTE intento) y en el peor caso, si esa otra operación ya completó, se devolvería
 // SU contenido como si fuera el de este payload -- exactamente lo que el 409 existe para evitar.
-var URB_SIN_RECUPERACION_HTTP = [400,401,402,403,409];
+// 124-BLOQ-URB-ABORT-02-R2.2 (Corte 2): 422 se agrega a esta lista -- es, igual que 409, un status
+// de negocio DEFINITIVO puesto explícitamente por el servidor (salida cortada por max_tokens, ver
+// api/anthropic.js) -- nunca hay un resultado nuevo que aparezca sondeando, así que tampoco acá
+// corresponde consultar-y-esperar.
+var URB_SIN_RECUPERACION_HTTP = [400,401,402,403,409,422];
 async function llamarFaseConRecuperacion(prompt, maxTokens, fase, etapa, firma){
   try{
     return await llamarAnthropicUrbanismo(prompt, maxTokens, fase, etapa, firma);
@@ -4394,6 +4474,14 @@ async function llamarFaseConRecuperacion(prompt, maxTokens, fase, etapa, firma){
       var eTerminalRecuperado = new Error('fallo_terminal_confirmado_por_recuperacion');
       eTerminalRecuperado._motivoUrb = 'fallo_terminal';
       throw eTerminalRecuperado;
+    }
+    // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 3): mismo criterio -- la recuperación encontró una
+    // confirmación real de que el servidor terminó, pero con una salida cortada por max_tokens.
+    // Nunca se trata como contenido utilizable ni se relanza el error de transporte original.
+    if(recuperado.estado === 'salida_truncada'){
+      var eTruncadoRecuperado = new Error('salida_truncada_confirmada_por_recuperacion');
+      eTruncadoRecuperado._motivoUrb = 'salida_truncada';
+      throw eTruncadoRecuperado;
     }
     reconciliarUsoRecuperado(fase, etapa, recuperado.usage);
     return (recuperado.content||[]).map(function(i){ return i.text||''; }).join('');
@@ -5727,6 +5815,12 @@ function renderDiag(d){
 //     'reclamo_en_curso' con recuperación agotada) -- no sabemos con certeza qué pasó del lado del
 //     servidor, así que NUNCA se convierte en un segundo POST automático.
 function urbClasificarResultadoIntentoProyectivo(e){
+  // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 2/3): CONFIRMACIÓN real del servidor de que la respuesta se
+  // cortó por max_tokens -- se revisa ANTES que el chequeo genérico de URB_SIN_RECUPERACION_HTTP de
+  // abajo (422 ya está incluido en esa lista, pero acá necesita su PROPIA categoría, distinta de
+  // 'fallo_terminal', para que regenerarProyectivo() pueda mostrar el mensaje correcto -- "no se
+  // descontaron créditos" -- y no el genérico de fallo terminal).
+  if(e && (e._motivoUrb === 'salida_truncada' || e._httpStatusUrb === 422)) return 'salida_truncada';
   if(e && URB_SIN_RECUPERACION_HTTP.indexOf(e._httpStatusUrb) !== -1) return 'fallo_terminal';
   // 124-BLOQ-URB-ABORT-02-R2.1a (punto 2): mismo criterio 'fallo_terminal' que el chequeo de
   // arriba, pero para una falla DESCUBIERTA por recuperación (GET), no respondida sincrónicamente
@@ -5734,6 +5828,10 @@ function urbClasificarResultadoIntentoProyectivo(e){
   // este chequeo, esta excepción caería en el 'pendiente_transporte' por defecto de más abajo,
   // aunque el servidor ya haya confirmado que la operación falló.
   if(e && e._motivoUrb === 'fallo_terminal') return 'fallo_terminal';
+  // 124-BLOQ-URB-ABORT-02-R2.2: marcador propio, puesto ahora explícitamente (ver
+  // intentoRegenerarProyectivo(), más abajo) además de seguir aceptando el mensaje literal
+  // 'JSON inválido' por compatibilidad con cualquier otro lugar que construya ese error a mano.
+  if(e && e._motivoUrb === 'incompleto_contenido') return 'incompleto_contenido';
   if(e && e.message === 'JSON inválido') return 'incompleto_contenido';
   return 'pendiente_transporte';
 }
@@ -5743,20 +5841,49 @@ function urbClasificarResultadoIntentoProyectivo(e){
 // URB_R11_pendienteCobertura, más abajo, y que asegurarOperationIdProyectivoUrbanismo() ya
 // soporta del lado de la firma (mismo numeroIntento=1, mismo firmaProy exacto -- reusa el mismo
 // operationId, nunca abre uno nuevo).
+// 124-BLOQ-URB-ABORT-02-R2.2 (Corte 4): 'numeroIntentoSiguiente' es nuevo -- para 'pendiente_
+// transporte' (fallo de RED de ESTE mismo intento: vale la pena reclamar la MISMA clave, el
+// servidor puede haberlo terminado igual) queda en el numeroIntento que ya se estaba usando. Para
+// 'incompleto_contenido'/'salida_truncada' (un CONTENIDO ya recibido/confirmado -- reintentar la
+// MISMA clave encontraría el mismo resultado ya persistido, o -- para 'salida_truncada' fresco, que
+// el servidor cierra como 'failed_terminal', Corte 2 -- SÍ sería reclamable de nuevo, pero conviene
+// una clave explícitamente nueva para no depender de ese detalle de estado del servidor) avanza al
+// numeroIntento siguiente. Ver retomarProyectivoPendiente()/regenerarProyectivo() más abajo.
 var URB_R21_pendienteTransporte = null;
 function retomarProyectivoPendiente(){
   var pend = URB_R21_pendienteTransporte;
   if(!pend) return;
   URB_R21_pendienteTransporte = null;
-  regenerarProyectivo(pend.nota, pend.intencion);
+  // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 6): activa el texto propio de "retomar" en el overlay de
+  // espera (ver mostrarEsperaRecuperacionUrb()) mientras dura este intento -- se desactiva siempre
+  // en el finally de regenerarProyectivo(), nunca queda pegado.
+  _urbProyRetomarActivo = true;
+  regenerarProyectivo(pend.nota, pend.intencion, pend.numeroIntentoSiguiente || 1);
 }
 
-async function regenerarProyectivo(nota, intencion){
+// 124-BLOQ-URB-ABORT-02-R2.2 (Corte 4): tercer parámetro nuevo, OPCIONAL -- 'numeroIntentoInicial'
+// (default 1). La llamada normal (cerrarVal(), fresca) no lo pasa -- sigue empezando en 1, sin
+// cambio de comportamiento. Sólo retomarProyectivoPendiente() lo pasa explícitamente, con el valor
+// que corresponda según qué tipo de pendiente se está retomando (ver el comentario junto a
+// URB_R21_pendienteTransporte, arriba).
+async function regenerarProyectivo(nota, intencion, numeroIntentoInicial){
+  var numeroIntentoUsado = numeroIntentoInicial || 1;
   // Mostrar pantalla de carga mientras se regenera
   document.getElementById('etapa-diag').style.display='none';
   document.getElementById('etapa-proy').style.display='block';
   setEtapa(2);
   mostrarCarga(true, null, 'proyectivo');
+  // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 6): si esto vino de retomarProyectivoPendiente(), el overlay
+  // recién mostrado por mostrarCarga() arranca con el primer paso normal de 'proyectivo'
+  // ("Incorporando valores validados…") -- se pisa acá, una sola vez, con el texto explícito de
+  // "retomar" que pide el brief; el resto de la narrativa de pasos (que YA no menciona los 36
+  // indicadores, ver CARGA_PASOS.proyectivo) sigue su curso normal después.
+  if(_urbProyRetomarActivo){
+    try{
+      var elTxtRetomar = document.getElementById('carga-txt');
+      if(elTxtRetomar) elTxtRetomar.textContent = urbAbortT('Recuperando el abordaje anterior…');
+    }catch(eTxtRetomar){}
+  }
   document.getElementById('ap-desc').innerHTML = '';
   // 124-BLOQ-URB-ABORT-02-R2.1b (punto 4): limpia cualquier mensaje que haya quedado de un
   // intento anterior (p.ej. "Retomar análisis" -> este mismo llamado) antes de arrancar uno
@@ -5764,8 +5891,9 @@ async function regenerarProyectivo(nota, intencion){
   setErrRes('');
   window.scrollTo(0,0);
   // 124-BLOQ-URB-ABORT-02-R2.1 (Corte 4): guarda la excepción real del intento que terminó en
-  // 'pendiente_transporte' o 'fallo_terminal', para poder mostrar el mensaje correspondiente
-  // (mensajeErrorUrbanismo()) una vez que se sale del try/finally de más abajo.
+  // 'pendiente_transporte', 'incompleto_contenido', 'salida_truncada' o 'fallo_terminal', para
+  // poder mostrar el mensaje correspondiente (mensajeErrorUrbanismo()) una vez que se sale del
+  // try/finally de más abajo.
   let errorProyPendiente = null;
 
   // URB-PROY-VALID-01 (04/09): el cuerpo de UN intento se extrajo a esta función interna, sin
@@ -5825,9 +5953,25 @@ async function regenerarProyectivo(nota, intencion){
       // abajo (fallo de RED antes de tener respuesta) debe dejar esto sin limpiar, para que un
       // reintento genuino de conexión reutilice el mismo operationId.
       limpiarOperationIdProyectivoUrbanismo(firmaProy);
-      const m = raw.match(/\{[\s\S]*\}/);
-      if(!m) throw new Error('JSON inválido');
-      const parsed = JSON.parse(m[0]);
+      // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 4): antes, un JSON.parse() que fallara sobre un `m[0]`
+      // que SÍ había matcheado la regex de llaves (contenido sintácticamente parecido a un objeto,
+      // pero inválido -- p.ej. una coma colgante) escapaba SIN pasar por el `if(!m)` de abajo, y
+      // llegaba al catch() de más abajo como un SyntaxError nativo, sin el mensaje literal
+      // 'JSON inválido' -- urbClasificarResultadoIntentoProyectivo() lo clasificaba, por defecto,
+      // como 'pendiente_transporte' (un fallo de TRANSPORTE), aunque la respuesta sí había llegado
+      // completa y el problema fuera de CONTENIDO. Ahora ambos caminos (sin match, o JSON.parse()
+      // rechazando lo que sí matcheó) quedan bajo el mismo try/catch acá adentro, con el mismo
+      // marcador explícito (_motivoUrb) -- nunca se depende de comparar el mensaje literal.
+      var parsed;
+      try{
+        const m = raw.match(/\{[\s\S]*\}/);
+        if(!m) throw new Error('sin_json');
+        parsed = JSON.parse(m[0]);
+      }catch(eParseProy){
+        var eJsonInvalido = new Error('JSON inválido');
+        eJsonInvalido._motivoUrb = 'incompleto_contenido';
+        throw eJsonInvalido;
+      }
 
       // URB-PROY-VALID-01 (04/09): receptivos se valida ANTES de aceptar CUALQUIER campo de esta
       // respuesta -- si no alcanza, no se aplica nada a diagData (ni haiku, ni síntesis, ni
@@ -5857,10 +6001,17 @@ async function regenerarProyectivo(nota, intencion){
       // cobertura incompleta, que se acepta y se devuelve tal cual para que decida un humano (ver
       // más abajo) -- nunca se reintenta ni se rechaza en silencio.
       if(!urbProyValid01ReceptivosOk(receptivosCandidato)){
-        console.error('URB-PROY-VALID-01: intento '+numeroIntento+'/2 de regenerarProyectivo() incompleto -- niveles receptivos incompletos.', receptivosCandidato);
+        console.error('URB-PROY-VALID-01: intento '+numeroIntento+' de regenerarProyectivo() incompleto -- niveles receptivos incompletos.', receptivosCandidato);
         // 124-BLOQ-URB-ABORT-02-R2.1 (Corte 4): renombrado de 'incompleto' a 'incompleto_contenido'
         // -- este es el caso de CONTENIDO real (hubo respuesta parseable, nivel1/2/3 no alcanzó),
         // nunca un fallo de transporte. Ver urbClasificarResultadoIntentoProyectivo(), más arriba.
+        // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 4): este camino no lanza excepción (vuelve un string
+        // directo), así que no hay `e` real para mostrar -- se arma un error sintético sólo para que
+        // mensajeErrorUrbanismo()/clasificarErrorUrbanismo() tengan algo consistente que mostrar más
+        // abajo, ahora que este resultado YA NO dispara un segundo intento automático.
+        var eContenidoIncompleto = new Error('receptivos_incompletos');
+        eContenidoIncompleto._motivoUrb = 'incompleto_contenido';
+        errorProyPendiente = eContenidoIncompleto;
         return 'incompleto_contenido';
       }
 
@@ -5902,7 +6053,7 @@ async function regenerarProyectivo(nota, intencion){
       // 124-BLOQ-URB-ABORT-02-R2.1 (Corte 4): clasificación explícita en vez de un 'incompleto'
       // único -- ver urbClasificarResultadoIntentoProyectivo(), más arriba, para el criterio.
       var clasificacionProy = urbClasificarResultadoIntentoProyectivo(e);
-      console.error('URB-PROY-VALID-01: error regenerando proyectivo (intento '+numeroIntento+'/2), clasificado como "'+clasificacionProy+'":', e);
+      console.error('URB-PROY-VALID-01: error regenerando proyectivo (intento '+numeroIntento+'), clasificado como "'+clasificacionProy+'":', e);
       // 124-BLOQ-URB-ABORT-02 (18/09): ya no hay un registrarUso() de respaldo acá -- desde que el
       // fetch pasa por llamarFaseConRecuperacion()/llamarAnthropicUrbanismo() (ver más arriba), el
       // registro de cualquier fallo real (red antes de headers, HTTP, cuerpo interrumpido) ya
@@ -5912,47 +6063,59 @@ async function regenerarProyectivo(nota, intencion){
       // de consultarRecuperacionConEspera() se agotó sin resultado): eso nunca se registra como
       // fallo, en ningún punto -- exactamente el mismo criterio que items/núcleo, porque no fue un
       // intento fallido del cliente, fue el servidor evitando correctamente una llamada de más.
-      // 124-BLOQ-URB-ABORT-02-R2.1: para 'pendiente_transporte'/'fallo_terminal' se guarda la
-      // excepción real -- regenerarProyectivo() la usa para mostrar el mensaje correspondiente
-      // (mensajeErrorUrbanismo()) en vez de un alert genérico.
-      if(clasificacionProy !== 'incompleto_contenido') errorProyPendiente = e;
+      // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 4): ANTES esto excluía 'incompleto_contenido' (no hacía
+      // falta guardar la excepción porque el reintento automático seguía en silencio) -- ahora que
+      // ESE resultado también vuelve a Validación con un mensaje visible (ver más abajo), se guarda
+      // siempre, sin excepción.
+      errorProyPendiente = e;
       return clasificacionProy;
     }
   }
 
-  // URB-PROY-VALID-01 (04/09), ajustado por Bloque A-R1.1 y por 124-BLOQ-URB-ABORT-02-R2.1
-  // (Corte 4): el reintento automático (2 intentos totales) queda reservado EXCLUSIVAMENTE para
-  // 'incompleto_contenido' (bloqueo TÉCNICO de contenido -- nivel1/2/3 no alcanzó, pero hubo una
-  // respuesta real y parseable del servidor). Un fallo de transporte ('pendiente_transporte') o un
-  // fallo terminal confirmado ('fallo_terminal') NUNCA dispara un segundo POST automático -- ver
-  // urbClasificarResultadoIntentoProyectivo(), más arriba. Un resultado 'parcial' (nivel1/2/3 ok,
-  // 'elementos' incompleto) tampoco -- se corta acá y se le ofrece la decisión al humano (ver más
-  // abajo); si el humano pide "Revisar y completar", eso es lo que dispara un nuevo llamado
-  // completo a regenerarProyectivo(), con su propio par de intentos.
+  // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 4) -- CAUSA CONFIRMADA por 124-BLOQ-URB-ABORT-02-R2.1c-R1_
+  // DIAGNOSTICO_PRODUCTIVO.md: el reintento automático de calidad (antes: 'incompleto_contenido'
+  // disparaba intentoRegenerarProyectivo(2) sin ninguna acción consciente del usuario) queda
+  // ELIMINADO -- era exactamente el mecanismo que produjo el segundo cobro real del incidente de
+  // producción documentado ahí (fila 40, consumo real id 754, ~5s después de que el cliente
+  // encontrara la fila 32 ya completada pero truncada). UN SOLO intento por llamado a
+  // regenerarProyectivo(); cualquier resultado que no sea 'completo'/'parcial' apaga el overlay,
+  // vuelve a Validación, conserva nota/intención, y ofrece (salvo 'fallo_terminal', sin cambios) un
+  // botón explícito -- nunca un segundo POST automático. Un resultado 'parcial' (nivel1/2/3 ok,
+  // 'elementos' incompleto) sigue sin disparar nada acá -- se corta y se le ofrece la decisión al
+  // humano (ver más abajo, sin cambios de este corte); si el humano pide "Revisar y completar", eso
+  // es lo que dispara un nuevo llamado completo a regenerarProyectivo() -- ese flujo permanece
+  // intacto, tal como pide el brief.
   // 124-BLOQ-URB-ABORT-02-R2.1 (Corte 5): try/finally en vez de una línea suelta de
   // mostrarCarga(false) -- garantiza que el overlay se apague en CUALQUIER salida (éxito, parcial,
-  // contenido incompleto, transporte pendiente, fallo terminal, o una excepción inesperada que
-  // intentoRegenerarProyectivo() no haya llegado a clasificar), en vez de depender de que la
-  // cadena de awaits llegue exactamente a esta línea.
+  // contenido incompleto, transporte pendiente, fallo terminal, salida truncada, o una excepción
+  // inesperada que intentoRegenerarProyectivo() no haya llegado a clasificar), en vez de depender
+  // de que la cadena de awaits llegue exactamente a esta línea.
   let resultado;
   try{
-    resultado = await intentoRegenerarProyectivo(1);
-    if(resultado === 'incompleto_contenido') resultado = await intentoRegenerarProyectivo(2);
+    resultado = await intentoRegenerarProyectivo(numeroIntentoUsado);
   } finally {
     mostrarCarga(false);
+    // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 6): se desactiva SIEMPRE acá, cualquiera sea el desenlace --
+    // nunca queda "pegado" mostrando el texto de Retomar en un sondeo posterior que no vino de ahí.
+    _urbProyRetomarActivo = false;
   }
 
-  if(resultado === 'pendiente_transporte'){
-    // 124-BLOQ-URB-ABORT-02-R2.1 (Corte 5): fallo de transporte (red, timeout, recuperación
-    // agotada) -- NUNCA se interpreta como contenido incompleto ni dispara una operación nueva.
-    // Se vuelve al diagnóstico ya validado (intacto), se conservan nota/intención/operationId
-    // (asegurarOperationIdProyectivoUrbanismo ya persiste ese operationId -- "↻ Retomar análisis"
-    // va a reclamar la MISMA operación, nunca una nueva) y se ofrece retomar explícitamente.
-    console.error('URB-PROY-VALID-01: abordaje proyectivo pendiente de transporte -- no se confirmó resultado, no se dispara una segunda llamada real.', errorProyPendiente);
+  // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 4): las tres clasificaciones que NO son 'completo'/'parcial'
+  // comparten el mismo tratamiento visible (volver a Validación, conservar nota/intención, ofrecer
+  // "↻ Retomar análisis") -- lo único que cambia entre ellas es el MENSAJE (mensajeErrorUrbanismo()
+  // ya lo distingue por tipo, ver clasificarErrorUrbanismo()) y qué numeroIntento va a usar el
+  // próximo Retomar: 'pendiente_transporte' reclama la MISMA clave (un fallo de transporte de ESTE
+  // intento -- el servidor puede haberlo terminado igual, ver el operationId ya persistido);
+  // 'incompleto_contenido'/'salida_truncada' avanzan a una clave NUEVA (reintentar la misma
+  // encontraría el mismo contenido ya recibido/rechazado -- nunca produciría una llamada real
+  // nueva).
+  if(resultado === 'pendiente_transporte' || resultado === 'incompleto_contenido' || resultado === 'salida_truncada'){
+    console.error('URB-PROY-VALID-01: abordaje proyectivo sin confirmar ("'+resultado+'") -- no se dispara una segunda llamada real automática.', errorProyPendiente);
     document.getElementById('etapa-proy').style.display='none';
     document.getElementById('etapa-diag').style.display='block';
     setEtapa(1);
-    URB_R21_pendienteTransporte = { nota: nota, intencion: intencion };
+    var numeroIntentoSiguienteProy = (resultado === 'pendiente_transporte') ? numeroIntentoUsado : (numeroIntentoUsado + 1);
+    URB_R21_pendienteTransporte = { nota: nota, intencion: intencion, numeroIntentoSiguiente: numeroIntentoSiguienteProy };
     // 124-BLOQ-URB-ABORT-02-R2.1a (punto 3): texto del botón envuelto en urbAbortT() -- mismo
     // motivo que el botón equivalente de ejecutar(), más arriba.
     var msgTransporte = mensajeErrorUrbanismo(errorProyPendiente, true)
@@ -5976,19 +6139,6 @@ async function regenerarProyectivo(nota, intencion){
     // Sin botón "Retomar análisis" acá a propósito (mensajeErrorUrbanismo() no lo agrega para
     // 'fallo_terminal_confirmado' -- confirmado, no hay nada ambiguo que reintentar sondeando).
     setErrRes(mensajeErrorUrbanismo(errorProyPendiente, true));
-    return;
-  }
-
-  if(resultado === 'incompleto_contenido'){
-    // Se agotaron los intentos sin siquiera alcanzar nivel1/2/3: no se fabrica contenido, no se
-    // presenta el Proyectivo como válido. diagData.receptivos NUNCA se sobreescribió con algo
-    // incompleto (sigue como estaba antes de este llamado) -- se detiene la transición, se vuelve
-    // al diagnóstico ya validado (que sigue intacto) y se avisa con un error visible.
-    console.error('URB-PROY-VALID-01: abordaje proyectivo NO se muestra -- no alcanzó nivel1/2/3 tras 2 intentos.');
-    document.getElementById('etapa-proy').style.display='none';
-    document.getElementById('etapa-diag').style.display='block';
-    setEtapa(1);
-    alert('No se pudo completar el abordaje proyectivo. Intentá nuevamente.');
     return;
   }
 
