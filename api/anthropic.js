@@ -327,12 +327,22 @@ async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
       // esto: el chequeo cubre las filas viejas exactamente igual que una nueva. Nunca se vuelve a
       // llamar a Anthropic ni se genera un consumo nuevo -- un GET nunca hizo ninguna de las dos
       // cosas, y sigue sin hacerlo.
+      // 124-BLOQ-URB-ABORT-02-R2.2a (punto 3): esta rama ('completed' con stop_reason:max_tokens)
+      // sólo puede corresponder a una fila LEGACY -- desde el Corte 2 de R2.2, ninguna salida
+      // truncada se vuelve a marcar 'completed' nunca más (ver más abajo, el chequeo ahora cierra
+      // 'failed_terminal' con un marcador propio). Esta rama sigue existiendo EXCLUSIVAMENTE para
+      // servir, sin tocarlas, filas ya viejas como las reales 32 y 40 -- que SÍ se cobraron en su
+      // momento (antes de que existiera esta protección). Decirle a ese usuario "no se descontaron
+      // créditos" sería falso -- por eso el mensaje y el código son distintos del caso nuevo
+      // (`salida_truncada_legacy`, no `salida_truncada`) -- nunca se infiere por texto cuál es cuál:
+      // lo decide el propio `estado` de la fila (completed=legacy siempre, ya cobrada;
+      // failed_terminal=nueva, protegida por R2.2, ver la rama de abajo).
       if (fila.resultado && fila.resultado.stop_reason === 'max_tokens') {
-        _trazaUrbResultado('GET_recuperacion_rechazada_truncada', perfil, firma, fase, fila.estado, fila.expira);
+        _trazaUrbResultado('GET_recuperacion_rechazada_truncada_legacy', perfil, firma, fase, fila.estado, fila.expira);
         return res.status(422).json({
           error: {
-            message: bi(req, 'El abordaje no llego a completarse. No se descontaron creditos.', 'The analysis could not be completed. No credits were charged.', 'A abordagem não pôde ser concluída. Nenhum crédito foi cobrado.'),
-            codigo: 'salida_truncada',
+            message: bi(req, 'Este abordaje anterior quedo incompleto y no puede recuperarse. Podes generar uno nuevo.', 'This earlier analysis was left incomplete and cannot be recovered. You can generate a new one.', 'Esta abordagem anterior ficou incompleta e não pode ser recuperada. Você pode gerar uma nova.'),
+            codigo: 'salida_truncada_legacy',
           },
         });
       }
@@ -350,6 +360,24 @@ async function manejarRecuperacionUrbanismo(req, res, token, urlBase, secreta) {
       return res.status(202).json({ estado: 'processing' });
     }
     if (fila.estado === 'failed_terminal') {
+      // 124-BLOQ-URB-ABORT-02-R2.2a (punto 1): un 'failed_terminal' puede arrastrar el marcador
+      // mínimo no sensible que el Corte 2 de R2.2 ahora persiste cuando la causa fue una salida
+      // truncada por max_tokens (ver finalizarOperacionUrbanismo(), más abajo, y el bloque que lo
+      // llama tras la respuesta de Anthropic) -- si el cliente perdió el 422 original (conexión
+      // cortada) y recupera vía este GET, sin este chequeo vería el fallo_terminal genérico
+      // ("la operación falló") en vez de la clasificación real (salida_truncada, con su propio
+      // mensaje y su botón de Retomar) -- se detecta ANTES del 404 genérico de abajo, nunca se
+      // infiere por texto. Sólo el marcador ({codigo,stop_reason}) se persistió -- nunca el
+      // contenido parcial generado por Anthropic.
+      if (fila.resultado && fila.resultado.codigo === 'salida_truncada') {
+        _trazaUrbResultado('GET_recuperacion_rechazada_truncada', perfil, firma, fase, fila.estado, fila.expira);
+        return res.status(422).json({
+          error: {
+            message: bi(req, 'El abordaje no llego a completarse. No se descontaron creditos.', 'The analysis could not be completed. No credits were charged.', 'A abordagem não pôde ser concluída. Nenhum crédito foi cobrado.'),
+            codigo: 'salida_truncada',
+          },
+        });
+      }
       // 124-BLOQ-URB-ABORT-02-R1 (brief punto 4): a diferencia de sinNada() (ambiguo -- "todavía
       // no hay nada"), esto SÍ es una confirmación real de que la operación se ejecutó y falló.
       // codigo distinto a propósito para que el cliente pueda dejar de sondear de inmediato en vez
@@ -458,6 +486,18 @@ async function finalizarOperacionUrbanismo(usuario, firma, fase, estado, data, s
       cuerpo.resultado = data;
       cuerpo.usage = (data && data.usage) || null;
       cuerpo.expira = new Date(Date.now() + CLAIM_TTL_COMPLETADO_SEG * 1000).toISOString();
+    } else if (data) {
+      // 124-BLOQ-URB-ABORT-02-R2.2a (punto 1): permite persistir, también para 'failed_terminal',
+      // un marcador MÍNIMO y no sensible (p.ej. {codigo:'salida_truncada', stop_reason:'max_tokens'})
+      // -- nunca el contenido parcial generado por Anthropic (eso nunca se guarda, truncado o no).
+      // Sin esto, si el cliente pierde la respuesta 422 original (conexión cortada tras recibir el
+      // status pero antes de leer el cuerpo, o cualquier corte de transporte) y luego recupera vía
+      // GET, sólo encontraba 'failed_terminal' genérico -- perdiendo la clasificación real
+      // (salida_truncada) y mostrando el mensaje equivocado ("la operación falló" en vez de "no se
+      // descontaron créditos"). Todo llamado existente que no pasa este marcador (la mayoría --
+      // fallas genéricas de reserva/identidad/modelo) sigue pasando `data=null`, sin cambio de
+      // comportamiento: `cuerpo.resultado` queda ausente, igual que antes de este corte.
+      cuerpo.resultado = data;
     }
     // 124-BLOQ-URB-ABORT-02-R2.1b (punto 2): comparación directa, no filtroPgExacto() -- mismo
     // criterio que el GET (ver manejarRecuperacionUrbanismo()). `firma` acá llega ya validada por
@@ -657,12 +697,17 @@ export default async function handler(req, res) {
         // devuelve como éxito, nunca llama de nuevo a Anthropic (ya no llegaba a hacerlo antes de
         // este corte tampoco) y nunca genera un consumo nuevo (este camino nunca reserva ni cobra
         // crédito, con o sin este chequeo).
+        // 124-BLOQ-URB-ABORT-02-R2.2a (punto 3): 'completed'+truncada sólo puede ser una fila LEGACY
+        // (mismo razonamiento que en el GET, ver manejarRecuperacionUrbanismo()) -- desde el Corte 2
+        // de R2.2 ninguna salida truncada nueva se marca 'completed'. Código/mensaje distintos de la
+        // truncación nueva: esta SÍ se cobró en su momento, no corresponde decir "no se descontaron
+        // créditos".
         if (reclamo.resultado && reclamo.resultado.stop_reason === 'max_tokens') {
-          _trazaUrbResultado('POST_reclamo_rechazado_truncado', usuario, firmaUrb, faseUrb, reclamo.estado, null);
+          _trazaUrbResultado('POST_reclamo_rechazado_truncado_legacy', usuario, firmaUrb, faseUrb, reclamo.estado, null);
           return res.status(422).json({
             error: {
-              message: bi(req, 'El abordaje no llego a completarse. No se descontaron creditos.', 'The analysis could not be completed. No credits were charged.', 'A abordagem não pôde ser concluída. Nenhum crédito foi cobrado.'),
-              codigo: 'salida_truncada',
+              message: bi(req, 'Este abordaje anterior quedo incompleto y no puede recuperarse. Podes generar uno nuevo.', 'This earlier analysis was left incomplete and cannot be recovered. You can generate a new one.', 'Esta abordagem anterior ficou incompleta e não pode ser recuperada. Você pode gerar uma nova.'),
+              codigo: 'salida_truncada_legacy',
             },
           });
         }
@@ -827,7 +872,12 @@ export default async function handler(req, res) {
       // reclamable de nuevo de inmediato), así que un reintento real explícito del usuario puede
       // reclamar esta misma clave sin quedar bloqueado hasta que venza el TTL de 'completed'
       // (24hs) -- no hizo falta ninguna migración nueva.
-      await finalizarOperacionUrbanismo(usuario, firmaUrb, faseUrb, 'failed_terminal', null, secreta);
+      // 124-BLOQ-URB-ABORT-02-R2.2a (punto 1): antes se pasaba `null` -- si el cliente perdía esta
+      // misma respuesta 422 (conexión cortada) y recuperaba después vía GET, encontraba
+      // 'failed_terminal' sin ningún dato adicional y perdía la clasificación real. Ahora se
+      // persiste el marcador mínimo -- nunca el contenido parcial -- para que
+      // manejarRecuperacionUrbanismo() (GET) pueda reconocerlo sin inferir nada por texto.
+      await finalizarOperacionUrbanismo(usuario, firmaUrb, faseUrb, 'failed_terminal', { codigo: 'salida_truncada', stop_reason: data.stop_reason }, secreta);
       // No se ejecuta consumir(): se libera íntegra la reserva -- una salida truncada e inutilizable
       // nunca cobra crédito.
       await liberarSeguro(usuario, modulo, estimado, secreta, res, _tlog);
