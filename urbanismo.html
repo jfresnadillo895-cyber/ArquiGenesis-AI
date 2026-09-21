@@ -4734,11 +4734,33 @@ function cargarOperationIdProyectivoUrbanismo(){
    MISMO intento (no un intento nuevo por calidad de contenido) reutilice el mismo operationId. Un
    numeroIntento distinto (el mecanismo de reintento por calidad, ya existente) es, a propósito,
    una firma distinta -- reclama su propia clave nueva, nunca colisiona con el intento anterior. */
+// 124 AG (21/09): identifica la version del CONTRATO de generacion bajo el que se guardo este
+// checkpoint -- el prompt real que arma buildPromptReceptivosEspiral() (y por lo tanto el
+// payload_hash que calcula urbHashPayload(), ver mas arriba) puede cambiar aunque firmaProy no
+// cambie (firmaProy solo captura los insumos visibles al usuario -- ciudad/organismo/pasivo/c2/
+// ref/nota/intencion/numeroIntento -- nunca el texto exacto de la plantilla del prompt). Sin este
+// chequeo, un checkpoint guardado ANTES de una actualizacion de buildPromptReceptivosEspiral()
+// reutilizaria el mismo operationId para un prompt DISTINTO -- reclamarOperacionUrbanismo() (ver
+// api/anthropic.js) detecta el payload_hash distinto contra la fila ya reclamada y devuelve 409,
+// exactamente el caso que motivo este corte. Subir este numero cada vez que
+// buildPromptReceptivosEspiral() (o cualquier funcion que participe en el texto final del prompt
+// de receptivos_espiral) cambie de forma que altere el prompt resultante para los MISMOS insumos.
+var CONTRATO_GENERACION_PROY = 'c1';
 function asegurarOperationIdProyectivoUrbanismo(firma){
   var ck = cargarOperationIdProyectivoUrbanismo();
+  // 124 AG (21/09): un checkpoint de un contrato ANTERIOR (o sin 'contrato' -- todo checkpoint
+  // guardado por versiones de este archivo previas a este corte) se descarta aca, ANTES de mirar
+  // la firma -- nunca se reutiliza su operationId, sin importar si la firma coincide. Esto es
+  // exactamente "checkpoint antiguo -> operacion nueva" (brief, punto 3): se genera una operacion
+  // nueva y compatible, y el checkpoint viejo queda reemplazado por uno del contrato vigente recien
+  // abajo. El diagnostico y el historial (que no pasan por este checkpoint) quedan intactos.
+  if(ck && ck.contrato !== CONTRATO_GENERACION_PROY) ck = null;
+  // Contrato vigente Y misma firma exacta: recuperacion por transporte -- MISMA operacion (brief,
+  // punto 3, "checkpoint vigente -> recuperacion de la misma operacion"), sin cambio de
+  // comportamiento respecto de antes de este corte.
   if(ck && ck.firma === firma && ck.operationId) return ck.operationId;
   var nuevoId = generarOperationIdUrbanismo();
-  try{ localStorage.setItem(UC_LLAVE_PROY, JSON.stringify({ firma:firma, operationId:nuevoId, actualizado:new Date().toISOString() })); }catch(e){}
+  try{ localStorage.setItem(UC_LLAVE_PROY, JSON.stringify({ firma:firma, operationId:nuevoId, contrato:CONTRATO_GENERACION_PROY, actualizado:new Date().toISOString() })); }catch(e){}
   return nuevoId;
 }
 /* "completar o abandonar explícitamente lo cierra" (brief punto 2) -- se llama una vez que
