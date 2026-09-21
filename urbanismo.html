@@ -3776,6 +3776,11 @@ function clasificarErrorUrbanismo(e){
   // donde no hay confirmación posible). Se revisa acá mismo, junto a los otros marcadores propios,
   // por la misma razón: nunca hay que adivinarlo por texto.
   if(e._motivoUrb === 'fallo_terminal') return 'fallo_terminal_confirmado';
+  // 124-BLOQ-URB-ABORT-02-R2.2a (punto 3): se revisa ANTES que el atajo genérico de 422, de abajo --
+  // una fila LEGACY (ya cobrada) nunca debe caer en el mensaje "no se descontaron créditos" sólo
+  // porque también respondió 422. Marcador propio, puesto explícitamente por el servidor (nunca se
+  // infiere por texto) en llamarAnthropicUrbanismo()/intentarRecuperarFaseUrbanismo().
+  if(e._motivoUrb === 'salida_truncada_legacy') return 'salida_truncada_legacy';
   // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 2/3): mismo criterio -- marcador propio o status HTTP 422
   // puesto explícitamente cuando el servidor confirma que la respuesta se cortó por max_tokens
   // (ver api/anthropic.js: la detección al recibir la respuesta fresca, o al recuperar una fila ya
@@ -3838,6 +3843,11 @@ function mensajeErrorUrbanismo(e, conDetalle){
   // estado -- respuesta fresca, GET de recuperación, POST duplicado -- cobra ni deja la fila como
   // 'completed' funcional cuando esto ocurre).
   else if(tipo === 'salida_truncada') base = urbAbortT('El abordaje no llegó a completarse. No se descontaron créditos.');
+  // 124-BLOQ-URB-ABORT-02-R2.2a (punto 3): mensaje NUEVO, distinto a propósito del anterior -- este
+  // caso es una fila LEGACY (anterior a la protección de R2.2) que SÍ se cobró en su momento. Decir
+  // acá "no se descontaron créditos" sería falso -- el servidor distingue explícitamente los dos
+  // casos por su propio 'estado' (completed=legacy, failed_terminal=nuevo), nunca se infiere acá.
+  else if(tipo === 'salida_truncada_legacy') base = urbAbortT('Este abordaje anterior quedó incompleto y no puede recuperarse. Podés generar uno nuevo.');
   // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 4): mensaje NUEVO -- contenido recibido pero no interpretable
   // (JSON inválido/incompleto) que YA NO dispara un segundo POST automático (ver
   // urbClasificarResultadoIntentoProyectivo()/regenerarProyectivo(), más abajo) -- a diferencia de
@@ -4181,6 +4191,14 @@ async function llamarAnthropicUrbanismo(prompt,maxTokens,fase,etapa,firma){
     // rendirse.
     const eHttp=new Error('Error '+res.status+': '+(e.error?.message||''));
     eHttp._httpStatusUrb=res.status;
+    // 124-BLOQ-URB-ABORT-02-R2.2a (punto 3): un 422 puede ser la truncación NUEVA (protegida por
+    // R2.2, sin cobro) o una fila LEGACY (ya cobrada, ver manejarRecuperacionUrbanismo() en
+    // api/anthropic.js) -- por ejemplo un POST duplicado (mismo operationId) que cae sobre una de
+    // esas filas viejas. Sin este marcador, cualquier 422 se clasificaba igual (ver el atajo por
+    // _httpStatusUrb===422 en clasificarErrorUrbanismo()/urbClasificarResultadoIntentoProyectivo())
+    // y ese caso mostraría el mensaje nuevo ("no se descontaron créditos"), que sería falso para una
+    // fila que sí se cobró. El código del propio servidor decide, nunca se infiere por texto.
+    if(res.status===422 && e && e.error && e.error.codigo==='salida_truncada_legacy') eHttp._motivoUrb='salida_truncada_legacy';
     throw eHttp;
   }
   // URB-ROBUST 02A (26/08) -- cierre del gap de observabilidad documentado en URB-ROBUST 02:
@@ -4258,6 +4276,11 @@ async function intentarRecuperarFaseUrbanismo(firma, fase){
     if(r.status===422){
       var cuerpoTrunc = await r.json().catch(function(){ return null; });
       if(cuerpoTrunc && cuerpoTrunc.error && cuerpoTrunc.error.codigo === 'salida_truncada') return { estado:'salida_truncada' };
+      // 124-BLOQ-URB-ABORT-02-R2.2a (punto 3): fila LEGACY (ya cobrada, ver
+      // manejarRecuperacionUrbanismo() en api/anthropic.js) -- estado propio, nunca se confunde con
+      // la truncación nueva (que sí queda protegida y sin cobro): el mensaje que corresponde a cada
+      // una es distinto, y mostrar el equivocado sería decirle al usuario algo falso sobre su cobro.
+      if(cuerpoTrunc && cuerpoTrunc.error && cuerpoTrunc.error.codigo === 'salida_truncada_legacy') return { estado:'salida_truncada_legacy' };
       return { estado:'ausente' };
     }
     if(!r.ok) return { estado:'ausente' };
@@ -4330,6 +4353,9 @@ async function consultarRecuperacionConEspera(firma, fase){
   // 124-BLOQ-URB-ABORT-02-R2.2 (Corte 3): mismo criterio -- 'salida_truncada' es otra confirmación
   // real (el servidor terminó, pero con una respuesta cortada por max_tokens), nunca ambigua.
   if(r1 && r1.estado === 'salida_truncada') return { estado: 'salida_truncada' };
+  // 124-BLOQ-URB-ABORT-02-R2.2a (punto 3): mismo criterio, pero para la fila LEGACY (ya cobrada) --
+  // estado propio, nunca se confunde con la truncación nueva (protegida, sin cobro).
+  if(r1 && r1.estado === 'salida_truncada_legacy') return { estado: 'salida_truncada_legacy' };
   // 124-BLOQ-URB-ABORT-02-R1 (brief punto 1): antes, un primer resultado que no fuera 'processing'
   // ni 'completed' (típicamente un 404 temprano -- el reclamo puede estar en camino, apenas
   // milisegundos después de abortar) cerraba la recuperación de inmediato, en el primer intento.
@@ -4372,6 +4398,7 @@ async function consultarRecuperacionConEspera(firma, fase){
       // devolver la confirmación explícita, no null.
       if(rN && rN.estado === 'fallo_terminal') return { estado: 'fallo_terminal' };
       if(rN && rN.estado === 'salida_truncada') return { estado: 'salida_truncada' };
+      if(rN && rN.estado === 'salida_truncada_legacy') return { estado: 'salida_truncada_legacy' };
       // Recién ACÁ, después de haber hecho la consulta, se decide si la ventana venció -- nunca
       // antes (ver el comentario de Corte 5, arriba).
       if(Date.now() >= limiteRecup) break;
@@ -4482,6 +4509,15 @@ async function llamarFaseConRecuperacion(prompt, maxTokens, fase, etapa, firma){
       var eTruncadoRecuperado = new Error('salida_truncada_confirmada_por_recuperacion');
       eTruncadoRecuperado._motivoUrb = 'salida_truncada';
       throw eTruncadoRecuperado;
+    }
+    // 124-BLOQ-URB-ABORT-02-R2.2a (punto 3): mismo criterio, pero para la fila LEGACY (ya cobrada,
+    // ver manejarRecuperacionUrbanismo() en api/anthropic.js) -- marcador propio, distinto del de
+    // arriba, para que clasificarErrorUrbanismo()/mensajeErrorUrbanismo() puedan mostrar el mensaje
+    // que corresponde a cada caso sin inferir nada por texto.
+    if(recuperado.estado === 'salida_truncada_legacy'){
+      var eTruncadoLegacyRecuperado = new Error('salida_truncada_legacy_confirmada_por_recuperacion');
+      eTruncadoLegacyRecuperado._motivoUrb = 'salida_truncada_legacy';
+      throw eTruncadoLegacyRecuperado;
     }
     reconciliarUsoRecuperado(fase, etapa, recuperado.usage);
     return (recuperado.content||[]).map(function(i){ return i.text||''; }).join('');
@@ -5820,6 +5856,9 @@ function urbClasificarResultadoIntentoProyectivo(e){
   // abajo (422 ya está incluido en esa lista, pero acá necesita su PROPIA categoría, distinta de
   // 'fallo_terminal', para que regenerarProyectivo() pueda mostrar el mensaje correcto -- "no se
   // descontaron créditos" -- y no el genérico de fallo terminal).
+  // 124-BLOQ-URB-ABORT-02-R2.2a (punto 3): se revisa ANTES que el atajo genérico de 422 -- una fila
+  // LEGACY (ya cobrada) nunca debe caer en 'salida_truncada' sólo porque también respondió 422.
+  if(e && e._motivoUrb === 'salida_truncada_legacy') return 'salida_truncada_legacy';
   if(e && (e._motivoUrb === 'salida_truncada' || e._httpStatusUrb === 422)) return 'salida_truncada';
   if(e && URB_SIN_RECUPERACION_HTTP.indexOf(e._httpStatusUrb) !== -1) return 'fallo_terminal';
   // 124-BLOQ-URB-ABORT-02-R2.1a (punto 2): mismo criterio 'fallo_terminal' que el chequeo de
@@ -6106,10 +6145,10 @@ async function regenerarProyectivo(nota, intencion, numeroIntentoInicial){
   // ya lo distingue por tipo, ver clasificarErrorUrbanismo()) y qué numeroIntento va a usar el
   // próximo Retomar: 'pendiente_transporte' reclama la MISMA clave (un fallo de transporte de ESTE
   // intento -- el servidor puede haberlo terminado igual, ver el operationId ya persistido);
-  // 'incompleto_contenido'/'salida_truncada' avanzan a una clave NUEVA (reintentar la misma
-  // encontraría el mismo contenido ya recibido/rechazado -- nunca produciría una llamada real
-  // nueva).
-  if(resultado === 'pendiente_transporte' || resultado === 'incompleto_contenido' || resultado === 'salida_truncada'){
+  // 'incompleto_contenido'/'salida_truncada'/'salida_truncada_legacy' avanzan a una clave NUEVA
+  // (reintentar la misma encontraría el mismo contenido ya recibido/rechazado, o la misma fila
+  // legacy -- nunca produciría una llamada real nueva).
+  if(resultado === 'pendiente_transporte' || resultado === 'incompleto_contenido' || resultado === 'salida_truncada' || resultado === 'salida_truncada_legacy'){
     console.error('URB-PROY-VALID-01: abordaje proyectivo sin confirmar ("'+resultado+'") -- no se dispara una segunda llamada real automática.', errorProyPendiente);
     document.getElementById('etapa-proy').style.display='none';
     document.getElementById('etapa-diag').style.display='block';
