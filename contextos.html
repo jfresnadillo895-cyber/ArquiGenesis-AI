@@ -2023,6 +2023,43 @@ header header .cai-ham{flex-shrink:0}
     });
   };
 })();
+var ComprenderCanal = (function(){
+  var CLAVE = 'ag_canal_twa';
+  function leerParamCanal(){
+    try{
+      var v = new URLSearchParams(window.location.search).get('canal');
+      return v ? v.toLowerCase() : null;
+    }catch(e){ return null; }
+  }
+  function marcarPorReferrer(){
+    try{
+      if(document.referrer && document.referrer.indexOf('android-app://') === 0){
+        sessionStorage.setItem(CLAVE, '1');
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+  function inicializar(){
+    var p = leerParamCanal();
+    try{
+      if(p === 'android'){ sessionStorage.setItem(CLAVE, '1'); return; }
+      if(p === 'web'){ sessionStorage.setItem(CLAVE, '0'); return; }
+      if(sessionStorage.getItem(CLAVE) !== null) return;
+    }catch(e){}
+    marcarPorReferrer();
+  }
+  function esAndroidTwa(){
+    try{
+      var v = sessionStorage.getItem(CLAVE);
+      if(v === '1') return true;
+      if(v === '0') return false;
+    }catch(e){}
+    return marcarPorReferrer();
+  }
+  inicializar();
+  return { esAndroidTwa: esAndroidTwa };
+})();
 </script>
 <script>
 
