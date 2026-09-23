@@ -2523,6 +2523,17 @@ canvas{animation:none !important}
   <header class="cai-header">
     <div class="cai-head"><comprender-mark variant="compact" size="30" phase="spiral_deployment" aria-hidden="true"></comprender-mark><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Urbanismo</b></div><div class="cai-baja">Versión profesional</div></div></div>
     <span style="flex:1"></span>
+    <!-- M3.1 (23/09): control de retorno visible en el header de #p-inicio -- antes
+         irAIncorporarEnCore() sólo era alcanzable desde dentro de #hist-panel (panel deslizable,
+         no visible por defecto), así que al entrar desde un organismo no había ningún retorno
+         visible en la pantalla inicial. Mismo botón/mismo texto que ya pinta
+         pintarContinuidadUrbanismo() para #btn-volver-comprender-core -- acá sólo se agrega un
+         segundo elemento al que esa misma función también sincroniza (ver pintarContinuidadUrbanismo()
+         más abajo). Reutiliza EXCLUSIVAMENTE irAIncorporarEnCore(): sin URL, contrato ni
+         persistencia nueva. Siempre visible (no se oculta sin organismo) -- si Urbanismo se abrió
+         directo, irAIncorporarEnCore() ya resuelve solo el destino a 'index.html' a secas, sin
+         fingir ningún vínculo. -->
+    <button class="btn-back" id="btn-volver-organismo-cai" onclick="irAIncorporarEnCore()">→ Volver a Comprender AI</button>
     <!-- Panel P4 (21/08): el medidor fijo de créditos en el header se sacó -- mismo criterio ya
          aplicado en el Core (index.html, 10/08): "Tus créditos" (credTarjeta()) sigue existiendo
          igual, solo que ahora se abre desde "Cuenta" (candado.txt, window.comprenderVerCreditos)
@@ -2764,6 +2775,17 @@ canvas{animation:none !important}
       <button class="btn-back" onclick="nuevaCiudad()" title="Nueva ciudad">+</button>
       <button class="btn-back" onclick="toggleHistorial()" title="Historial" style="display:flex;align-items:center;gap:3px">⊙<span class="hist-badge" id="hist-badge">0</span></button>
       <button class="btn-back" onclick="back()" title="Inicio">⌂</button>
+      <!-- M3.1 (23/09): mismo control que el header de #p-inicio (ver esa nota), ahora también acá
+           -- éste es el topbar COMPARTIDO por las tres etapas de resultados (Diagnóstico,
+           Validación, Abordaje Proyectivo: #etapa-diag/#etapa-val/#etapa-proy viven todas dentro de
+           #p-res, debajo de este mismo topbar), así que un solo botón acá cubre las tres sin
+           duplicar nada. Antes de este corte, desde Resultados sólo se podía volver al organismo
+           abriendo el panel de Historial -- no había ningún control accesible directo. Mismo
+           id-pattern que el de #p-inicio, mismo texto sincronizado por pintarContinuidadUrbanismo(),
+           misma función real irAIncorporarEnCore(). No reemplaza ni toca el botón condicional de
+           URB-RET-01 (urbRet01Render(), "Volver al organismo en Comprender") que sólo aparece
+           después de un envío real preparado -- ese sigue exactamente igual. -->
+      <button class="btn-back" id="btn-volver-organismo-res" onclick="irAIncorporarEnCore()">→ Volver a Comprender AI</button>
       <!-- Panel P4 (21/08): ver misma nota en el header de #p-inicio más arriba -- el botón fijo
            de créditos se sacó, "Tus créditos" ahora vive en "Cuenta". -->
     <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
@@ -10717,8 +10739,18 @@ var marcoOrganismoNombre = null;   // 14/08: capturado para la etiqueta de conti
 function pintarContinuidadUrbanismo(){
   try{
     var t = (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.t) ? ComprenderI18n.t : function(s){ return s; };
+    // M3.1 (23/09): mismo texto, mismas claves de i18n ya existentes (t('Volver al organismo')/
+    // t('Volver a Comprender AI'), ya traducidas en lib/i18n.js para EN/PT -- no se agrega
+    // ninguna clave nueva), ahora sincronizado en LOS TRES controles que ejecutan
+    // irAIncorporarEnCore(): el histórico dentro de #hist-panel, y los dos nuevos de este corte
+    // (header de #p-inicio y topbar compartido de #p-res). Un solo cálculo, tres asignaciones.
+    var etiquetaVolver = '→ ' + (__organismoIdCoreUrbanismo ? t('Volver al organismo') : t('Volver a Comprender AI'));
     var btn = document.getElementById('btn-volver-comprender-core');
-    if(btn) btn.textContent = '→ ' + (__organismoIdCoreUrbanismo ? t('Volver al organismo') : t('Volver a Comprender AI'));
+    if(btn) btn.textContent = etiquetaVolver;
+    var btnHeaderInicio = document.getElementById('btn-volver-organismo-cai');
+    if(btnHeaderInicio) btnHeaderInicio.textContent = etiquetaVolver;
+    var btnHeaderRes = document.getElementById('btn-volver-organismo-res');
+    if(btnHeaderRes) btnHeaderRes.textContent = etiquetaVolver;
     var ind = document.getElementById('contexto-indicador');
     if(!ind) return;
     if(!__organismoIdCoreUrbanismo){ ind.style.display = 'none'; return; }
