@@ -2523,17 +2523,13 @@ canvas{animation:none !important}
   <header class="cai-header">
     <div class="cai-head"><comprender-mark variant="compact" size="30" phase="spiral_deployment" aria-hidden="true"></comprender-mark><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Urbanismo</b></div><div class="cai-baja">Versión profesional</div></div></div>
     <span style="flex:1"></span>
-    <!-- M3.1 (23/09): control de retorno visible en el header de #p-inicio -- antes
-         irAIncorporarEnCore() sólo era alcanzable desde dentro de #hist-panel (panel deslizable,
-         no visible por defecto), así que al entrar desde un organismo no había ningún retorno
-         visible en la pantalla inicial. Mismo botón/mismo texto que ya pinta
-         pintarContinuidadUrbanismo() para #btn-volver-comprender-core -- acá sólo se agrega un
-         segundo elemento al que esa misma función también sincroniza (ver pintarContinuidadUrbanismo()
-         más abajo). Reutiliza EXCLUSIVAMENTE irAIncorporarEnCore(): sin URL, contrato ni
-         persistencia nueva. Siempre visible (no se oculta sin organismo) -- si Urbanismo se abrió
-         directo, irAIncorporarEnCore() ya resuelve solo el destino a 'index.html' a secas, sin
-         fingir ningún vínculo. -->
-    <button class="btn-back" id="btn-volver-organismo-cai" onclick="irAIncorporarEnCore()">→ Volver a Comprender AI</button>
+    <!-- M3.2 (23/09): el botón fijo de retorno que M3.1 agregó acá (y su equivalente en el
+         topbar de #p-res) se sacaron -- tapaban el logo/título "Comprender · Urbanismo" en
+         Android (confirmado con prueba física real). La acción de retorno ahora vive como una
+         única entrada dentro del menú Aplicaciones (construirModulosMenu(), más abajo), que ya
+         se abre desde el mismo botón ☰ "Módulos" que sigue acá al lado. Sigue usando
+         EXCLUSIVAMENTE irAIncorporarEnCore(), sin tocarla. El botón histórico dentro de Historial
+         (#btn-volver-comprender-core) no se tocó. -->
     <!-- Panel P4 (21/08): el medidor fijo de créditos en el header se sacó -- mismo criterio ya
          aplicado en el Core (index.html, 10/08): "Tus créditos" (credTarjeta()) sigue existiendo
          igual, solo que ahora se abre desde "Cuenta" (candado.txt, window.comprenderVerCreditos)
@@ -2775,17 +2771,10 @@ canvas{animation:none !important}
       <button class="btn-back" onclick="nuevaCiudad()" title="Nueva ciudad">+</button>
       <button class="btn-back" onclick="toggleHistorial()" title="Historial" style="display:flex;align-items:center;gap:3px">⊙<span class="hist-badge" id="hist-badge">0</span></button>
       <button class="btn-back" onclick="back()" title="Inicio">⌂</button>
-      <!-- M3.1 (23/09): mismo control que el header de #p-inicio (ver esa nota), ahora también acá
-           -- éste es el topbar COMPARTIDO por las tres etapas de resultados (Diagnóstico,
-           Validación, Abordaje Proyectivo: #etapa-diag/#etapa-val/#etapa-proy viven todas dentro de
-           #p-res, debajo de este mismo topbar), así que un solo botón acá cubre las tres sin
-           duplicar nada. Antes de este corte, desde Resultados sólo se podía volver al organismo
-           abriendo el panel de Historial -- no había ningún control accesible directo. Mismo
-           id-pattern que el de #p-inicio, mismo texto sincronizado por pintarContinuidadUrbanismo(),
-           misma función real irAIncorporarEnCore(). No reemplaza ni toca el botón condicional de
-           URB-RET-01 (urbRet01Render(), "Volver al organismo en Comprender") que sólo aparece
-           después de un envío real preparado -- ese sigue exactamente igual. -->
-      <button class="btn-back" id="btn-volver-organismo-res" onclick="irAIncorporarEnCore()">→ Volver a Comprender AI</button>
+      <!-- M3.2 (23/09): botón fijo sacado -- ver nota M3.2 en el header de #p-inicio más arriba.
+           La acción de retorno vive ahora en el menú Aplicaciones, compartido por las tres etapas
+           de resultados igual que este topbar. No toca el botón condicional de URB-RET-01
+           ("Volver al organismo en Comprender" dentro de urbRet01Render()), que sigue igual. -->
       <!-- Panel P4 (21/08): ver misma nota en el header de #p-inicio más arriba -- el botón fijo
            de créditos se sacó, "Tus créditos" ahora vive en "Cuenta". -->
     <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
@@ -10485,6 +10474,28 @@ function construirTuEspacioConfig(){
 function construirModulosMenu(){
   const menu = document.getElementById('modulosMenu');
   menu.innerHTML = '';
+  // M3.2 (23/09): acción única de retorno a Comprender, movida acá desde los dos botones fijos de
+  // header que agregó M3.1 (tapaban el logo/título en Android, confirmado con prueba física).
+  // Reutiliza EXCLUSIVAMENTE irAIncorporarEnCore() -- función real, sin tocarla, sin URL, contrato
+  // ni lógica nueva. El texto (etiquetaVolverMenu) se calcula una sola vez en
+  // pintarContinuidadUrbanismo() según exista o no __organismoIdCoreUrbanismo -- acá sólo se lee,
+  // nunca se recalcula.
+  // Aclaración funcional M3.2: sólo aparece en la pantalla inicial (#p-inicio), antes de iniciar
+  // el análisis -- ahí era donde no había ningún retorno visible. En Resultados (#p-res, análisis
+  // iniciado o mostrado) NO se agrega ni se duplica acá: se conservan el histórico dentro de
+  // Historial y el retorno condicional de URB-RET-01, que ya cubrían ese caso. Se detecta la
+  // pantalla activa igual que el resto del archivo (element.style.display, ver back() más arriba)
+  // -- sin variable ni estado nuevo. Se arma ANTES del early-return de "sin más módulos" para que
+  // aparezca aun si caiNavItems() viniera vacío.
+  var enPantallaInicial = document.getElementById('p-inicio') && document.getElementById('p-inicio').style.display !== 'none';
+  if(enPantallaInicial){
+    const bVolver = document.createElement('button');
+    bVolver.className = 'cai-item';
+    bVolver.id = 'btn-volver-organismo-menu';
+    bVolver.textContent = etiquetaVolverMenu;
+    bVolver.addEventListener('click', function(){ menu.classList.remove('open'); irAIncorporarEnCore(); });
+    menu.appendChild(bVolver);
+  }
   const items = caiNavItems();
   if(!items.length){
     const v = document.createElement('div'); v.className = 'vacio';
@@ -10499,6 +10510,8 @@ function construirModulosMenu(){
     b.addEventListener('click', function(){ menu.classList.remove('open'); it[1](); });
     menu.appendChild(b);
   });
+  // No reemplaza "Comprender AI →" (primer ítem de la lista de arriba, via caiIrA() -- nav
+  // genérica sin organismo ni canal) ni el retorno condicional de URB-RET-01: ambos siguen igual.
 }
 function abrirModulosMenu(boton){
   const menu = document.getElementById('modulosMenu');
@@ -10709,6 +10722,7 @@ function permitirOperacion(tipo){
    Se toma una sola vez y se descarta, para no reaplicarlo en cada recarga. */
 var __organismoIdCoreUrbanismo = null;   // 14/08: capturado acá para el handoff automático de vuelta
 var marcoOrganismoNombre = null;   // 14/08: capturado para la etiqueta de continuidad
+var etiquetaVolverMenu = '← Abrir Comprender';   // M3.2 (23/09): default seguro antes de la primera pintarContinuidadUrbanismo(); valor real, ver esa función más abajo
 
 /* 124-M0.3-R1 (14/09): única función que pinta el botón de regreso y el badge de continuidad --
    se llama tanto en la recepción fresca como en la recuperación tras recargar (misma fuente de
@@ -10740,17 +10754,21 @@ function pintarContinuidadUrbanismo(){
   try{
     var t = (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.t) ? ComprenderI18n.t : function(s){ return s; };
     // M3.1 (23/09): mismo texto, mismas claves de i18n ya existentes (t('Volver al organismo')/
-    // t('Volver a Comprender AI'), ya traducidas en lib/i18n.js para EN/PT -- no se agrega
-    // ninguna clave nueva), ahora sincronizado en LOS TRES controles que ejecutan
-    // irAIncorporarEnCore(): el histórico dentro de #hist-panel, y los dos nuevos de este corte
-    // (header de #p-inicio y topbar compartido de #p-res). Un solo cálculo, tres asignaciones.
+    // t('Volver a Comprender AI'), ya traducidas en lib/i18n.js para EN/PT), sincronizado en el
+    // botón histórico dentro de #hist-panel.
     var etiquetaVolver = '→ ' + (__organismoIdCoreUrbanismo ? t('Volver al organismo') : t('Volver a Comprender AI'));
     var btn = document.getElementById('btn-volver-comprender-core');
     if(btn) btn.textContent = etiquetaVolver;
-    var btnHeaderInicio = document.getElementById('btn-volver-organismo-cai');
-    if(btnHeaderInicio) btnHeaderInicio.textContent = etiquetaVolver;
-    var btnHeaderRes = document.getElementById('btn-volver-organismo-res');
-    if(btnHeaderRes) btnHeaderRes.textContent = etiquetaVolver;
+    // M3.2 (23/09): los dos botones fijos de header de M3.1 se sacaron (ver notas más arriba,
+    // header de #p-inicio y topbar de #p-res) -- la acción de retorno se reubicó como una única
+    // entrada dentro del menú Aplicaciones (construirModulosMenu()). 'Volver al organismo en
+    // Comprender' reutiliza la clave i18n existente (la misma que ya usa el retorno especializado
+    // de URB-RET-01, urbRet01Render() -- ya traducida EN/PT). 'Abrir Comprender' es clave nueva,
+    // agregada a lib/i18n.js (EN: "Open Comprender", PT: "Abrir Comprender" -- mismo verbo). Si el
+    // menú Aplicaciones está abierto en este momento, se sincroniza también su botón en vivo.
+    etiquetaVolverMenu = '← ' + (__organismoIdCoreUrbanismo ? t('Volver al organismo en Comprender') : t('Abrir Comprender'));
+    var btnMenu = document.getElementById('btn-volver-organismo-menu');
+    if(btnMenu) btnMenu.textContent = etiquetaVolverMenu;
     var ind = document.getElementById('contexto-indicador');
     if(!ind) return;
     if(!__organismoIdCoreUrbanismo){ ind.style.display = 'none'; return; }
