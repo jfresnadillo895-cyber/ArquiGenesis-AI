@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.comprenderai.app",
+      "sha256_cert_fingerprints": [
+        "94:65:05:AE:C6:70:AB:5D:B9:C5:F4:37:0F:6F:8D:C2:30:48:FB:1C:04:28:41:ED:BA:C5:08:85:B7:FC:99:60"
+      ]
+    }
+  }
+]
