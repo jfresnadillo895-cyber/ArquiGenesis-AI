@@ -7,7 +7,8 @@
       "namespace": "android_app",
       "package_name": "com.comprenderai.app",
       "sha256_cert_fingerprints": [
-        "94:65:05:AE:C6:70:AB:5D:B9:C5:F4:37:0F:6F:8D:C2:30:48:FB:1C:04:28:41:ED:BA:C5:08:85:B7:FC:99:60"
+        "94:65:05:AE:C6:70:AB:5D:B9:C5:F4:37:0F:6F:8D:C2:30:48:FB:1C:04:28:41:ED:BA:C5:08:85:B7:FC:99:60",
+        "B3:5A:97:B8:D6:A8:EC:7C:91:E3:77:BF:FE:D7:3E:54:11:B3:5E:20:26:27:5B:39:CA:BE:4D:43:6F:22:83:69"
       ]
     }
   }
