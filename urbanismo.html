@@ -2400,6 +2400,7 @@ canvas{animation:none !important}
     <div class="metodo-seccion">
       <h4>Los 36 indicadores</h4>
       <p>Cada dimensión se despliega en 6 indicadores que describen aspectos específicos. Cada indicador se evalúa con un valor de 0 a 10 y se pondera por dos factores:</p>
+      <p>El sistema articula 36 elementos: 18 activos, utilizados para construir el diagnóstico, y 18 receptivos, desarrollados posteriormente en el Abordaje Proyectivo.</p>
       <ul>
         <li><strong>Persistencia Temporal (PT):</strong> ¿hace cuánto tiempo existe y con qué continuidad?</li>
         <li><strong>Alcance Poblacional (AP):</strong> ¿a qué proporción de la población afecta?</li>
@@ -2421,7 +2422,7 @@ canvas{animation:none !important}
     </div>
 
     <div style="background:var(--gris);border-radius:8px;padding:.85rem 1rem;font-size:11px;color:var(--texto3);line-height:1.6">
-      Comprender · Urbanismo está basado en una metodología propia de análisis sistémico desarrollada en Argentina desde 2015. El sistema no reemplaza el juicio profesional — lo amplifica, integrando múltiples fuentes de conocimiento en un diagnóstico coherente.
+      <span>Comprender · Urbanismo se basa en una metodología propia de análisis sistémico desarrollada en Argentina a partir de una investigación iniciada en 2006 y formalizada en Geometría Urbana en 2008. Desde entonces evolucionó hasta su implementación actual en Comprender.</span> El sistema no reemplaza el juicio profesional — lo amplifica, integrando múltiples fuentes de conocimiento en un diagnóstico coherente.
     </div>
 
     <div class="modal-btns" style="margin-top:1rem">
@@ -2487,7 +2488,7 @@ canvas{animation:none !important}
   <div class="carga-sub" id="carga-sub">Este proceso puede tomar entre 15 y 30 segundos</div>
   <div class="carga-pasos" id="carga-pasos">
     <div class="carga-paso" id="cp-0"><div class="carga-paso-dot"></div>Recopilando información del territorio</div>
-    <div class="carga-paso" id="cp-1"><div class="carga-paso-dot"></div>Evaluando los 36 indicadores</div>
+    <div class="carga-paso" id="cp-1"><div class="carga-paso-dot"></div>Evaluando los indicadores activos</div>
     <div class="carga-paso" id="cp-2"><div class="carga-paso-dot"></div>Aplicando ponderación PT + AP</div>
     <div class="carga-paso" id="cp-3"><div class="carga-paso-dot"></div>Calculando ciclos de control</div>
     <div class="carga-paso" id="cp-4"><div class="carga-paso-dot"></div>Generando síntesis diagnóstica</div>
@@ -2765,7 +2766,7 @@ canvas{animation:none !important}
 <div id="p-res">
   <div class="topbar">
     <div class="cai-head"><comprender-mark variant="compact" size="30" phase="spiral_deployment" aria-hidden="true"></comprender-mark><div><div class="cai-titulo">Comprender <span class="s">·</span> <b>Urbanismo</b></div><div class="cai-baja">Versión profesional</div></div></div>
-    <div class="tb-ciudad"><h2 id="r-ciudad">—</h2><p>36 indicadores</p></div>
+    <div class="tb-ciudad"><h2 id="r-ciudad">—</h2><p>Diagnóstico sistémico</p></div>
     <span style="flex:1"></span>
     <div style="display:flex;gap:6px;align-items:center">
       <button class="btn-back" onclick="nuevaCiudad()" title="Nueva ciudad">+</button>
@@ -2832,7 +2833,7 @@ canvas{animation:none !important}
       <div class="err-box" id="err-box-res"></div>
       <div class="subtabs">
         <button class="subtab on" onclick="subtab(0)">Resumen</button>
-        <button class="subtab" onclick="subtab(1)">36 Indicadores</button>
+        <button class="subtab" onclick="subtab(1)">Indicadores evaluados</button>
         <button class="subtab" onclick="subtab(2)">9 Dimensiones</button>
         <button class="subtab" onclick="subtab(3)" style="border-color:#2C6B5C;color:#2C6B5C" id="subtab-pond">🎯 Ajustar ponderación</button>
       </div>
@@ -2921,7 +2922,7 @@ canvas{animation:none !important}
       <div id="card-contexto"></div>
       <div id="st1" style="display:none">
         <div class="card">
-          <div class="ctitle">Los 36 indicadores del sistema</div>
+          <div class="ctitle">Indicadores activos del diagnóstico</div>
           <div style="overflow-x:auto">
             <table class="tbl">
               <thead><tr><th>#</th><th>Dimensión</th><th>Grupo</th><th>Valor</th><th>PT</th><th>AP</th><th>Coef.</th><th>Ponderado</th><th>Confianza</th></tr></thead>
@@ -7366,7 +7367,7 @@ let cargaPasoActual = 0;
 const CARGA_PASOS = {
   diagnostico: [
     {txt:'Recopilando información del territorio',   sub:'Buscando datos públicos verificados...'},
-    {txt:'Evaluando los 36 indicadores',             sub:'Aplicando el sistema de análisis sistémico...'},
+    {txt:'Evaluando los indicadores activos',        sub:'Aplicando el sistema de análisis sistémico...'},
     {txt:'Aplicando ponderación PT + AP',            sub:'Calculando el impacto real de cada indicador...'},
     {txt:'Calculando ciclos de control',             sub:'Identificando palancas de intervención...'},
     {txt:'Generando síntesis diagnóstica',           sub:'Construyendo el diagnóstico completo...'},
