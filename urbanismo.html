@@ -4,6 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comprender · Urbanismo — versión profesional</title>
+<!-- 124-URB-VIS-02 Corte A: metadatos sociales para el umbral público (LinkedIn/Twitter/genérico).
+     No existían en la base productiva congelada (confirmado por grep en la Fase 1 del audit --
+     "no social meta tags"). og:image apunta a urbanismo-og.png, entregado junto a este candidato
+     como asset final, servido desde la misma raíz que urbanismo.html. -->
+<meta name="description" content="Comprender · Urbanismo interpreta las relaciones reales de un territorio -- institucionales, patrimoniales, sociales, productivas -- y devuelve un diagnóstico sistémico, no un informe genérico. Basado en ARQUIGÉNESIS, investigación original de Javier Fresnadillo.">
+<link rel="canonical" href="https://app.comprenderai.com/urbanismo.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Comprender">
+<meta property="og:title" content="Comprender · Urbanismo — versión profesional">
+<meta property="og:description" content="Descubrí las relaciones que organizan un territorio antes de intervenirlo. Diagnóstico, Validación y Abordaje Proyectivo -- un método con dos décadas de investigación.">
+<meta property="og:url" content="https://app.comprenderai.com/urbanismo.html">
+<meta property="og:image" content="https://app.comprenderai.com/urbanismo-og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="es_AR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Comprender · Urbanismo — versión profesional">
+<meta name="twitter:description" content="Descubrí las relaciones que organizan un territorio antes de intervenirlo.">
+<meta name="twitter:image" content="https://app.comprenderai.com/urbanismo-og.png">
 <!-- MARCA-VIVA-01 (11/09): componente de la marca viva (define <comprender-mark>). -->
 <script src="/comprender-mark.js"></script>
 <!-- 209 AG · I18N ES/EN -->
@@ -314,10 +333,15 @@
     if(h.charAt(0) === '#') h = h.slice(1);
     if(!h) return null;
     var p = {};
-    h.split('&').forEach(function(par){
-      var kv = par.split('=');
-      if(kv[0]) p[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
-    });
+    /* Corte A-R1: un hash malformado (% que no es un escape porcentual válido) se trata igual
+       que la ausencia de hash -- ver comentario arriba de esta función en el diff para el
+       porqué. No cambia nada para ningún hash bien formado. */
+    try{
+      h.split('&').forEach(function(par){
+        var kv = par.split('=');
+        if(kv[0]) p[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
+      });
+    }catch(e){ return null; }
     return p.access_token ? p : null;
   }
   function limpiarHash(){
@@ -1521,7 +1545,28 @@
     if(h && h.type === 'recovery'){ limpiarHash(); return { modo: 'nueva_clave', extra: { token: h.access_token, refresco: h.refresh_token || '' } }; }
     return null;
   })();
-  if(_arranqueInicial) portal('', _arranqueInicial.modo, _arranqueInicial.extra);
+  /* 124-URB-VIS-02 Corte C (C-01): la detección de arriba (_arranqueInicial, con su
+     limpiarQuery()/limpiarHash() de un solo uso) se queda exactamente donde estaba, síncrona,
+     por la misma razón ya documentada (ganarle la carrera al fetch de arranque). Lo único que
+     cambia es CUÁNDO se llama a portal(): este script corre entero dentro de <head>, antes de
+     que el parser llegue a <body> -- document.body es null en este punto en una carga real en
+     frío con estos query params, y portal() revienta en su primer document.body.appendChild
+     (hallazgo reproducido en control negativo, ver repro_c01_control_negativo.json). Se difiere
+     únicamente la llamada a portal() -- nunca la detección ni el procesamiento del token -- a un
+     punto determinístico: inmediata si document.body ya existe (cubre cualquier caso en que este
+     script se cargara después de <body>), o al primer DOMContentLoaded si todavía no existe. Se
+     ejecuta como máximo una vez (guardado tanto por _arranqueInicial, que ya se resuelve una sola
+     vez arriba, como por {once:true} en la rama diferida) y no agrega ningún listener cuando no
+     hace falta (el bloque completo queda adentro de "if(_arranqueInicial)"). */
+  if(_arranqueInicial){
+    if(document.body){
+      portal('', _arranqueInicial.modo, _arranqueInicial.extra);
+    }else{
+      document.addEventListener('DOMContentLoaded', function(){
+        portal('', _arranqueInicial.modo, _arranqueInicial.extra);
+      }, { once: true });
+    }
+  }
 
   // GATE-01B (25/08): mismo mecanismo de los Cortes AD/AE de arriba, aplicado a un caso que se
   // les habia escapado. El segundo <script> de esta pagina dispara su propio fetch de arranque
@@ -1556,9 +1601,99 @@
     return { session: s, esGoogle: esGoogle };
   })();
 
+  /* 124-URB-VIS-02 Corte A: umbral público. Estas dos funciones y el export en window son el único
+     puente entre este script (candado v6, privado dentro de la IIFE de <head>) y el resto del
+     documento -- tokenVigente(), portal(), portalAbierto y arrancar() siguen siendo privados,
+     nada de esto los reemplaza ni los reimplementa. mostrarUmbralPublico() sólo agrega una clase a
+     <html>; toda la lógica de qué se ve queda en el CSS de #umb-css (ver el fragmento del umbral,
+     más abajo en <body>). abrirPortalDesdeUmbral() reutiliza portal('') tal cual ya existía --
+     no se reconstruye login, Google, correo ni contraseña -- y le agrega un botón "← Volver" que
+     no existía antes (confirmado por grep: capa.remove() sólo ocurría en los 5 call-sites de éxito
+     de autenticación). Ese botón se agrega desde afuera del propio portal(), sin tocar su código. */
+  function mostrarUmbralPublico(){
+    document.documentElement.classList.add('cai-anonimo');
+  }
+  function abrirPortalDesdeUmbral(){
+    document.documentElement.classList.add('cai-portal-abierto');
+    portal('');
+    var capa = document.getElementById('comprenderPortal');
+    if(!capa) return;
+    /* 124-URB-VIS-02 Corte C (C-02): "← Volver" se agregaba una sola vez, como hijo directo de
+       capa, por fuera de portal(). Cada cambio de vista real (ingreso->registro,
+       ingreso->recuperar, etc.) dispara pintar() dentro de portal(), que hace
+       capa.innerHTML = vista() -- eso borra cualquier hijo agregado desde afuera, incluido este
+       botón, y nunca se volvía a agregar. Arreglo mínimo, sin tocar portal()/pintar(): un
+       MutationObserver que sólo mira los hijos directos de ESTA capa (la que abrió el umbral) y
+       repone el botón cada vez que falta, de forma idempotente (getElementById ya evita
+       duplicados). Se autodesconecta la primera vez que nota que capa ya no está en el documento
+       (isConnected) -- cubre tanto el cierre por "← Volver" como cualquiera de los 5 cierres por
+       login exitoso ya existentes dentro de portal(), sin necesidad de tocar esos call-sites. */
+    function asegurarVolver(){
+      if(!capa.isConnected){ if(obs) obs.disconnect(); return; }
+      if(document.getElementById('umbralVolver')) return;
+      var volver = document.createElement('button');
+      volver.id = 'umbralVolver';
+      volver.type = 'button';
+      volver.textContent = '← Volver';
+      volver.style.cssText = 'position:absolute;top:18px;left:18px;background:none;border:none;' +
+        'font-size:14px;color:#777;text-decoration:underline;cursor:pointer;z-index:2;' +
+        'font-family:system-ui,-apple-system,sans-serif;';
+      volver.addEventListener('click', function(){
+        if(obs) obs.disconnect();
+        capa.remove();
+        portalAbierto = false;
+        document.documentElement.classList.remove('cai-portal-abierto');
+      });
+      capa.appendChild(volver);
+    }
+    asegurarVolver();
+    var obs = new MutationObserver(asegurarVolver);
+    obs.observe(capa, { childList: true });
+  }
+  window.__umbralPublico = { abrir: abrirPortalDesdeUmbral };
+
+  /* 124-URB-VIS-02 Corte A-R1: único punto central de "autenticación confirmada". portal()
+     ya llamaba a window.alConfirmarSesion() en sus 5 call-sites de éxito (ingreso, registro,
+     recuperación/nueva clave, confirmación de cuenta) -- ese hook YA EXISTÍA, sin definir, en
+     la base productiva congelada (confirmado por grep contra urbanismo_PRE.html, idéntico ahí
+     también) -- no se tocó una sola línea de portal() ni de sus 5 call-sites para esto.
+     Definirlo acá cierra el hallazgo real de la revisión independiente: sin esto, un login
+     interactivo desde el umbral cerraba el portal pero dejaba #p-inicio oculto por cai-anonimo
+     y el umbral oculto por cai-portal-abierto -- pantalla vacía. Costo documentado: los 5
+     call-sites ya llaman sincronizarSaldo() por su cuenta (sin encadenarla), así que este hook
+     la vuelve a llamar una vez más -- una lectura de perfil de más, de sólo lectura, sin gasto
+     de crédito -- a cambio de no tocar ninguna línea dentro de portal(). */
+  function alConfirmarSesion(){
+    document.documentElement.classList.remove('cai-anonimo');
+    document.documentElement.classList.remove('cai-portal-abierto');
+    document.documentElement.classList.add('cai-sesion-resuelta');
+    sincronizarSaldo().then(verificarAccesoModulo);
+  }
+  window.alConfirmarSesion = alConfirmarSesion;
+
   function arrancar(){
-    if(_arranqueInicial) return;
+    /* 124-URB-VIS-02 Corte A-R1: cai-sesion-resuelta ya NO se agrega acá arriba, incondicional
+       -- hallazgo real de la revisión independiente: con un token vencido que necesita
+       renovación por red (refrescar(), línea ~352), marcarla acá dejaba una ventana real donde
+       #p-inicio quedaba visible (nada lo ocultaba todavía: cai-anonimo depende de una decisión
+       que recién se toma más abajo) antes de saber si el visitante termina anónimo o
+       autenticado. Ahora se agrega en cada rama, en el mismo instante en que esa rama ya tomó
+       su decisión real -- nunca antes. */
+    if(_arranqueInicial){
+      // Portal de recuperación/confirmación ya abierto de forma síncrona más arriba (ver
+      // _arranqueInicial) -- cubre toda la pantalla (position:fixed, inset:0, z-index:99999);
+      // revelar #p-inicio detrás es seguro acá: ningún camino de esta rama termina en
+      // "anónimo, ocultar #p-inicio" -- o el portal completa con éxito (alConfirmarSesion
+      // revela el producto real) o queda abierto, igual que en la producción congelada, donde
+      // #p-inicio siempre estuvo visible detrás de este mismo portal.
+      document.documentElement.classList.add('cai-sesion-resuelta');
+      return;
+    }
     if(_hashInicial){
+      // Mismo razonamiento: ningún camino de acá abajo termina en "anónimo" -- o hay sesión
+      // (magic link/invitación) o se abre el gate de consentimiento de Google, otro overlay
+      // que también cubre toda la pantalla. Seguro revelar #p-inicio ya.
+      document.documentElement.classList.add('cai-sesion-resuelta');
       // MB2 (21/08): mismo hash que ya leia arrancar() para magic link/invitacion -- Google
       // OAuth vuelve con el mismo formato (#access_token=...), asi que no hace falta un parser
       // nuevo. Lo unico nuevo es esRetornoGoogle(): si la marca dice que este viaje de ida y
@@ -1578,7 +1713,13 @@
       return;
     }
     tokenVigente().then(function(t){
-      if(!t) portal('');
+      // Acá sí importa el orden: recién ahora se sabe si hay token, así que recién ahora se
+      // marca la sesión como resuelta -- cubre sin token, token válido, y token vencido con
+      // renovación (exitosa, fallida o lenta: refrescar(), línea ~352, siempre resuelve esta
+      // promesa tarde o temprano, nunca queda colgada -- todo camino, incluido el catch de
+      // red, termina en resolve(null)).
+      document.documentElement.classList.add('cai-sesion-resuelta');
+      if(!t) mostrarUmbralPublico();
       else sincronizarSaldo().then(verificarAccesoModulo);
     });
   }
@@ -2519,6 +2660,378 @@ canvas{animation:none !important}
   <div id="teConfig"></div>
 </div>
 <div id="modulosMenu"></div>
+
+<!-- 124-URB-VIS-02 Corte A (candidato local, sin desplegar): umbral público para el visitante
+     anónimo del arranque normal. Oculto por defecto vía CSS hasta que el script de sesión, más
+     abajo en este mismo archivo, resuelve el estado real y agrega la clase correspondiente a
+     <html> -- así se evita cualquier parpadeo entre estados (ver bloque "arrancar()" más abajo,
+     y el diff exclusivo para el detalle línea por línea). No hace ninguna llamada de red propia.
+     Todo el contenido reutiliza los tokens de color/tipografía ya definidos en :root más arriba
+     en este mismo archivo (--azul, --texto, --borde, --mono, --grid-max, --sombra, etc.) -- no
+     se redefine ningún color nuevo salvo los 6 de asignación cromática real por dimensión,
+     tomados de ECFG (ver comentario en la sección de colores más abajo). Todas las clases e ids
+     nuevos llevan el prefijo "umb-"/"umbral-" para no colisionar con ninguna clase/id existente
+     (.card, .btn, .chip, .head, .hero y .wrap ya existen en el CSS real de este archivo con
+     otro significado -- confirmado por grep antes de escribir esto). -->
+<style id="umb-css">
+html:not(.cai-sesion-resuelta) #umbral-publico,
+html:not(.cai-sesion-resuelta) #p-inicio{display:none!important}
+html.cai-sesion-resuelta:not(.cai-anonimo) #umbral-publico{display:none!important}
+html.cai-anonimo #p-inicio{display:none!important}
+html.cai-portal-abierto #umbral-publico{display:none!important}
+/* Corte A-R1: precedencia explícita -- un modo lectura (#share=) realmente activado gana
+   siempre sobre el umbral público, sin importar el estado de sesión. cai-modo-lectura sólo lo
+   agrega mostrarModoLectura() (ver más abajo en <body>), nunca por la sola presencia textual
+   de #share= en el hash -- esa función sólo corre tras decodificar y parsear el payload con
+   éxito (ver verificarModoLectura(), que ya envuelve eso en try/catch). #p-inicio ya queda
+   cubierto sin necesidad de una regla nueva: mostrarModoLectura() lo oculta por estilo en
+   línea, y ninguna regla con !important de este bloque lo vuelve a mostrar cuando sólo está
+   presente cai-sesion-resuelta (la única forma de ganarle a un estilo en línea es otra regla
+   !important más específica, y no existe ninguna que reaparezca #p-inicio en ese caso). */
+html.cai-modo-lectura #umbral-publico{display:none!important}
+#umbral-publico{font-family:'Inter',system-ui,-apple-system,sans-serif;color:var(--texto);background:#F7F6F3;line-height:1.5}
+#umbral-publico *{box-sizing:border-box}
+#umbral-publico .umb-wrap{max-width:var(--grid-max);margin:0 auto;padding:0 28px}
+#umbral-publico .umb-eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--texto3);font-weight:500}
+#umbral-publico h1,#umbral-publico h2,#umbral-publico h3{font-family:'DM Sans','Inter','IBM Plex Sans',system-ui,sans-serif;font-weight:700;color:var(--texto);margin:0}
+#umbral-publico p{margin:0}
+#umbral-publico .umb-btn{display:inline-flex;align-items:center;gap:8px;font-family:'DM Sans','Inter',sans-serif;font-weight:600;font-size:15px;padding:13px 22px;border-radius:14px;border:1.5px solid transparent;cursor:pointer;text-decoration:none;white-space:nowrap}
+#umbral-publico .umb-btn-primary{background:var(--azul);color:#fff;box-shadow:var(--sombra)}
+#umbral-publico .umb-btn-ghost{background:transparent;color:var(--azul);border-color:var(--azul-borde)}
+#umbral-publico .umb-btn-text{background:none;border:none;color:var(--texto2);font-size:14px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap}
+#umbral-publico header.umb-top{position:sticky;top:0;z-index:20;background:rgba(247,246,243,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--borde)}
+#umbral-publico header.umb-top .umb-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 28px;max-width:var(--grid-max);margin:0 auto}
+#umbral-publico .umb-brand{display:flex;align-items:center;gap:10px;min-width:0}
+#umbral-publico .umb-brand-text{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+#umbral-publico .umb-brand-text b{font-family:'DM Sans',sans-serif;font-weight:700;font-size:16px;white-space:nowrap}
+#umbral-publico .umb-brand-text span{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--texto3);text-transform:uppercase;white-space:nowrap}
+#umbral-publico .umb-ingresar-full{display:inline}
+@media (max-width:640px){#umbral-publico .umb-ingresar-full{display:none} #umbral-publico .umb-brand-text span{display:none}}
+#umbral-publico .umb-hero{padding:64px 0 60px}
+#umbral-publico .umb-hero-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:52px;align-items:center}
+#umbral-publico .umb-hero .umb-eyebrow{margin-bottom:18px}
+#umbral-publico .umb-hero h1{font-size:42px;line-height:1.14;letter-spacing:-.01em}
+#umbral-publico .umb-hero .umb-sub{margin-top:22px;font-size:18px;color:var(--texto2);line-height:1.55}
+#umbral-publico .umb-hero .umb-ctas{margin-top:32px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+#umbral-publico .umb-hero .umb-micro{margin-top:14px;font-size:13px;color:var(--texto3)}
+#umbral-publico .umb-hero-visual{display:flex;flex-direction:column;align-items:center;gap:16px}
+#umbral-publico .umb-rel-diagram{position:relative;width:100%;max-width:360px;aspect-ratio:1}
+#umbral-publico .umb-rel-lines{position:absolute;inset:0;width:100%;height:100%}
+#umbral-publico .umb-rel-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--card);border-radius:50%;padding:9px;box-shadow:var(--sombra);z-index:2}
+#umbral-publico .umb-rel-chip{position:absolute;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--borde);border-radius:10px;padding:6px 10px;font-family:var(--mono);font-size:11px;color:var(--texto2);box-shadow:0 1px 2px rgba(28,42,58,.05);text-align:center;line-height:1.25;z-index:1}
+#umbral-publico .umb-rel-chip b{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle}
+#umbral-publico .umb-rel-chip.umb-top,#umbral-publico .umb-rel-chip.umb-bottom{max-width:44%}
+#umbral-publico .umb-rel-chip.umb-side{max-width:32%}
+#umbral-publico .umb-rel-caption{font-size:13px;color:var(--texto3);text-align:center;max-width:340px;line-height:1.55}
+#umbral-publico section{padding:56px 0;border-top:1px solid var(--borde)}
+#umbral-publico section .umb-head{max-width:56ch;margin-bottom:34px}
+#umbral-publico section .umb-head h2{font-size:27px;margin-top:10px;line-height:1.25}
+#umbral-publico section .umb-head .umb-sub{margin-top:10px;color:var(--texto2);font-size:15.5px}
+#umbral-publico .umb-grid-4{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+#umbral-publico .umb-card{background:var(--card);border:1px solid var(--borde);border-radius:16px;padding:22px 24px}
+#umbral-publico .umb-card .umb-eyebrow{margin-bottom:10px}
+#umbral-publico .umb-card h3{font-size:17px;line-height:1.3}
+#umbral-publico .umb-card p{margin-top:10px;font-size:14.5px;color:var(--texto2);line-height:1.6}
+#umbral-publico .umb-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
+#umbral-publico .umb-step{background:var(--card);border:1px solid var(--borde);border-radius:16px;padding:24px}
+#umbral-publico .umb-step + .umb-step{margin-left:18px}
+#umbral-publico .umb-step .umb-n{width:34px;height:34px;border-radius:50%;background:var(--azul-c);color:var(--azul);font-family:var(--mono);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:14px;margin-bottom:14px}
+#umbral-publico .umb-step h3{font-size:16px}
+#umbral-publico .umb-step p{margin-top:8px;font-size:14px;color:var(--texto2);line-height:1.55}
+#umbral-publico .umb-recorrido-nota{margin-top:18px;font-size:13px;color:var(--texto3)}
+#umbral-publico .umb-demo-card{background:var(--card);border:1px solid var(--borde);border-radius:20px;padding:0;overflow:hidden;box-shadow:var(--sombra);position:relative}
+#umbral-publico .umb-demo-badge{position:absolute;top:18px;right:18px;z-index:5;background:var(--ocre);color:#fff;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;padding:6px 11px;border-radius:8px;text-transform:uppercase;text-align:right;max-width:46%}
+#umbral-publico .umb-demo-head{position:relative;padding:24px 140px 24px 28px;border-bottom:1px solid var(--borde);background:var(--card2)}
+#umbral-publico .umb-demo-head h3{font-size:19px}
+#umbral-publico .umb-demo-head .umb-loc{font-family:var(--mono);font-size:12px;color:var(--texto3);margin-top:4px}
+#umbral-publico .umb-demo-body{padding:26px 28px}
+#umbral-publico .umb-demo-disclaimer{background:var(--azul-c);border:1px solid var(--azul-borde);border-radius:10px;padding:11px 14px;font-size:12.5px;color:var(--azul);margin-bottom:22px;line-height:1.5}
+#umbral-publico .umb-score-row{display:flex;align-items:center;gap:22px;margin-bottom:24px;flex-wrap:wrap}
+#umbral-publico .umb-score-num{font-family:var(--mono);font-size:40px;font-weight:700;color:var(--azul)}
+#umbral-publico .umb-score-tag{background:var(--verde-c);color:var(--verde);font-family:var(--mono);font-size:11px;padding:5px 10px;border-radius:8px;text-transform:uppercase;letter-spacing:.06em}
+#umbral-publico .umb-dim-row{display:grid;grid-template-columns:170px 1fr 40px;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--gris);font-size:13.5px}
+#umbral-publico .umb-dim-row:last-child{border-bottom:none}
+#umbral-publico .umb-dim-bar{height:8px;border-radius:5px;background:var(--gris);overflow:hidden}
+#umbral-publico .umb-dim-bar i{display:block;height:100%;border-radius:5px}
+#umbral-publico .umb-dim-val{font-family:var(--mono);text-align:right;color:var(--texto2)}
+#umbral-publico .umb-demo-foot{padding:18px 28px;background:var(--card2);border-top:1px solid var(--borde);font-size:13px;color:var(--texto3)}
+#umbral-publico .umb-demo-cta{padding:22px 28px;display:flex;justify-content:flex-end}
+#umbral-publico .umb-timeline{display:flex;gap:0;margin-top:8px}
+#umbral-publico .umb-tl-item{flex:1;position:relative;padding:0 18px 0 0}
+#umbral-publico .umb-tl-item .umb-dot{width:11px;height:11px;border-radius:50%;background:var(--ocre);margin-bottom:14px}
+#umbral-publico .umb-tl-item .umb-line{position:absolute;top:5px;left:11px;right:-18px;height:1px;background:var(--borde2)}
+#umbral-publico .umb-tl-item:last-child .umb-line{display:none}
+#umbral-publico .umb-tl-item .umb-yr{font-family:var(--mono);font-size:13px;color:var(--ocre);font-weight:700}
+#umbral-publico .umb-tl-item .umb-desc{margin-top:6px;font-size:13.5px;color:var(--texto2);line-height:1.55}
+#umbral-publico .umb-genealogia-p{margin-top:30px;font-size:15px;color:var(--texto2);line-height:1.7;max-width:66ch;border-left:3px solid var(--ocre-2);padding-left:20px}
+#umbral-publico .umb-continuidad-row{display:flex;align-items:center;gap:16px;margin-top:24px;flex-wrap:wrap}
+#umbral-publico .umb-chip{font-family:var(--mono);font-size:12.5px;padding:9px 16px;border-radius:10px;background:var(--card2);border:1px solid var(--borde);color:var(--texto2)}
+#umbral-publico .umb-chip.umb-on{background:var(--azul);color:#fff;border-color:var(--azul)}
+#umbral-publico .umb-arrow{color:var(--texto3);font-size:15px}
+#umbral-publico .umb-cta-final{text-align:center;padding:70px 0}
+#umbral-publico .umb-cta-final h2{font-size:28px}
+#umbral-publico .umb-cta-final .umb-row{margin-top:26px;display:flex;justify-content:center;gap:14px;flex-wrap:wrap}
+#umbral-publico footer.umb-legal{padding:24px 0 48px;text-align:center}
+#umbral-publico footer.umb-legal p{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--texto3);text-transform:uppercase}
+@media (max-width:840px){
+  #umbral-publico .umb-hero-grid{grid-template-columns:1fr}
+  #umbral-publico .umb-grid-4{grid-template-columns:1fr}
+  #umbral-publico .umb-steps{grid-template-columns:1fr;gap:14px}
+  #umbral-publico .umb-step + .umb-step{margin-left:0}
+  #umbral-publico .umb-hero h1{font-size:32px}
+  #umbral-publico .umb-hero .umb-sub{font-size:16px}
+  #umbral-publico .umb-timeline{flex-direction:column;gap:22px}
+  #umbral-publico .umb-tl-item .umb-line{display:none}
+  #umbral-publico .umb-dim-row{grid-template-columns:110px 1fr 36px;font-size:12.5px}
+  #umbral-publico section .umb-head h2{font-size:22px}
+  #umbral-publico .umb-wrap{padding:0 18px}
+  #umbral-publico .umb-demo-head{padding:24px 24px}
+  #umbral-publico .umb-demo-badge{position:static;display:inline-block;margin-bottom:12px;max-width:none}
+}
+</style>
+<div id="umbral-publico">
+<header class="umb-top">
+  <div class="umb-row">
+    <div class="umb-brand">
+      <comprender-mark size="30" phase="spiral_deployment"></comprender-mark>
+      <div class="umb-brand-text">
+        <b>Comprender · Urbanismo</b>
+        <span>Una capacidad fundadora de Comprender</span>
+      </div>
+    </div>
+    <button class="umb-btn-text" id="umbBtnIngresarTop"><span class="umb-ingresar-full">¿Ya tenés cuenta? </span>Ingresar</button>
+  </div>
+</header>
+
+<section class="umb-hero">
+  <div class="umb-wrap umb-hero-grid">
+    <div class="umb-hero-content">
+      <p class="umb-eyebrow">COMPRENDER · URBANISMO</p>
+      <h1>Descubrí las relaciones que organizan un territorio antes de intervenirlo.</h1>
+      <p class="umb-sub">Una lectura sistémica de ciudades, barrios y proyectos urbanos a partir de
+        las relaciones que los constituyen.</p>
+      <div class="umb-ctas">
+        <button class="umb-btn umb-btn-primary" id="umbBtnComprender1">Comprender un territorio →</button>
+        <a class="umb-btn umb-btn-ghost" href="#umb-caso-demo">Ver un ejemplo</a>
+      </div>
+      <p class="umb-micro">Podés recorrer esta página entera antes de crear una cuenta.</p>
+    </div>
+
+    <div class="umb-hero-visual">
+      <div class="umb-rel-diagram">
+        <!-- Colores reales por dimensión, tomados de ECFG (definido más abajo en este mismo
+             archivo) vía VOCABULARIO.urban -- no son colores inventados para el umbral:
+             CIVILIZACIÓN->Marco Institucional #2E7D32, MENTE->Intención Proyectual #5C6B7D,
+             CULTURA->Patrimonio y Expresión #2E5A87, EMOCIÓN->Cohesión Social #A03A28,
+             CUERPO FÍSICO->Actor Territorial #5F4585, HISTORIA->Dinámica Territorial #9C5A20. -->
+        <svg class="umb-rel-lines" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
+          <line x1="200" y1="200" x2="200" y2="52"  stroke="#D3CFC6" stroke-width="1"/>
+          <line x1="200" y1="200" x2="328" y2="126" stroke="#D3CFC6" stroke-width="1"/>
+          <line x1="200" y1="200" x2="328" y2="274" stroke="#D3CFC6" stroke-width="1"/>
+          <line x1="200" y1="200" x2="200" y2="348" stroke="#D3CFC6" stroke-width="1"/>
+          <line x1="200" y1="200" x2="72"  y2="274" stroke="#D3CFC6" stroke-width="1"/>
+          <line x1="200" y1="200" x2="72"  y2="126" stroke="#D3CFC6" stroke-width="1"/>
+          <circle cx="200" cy="52"  r="4" fill="#2E7D32"/>
+          <circle cx="328" cy="126" r="4" fill="#5C6B7D"/>
+          <circle cx="328" cy="274" r="4" fill="#2E5A87"/>
+          <circle cx="200" cy="348" r="4" fill="#A03A28"/>
+          <circle cx="72"  cy="274" r="4" fill="#9C5A20"/>
+          <circle cx="72"  cy="126" r="4" fill="#5F4585"/>
+        </svg>
+        <div class="umb-rel-center"><comprender-mark size="64" phase="organization" tone="color"></comprender-mark></div>
+        <div class="umb-rel-chip umb-top"    style="left:50%;top:13%"><b style="background:#2E7D32"></b>Marco Institucional</div>
+        <div class="umb-rel-chip umb-side"   style="left:82%;top:31.5%"><b style="background:#5C6B7D"></b>Intención Proyectual</div>
+        <div class="umb-rel-chip umb-side"   style="left:82%;top:68.5%"><b style="background:#2E5A87"></b>Patrimonio y Expresión</div>
+        <div class="umb-rel-chip umb-bottom" style="left:50%;top:87%"><b style="background:#A03A28"></b>Cohesión Social</div>
+        <div class="umb-rel-chip umb-side"   style="left:18%;top:68.5%"><b style="background:#9C5A20"></b>Dinámica Territorial</div>
+        <div class="umb-rel-chip umb-side"   style="left:18%;top:31.5%"><b style="background:#5F4585"></b>Actor Territorial</div>
+      </div>
+      <p class="umb-rel-caption">Seis dimensiones, un mismo territorio — el sistema y quien lo
+        habita, leídos en relación.</p>
+    </div>
+  </div>
+</section>
+
+<section id="umb-explicacion">
+  <div class="umb-wrap">
+    <div class="umb-head">
+      <p class="umb-eyebrow">ANTES DE EMPEZAR</p>
+      <h2>Qué es esto, en cuatro respuestas cortas</h2>
+    </div>
+    <div class="umb-grid-4">
+      <div class="umb-card">
+        <p class="umb-eyebrow">QUÉ SITUACIONES</p>
+        <h3>Territorios que no cierran fácil</h3>
+        <p>Un plan que no termina de resolverse. Un barrio que resiste una intervención. Un predio
+          con historia y sin diagnóstico. Comprender lee las relaciones reales del lugar —
+          institucionales, patrimoniales, sociales, productivas — antes de que se tome una decisión
+          sobre él.</p>
+      </div>
+      <div class="umb-card">
+        <p class="umb-eyebrow">QUÉ RECIBÍS</p>
+        <h3>Un diagnóstico, no un informe genérico</h3>
+        <p>Un diagnóstico sistémico del territorio, con sus tensiones y sus potenciales
+          identificados, y un abordaje proyectivo con niveles de intervención concretos —
+          específico de ese lugar, no una plantilla.</p>
+      </div>
+      <div class="umb-card">
+        <p class="umb-eyebrow">POR QUÉ NO ES UN CHATBOT NI UN GIS</p>
+        <h3>Interpreta, no conversa ni superpone capas</h3>
+        <p>No improvisa una respuesta ni apila capas de datos. Aplica una metodología propia — 36
+          indicadores, en modo automático o en modo experto — y devuelve una interpretación del
+          territorio, no una lista de coordenadas.</p>
+      </div>
+      <div class="umb-card">
+        <p class="umb-eyebrow">CÓMO SE ARMA EL DIAGNÓSTICO</p>
+        <h3>Lectura automática + lo que vos sabés del lugar</h3>
+        <p>El sistema hace una primera lectura solo. Después, quien conoce el territorio la valida,
+          la corrige y agrega lo que sólo alguien que estuvo ahí puede saber. El diagnóstico final
+          integra ambas lecturas.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="umb-recorrido">
+  <div class="umb-wrap">
+    <div class="umb-head">
+      <p class="umb-eyebrow">EL RECORRIDO</p>
+      <h2>El mismo recorrido que vas a hacer con tu propio territorio, explicado antes de empezar</h2>
+    </div>
+    <div class="umb-steps">
+      <div class="umb-step">
+        <div class="umb-n">1</div>
+        <h3>Diagnóstico</h3>
+        <p>El sistema lee el territorio en 6 dimensiones y 36 indicadores, y devuelve un primer
+          diagnóstico sistémico.</p>
+      </div>
+      <div class="umb-step">
+        <div class="umb-n">2</div>
+        <h3>Validación</h3>
+        <p>Vos revisás ese diagnóstico y lo ajustás con lo que sabés del lugar y no está en ningún
+          dato.</p>
+      </div>
+      <div class="umb-step">
+        <div class="umb-n">3</div>
+        <h3>Abordaje Proyectivo</h3>
+        <p>Comprender identifica dónde intervenir primero y propone una secuencia de acciones en
+          el tiempo.</p>
+      </div>
+    </div>
+    <p class="umb-recorrido-nota">Las tres etapas son reales: son las mismas que vas a atravesar con
+      tu propio territorio una vez que empieces.</p>
+  </div>
+</section>
+
+<section id="umb-caso-demo">
+  <div class="umb-wrap">
+    <div class="umb-head">
+      <p class="umb-eyebrow">EJEMPLO ILUSTRATIVO</p>
+      <h2>Así se ve un resultado — con valores demostrativos, no un diagnóstico real</h2>
+      <p class="umb-sub">Para que puedas ver el tipo de resultado antes de crear una cuenta. Estos
+        valores son demostrativos y no representan ningún territorio real.</p>
+    </div>
+    <div class="umb-demo-card">
+      <span class="umb-demo-badge">Ejemplo ilustrativo</span>
+      <div class="umb-demo-head">
+        <h3>Diagnóstico sistémico — ejemplo</h3>
+        <p class="umb-loc">TERRITORIO DE EJEMPLO · VALORES ILUSTRATIVOS</p>
+      </div>
+      <div class="umb-demo-body">
+        <p class="umb-demo-disclaimer">Estos valores son demostrativos y no representan ningún
+          territorio real.</p>
+        <div class="umb-score-row">
+          <div class="umb-score-num">3.6</div>
+          <span class="umb-score-tag">En desarrollo</span>
+          <span style="font-size:13px;color:var(--texto3)">Puntaje global ponderado · 6 dimensiones</span>
+        </div>
+        <div class="umb-dim-list">
+          <div class="umb-dim-row"><span>Intención Proyectual</span><div class="umb-dim-bar"><i style="width:88%;background:#5C6B7D"></i></div><span class="umb-dim-val">3.9</span></div>
+          <div class="umb-dim-row"><span>Cohesión Social</span><div class="umb-dim-bar"><i style="width:84%;background:#A03A28"></i></div><span class="umb-dim-val">3.8</span></div>
+          <div class="umb-dim-row"><span>Patrimonio y Expresión</span><div class="umb-dim-bar"><i style="width:80%;background:#2E5A87"></i></div><span class="umb-dim-val">3.6</span></div>
+          <div class="umb-dim-row"><span>Dinámica Territorial</span><div class="umb-dim-bar"><i style="width:77%;background:#9C5A20"></i></div><span class="umb-dim-val">3.5</span></div>
+          <div class="umb-dim-row"><span>Actor Territorial</span><div class="umb-dim-bar"><i style="width:74%;background:#5F4585"></i></div><span class="umb-dim-val">3.4</span></div>
+          <div class="umb-dim-row"><span>Marco Institucional</span><div class="umb-dim-bar"><i style="width:69%;background:#2E7D32"></i></div><span class="umb-dim-val">3.2</span></div>
+        </div>
+      </div>
+      <div class="umb-demo-foot">Con tu propio territorio, el diagnóstico continúa con Validación y
+        Abordaje Proyectivo dentro del sistema.</div>
+      <div class="umb-demo-cta">
+        <button class="umb-btn umb-btn-primary" id="umbBtnComprender2">Comprender tu propio territorio →</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="umb-genealogia">
+  <div class="umb-wrap">
+    <div class="umb-head">
+      <p class="umb-eyebrow">DE DÓNDE VIENE ESTE MÉTODO</p>
+      <h2>Dos décadas de investigación, convertidas en sistema.</h2>
+    </div>
+    <div class="umb-timeline">
+      <div class="umb-tl-item"><div class="umb-dot"></div><div class="umb-line"></div>
+        <div class="umb-yr">2006</div><div class="umb-desc">Investigación territorial iniciada.</div></div>
+      <div class="umb-tl-item"><div class="umb-dot"></div><div class="umb-line"></div>
+        <div class="umb-yr">2008</div><div class="umb-desc">Geometría Urbana — ARQUIGÉNESIS,
+          investigación original de Javier Fresnadillo.</div></div>
+      <div class="umb-tl-item"><div class="umb-dot"></div>
+        <div class="umb-yr">Hoy</div><div class="umb-desc">Comprender · Urbanismo — la misma
+          lectura sistémica, ahora ejecutada por el sistema.</div></div>
+    </div>
+    <p class="umb-genealogia-p">Comprender · Urbanismo se basa en una metodología propia de análisis
+      sistémico, desarrollada a partir de una investigación iniciada en 2006 y formalizada en
+      <i>Geometría Urbana</i> en 2008. Es ARQUIGÉNESIS, la investigación original de Javier
+      Fresnadillo, llevada a un sistema que se puede usar hoy.</p>
+  </div>
+</section>
+
+<section id="umb-continuidad">
+  <div class="umb-wrap">
+    <div class="umb-head">
+      <p class="umb-eyebrow">Y DESPUÉS DEL DIAGNÓSTICO</p>
+      <h2>Esto no termina en el territorio</h2>
+      <p class="umb-sub">Un territorio comprendido puede continuar como organismo dentro de
+        Comprender, conservando su diagnóstico, las validaciones y la intención que orienta el
+        proceso. Urbanismo es la puerta de entrada; el organismo mantiene y desarrolla esa
+        comprensión.</p>
+    </div>
+    <div class="umb-continuidad-row">
+      <span class="umb-chip umb-on">Urbanismo</span><span class="umb-arrow">→</span>
+      <span class="umb-chip">Organismo</span><span class="umb-arrow">→</span>
+      <span class="umb-chip">Comprender</span>
+    </div>
+  </div>
+</section>
+
+<section class="umb-cta-final" style="border-top:1px solid var(--borde)">
+  <div class="umb-wrap">
+    <h2>Empezá por tu propio territorio.</h2>
+    <div class="umb-row">
+      <button class="umb-btn umb-btn-primary" id="umbBtnComprender3">Comprender un territorio →</button>
+      <button class="umb-btn-text" id="umbBtnIngresarBottom">¿Ya tenés cuenta? Ingresar</button>
+    </div>
+  </div>
+</section>
+
+<footer class="umb-legal">
+  <p>Comprender · Urbanismo — versión profesional · Un producto de ARQUIGÉNESIS</p>
+</footer>
+</div>
+
+<script>
+/* 124-URB-VIS-02 Corte A: cablea los botones del umbral público al portal real, expuesto como
+   window.__umbralPublico por el <script> del candado (arriba, en <head>) -- ver el comentario
+   junto a esa función. Este <script> vive después del propio umbral en el documento, así que
+   los botones ya existen en el DOM cuando esto corre. No hace ninguna llamada de red. */
+(function(){
+  var ids = ['umbBtnComprender1','umbBtnComprender2','umbBtnComprender3','umbBtnIngresarTop','umbBtnIngresarBottom'];
+  ids.forEach(function(id){
+    var el = document.getElementById(id);
+    if(el && window.__umbralPublico) el.addEventListener('click', window.__umbralPublico.abrir);
+  });
+})();
+</script>
 
 <div id="p-inicio">
   <header class="cai-header">
@@ -7750,6 +8263,13 @@ function verificarModoLectura(){
 }
 
 function mostrarModoLectura(data){
+  // 124-URB-VIS-02 Corte A-R1: marca <html> para que el CSS del umbral público (definido más
+  // arriba, en <head>) nunca compita visualmente con el modo lectura -- precedencia explícita:
+  // modo lectura válido > umbral anónimo > producto autenticado. Sólo se agrega ACÁ ADENTRO,
+  // nunca por la sola presencia textual de #share= en el hash: verificarModoLectura() ya validó
+  // el payload (atob + JSON.parse dentro de un try/catch) antes de llamar a esta función, así
+  // que un hash inválido nunca dispara esta clase ni oculta nada.
+  document.documentElement.classList.add('cai-modo-lectura');
   // Ocultar todo y mostrar solo el modo lectura
   document.getElementById('p-inicio').style.display = 'none';
   document.getElementById('p-res').style.display = 'none';
