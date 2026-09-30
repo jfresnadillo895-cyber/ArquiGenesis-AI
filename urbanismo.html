@@ -152,170 +152,6 @@
     };
   }
 
-  /* ---------- AUT-EXP-01 OLA 1-B (30/09) · adquisicion y analytics minimos --------------------
-     anonymous_id (localStorage, persiste), session_id (sessionStorage, por pestaña) y el
-     contexto de adquisicion (entry_point/path/referrer/UTM/idioma/device_class, capturado una
-     sola vez por pestaña y preservado durante todo el flujo umbral->portal->signup). Nada de
-     esto es fingerprinting: son valores random generados por este mismo codigo o datos que ya
-     llegan en la URL/navegador (UTM, referrer, ancho de viewport). Todo lo que sale de aca via
-     analyticsEmitirPublico()/analyticsEmitirAutenticado() es best-effort real, igual que
-     registrarSenalVital() en index.html: nunca usa await, nunca deja escapar una excepcion ni
-     una promesa rechazada, no puede bloquear render ni ningun flujo de cuenta. */
-  var LLAVE_ANON = 'comprender_anonymous_id';
-  var LLAVE_SESION_AN = 'comprender_session_id';
-  var LLAVE_ADQ = 'comprender_adquisicion_ctx';
-
-  function uuidAleatorio(){
-    return (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID()
-      : 'an-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + '-' + Math.random().toString(36).slice(2);
-  }
-  function obtenerAnonymousId(){
-    try{
-      var v = localStorage.getItem(LLAVE_ANON);
-      if(v) return v;
-      v = uuidAleatorio();
-      localStorage.setItem(LLAVE_ANON, v);
-      return v;
-    }catch(e){ return null; }
-  }
-  function obtenerSessionIdAnalytics(){
-    try{
-      var v = sessionStorage.getItem(LLAVE_SESION_AN);
-      if(v) return v;
-      v = uuidAleatorio();
-      sessionStorage.setItem(LLAVE_SESION_AN, v);
-      return v;
-    }catch(e){ return null; }
-  }
-  function capturarContextoAdquisicion(){
-    try{
-      var existente = sessionStorage.getItem(LLAVE_ADQ);
-      if(existente) return JSON.parse(existente);
-    }catch(e){}
-    var qp = null;
-    try{ qp = new URLSearchParams(location.search); }catch(e){}
-    var ancho = window.innerWidth || 0;
-    var ctx = {
-      entry_point: 'urbanismo',
-      path: location.pathname,
-      referrer: (document.referrer || '').slice(0, 1024),
-      utm_source:   qp ? qp.get('utm_source')   : null,
-      utm_medium:   qp ? qp.get('utm_medium')   : null,
-      utm_campaign: qp ? qp.get('utm_campaign') : null,
-      utm_content:  qp ? qp.get('utm_content')  : null,
-      utm_term:     qp ? qp.get('utm_term')     : null,
-      language: document.documentElement.lang || (navigator.language || '').slice(0, 16) || null,
-      device_class: ancho < 768 ? 'mobile' : (ancho < 1024 ? 'tablet' : 'desktop')
-    };
-    try{ sessionStorage.setItem(LLAVE_ADQ, JSON.stringify(ctx)); }catch(e){}
-    return ctx;
-  }
-  function leerContextoAdquisicion(){
-    try{
-      var existente = sessionStorage.getItem(LLAVE_ADQ);
-      if(existente) return JSON.parse(existente);
-    }catch(e){}
-    return capturarContextoAdquisicion();
-  }
-
-  // EV-001/002/003 -- camino publico, sin sesion. recurso:'analytics_public' (ver api/comm.js),
-  // interceptado ahi ANTES del gate de autenticacion -- no reusa el fetch de bandejaFetch ni
-  // ningun envoltorio global (esta pagina no tiene uno para /api/comm, a proposito: no existe
-  // sesion todavia en el umbral).
-  function analyticsEmitirPublico(eventName, extra){
-    try{
-      var ctx = leerContextoAdquisicion();
-      fetch('/api/comm', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          recurso: 'analytics_public', event_id: uuidAleatorio(), event_name: eventName,
-          anonymous_id: obtenerAnonymousId(), session_id: obtenerSessionIdAnalytics(),
-          entry_point: ctx.entry_point, path: ctx.path, referrer: ctx.referrer,
-          utm_source: ctx.utm_source, utm_medium: ctx.utm_medium, utm_campaign: ctx.utm_campaign,
-          utm_content: ctx.utm_content, utm_term: ctx.utm_term,
-          language: ctx.language, device_class: ctx.device_class,
-          occurred_at: new Date().toISOString(), metadata: extra || {}
-        })
-      }).catch(function(){});
-    }catch(e){}
-  }
-
-  // EV-004 -- camino autenticado. Se llama SOLO desde los puntos donde ya existe sesion real
-  // (ver registrar()/portal() mas abajo), nunca antes. Adjunta el Bearer a mano -- esta pagina
-  // no tiene el envoltorio global de fetch que si tiene index.html.
-  function analyticsEmitirAutenticado(eventName, token, extra){
-    try{
-      var ctx = leerContextoAdquisicion();
-      fetch('/api/comm', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({
-          recurso: 'analytics', accion: 'ingresar_completado',
-          event_id: uuidAleatorio(), event_name: eventName,
-          anonymous_id: obtenerAnonymousId(), session_id: obtenerSessionIdAnalytics(),
-          entry_point: ctx.entry_point, path: ctx.path, referrer: ctx.referrer,
-          utm_source: ctx.utm_source, utm_medium: ctx.utm_medium, utm_campaign: ctx.utm_campaign,
-          utm_content: ctx.utm_content, utm_term: ctx.utm_term,
-          language: ctx.language, device_class: ctx.device_class,
-          occurred_at: new Date().toISOString(), metadata: extra || {}
-        })
-      }).catch(function(){});
-    }catch(e){}
-  }
-
-  // Bridge de identidad -- NO es un evento canonico. Reasocia (server-side) los eventos
-  // anonimos previos a la cuenta recien autenticada. p_anonymousIdOverride se usa cuando el
-  // identificador que hay que preservar no es el de ESTE navegador sino el que viajo en
-  // user_metadata (ver analyticsCerrarSignup, caso de confirmacion cross-device).
-  function analyticsEjecutarBridge(token, anonymousIdOverride){
-    try{
-      fetch('/api/comm', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({
-          recurso: 'analytics', accion: 'asociar_identidad',
-          anonymous_id: anonymousIdOverride || obtenerAnonymousId(),
-          session_id: obtenerSessionIdAnalytics()
-        })
-      }).catch(function(){});
-    }catch(e){}
-  }
-
-  // Cierre real de signup (los dos caminos: alta directa infrecuente y confirmacion por
-  // correo) -- SIEMPRE emite EV-004 + ejecuta el bridge, nunca uno sin el otro. Lee
-  // user_metadata.comprender_acquisition_id (guardado en el alta, ver registrar() mas abajo)
-  // porque es el unico identificador que sobrevive si la confirmacion se abre en otro
-  // dispositivo/navegador -- el anonymous_id de ESTE navegador puede no ser el mismo que iba
-  // acumulando eventos anonimos en el dispositivo de origen.
-  function analyticsCerrarSignup(token){
-    analyticsEmitirAutenticado('app_signup_completed', token, {});
-    try{
-      obtenerUsuario(token).then(function(u){
-        var acqId = u && u.user_metadata && u.user_metadata.comprender_acquisition_id;
-        analyticsEjecutarBridge(token, acqId || null);
-      }).catch(function(){ analyticsEjecutarBridge(token, null); });
-    }catch(e){ analyticsEjecutarBridge(token, null); }
-  }
-
-  // CORRECCION C (pre-staging, 30/09) -- auditoria pedida por Javier: ¿existe ya una señal
-  // determinista, sin infraestructura nueva, de que una cuenta de Google recien se creo? SI:
-  // GoTrue (el objeto que ya devuelve /auth/v1/user, ya se usa via obtenerUsuario -- ninguna
-  // llamada nueva) trae created_at (fijo, momento de creacion de la cuenta) y last_sign_in_at
-  // (se actualiza en CADA inicio de sesion exitoso, incluido el primero). Para una cuenta nueva,
-  // esta MISMA sesion es tambien el primer inicio de sesion: ambos timestamps se fijan en el
-  // mismo request de Google/Supabase, a milisegundos de distancia. En cualquier login posterior
-  // de la MISMA cuenta, last_sign_in_at ya quedo muy por delante de created_at (minutos, dias,
-  // lo que sea). Umbral generoso (2 minutos) para absorber latencia de red/reloj sin perder
-  // precision -- una vuelta real a esta pantalla de consentimiento mas de 2 minutos despues de
-  // creada la cuenta ya no puede confundirse con el alta misma.
-  function analyticsEsAltaGoogleNueva(u){
-    if(!u || !u.created_at || !u.last_sign_in_at) return false;
-    var creado = Date.parse(u.created_at), entrado = Date.parse(u.last_sign_in_at);
-    if(isNaN(creado) || isNaN(entrado)) return false;
-    return Math.abs(entrado - creado) <= 120000;
-  }
-
   /* ---------- llamadas a Supabase ---------- */
   function auth(ruta, cuerpo){
     return fetch(SB_URL + '/auth/v1/' + ruta, {
@@ -334,10 +170,6 @@
         var s = desdeRespuesta(r.datos);
         if(!s) return { ok:false, mensaje:'Respuesta inesperada del servidor.' };
         guardar(s);
-        // AUT-EXP-01 OLA 1-B (30/09): login de cuenta existente -- NUNCA dispara app_signup_completed,
-        // solo el bridge de identidad (mismo navegador/pestaña, anonymous_id/session_id locales
-        // siguen siendo los correctos porque no hay salto de dispositivo en este camino).
-        analyticsEjecutarBridge(s.token, obtenerAnonymousId());
         return { ok:true };
       })
       .catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor. Revisá tu conexión.' }; });
@@ -354,25 +186,14 @@
 
   /* ---------- alta de cuenta ---------- */
   function registrar(correo, clave, consentimiento){
-    // AUT-EXP-01 OLA 1-B (30/09): EV-003, antes de pedir el alta. Sin correo en el payload.
-    analyticsEmitirPublico('app_signup_started', {});
     var destino = location.origin + location.pathname;
-    // comprender_acquisition_id viaja en user_metadata (mismo mecanismo que ya usa este alta
-    // para el consentimiento -- ningun endpoint/tabla nueva) para poder cerrar el bridge de
-    // identidad aunque la confirmacion del correo se abra en otro dispositivo/navegador, donde
-    // el anonymous_id de localStorage de ESTE navegador ya no está disponible. No es PII: un
-    // UUID sin significado personal, igual que anonymous_id.
-    var adquisicion = { comprender_acquisition_id: obtenerAnonymousId() };
-    var cuerpo = { email: correo, password: clave, data: consentimiento ? Object.assign({}, consentimiento, adquisicion) : adquisicion };
+    var cuerpo = { email: correo, password: clave };
+    if(consentimiento){ cuerpo.data = consentimiento; }
     return auth('signup?redirect_to=' + encodeURIComponent(destino), cuerpo)
       .then(function(r){
         if(!r.ok) return { ok:false, mensaje: mensajeRegistro(r) };
         var s = desdeRespuesta(r.datos);
-        if(s){
-          guardar(s);
-          analyticsCerrarSignup(s.token);   // confirmacion automatica, poco comun -- EV-004 + bridge
-          return { ok:true, sesion:true };
-        }
+        if(s){ guardar(s); return { ok:true, sesion:true }; }   // confirmacion automatica, poco comun
         return { ok:true, sesion:false };                        // caso normal: espera el correo
       })
       .catch(function(){ return { ok:false, mensaje:'No se pudo contactar al servidor. Revisá tu conexión.' }; });
@@ -878,12 +699,7 @@
               return;
             }
             guardar(sesion);
-            portalAbierto=false; capa.remove(); sincronizarSaldo();
-            // AUT-EXP-01 OLA 1-B (30/09): camino real de EV-004 para el caso comun (confirmacion
-            // por correo) -- puede ser otro dispositivo/navegador que el que arranco el alta, ver
-            // analyticsCerrarSignup() y el comentario sobre comprender_acquisition_id en registrar().
-            analyticsCerrarSignup(sesion.token);
-            if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
+            portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
           });
         }
         accion.addEventListener('click', intentarConfirmar);
@@ -907,25 +723,7 @@
           };
           guardarConsentimiento(extra.token, consentimiento).then(function(r){
             if(!r.ok){ ocupado(false,'Continuar'); avisoEl.textContent = r.mensaje; return; }
-            portalAbierto=false; capa.remove(); sincronizarSaldo();
-            // CORRECCION C (pre-staging, 30/09): ya NO se trata "primera vez que completa el
-            // consentimiento" como sinonimo de "alta nueva" -- una cuenta de Google vieja que
-            // por el motivo que sea nunca habia completado el consentimiento (por ejemplo, si
-            // este requisito se agrego despues de que esa cuenta ya existia) tambien llegaria
-            // aca la primera vez, y eso NO es un alta, es un login. La señal real y determinista
-            // (ver analyticsEsAltaGoogleNueva, calculada en arrancar() con el `u` recien
-            // resuelto de /auth/v1/user, sin ninguna llamada nueva) es created_at ~= last_sign_
-            // in_at: solo entonces esta pantalla es, en los hechos, el alta real de esa cuenta
-            // -- recien ahi se trata como cierre real de signup (EV-004 + bridge), simetrico al
-            // otro camino de alta (correo). En cualquier otro caso -- incluida CUALQUIER vuelta
-            // posterior de la misma cuenta de Google, con o sin consentimiento ya completo --
-            // es login: solo bridge, nunca app_signup_completed.
-            if(extra.esAltaNueva){
-              analyticsCerrarSignup(extra.token);
-            }else{
-              analyticsEjecutarBridge(extra.token, obtenerAnonymousId());
-            }
-            if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
+            portalAbierto=false; capa.remove(); sincronizarSaldo(); if(typeof window.alConfirmarSesion === 'function'){ try{ window.alConfirmarSesion(); }catch(e){} }
           });
         }
         accion.addEventListener('click', intentarConsentirG);
@@ -1852,12 +1650,7 @@
     var obs = new MutationObserver(asegurarVolver);
     obs.observe(capa, { childList: true });
   }
-  // AUT-EXP-01 OLA 1-B (30/09): mismo puente que ya existía (abrir) -- se agrega emitirCta,
-  // usado sólo por el <script> de cableado de los CTA, más abajo en <body>.
-  window.__umbralPublico = {
-    abrir: abrirPortalDesdeUmbral,
-    emitirCta: function(ctaId){ analyticsEmitirPublico('web_cta_click', { cta_id: ctaId }); }
-  };
+  window.__umbralPublico = { abrir: abrirPortalDesdeUmbral };
 
   /* 124-URB-VIS-02 Corte A-R1: único punto central de "autenticación confirmada". portal()
      ya llamaba a window.alConfirmarSesion() en sus 5 call-sites de éxito (ingreso, registro,
@@ -1879,12 +1672,6 @@
   window.alConfirmarSesion = alConfirmarSesion;
 
   function arrancar(){
-    // AUT-EXP-01 OLA 1-B (30/09): EV-001, una sola vez por carga real de esta pagina --
-    // arrancar() en si mismo solo corre una vez por carga (DOMContentLoaded o directo, ver el
-    // llamado mas abajo), asi que no hace falta ningun guard adicional. No depende de ninguna
-    // rama de abajo (anonimo o autenticado) ni puede bloquearlas: es fire-and-forget puro.
-    capturarContextoAdquisicion();
-    analyticsEmitirPublico('web_page_view', {});
     /* 124-URB-VIS-02 Corte A-R1: cai-sesion-resuelta ya NO se agrega acá arriba, incondicional
        -- hallazgo real de la revisión independiente: con un token vencido que necesita
        renovación por red (refrescar(), línea ~352), marcarla acá dejaba una ventana real donde
@@ -1917,26 +1704,8 @@
       // el gate de consentimiento (si corresponde), que es async.
       if(_hashInicial.esGoogle){
         obtenerUsuario(_hashInicial.session.token).then(function(u){
-          if(u && tieneConsentimientoCompleto(u)){
-            // AUT-EXP-01 OLA 1-B (30/09): login exitoso con Google -- solo el bridge de
-            // identidad (mismo navegador/pestaña que arrancó el OAuth, redirect_to vuelve al
-            // mismo origin), NUNCA app_signup_completed. Ya tenemos `u` de obtenerUsuario(),
-            // no hace falta otra llamada.
-            analyticsEjecutarBridge(_hashInicial.session.token, obtenerAnonymousId());
-            sincronizarSaldo().then(verificarAccesoModulo);
-          }
-          else{
-            // CORRECCION C (30/09): esAltaNueva viaja calculado desde ACA -- unico lugar donde
-            // se tiene `u` recien resuelto de /auth/v1/user -- hasta intentarConsentirG(), que
-            // decide con esto (y ya no con "es la primera vez que completa el consentimiento",
-            // señal que podia confundir un login real de una cuenta vieja que por algun motivo
-            // nunca habia completado el consentimiento con un alta nueva).
-            portal('', 'consentir_google', {
-              token: _hashInicial.session.token,
-              correo: (u && u.email) || '',
-              esAltaNueva: analyticsEsAltaGoogleNueva(u)
-            });
-          }
+          if(u && tieneConsentimientoCompleto(u)){ sincronizarSaldo().then(verificarAccesoModulo); }
+          else{ portal('', 'consentir_google', { token: _hashInicial.session.token, correo: (u && u.email) || '' }); }
         });
         return;
       }
@@ -3257,23 +3026,9 @@ html.cai-modo-lectura #umbral-publico{display:none!important}
    los botones ya existen en el DOM cuando esto corre. No hace ninguna llamada de red. */
 (function(){
   var ids = ['umbBtnComprender1','umbBtnComprender2','umbBtnComprender3','umbBtnIngresarTop','umbBtnIngresarBottom'];
-  // AUT-EXP-01 OLA 1-B (30/09): EV-002 sólo en los dos CTA que pidió el encargo -- ni en
-  // umbBtnComprender2 (demo, fuera de alcance de este corte) ni en los botones "Ingresar"
-  // (no son el CTA de conversión que interesa medir acá). No se toca abrirPortalDesdeUmbral()
-  // -- se le agrega el emit ANTES, en este mismo listener, sin cambiar su firma ni su uso
-  // desde los otros 3 botones.
-  var idsConEV002 = ['umbBtnComprender1','umbBtnComprender3'];
   ids.forEach(function(id){
     var el = document.getElementById(id);
-    if(!el || !window.__umbralPublico) return;
-    if(idsConEV002.indexOf(id) > -1){
-      el.addEventListener('click', function(ev){
-        window.__umbralPublico.emitirCta(id);
-        window.__umbralPublico.abrir(ev);
-      });
-    }else{
-      el.addEventListener('click', window.__umbralPublico.abrir);
-    }
+    if(el && window.__umbralPublico) el.addEventListener('click', window.__umbralPublico.abrir);
   });
 })();
 </script>
