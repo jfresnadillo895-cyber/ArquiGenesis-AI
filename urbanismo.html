@@ -5660,6 +5660,7 @@ async function llamarAPI(ciudad,pasivo,c2,ref){
   // MISMOS insumos dejó fases ya resueltas en el checkpoint, se reusan en vez de rederivarlas.
   // Distinto organismo/ciudad/insumos = firma distinta = fasesPrevias vacío = comportamiento
   // idéntico al de siempre (validación 3 del brief).
+  urbRet02SepararCiudadStandalone(ciudad);
   const organismoIdCap = (typeof __organismoIdCoreUrbanismo!=='undefined' && __organismoIdCoreUrbanismo) || null;
   const firmaCap = firmaCheckpointUrbanismo(ciudad, organismoIdCap, pasivo, c2, ref);
   const fasesPrevias = fasesResumiblesDeCheckpoint(firmaCap);
@@ -10896,7 +10897,21 @@ function urbRet02GuardarMintedPersistido(organismId, specialtyStudyRef, ciudad){
   }catch(e){ /* si falla el guardado, el próximo clic simplemente vuelve a mint -- mismo peor caso
     que el comportamiento previo a este corte, nunca uno peor. */ }
 }
+// La identidad creada desde Urbanismo pertenece a su ciudad. Antes de calcular
+// el checkpoint o devolver el diagnóstico, descarta el puntero de otra ciudad.
+// Una identidad entregada por Core que no coincide con este registro se conserva.
+function urbRet02SepararCiudadStandalone(ciudad){
+  var previo = urbRet02CargarMintedPersistido();
+  if(!previo || previo.ciudad === (ciudad || null)) return;
+  if(CX5U.organismId === previo.organismId){
+    cx5uLimpiarIdentidadActual();
+  }
+  if(typeof __organismoIdCoreUrbanismo !== 'undefined' && __organismoIdCoreUrbanismo === previo.organismId){
+    __organismoIdCoreUrbanismo = null;
+  }
+}
 function urbRet02AsegurarOrganismId(){
+  urbRet02SepararCiudadStandalone((typeof diagData !== 'undefined' && diagData && diagData.ciudad) || null);
   if(CX5U.organismId && typeof CX5U.specialtyStudyRef === 'string' && CX5U.specialtyStudyRef.indexOf('urbanctx_') === 0){
     return { organismId: CX5U.organismId, specialtyStudyRef: CX5U.specialtyStudyRef };
   }
