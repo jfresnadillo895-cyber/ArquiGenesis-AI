@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Comprender · Tablero V0 de Medición (interno)</title>
+<!-- PASO 7 (01/10): Tablero V0 de Medición -- pagina interna de staff, no linkeada desde ningun
+     menu publico (acceso solo por URL directa). Consume el endpoint ya existente y autorizado
+     en el Paso 6, GET /api/comm?recurso=metricas&dias=N, protegido por X-Staff-Key -- esta
+     pagina NO toca Supabase directamente, NO toca analytics_events/comm_events/SV1/
+     analytics_embudo_diario, y no trae sesion de usuario de la app (candado.txt no aplica aca:
+     la proteccion es la clave de staff, no Supabase Auth). Archivo nuevo, unico, sin build y sin
+     dependencias nuevas -- misma regla de la casa que el resto de las paginas de este repo.
+
+     LA CLAVE DE ACCESO (STAFF_API_KEY, vista por quien usa esta pagina como "Clave de acceso")
+       - vive solo en una variable JS en memoria (closure), nunca en localStorage/sessionStorage;
+       - nunca se imprime por console.log ni se manda a ningun lado salvo el header
+         X-Staff-Key de la llamada a /api/comm -- mismo origen, sin CORS;
+       - se pierde al refrescar la pagina o cerrar la pestaña, a proposito: no hay "recordarme".
+
+     QUE MUESTRA: solo lo que la vista analytics_embudo_diario ya da (ver Paso 4/5): conteos
+     independientes por evento/origen/dia/organizacion. NO es un embudo de conversion real --
+     por eso la leyenda de abajo es visible en la pantalla, no solo un comentario de codigo. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root{
+  /* Mismos tokens de identidad que urbanismo.html (:root, linea 2059) -- se copia el subconjunto
+     que esta pagina usa, no el archivo completo. */
+  --azul:#2E5A87;
+  --azul-2:#4A7BA8;
+  --azul-c:#EAF0F6;
+  --verde:#3E8C7A;
+  --verde-c:#E6F2EF;
+  --ocre:#B08A3E;
+  --rojo:#C1553F;
+  --borde:#E2DFD8;
+  --borde2:#D3CFC6;
+  --texto:#1C2A3A;
+  --texto2:#5C6B7D;
+  --texto3:#94A0AD;
+  --gris:#F1EFEA;
+  --inset:#F1EFEA;
+  --card:#FFFFFF;
+  --card2:#FAF9F6;
+  --sombra:0 1px 3px rgba(28,42,58,.06),0 8px 28px rgba(28,42,58,.08);
+  --mono:'IBM Plex Mono',monospace;
+  --grid-max:1080px;
+}
+
+*{box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;color:var(--texto);background:#F7F6F3;min-height:100vh;margin:0;padding:2rem 1.25rem}
+button{cursor:pointer;font-family:inherit}
+input{font-family:inherit;color:var(--texto);background:var(--gris);border:1px solid var(--borde);border-radius:6px}
+input:focus{outline:none;border-color:var(--azul);background:#FFF}
+
+.wrap{max-width:var(--grid-max);margin:0 auto}
+
+/* ---------- pantalla de clave ---------- */
+#p-clave{min-height:70vh;display:flex;align-items:center;justify-content:center}
+.main-card{background:var(--card);border:1px solid var(--borde);border-radius:8px;padding:2rem 2.25rem;width:100%;max-width:420px;box-shadow:var(--sombra)}
+.main-card h1{font-size:16px;font-weight:700;color:var(--azul-2);margin:0 0 .4rem;letter-spacing:-.01em}
+.main-card p{font-size:12.5px;color:var(--texto2);margin:0 0 1.4rem;line-height:1.6}
+.inp-row{display:flex;gap:8px}
+.inp-row input{flex:1;padding:12px 14px;font-size:14px}
+.btn-pri{padding:12px 20px;background:var(--azul);color:#FFF;border:none;border-radius:6px;font-size:13px;font-weight:700;white-space:nowrap;transition:background .15s}
+.btn-pri:hover{background:var(--azul-2)}
+.btn-pri:disabled{background:#aaa;cursor:not-allowed}
+.btn-sec{padding:8px 16px;background:var(--inset);border:1px solid var(--borde2);border-radius:6px;font-size:12px;font-weight:600;color:var(--texto2)}
+.btn-sec:hover{background:var(--card2)}
+.err-box{display:none;margin-top:.9rem;padding:.7rem .9rem;background:#FEF0EE;border:1px solid #F5C4B3;border-radius:7px;font-size:12px;color:#993C1D;line-height:1.5}
+.err-box.vis{display:block}
+.spinner{width:14px;height:14px;border:2px solid var(--azul);border-top-color:var(--texto3);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;vertical-align:-2px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- panel principal ---------- */
+#p-panel{display:none}
+#p-panel.vis{display:block}
+.panel-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1.1rem}
+.panel-top h1{font-size:17px;font-weight:700;color:var(--azul-2);margin:0;letter-spacing:-.01em}
+.panel-top .sub{font-size:12px;color:var(--texto3);margin-top:.2rem}
+.top-acciones{display:flex;align-items:center;gap:10px}
+
+.rango{display:flex;gap:6px}
+.rango button{padding:7px 14px;font-size:12px;font-weight:700;border:1px solid var(--borde2);border-radius:20px;background:var(--card);color:var(--texto2);transition:all .15s}
+.rango button.activo{background:var(--azul);color:#FFF;border-color:var(--azul)}
+.rango button:hover:not(.activo){background:var(--azul-c)}
+
+.leyenda{background:var(--azul-c);border:1px solid var(--borde2);border-radius:8px;padding:.85rem 1.1rem;font-size:12.5px;color:var(--azul);line-height:1.6;margin-bottom:1.4rem}
+.leyenda strong{color:var(--texto)}
+
+.bloque{background:var(--card);border:1px solid var(--borde);border-radius:8px;padding:1.4rem 1.5rem;margin-bottom:1.3rem;box-shadow:var(--sombra)}
+.bloque h2{font-size:14.5px;font-weight:700;color:var(--texto);margin:0 0 .15rem;letter-spacing:-.01em}
+.bloque .bloque-sub{font-size:11.5px;color:var(--texto3);margin:0 0 1rem}
+.bloque-total{font-size:28px;font-weight:700;color:var(--azul-2);margin:0 0 .15rem}
+.bloque-total-label{font-size:11px;color:var(--texto3);margin:0 0 1rem;text-transform:uppercase;letter-spacing:.04em}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:1.2rem}
+.chip{padding:5px 12px;font-size:11px;border:1px solid var(--borde);border-radius:20px;background:var(--card2);color:var(--texto2)}
+.chip b{color:var(--texto);font-family:var(--mono)}
+
+.evol-row{display:grid;grid-template-columns:86px 1fr 46px;align-items:center;gap:10px;margin-bottom:5px}
+.evol-fecha{font-size:11px;color:var(--texto3);font-family:var(--mono)}
+.evol-barra-fondo{background:var(--inset);border-radius:4px;height:14px;overflow:hidden}
+.evol-barra{background:var(--verde);height:100%;border-radius:4px;min-width:2px;transition:width .2s}
+.evol-cant{font-size:11px;color:var(--texto2);text-align:right;font-family:var(--mono)}
+
+table{width:100%;border-collapse:collapse;margin-top:.3rem}
+th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--texto3);font-weight:600;padding:7px 10px;border-bottom:1px solid var(--borde)}
+td{font-size:12px;color:var(--texto);padding:7px 10px;border-bottom:1px solid var(--gris);font-family:var(--mono)}
+tr:hover td{background:var(--card2)}
+.detalle-wrap{max-height:340px;overflow-y:auto;border:1px solid var(--gris);border-radius:6px}
+.sin-datos{font-size:12px;color:var(--texto3);padding:.6rem 0}
+
+.pie{text-align:center;margin-top:1.5rem;font-size:10px;color:var(--texto3);letter-spacing:.06em;text-transform:uppercase;font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- ══ pantalla de clave ══ -->
+  <div id="p-clave">
+    <div class="main-card">
+      <h1>Tablero V0 de Medición</h1>
+      <p>Acceso interno (staff). Ingresá la clave de acceso para continuar.</p>
+      <div class="inp-row">
+        <input type="password" id="in-clave" placeholder="Clave de acceso" autocomplete="off">
+        <button class="btn-pri" id="btn-entrar">Entrar</button>
+      </div>
+      <div class="err-box" id="err-clave"></div>
+    </div>
+  </div>
+
+  <!-- ══ panel principal ══ -->
+  <div id="p-panel">
+    <div class="panel-top">
+      <div>
+        <h1>Tablero V0 de Medición</h1>
+        <div class="sub">Comprender AI · interno</div>
+      </div>
+      <div class="top-acciones">
+        <div class="rango" id="rango">
+          <button data-dias="7">7 días</button>
+          <button data-dias="30" class="activo">30 días</button>
+          <button data-dias="90">90 días</button>
+        </div>
+        <button class="btn-sec" id="btn-salir">Salir</button>
+      </div>
+    </div>
+
+    <div class="leyenda">
+      <strong>Nota:</strong> estos son conteos independientes por evento, origen, día y organización
+      -- tal como los expone la vista <code>analytics_embudo_diario</code>. No hay un cruce entre
+      Adquisición y Comprensión, así que esto <strong>no es una tasa de conversión real</strong>,
+      solo volumen por evento.
+    </div>
+
+    <div id="estado-carga" class="err-box" style="background:var(--azul-c);border-color:var(--borde2);color:var(--azul)"></div>
+
+    <!-- Adquisición -->
+    <div class="bloque">
+      <h2>Adquisición</h2>
+      <div class="bloque-sub">web_page_view · web_cta_click · app_signup_started · app_signup_completed</div>
+      <div class="bloque-total" id="adq-total">—</div>
+      <div class="bloque-total-label">eventos en el período</div>
+      <div class="chips" id="adq-chips"></div>
+      <div id="adq-evolucion"></div>
+      <div class="detalle-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Evento</th><th>Origen</th><th>Cantidad</th></tr></thead>
+        <tbody id="adq-tabla"></tbody>
+      </table></div>
+    </div>
+
+    <!-- Comprensión -->
+    <div class="bloque">
+      <h2>Comprensión</h2>
+      <div class="bloque-sub">senal_comprension_iniciada · senal_comprension_confirmada · senal_retorno</div>
+      <div class="bloque-total" id="comp-total">—</div>
+      <div class="bloque-total-label">eventos en el período</div>
+      <div class="chips" id="comp-chips"></div>
+      <div id="comp-evolucion"></div>
+      <div class="detalle-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Evento</th><th>Origen</th><th>Cantidad</th></tr></thead>
+        <tbody id="comp-tabla"></tbody>
+      </table></div>
+    </div>
+
+    <div class="pie">Tablero V0 · Paso 7 · Comprender AI</div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  // La clave vive solo aca, en una variable de closure -- nunca localStorage/sessionStorage,
+  // nunca console.log, nunca se manda a otro lado que no sea el header X-Staff-Key de /api/comm.
+  var claveEnMemoria = '';
+  var diasActual = 30;
+
+  var ADQUISICION = ['web_page_view', 'web_cta_click', 'app_signup_started', 'app_signup_completed'];
+  var COMPRENSION = ['senal_comprension_iniciada', 'senal_comprension_confirmada', 'senal_retorno'];
+
+  var elClave     = document.getElementById('in-clave');
+  var btnEntrar   = document.getElementById('btn-entrar');
+  var errClave    = document.getElementById('err-clave');
+  var pClave      = document.getElementById('p-clave');
+  var pPanel      = document.getElementById('p-panel');
+  var btnSalir    = document.getElementById('btn-salir');
+  var rangoBox    = document.getElementById('rango');
+  var estadoCarga = document.getElementById('estado-carga');
+
+  function mostrarErrorClave(msg){
+    errClave.textContent = msg;
+    errClave.classList.add('vis');
+  }
+  function ocultarErrorClave(){
+    errClave.classList.remove('vis');
+    errClave.textContent = '';
+  }
+
+  function salir(){
+    claveEnMemoria = '';
+    elClave.value = '';
+    pPanel.classList.remove('vis');
+    pClave.style.display = 'flex';
+    ocultarErrorClave();
+  }
+  btnSalir.addEventListener('click', salir);
+
+  function entrar(){
+    var val = elClave.value || '';
+    if (!val) { mostrarErrorClave('Ingresá la clave de acceso.'); return; }
+    ocultarErrorClave();
+    btnEntrar.disabled = true;
+    btnEntrar.innerHTML = '<span class="spinner"></span>Verificando…';
+    claveEnMemoria = val;
+    cargarMetricas(function(okFn){
+      btnEntrar.disabled = false;
+      btnEntrar.textContent = 'Entrar';
+      if (okFn) {
+        pClave.style.display = 'none';
+        pPanel.classList.add('vis');
+      } else {
+        claveEnMemoria = ''; // no se conserva una clave que ya sabemos que es incorrecta
+      }
+    });
+  }
+  btnEntrar.addEventListener('click', entrar);
+  elClave.addEventListener('keydown', function(e){ if (e.key === 'Enter') entrar(); });
+
+  rangoBox.addEventListener('click', function(e){
+    var btn = e.target.closest('button[data-dias]');
+    if (!btn) return;
+    diasActual = Number(btn.getAttribute('data-dias'));
+    Array.prototype.forEach.call(rangoBox.querySelectorAll('button'), function(b){
+      b.classList.toggle('activo', b === btn);
+    });
+    cargarMetricas();
+  });
+
+  function fmtFecha(iso){
+    // "2026-09-30 00:00:00+00" / "2026-09-30T00:00:00+00:00" -> "30/09"
+    var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return String(iso);
+    return m[3] + '/' + m[2];
+  }
+
+  function renderBloque(prefijo, filas, eventos){
+    var propias = filas.filter(function(f){ return eventos.indexOf(f.evento) !== -1; });
+
+    // total del periodo
+    var total = propias.reduce(function(acc, f){ return acc + (Number(f.cantidad) || 0); }, 0);
+    document.getElementById(prefijo + '-total').textContent = total.toLocaleString('es-AR');
+
+    // chips por evento
+    var porEvento = {};
+    propias.forEach(function(f){
+      porEvento[f.evento] = (porEvento[f.evento] || 0) + (Number(f.cantidad) || 0);
+    });
+    var chipsBox = document.getElementById(prefijo + '-chips');
+    chipsBox.innerHTML = '';
+    eventos.forEach(function(ev){
+      var span = document.createElement('span');
+      span.className = 'chip';
+      span.innerHTML = ev + ': <b>' + (porEvento[ev] || 0).toLocaleString('es-AR') + '</b>';
+      chipsBox.appendChild(span);
+    });
+
+    // evolucion diaria (suma por dia, orden cronologico ascendente)
+    var porDia = {};
+    propias.forEach(function(f){
+      var k = String(f.dia);
+      porDia[k] = (porDia[k] || 0) + (Number(f.cantidad) || 0);
+    });
+    var dias = Object.keys(porDia).sort();
+    var evolBox = document.getElementById(prefijo + '-evolucion');
+    evolBox.innerHTML = '';
+    if (!dias.length) {
+      evolBox.innerHTML = '<div class="sin-datos">Sin datos en este rango.</div>';
+    } else {
+      var max = Math.max.apply(null, dias.map(function(d){ return porDia[d]; }));
+      dias.forEach(function(d){
+        var cant = porDia[d];
+        var pct = max > 0 ? Math.max(2, Math.round((cant / max) * 100)) : 2;
+        var row = document.createElement('div');
+        row.className = 'evol-row';
+        row.innerHTML =
+          '<div class="evol-fecha">' + fmtFecha(d) + '</div>' +
+          '<div class="evol-barra-fondo"><div class="evol-barra" style="width:' + pct + '%"></div></div>' +
+          '<div class="evol-cant">' + cant.toLocaleString('es-AR') + '</div>';
+        evolBox.appendChild(row);
+      });
+    }
+
+    // tabla de detalle (ya viene ordenada dia.desc,origen.asc,evento.asc desde el endpoint)
+    var tbody = document.getElementById(prefijo + '-tabla');
+    tbody.innerHTML = '';
+    if (!propias.length) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="4" class="sin-datos">Sin datos en este rango.</td>';
+      tbody.appendChild(tr);
+    } else {
+      propias.forEach(function(f){
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + fmtFecha(f.dia) + '</td>' +
+          '<td>' + f.evento + '</td>' +
+          '<td>' + f.origen + '</td>' +
+          '<td>' + (Number(f.cantidad) || 0).toLocaleString('es-AR') + '</td>';
+        tbody.appendChild(tr);
+      });
+    }
+  }
+
+  function cargarMetricas(callback){
+    estadoCarga.classList.add('vis');
+    estadoCarga.innerHTML = '<span class="spinner"></span>Cargando métricas…';
+
+    fetch('/api/comm?recurso=metricas&dias=' + encodeURIComponent(diasActual), {
+      method: 'GET',
+      headers: { 'X-Staff-Key': claveEnMemoria }
+    }).then(function(res){
+      if (res.status === 401) {
+        estadoCarga.classList.remove('vis');
+        if (callback) {
+          mostrarErrorClave('Clave incorrecta.');
+          callback(false);
+        } else {
+          // la sesion en memoria dejo de ser valida (p.ej. la clave cambio en el servidor):
+          // no insistimos silenciosamente, volvemos a pedirla.
+          salir();
+          mostrarErrorClave('La clave dejó de ser válida. Ingresala de nuevo.');
+        }
+        return null;
+      }
+      if (!res.ok) {
+        return res.json().catch(function(){ return null; }).then(function(cuerpo){
+          throw new Error((cuerpo && cuerpo.error && cuerpo.error.message) || ('Error ' + res.status));
+        });
+      }
+      return res.json();
+    }).then(function(data){
+      if (!data) return;
+      estadoCarga.classList.remove('vis');
+      var filas = Array.isArray(data.filas) ? data.filas : [];
+      renderBloque('adq', filas, ADQUISICION);
+      renderBloque('comp', filas, COMPRENSION);
+      if (callback) callback(true);
+    }).catch(function(err){
+      estadoCarga.classList.remove('vis');
+      estadoCarga.classList.add('vis');
+      estadoCarga.style.background = '#FEF0EE';
+      estadoCarga.style.borderColor = '#F5C4B3';
+      estadoCarga.style.color = '#993C1D';
+      estadoCarga.textContent = 'No se pudo cargar: ' + err.message;
+      if (callback) callback(false);
+    });
+  }
+
+})();
+</script>
+
+</body>
+</html>
