@@ -16,6 +16,8 @@
 //   GET  /api/comm?recurso=inbox                             -> listar bandeja (+ contador)
 //   GET  /api/comm?recurso=inbox&incluir_archivadas=1        -> listar bandeja, con archivadas
 //   GET  /api/comm?recurso=inbox&entry_id=...                -> detalle de una entrada
+//   GET  /api/comm?recurso=metricas&dias=30                  -> Tablero V0 (interno, X-Staff-Key,
+//                                                                ver bloque "metricas" mas abajo)
 //
 //   POST /api/comm   body siempre con { recurso, accion, ...datos }:
 //     { recurso:'events', accion:'ingresar',  event_id, version, type, producer,
@@ -52,6 +54,8 @@
 //   BREVO_API_KEY                        clave de API de Brevo (Corte D)
 //   BREVO_SENDER_EMAIL                   remitente verificado (default: contacto@comprenderai.com)
 //   BREVO_SENDER_NAME                    nombre del remitente (default: "Comprender AI")
+//   STAFF_API_KEY                        (PASO 6, ya cargada -- la misma que ya protege GET/PATCH
+//                                         de api/solicitudes.js) protege GET ?recurso=metricas
 //
 // 10/08 — recurso 'opinion' (arregla el cuadro "Tu opinión", ver MIGRACION_TU_OPINION.sql)
 //   POST /api/comm { recurso:'opinion', accion:'enviar', categoria, mensaje }
@@ -692,6 +696,35 @@ async function opinionEnviar(cuerpo, res, perfil, SB_URL, SERVICE_KEY) {
   return res.status(200).json({ ok: true });
 }
 
+// ---------- metricas (Tablero V0, PASO 6 -- 01/10) ------------------------------------------
+// Lectura server-side de analytics_embudo_diario (vista de conteos por dia/organizacion/evento
+// -- ver PASO 4/5 del informe de medicion: NO es un embudo de conversion real, son conteos
+// independientes de analytics_events + comm_events/SV1). Esta funcion no agrega, no interpreta,
+// no calcula tasas -- devuelve exactamente lo que la vista ya da, sin tocarla.
+// Uso interno (staff), no de un usuario de la app -- protegido por X-Staff-Key contra
+// STAFF_API_KEY, mismo patron ya en produccion en api/solicitudes.js (GET/PATCH ?vista=metricas).
+// No crea tabla, vista, RPC ni migracion nueva -- solo lee lo que ya existe.
+const METRICAS_DIAS_DEFECTO = 30;
+const METRICAS_DIAS_MAXIMO = 180;
+
+async function metricasGet(req, res, SB_URL, SERVICE_KEY) {
+  const diasCrudo = Number(req.query.dias);
+  const dias = Number.isInteger(diasCrudo) && diasCrudo > 0
+    ? Math.min(diasCrudo, METRICAS_DIAS_MAXIMO)
+    : METRICAS_DIAS_DEFECTO;
+  const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
+
+  try {
+    const ruta = '/rest/v1/analytics_embudo_diario?select=organization_id,dia,evento,origen,cantidad' +
+      '&dia=gte.' + encodeURIComponent(desde) + '&order=dia.desc,origen.asc,evento.asc';
+    const filas = await restGet(ruta, SB_URL, SERVICE_KEY);
+    return res.status(200).json({ ok: true, dias, filas });
+  } catch (e) {
+    registrar({ error: 'fallo_metricas', detalle: String((e && e.message) || e) });
+    return res.status(503).json({ error: { message: 'No se pudo consultar. Volve a intentar.', codigo: 'servicio_no_disponible' } });
+  }
+}
+
 // ---------- handler ----------
 
 export default async function handler(req, res) {
@@ -704,6 +737,21 @@ export default async function handler(req, res) {
   const SERVICE_KEY = process.env.SUPABASE_SECRET_KEY;
   if (!SB_URL || !SERVICE_KEY) {
     return res.status(500).json({ error: { message: 'Falta SUPABASE_URL o SUPABASE_SECRET_KEY.' } });
+  }
+
+  // PASO 6 (01/10): segundo corte al gate de autenticacion de este archivo -- unico GET que NO
+  // exige sesion de usuario real, exactamente igual que GET/PATCH de api/solicitudes.js: es de
+  // uso interno (staff, Tablero V0), protegido por X-Staff-Key contra STAFF_API_KEY, nunca por
+  // Bearer de Supabase (quien lo use no necesariamente tiene cuenta en la app). Todo el resto de
+  // GET (events/jobs/inbox/preferences/consent/respuestas) sigue exactamente igual mas abajo,
+  // exigiendo sesion real -- sin excepcion, sin tocar esa rama.
+  if (req.method === 'GET' && String(req.query.recurso || '') === 'metricas') {
+    const claveStaff = process.env.STAFF_API_KEY;
+    const recibida = String(req.headers['x-staff-key'] || '');
+    if (!claveStaff || recibida !== claveStaff) {
+      return res.status(401).json({ error: { message: 'No autorizado.' } });
+    }
+    return metricasGet(req, res, SB_URL, SERVICE_KEY);
   }
 
   const cabecera = String(req.headers['authorization'] || '');
