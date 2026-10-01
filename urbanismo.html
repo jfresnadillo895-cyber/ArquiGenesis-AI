@@ -3428,7 +3428,7 @@ html.cai-modo-lectura #umbral-publico{display:none!important}
         <button class="btn-proyectivo" onclick="abrirValidacion()">Validar diagnóstico y continuar al Abordaje Proyectivo →</button>
         <button id="btn-ir-proy" style="display:none;width:100%;padding:10px;background:transparent;border:1px solid var(--azul);border-radius:10px;font-size:13px;font-weight:600;color:var(--azul);cursor:pointer;margin-top:.5rem" onclick="irDirectoProyectivo()">Ver Abordaje Proyectivo ya generado →</button>
         <button class="btn-pdf no-print" onclick="exportarPDF()">📄 Exportar diagnóstico en PDF</button>
-        <button class="btn-pdf no-print" style="background:var(--azul);color:#fff;border-color:var(--azul)" onclick="copiarProyectivoParaCore()">→ Llevar a Comprender AI</button>
+        <button class="btn-pdf no-print" style="background:var(--azul);color:#fff;border-color:var(--azul)" onclick="iniciarHandoffCore()">→ Llevar a Comprender AI</button>
       </div>
 
       <!-- Subtab 1: 36 Indicadores -->
@@ -3568,7 +3568,7 @@ html.cai-modo-lectura #umbral-publico{display:none!important}
           <div style="font-size:11px;font-weight:400;color:var(--texto3);margin-top:3px">Incorporar información adicional o documentos</div>
         </button>
       </div>
-      <button class="btn-pdf no-print" style="background:var(--azul);color:#fff;border-color:var(--azul)" onclick="copiarProyectivoParaCore()">→ Llevar a Comprender AI</button>
+      <button class="btn-pdf no-print" style="background:var(--azul);color:#fff;border-color:var(--azul)" onclick="iniciarHandoffCore()">→ Llevar a Comprender AI</button>
       <button class="btn-pdf no-print" onclick="exportarPDF()">📄 Exportar informe completo en PDF</button>
       <div class="fb-band">
         <h4>¿El análisis proyectivo refleja el potencial del territorio?</h4>
@@ -10619,6 +10619,97 @@ function rtp01Encolar(envelope, meta){
 window.rtp01Encolar = rtp01Encolar;
 window.rtp01CargarOutbox = rtp01CargarOutbox;
 /* ============ fin RET-TRANSPORT-01 (outbox writer) ============ */
+
+/* ============ URB-RET-02 (OLA 1-C) · handoff automático "→ Llevar a Comprender AI" ============
+   No crea tabla, endpoint, formato de envelope ni sistema de identidad nuevos: orquesta
+   EXACTAMENTE las piezas ya certificadas de arriba (URB-RET-01 / RET-TRANSPORT-01 / CX5-U-R1) y
+   la navegación ya existente irAIncorporarEnCore(). copiarProyectivoParaCore() queda intacta y
+   sin llamadas -- no se borra por si algún otro call site la sigue usando.
+
+   urbRet02AsegurarOrganismId(): si CX5U ya trae una identidad real (vino de Core vía
+   __organismoIdCoreUrbanismo/ag_marco_pendiente -> cx5uSincronizarIdentidad(), caso con organismo
+   previo), la reusa tal cual -- nunca la pisa. Si no hay ninguna (caso común: alta directa en
+   Urbanismo, sin Core todavía), mintea un id opaco una única vez por ciudad analizada y lo
+   persiste en una clave propia (ag_urb_ret02_organismo_minted_v1), separada de la identidad
+   CX5-U-R1 real -- así un segundo clic, un reintento o un F5 sobre el MISMO análisis reusa el
+   mismo id en vez de fabricar un organismo nuevo cada vez, y un análisis de una ciudad distinta sí
+   mintea uno propio. */
+var URBRET02_MINTED_LLAVE = 'ag_urb_ret02_organismo_minted_v1';
+function urbRet02CargarMintedPersistido(){
+  try{
+    var raw = JSON.parse(localStorage.getItem(URBRET02_MINTED_LLAVE) || 'null');
+    if(!raw || typeof raw !== 'object' || !raw.organismId || !raw.specialtyStudyRef) return null;
+    return raw;
+  }catch(e){ return null; }
+}
+function urbRet02GuardarMintedPersistido(organismId, specialtyStudyRef, ciudad){
+  try{
+    localStorage.setItem(URBRET02_MINTED_LLAVE, JSON.stringify({
+      organismId: organismId, specialtyStudyRef: specialtyStudyRef, ciudad: ciudad || null,
+      creado: new Date().toISOString()
+    }));
+  }catch(e){ /* si falla el guardado, el próximo clic simplemente vuelve a mint -- mismo peor caso
+    que el comportamiento previo a este corte, nunca uno peor. */ }
+}
+function urbRet02AsegurarOrganismId(){
+  if(CX5U.organismId && typeof CX5U.specialtyStudyRef === 'string' && CX5U.specialtyStudyRef.indexOf('urbanctx_') === 0){
+    return { organismId: CX5U.organismId, specialtyStudyRef: CX5U.specialtyStudyRef };
+  }
+  var ciudadActual = (typeof diagData !== 'undefined' && diagData && diagData.ciudad) || null;
+  var persistido = urbRet02CargarMintedPersistido();
+  if(persistido && persistido.ciudad === ciudadActual){
+    CX5U.organismId = persistido.organismId;
+    CX5U.specialtyStudyRef = persistido.specialtyStudyRef;
+    __organismoIdCoreUrbanismo = persistido.organismId;
+    return persistido;
+  }
+  var nuevoId = 'urborg_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+  var nuevoRef = cx5uOpaqueId();
+  CX5U.organismId = nuevoId;
+  CX5U.specialtyStudyRef = nuevoRef;
+  __organismoIdCoreUrbanismo = nuevoId;
+  urbRet02GuardarMintedPersistido(nuevoId, nuevoRef, ciudadActual);
+  return { organismId: nuevoId, specialtyStudyRef: nuevoRef };
+}
+
+var _urbRet02HandoffEnCurso = false;
+/* Reemplaza el comportamiento de los dos botones "→ Llevar a Comprender AI" (antes
+   copiarProyectivoParaCore(), sólo portapapeles). Tubería: asegura identidad -> si hay
+   diagnóstico real preparable (urbRet01PuedePreparar()), genera los envelopes
+   comprender.specialty-return.v1 (urbRet01PrepararTodos(), mismo historial urbRet01Append()) y
+   los encola (rtp01Encolar(), mismo outbox, mismo dedup por fingerprint+organismId) -> navega a
+   Core (irAIncorporarEnCore(), misma convención ?organismo=<id> ya certificada, TWA-aware). Si no
+   hay nada preparable todavía, navega igual -- mismo destino final que ya ofrecía el botón
+   anterior. Guarda simple (_urbRet02HandoffEnCurso) contra doble clic/reintento concurrente. */
+async function iniciarHandoffCore(){
+  if(_urbRet02HandoffEnCurso) return;
+  _urbRet02HandoffEnCurso = true;
+  try{
+    urbRet02AsegurarOrganismId();
+    if(!urbRet01PuedePreparar()){
+      irAIncorporarEnCore();
+      return;
+    }
+    var actorEmail = '';
+    try{
+      if(typeof window.obtenerCorreoActivoComprender === 'function'){
+        actorEmail = await window.obtenerCorreoActivoComprender();
+      }
+    }catch(e){ actorEmail = ''; }
+    var resultado = urbRet01PrepararTodos(actorEmail);
+    var envelopes = (resultado && Array.isArray(resultado.envelopes)) ? resultado.envelopes : [];
+    envelopes.forEach(function(env){
+      rtp01Encolar(env, { specialtyStudyRef: CX5U.specialtyStudyRef });
+    });
+    if(typeof urbRet01Render === 'function'){ try{ urbRet01Render(); }catch(e){} }
+    irAIncorporarEnCore();
+  } finally {
+    _urbRet02HandoffEnCurso = false;
+  }
+}
+window.urbRet02AsegurarOrganismId = urbRet02AsegurarOrganismId;
+window.iniciarHandoffCore = iniciarHandoffCore;
+/* ============ fin URB-RET-02 ============ */
 </script>
 <script>
 /* ================================================================

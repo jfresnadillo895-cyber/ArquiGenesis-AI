@@ -18152,11 +18152,77 @@ function cardSesionesAnteriores(org){
   el.overlay.classList.add('open');
 }
 
+/* ============ URB-RET-02 (OLA 1-C) · recepción del handoff automático desde Urbanismo ============
+   No agrega ruta, query param, tabla ni formato nuevos. Lee la MISMA outbox que urbanismo.html ya
+   encola -- ret_transport01_outbox_v1, bloque RET-TRANSPORT-01 de ese archivo -- nunca redefine su
+   formato acá, sólo lee items y actualiza su estadoEntrega, igual que ya hace urbRet01EstadoEnvioReal()
+   del lado de Urbanismo. El envelope entra SIEMPRE por retgov01RecibirEnvelope() (que internamente
+   pasa por receiveSpecialtyReturnEnvelope(), única fuente de verdad) -- ninguno de los dos se toca
+   ni se reimplementa acá. */
+var RETTRANSPORT01_STORAGE_LLAVE_CORE = 'ret_transport01_outbox_v1'; // misma clave exacta que urbanismo.html
+function retRet02CargarOutboxCrudo(){
+  try{
+    var c = JSON.parse(localStorage.getItem(RETTRANSPORT01_STORAGE_LLAVE_CORE) || 'null');
+    if(!c || !Array.isArray(c.items)) return null;
+    return c;
+  }catch(e){ return null; }
+}
+function retRet02GuardarOutboxCrudo(c){
+  try{ localStorage.setItem(RETTRANSPORT01_STORAGE_LLAVE_CORE, JSON.stringify(c)); return true; }catch(e){ return false; }
+}
+function retRet02LeerPendientesOutbox(organismId){
+  var c = retRet02CargarOutboxCrudo();
+  if(!c) return [];
+  return c.items.filter(function(it){ return it && it.organismId === organismId && it.estadoEntrega === 'pending'; });
+}
+/* Procesa TODOS los pendientes de este organismo (no sólo el que disparó la navegación -- cubre
+   el caso real de los dos botones de urbanismo.html pudiendo encolar más de un envelope). Cada
+   item queda 'delivered' o 'invalid' según lo que diga retgov01RecibirEnvelope() -- nunca
+   'pending' indefinidamente. Un duplicado (mismo fingerprint ya recibido antes) también se marca
+   'delivered': ya está gobernado del lado Core, no hay nada más que reintentar. Idempotente por
+   diseño: correr esto de nuevo sobre items ya 'delivered'/'invalid' no hace nada (el filtro sólo
+   toma 'pending'), así que un doble clic/reintento sobre el mismo organismo es seguro. */
+function retRet02ProcesarPendientesOutbox(organismoDestino){
+  if(!organismoDestino || !organismoDestino.id) return;
+  var c = retRet02CargarOutboxCrudo();
+  if(!c) return;
+  var huboCambios = false;
+  c.items.forEach(function(it){
+    if(!it || it.organismId !== organismoDestino.id || it.estadoEntrega !== 'pending') return;
+    huboCambios = true;
+    it.intentosTecnicos = (it.intentosTecnicos || 0) + 1;
+    it.ultimoIntentoEn = new Date().toISOString();
+    try{
+      var r = retgov01RecibirEnvelope(it.envelope, organismoDestino);
+      if(r && r.ok){
+        it.estadoEntrega = 'delivered';
+        it.receivedId = r.receivedId || null;
+        it.entregadoEn = new Date().toISOString();
+        it.ultimoError = null;
+      } else {
+        it.estadoEntrega = 'invalid';
+        it.ultimoError = (r && r.error) || 'ERROR_DESCONOCIDO';
+      }
+    }catch(e){
+      it.estadoEntrega = 'invalid';
+      it.ultimoError = 'EXCEPCION_' + (e && e.message ? e.message : 'DESCONOCIDA');
+    }
+  });
+  if(huboCambios) retRet02GuardarOutboxCrudo(c);
+}
+/* ============ fin URB-RET-02 ============ */
+
 /* ---- Corte I: abrir directo desde el link del correo diferido (?organismo=<id>) ----
    Se llama dos veces a proposito: al iniciar (cubre el caso comun, el mismo navegador
    donde ya hay sesion y el organismo esta en localStorage) y de nuevo al terminar
    sincronizarOrganismosConServidor() (cubre abrir el link desde un dispositivo nuevo,
-   donde el organismo recien llega del servidor). La bandera evita abrirlo dos veces. */
+   donde el organismo recien llega del servidor). La bandera evita abrirlo dos veces.
+   OLA 1-C (URB-RET-02): si el id no existe todavía, antes de rendirse revisa si hay un handoff
+   real pendiente de Urbanismo para ese id exacto (ret_transport01_outbox_v1) -- sólo en ese caso
+   crea el organismo (mismo patrón de promoverAOrganismo(): id/nombre/tipo/campo_de/creado/
+   actualizado/ficha/principios/destilados vacíos, reusando el MISMO id que ya trae el envelope
+   para que receiveSpecialtyReturnEnvelope() no lo rechace por ORGANISM_MISMATCH). Si no hay nada
+   pendiente, comportamiento IDÉNTICO al de siempre: no hace nada, no fabrica nada. */
 var _orgDesdeURLIntentado = false;
 function intentarAbrirOrganismoDesdeURL(){
   if(_orgDesdeURLIntentado) return;
@@ -18165,8 +18231,26 @@ function intentarAbrirOrganismoDesdeURL(){
     var id = params.get('organismo');
     if(!id) return;
     var org = cargarOrganismos().find(function(o){ return o.id === id; });
+    if(!org){
+      var pendientes = retRet02LeerPendientesOutbox(id);
+      if(pendientes.length){
+        var primero = pendientes[0];
+        var env0 = primero.envelope || {};
+        var ciudad = (env0.scope && env0.scope.ciudad) || (env0.payload && env0.payload.ciudad) || 'Organismo';
+        org = {
+          id: id,
+          nombre: ciudad,
+          tipo: TIPOS_ORG[0],
+          campo_de: null,
+          creado: new Date().toISOString(), actualizado: new Date().toISOString(),
+          ficha: {}, principios: [], destilados: []
+        };
+        guardarOrganismo(org);
+      }
+    }
     if(org){
       _orgDesdeURLIntentado = true;
+      try{ retRet02ProcesarPendientesOutbox(org); }catch(e){}
       abrirOrganismo(org);
       // PF-01-UI (31/08): parámetro nuevo, mínimo y explícito, estrictamente opt-in --
       // ?organismo=<id>&abrir=ficha. Reutiliza la MISMA convención de deep-link del Corte I (no
