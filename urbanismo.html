@@ -1851,6 +1851,12 @@ html,body{max-width:100%;overflow-x:hidden}
   --mono:'IBM Plex Mono',monospace;
   --c1:#3E8C7A;--c2:#B08A3E;--c3:#2E5A87;--c4:#C1553F;--c5:#7B5EA7;--c6:#D07C3A;
   --grid-max:1080px;
+  /* ===== 124-URB-VIS-03 · CORTE E2: tokens internos ===== */
+  --r-sm:6px;--r-md:8px;--r-lg:10px;--r-xl:12px;--r-pill:20px;
+  --font-head:'DM Sans','Inter','IBM Plex Sans',system-ui,sans-serif;
+  --sombra-modal:0 24px 70px rgba(28,42,58,.35);
+  --anillo-focus:0 0 0 3px rgba(74,158,204,.18);
+  --anillo-error:0 0 0 3px rgba(193,85,63,.12);
 }
 body{font-family:'Inter',system-ui,sans-serif;color:var(--texto);background:#F7F6F3;min-height:100vh;overflow-x:hidden}
 button{cursor:pointer;font-family:inherit}
@@ -1866,8 +1872,8 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--azul);ba
 /* UX-P3A (25/08): segunda línea, secundaria -- misma familia visual que .logo-tag, un escalón más
    discreta (más chica, más tenue), para que la frase de capacidad quede primera y esta sea apoyo. */
 .logo-tag-sec{font-size:.82rem;opacity:.68;margin-top:.35rem}
-.main-card{background:var(--card);border:1px solid var(--borde);border-radius:6px;padding:2rem 2.25rem;width:100%;max-width:580px;box-shadow:var(--sombra)}
-.main-card h3{font-size:16px;font-weight:700;color:var(--azul-2);margin-bottom:.5rem;letter-spacing:-.01em}
+.main-card{background:var(--card);border:1px solid var(--borde);border-radius:var(--r-xl);padding:2rem 2.25rem;width:100%;max-width:580px;box-shadow:var(--sombra)}
+.main-card h3{font-size:16px;font-weight:700;color:var(--azul-2);margin-bottom:.5rem;letter-spacing:-.01em;font-family:var(--font-head)}
 .main-card>p{font-size:12.5px;color:var(--texto2);margin-bottom:1.4rem;line-height:1.75}
 /* UX-P3A (25/08): continuidad del organismo, ahora próxima al encabezado de la tarjeta -- mismo
    <span id="contexto-indicador"> de siempre (misma lógica JS, mismo id), sólo se le da presencia
@@ -1881,16 +1887,16 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--azul);ba
 .control-secundario{opacity:.65 !important;font-weight:500 !important;color:var(--texto3) !important;border-color:var(--borde) !important;padding:8px 11px !important;font-size:12px !important}
 .inp-row{display:flex;gap:8px;margin-bottom:.75rem}
 .city-inp{flex:1;padding:12px 16px;font-size:15px;border:1px solid var(--borde2);border-radius:6px;color:var(--texto);transition:border-color .2s,box-shadow .2s}
-.city-inp:focus{outline:none;border-color:var(--azul);box-shadow:0 0 0 3px rgba(74,158,204,.18)}
-.city-inp[aria-invalid="true"]{border-color:var(--rojo);box-shadow:0 0 0 3px rgba(193,85,63,.12)}
+.city-inp:focus{outline:none;border-color:var(--azul);box-shadow:var(--anillo-focus)}
+.city-inp[aria-invalid="true"]{border-color:var(--rojo);box-shadow:var(--anillo-error)}
 .city-error{display:none;margin:-.25rem 0 .75rem;font-size:12px;font-weight:600;color:#993C1D;line-height:1.45}
 .city-error.vis{display:block}
-.btn-go{padding:12px 22px;background:var(--azul);color:#FFFFFF;border:none;border-radius:6px;font-size:14px;font-weight:700;white-space:nowrap;transition:background .2s}
+.btn-go{padding:12px 22px;background:var(--azul);color:#FFFFFF;border:none;border-radius:var(--r-sm);font-size:14px;font-weight:700;white-space:nowrap;transition:background .2s}
 .btn-go:hover{background:var(--azul-2)}
 .btn-go:disabled{background:#aaa;cursor:not-allowed}
 .ej-label{font-size:11px;color:var(--texto3);margin-bottom:.4rem}
 .ej-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:1rem}
-.ej-chip{padding:7px 12px;min-height:36px;font-size:11.5px;border:1px solid var(--borde);border-radius:20px;background:transparent;color:var(--texto2);transition:all .15s}
+.ej-chip{padding:7px 12px;min-height:36px;font-size:11.5px;border:1px solid var(--borde);border-radius:var(--r-pill);background:transparent;color:var(--texto2);transition:all .15s}
 .ej-chip:hover{background:var(--azul);color:#fff;border-color:var(--azul)}
 .sep{border:none;border-top:1px solid var(--borde);margin:1rem 0}
 .expand-btn{font-size:12px;color:var(--azul);background:none;border:none;text-decoration:underline;cursor:pointer;display:block;margin-bottom:.6rem}
@@ -1913,18 +1919,33 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--azul);ba
 /* ══ MODAL BASE ══ */
 .modal{display:none;position:fixed;inset:0;background:rgba(28,42,58,.38);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;padding:1rem}
 .modal.vis{display:flex}
-.modal-card{background:var(--card);border:1px solid var(--borde2);border-radius:8px;padding:2rem;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.55);position:relative}
+.modal-card{background:var(--card);border:1px solid var(--borde2);border-radius:var(--r-xl);padding:2rem;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;box-shadow:var(--sombra-modal);position:relative}
 .modal-close{position:absolute;top:1rem;right:1rem;width:40px;height:40px;border-radius:50%;background:var(--inset);border:1px solid var(--borde);font-size:18px;color:var(--texto3);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
 .modal-close:hover{background:var(--borde);color:var(--texto)}
-.modal-card h3{font-size:18px;font-weight:700;color:var(--azul-2);margin-bottom:.45rem;letter-spacing:-.01em}
+.modal-card h3{font-size:18px;font-weight:700;color:var(--azul-2);margin-bottom:.45rem;letter-spacing:-.01em;font-family:var(--font-head)}
+/* 124-URB-VIS-03 E2-R2: en móvil, .modal-close (40x40, position:absolute,
+   top:1rem;right:1rem) quedaba tapando parte del título de Validación (y,
+   estructuralmente, de cualquier modal con .modal-card h3) -- confirmado
+   visualmente en la corrida E2-R1 ("¿Los valores reflejan la realidad..." con
+   la "d" final de "realidad" bajo el botón). Se retrae el ANCHO de la caja
+   del título (no sólo su padding -- ver nota técnica arriba) lo suficiente
+   para despejar el botón + separación; aplica a .modal-card h3 (selector ya
+   existente, cubre los dos pasos de Validación y el resto de los modales por
+   igual) y a .metodo-card h3 (modal de Metodología, que usa su propia clase
+   de card). */
+@media (max-width:480px){
+  .modal-card h3,.metodo-card h3{width:calc(100% - 64px)}
+}
 .modal-card .msub{font-size:12.5px;color:var(--texto2);margin-bottom:1.4rem;line-height:1.65;opacity:.85}
 .modal-btns{display:flex;gap:8px;margin-top:1.25rem}
 .modal-actions-sticky{position:sticky;bottom:-2rem;z-index:4;margin-left:-2rem;margin-right:-2rem;padding:1rem 2rem;background:rgba(255,255,255,.96);backdrop-filter:blur(8px);border-top:1px solid var(--borde);box-shadow:0 -10px 24px rgba(28,42,58,.06)}
-.btn-sec{padding:10px 20px;background:var(--inset);border:1px solid var(--borde2);border-radius:6px;font-size:13px;font-weight:600;color:var(--texto2)}
+.btn-sec{padding:10px 20px;background:var(--inset);border:1px solid var(--borde2);border-radius:var(--r-sm);font-size:13px;font-weight:600;color:var(--texto2)}
 .btn-sec:hover{background:var(--card2)}
-.btn-pri{padding:10px 20px;background:var(--azul);color:#FFFFFF;border:none;border-radius:6px;font-size:13px;font-weight:700}
+.btn-pri{padding:10px 20px;background:var(--azul);color:#FFFFFF;border:none;border-radius:var(--r-sm);font-size:13px;font-weight:700}
 .btn-pri:hover{background:var(--azul-2)}
-.btn-sml{padding:6px 12px;font-size:11px;border:1px solid var(--azul);border-radius:6px;background:transparent;color:var(--azul);margin-top:.5rem}
+.btn-pri:disabled,.btn-sec:disabled{opacity:.45;cursor:not-allowed;background:var(--inset);color:var(--texto3);border-color:var(--borde)}
+.btn-pri:disabled:hover,.btn-sec:disabled:hover{background:var(--inset)}
+.btn-sml{padding:6px 12px;font-size:11px;border:1px solid var(--azul);border-radius:var(--r-sm);background:transparent;color:var(--azul);margin-top:.5rem}
 .btn-sml:hover{background:var(--azul-c)}
 .ctx-file-picker{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px dashed var(--azul-borde);border-radius:8px;background:var(--card2)}
 .ctx-file-picker .btn-sml{margin-top:0;min-height:38px}
@@ -1966,7 +1987,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .tb-left p span{white-space:nowrap}
 .tb-logo{font-size:15px;font-weight:700;font-family:var(--mono);letter-spacing:.01em;margin:0 auto 0 1rem;opacity:.95;display:flex;align-items:center;gap:8px}
 .tb-logo span{color:#2E5A87}
-.btn-back{min-width:40px;min-height:40px;padding:7px 10px;background:transparent;border:1px solid var(--borde);color:var(--texto2);border-radius:7px;font-size:13px;font-weight:600;font-family:var(--mono);white-space:nowrap;flex-shrink:0}
+.btn-back{min-width:40px;min-height:40px;padding:7px 10px;background:transparent;border:1px solid var(--borde);color:var(--texto2);border-radius:var(--r-sm);font-size:13px;font-weight:600;font-family:var(--mono);white-space:nowrap;flex-shrink:0}
 .btn-back:hover{background:rgba(46,90,135,.06)}
 
 /* Etapas */
@@ -1976,7 +1997,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .etapa.activa{background:rgba(74,158,204,.12);color:var(--azul);font-weight:700}
 .etapa.completa{color:var(--verde);font-weight:600}
 .etapa-num{width:20px;height:20px;border-radius:50%;background:var(--borde);color:var(--texto3);font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.etapa.activa .etapa-num{background:var(--azul);color:#1C2A3A}
+.etapa.activa .etapa-num{background:var(--azul);color:#fff}
 .etapa.completa .etapa-num{background:var(--verde);color:#fff}
 .etapa-sep{color:var(--borde);font-size:16px;margin:0 4px;flex-shrink:0}
 
@@ -1984,10 +2005,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
 /* Submenu dentro de diagnóstico */
 .subtabs{display:flex;gap:4px;margin-bottom:1rem}
-.subtab{padding:6px 14px;font-size:11px;font-weight:600;border:1px solid var(--borde);background:transparent;color:var(--texto3);border-radius:20px;transition:all .2s}
+.subtab{padding:6px 14px;font-size:11px;font-weight:600;border:1px solid var(--borde);background:transparent;color:var(--texto3);border-radius:var(--r-pill);transition:all .2s}
 .subtab.on{background:var(--azul);color:#fff;border-color:var(--azul)}
 
-.card{background:var(--card);border-radius:5px;padding:1.4rem 1.5rem;margin-bottom:1.1rem;border:1px solid var(--borde)}
+.card{background:var(--card);border-radius:var(--r-md);padding:1.4rem 1.5rem;margin-bottom:1.1rem;border:1px solid var(--borde)}
 .ctitle{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:var(--texto3);margin-bottom:1rem;padding-bottom:.6rem;border-bottom:1px solid var(--borde);font-family:var(--mono)}
 .desc-band{font-size:12px;color:var(--texto);line-height:1.7;padding:.75rem 1rem;background:rgba(74,158,204,.07);border-radius:3px;border-left:2px solid var(--azul);margin-bottom:1rem}
 
@@ -2026,7 +2047,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .ptag{display:inline-block;padding:1px 5px;border-radius:6px;font-size:9px;font-weight:700}
 .tA{background:#e8f5e9;color:#2C6B5C}.tM{background:#fff8e1;color:#5C6B7D}.tB{background:#fce4ec;color:#c62828}
 .pnum{font-weight:800;color:var(--azul)}
-.deficit-badge{display:inline-block;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700;background:#FCE4EC;color:#A03A28;margin-left:4px}
+.deficit-badge{display:inline-block;padding:1px 6px;border-radius:var(--r-sm);font-size:9px;font-weight:700;background:#FCE4EC;color:#A03A28;margin-left:4px}
 .btn-detalle{padding:3px 10px;font-size:10px;font-weight:700;border:1px solid var(--azul);border-radius:6px;background:transparent;color:var(--azul);cursor:pointer;white-space:nowrap;transition:all .15s}
 .btn-detalle:hover{background:var(--azul-c)}
 .btn-detalle-deficit{border-color:#A03A28;color:#A03A28;background:#FFF0F0}
@@ -2054,7 +2075,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .btn-detalle{padding:3px 8px;font-size:10px;font-weight:700;border:1px solid var(--azul);border-radius:5px;background:transparent;color:var(--azul);cursor:pointer;white-space:nowrap}
 .btn-detalle:hover{background:var(--azul-c)}
 .btn-detalle.cargando{opacity:.6;cursor:not-allowed}
-.badge-deficit{display:inline-block;padding:1px 5px;background:#FCE4EC;color:#A03A28;font-size:9px;font-weight:700;border-radius:4px;margin-left:4px}
+.badge-deficit{display:inline-block;padding:1px 5px;background:#FCE4EC;color:#A03A28;font-size:9px;font-weight:700;border-radius:var(--r-sm);margin-left:4px}
 .tbl-grupo td{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
 
 /* dims */
@@ -2066,7 +2087,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .dim-nota{font-size:10px;color:var(--texto3);width:200px;text-align:right;flex-shrink:0}
 
 /* proyectivo */
-.ap-band{background:var(--card);border:1px solid var(--borde);color:var(--texto);padding:1rem 1.25rem;border-radius:12px;margin-bottom:1rem}
+.ap-band{background:var(--card);border:1px solid var(--borde);color:var(--texto);padding:1rem 1.25rem;border-radius:var(--r-xl);margin-bottom:1rem}
 .ap-band h3{font-size:15px;font-weight:800;margin-bottom:3px}
 .ap-band p{font-size:11px;opacity:.75}
 .cc-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:1rem}
@@ -2112,7 +2133,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .sb-tríada-T{background:#FFF3E0;color:#9C5A20;border-color:#9C5A20}
 .cA{background:#E8F5E9;color:#2C6B5C}.cM{background:#FFF8E1;color:#5C6B7D}.cB{background:#FCE4EC;color:#A03A28}
 .conf-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
-.haiku-diag{background:#F7F6F3;border:1px solid var(--borde);border-top:2px solid var(--ocre);border-radius:4px;padding:1.25rem;margin-bottom:1rem;text-align:center;position:relative}
+.haiku-diag{background:#F7F6F3;border:1px solid var(--borde);border-top:2px solid var(--ocre);border-radius:var(--r-md);padding:1.25rem;margin-bottom:1rem;text-align:center;position:relative}
 .haiku-diag:before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Ccircle cx='30' cy='30' r='20'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}
 .haiku-diag-label{font-size:9px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:#1C2A3A;margin-bottom:.4rem}
 .haiku-diag-txt{font-size:14px;font-style:italic;color:var(--ocre);line-height:1.9;position:relative;font-family:var(--mono);letter-spacing:.02em}
@@ -2130,7 +2151,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .comp-igual{background:#f5f5f5;color:#888}
 .btn-comp{padding:5px 12px;font-size:11px;font-weight:700;border:1px solid var(--azul);border-radius:6px;background:transparent;color:var(--azul);cursor:pointer;transition:all .15s}
 .btn-comp:hover{background:var(--azul-c)}
-.progreso-band{border-radius:5px;padding:1.2rem;margin-bottom:1.1rem;border:1px solid var(--borde);background:var(--card)}
+.progreso-band{border-radius:var(--r-md);padding:1.2rem;margin-bottom:1.1rem;border:1px solid var(--borde);background:var(--card)}
 .progreso-titulo{font-size:12px;font-weight:700;color:var(--azul);margin-bottom:.75rem;display:flex;align-items:center;gap:6px}
 .progreso-eje{display:flex;align-items:center;gap:8px;padding:.4rem 0;border-bottom: 1px solid rgba(46,90,135,.18);font-size:11px}
 .progreso-eje:last-child{border-bottom:none}
@@ -2143,7 +2164,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .progreso-bar-wrap{flex:1;height:5px;background:rgba(46,90,135,.06);border-radius:3px;overflow:hidden;position:relative}
 .progreso-bar-antes{position:absolute;height:100%;border-radius:3px;background:rgba(46,90,135,.06)}
 .progreso-bar-ahora{position:absolute;height:100%;border-radius:3px;transition:width .5s}
-.tension-band{border-radius:5px;padding:1.1rem 1.25rem;margin-bottom:1.1rem;border-left:3px solid var(--rojo);background:rgba(224,90,90,.08)}
+.tension-band{border-radius:var(--r-md);padding:1.1rem 1.25rem;margin-bottom:1.1rem;border-left:3px solid var(--rojo);background:rgba(224,90,90,.08)}
 .tension-titulo{font-size:12px;font-weight:700;color:var(--rojo);margin-bottom:.6rem;display:flex;align-items:center;gap:6px}
 .tension-item{display:flex;align-items:flex-start;gap:10px;padding:.5rem 0;border-bottom:1px solid rgba(198,40,40,.1);font-size:12px}
 .tension-item:last-child{border-bottom:none}
@@ -2165,7 +2186,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .api-counter.vis{display:block}
 
 /* ══ PDF REPORT ══ */
-.pdf-btn{padding:8px 16px;background:var(--ocre);color:#1C2A3A;border:none;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--mono);letter-spacing:.05em}
+.pdf-btn{padding:8px 16px;background:var(--ocre);color:#1C2A3A;border:none;border-radius:var(--r-sm);font-size:11px;font-weight:700;cursor:pointer;font-family:var(--mono);letter-spacing:.05em}
 .alerta-critica{background:rgba(224,90,90,.08);border:1px solid rgba(224,90,90,.4);border-left:3px solid var(--rojo);border-radius:4px;padding:.75rem 1rem;margin-bottom:.75rem;cursor:pointer;transition:background .15s}
 .alerta-critica:hover{background:rgba(224,90,90,.14)}
 .alerta-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
@@ -2175,17 +2196,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .alerta-desc{font-size:10px;color:var(--texto2);line-height:1.5}
 .alerta-rec{font-size:10px;color:var(--texto);line-height:1.6;margin-top:.5rem;padding-top:.5rem;border-top:1px solid rgba(224,90,90,.2)}
 .alerta-banner{background:rgba(224,90,90,.06);border:1px solid rgba(224,90,90,.25);border-radius:4px;padding:.6rem .85rem;margin-bottom:1rem;display:none}
-.perfil-band{background:var(--card);border-radius:4px;padding:.85rem 1rem;margin-bottom:.75rem;border-left:3px solid var(--ocre);display:none}
+.perfil-band{background:var(--card);border-radius:var(--r-md);padding:.85rem 1rem;margin-bottom:.75rem;border-left:3px solid var(--ocre);display:none}
 .perfil-nombre{font-size:14px;font-weight:700;color:var(--texto);font-family:var(--mono)}
 .perfil-meta{font-size:10px;color:var(--texto3);font-family:var(--mono);margin-top:2px}
 .perfil-desc{font-size:11px;color:var(--texto2);line-height:1.6;margin-top:.5rem}
 .perfil-field{margin-bottom:.6rem}
 .perfil-label{font-size:9px;color:var(--texto3);font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
 .perfil-input{width:100%;padding:6px 10px;background:#F7F6F3;border:1px solid var(--borde);border-radius:3px;color:var(--texto);font-size:12px;font-family:'Inter',sans-serif}
-.perfil-input:focus{outline:none;border-color:var(--azul)}
+.perfil-input:focus{outline:none;border-color:var(--azul);box-shadow:var(--anillo-focus)}
 .alerta-banner-title{font-size:9px;font-weight:700;color:var(--rojo);font-family:var(--mono);letter-spacing:.15em;margin-bottom:.4rem}
 .pdf-btn:hover{opacity:.9}
-.resumen-band{background:#F7F6F3;border:1px solid var(--borde);border-left:3px solid var(--ocre);border-radius:4px;padding:1.25rem;margin-bottom:1rem;color:var(--texto)}
+.resumen-band{background:#F7F6F3;border:1px solid var(--borde);border-left:3px solid var(--ocre);border-radius:var(--r-md);padding:1.25rem;margin-bottom:1rem;color:var(--texto)}
 .resumen-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem}
 .resumen-score{text-align:center}
 .resumen-score-val{font-size:56px;font-weight:700;line-height:1;color:var(--ocre);font-family:var(--mono);letter-spacing:-.03em}
@@ -2204,8 +2225,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .resumen-rank-bar{width:60px;height:4px;background:rgba(46,90,135,.06);border-radius:2px;overflow:hidden;flex-shrink:0}
 .resumen-rank-fill{height:100%;border-radius:2px;background:#2E5A87}
 .metodo-btn:hover{color:#1C2A3A}
-.metodo-card{background:#FFFFFF;border:1px solid var(--borde);border-radius:4px;padding:2rem;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.6)}
-.metodo-card h3{font-size:17px;font-weight:700;color:var(--azul);margin-bottom:.4rem}
+.metodo-card{background:var(--card);border:1px solid var(--borde);border-radius:var(--r-xl);padding:2rem;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;box-shadow:var(--sombra-modal)}
+.metodo-card h3{font-size:18px;font-weight:700;color:var(--azul-2);margin-bottom:.45rem;letter-spacing:-.01em;font-family:var(--font-head)}
 .metodo-seccion{margin-bottom:1.25rem}
 .metodo-seccion h4{font-size:13px;font-weight:700;color:var(--azul);margin-bottom:.4rem;padding-bottom:.3rem;border-bottom:1px solid var(--borde)}
 .metodo-seccion p{font-size:12px;color:var(--texto2);line-height:1.7;margin-bottom:.5rem}
@@ -2226,7 +2247,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
   .modal-actions-sticky .btn-sec,.modal-actions-sticky .btn-pri{width:100%;min-height:42px}
 .comp-grid{grid-template-columns:1fr}}
 .cdA{background:#E6F2EF}.cdM{background:#F9A825}.cdB{background:#FAE8E4}
-.intencion-btn{padding:.7rem .9rem;background:var(--inset);border:1px solid var(--borde2);border-radius:6px;font-size:12px;font-weight:600;color:var(--texto2);cursor:pointer;text-align:left;transition:all .2s;width:100%}
+.intencion-btn{padding:.7rem .9rem;background:var(--inset);border:1px solid var(--borde2);border-radius:var(--r-sm);font-size:12px;font-weight:600;color:var(--texto2);cursor:pointer;text-align:left;transition:all .2s;width:100%}
 .intencion-btn:hover{border-color:var(--azul);color:var(--azul-2);background:var(--azul-c)}
 .intencion-btn.sel{border-color:var(--azul);background:var(--azul);color:#FFFFFF}
 
@@ -2245,7 +2266,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .ley-dot{width:10px;height:10px;border-radius:50%}
 
 /* botón proyectivo */
-.btn-proyectivo{width:100%;padding:14px;background:var(--azul);color:#FFFFFF;border:none;border-radius:12px;font-size:15px;font-weight:700;margin-top:1rem;cursor:pointer;transition:background .2s}   /* C-10: era var(--card) con border:none — blanco sobre blanco */
+.btn-proyectivo{width:100%;padding:14px;background:var(--azul);color:#FFFFFF;border:none;border-radius:var(--r-xl);font-size:15px;font-weight:700;margin-top:1rem;cursor:pointer;transition:background .2s}   /* C-10: era var(--card) con border:none — blanco sobre blanco */
 .carga-overlay{display:none;position:fixed;inset:0;background:#F7F6F3;z-index:300;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem}
 .carga-overlay.vis{display:flex}
 .carga-logo{font-size:24px;font-weight:700;color:var(--texto);letter-spacing:.05em;font-family:var(--mono)}
@@ -2262,7 +2283,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .carga-paso.hecho .carga-paso-dot{background:#2E5A87}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .btn-proyectivo:hover{background:var(--azul-2)}
-.btn-pdf{width:100%;padding:12px;background:#fff;border:2px solid var(--azul);border-radius:10px;font-size:14px;font-weight:700;color:var(--azul);cursor:pointer;margin-top:.75rem;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-pdf{width:100%;padding:12px;background:#fff;border:2px solid var(--azul);border-radius:var(--r-lg);font-size:14px;font-weight:700;color:var(--azul);cursor:pointer;margin-top:.75rem;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
 .btn-pdf:hover{background:var(--azul-c)}
 @media print{
   .topbar,.etapas,.subtabs,.btn-proyectivo,.btn-pdf,.fb-band,.hist-panel,.carga-overlay,
@@ -2361,6 +2382,13 @@ canvas{animation:none !important}
 @media (max-width:840px){
   .tb-ciudad{display:none}
 }
+/* 124-URB-VIS-03 E2-R3: la regla de segunda fila móvil de E2-R2 (ver historial en el informe
+   E2-R2) se retira -- con sólo 2 controles en el header de resultados (Módulos + Menú, tras
+   trasladar Nueva ciudad/Historial/Inicio a "Tu espacio") el total de anchos mínimos vuelve a
+   entrar en una sola fila incluso en 360px, sin que la marca quede tapada. Confirmado por la
+   matriz de medición de este corte (intersección marca/controles = 0 en una sola fila, sin
+   flex-wrap). La corrección R2 de títulos de modales (.modal-card h3,.metodo-card h3{width:
+   calc(100% - 64px)}, en otro punto de esta hoja) no se toca. */
 
 /* ===== TÍTULO DE MARCA — idéntico en los tres productos ===== */
 /* MARCA-VIVA-01 (11/09): .cai-toro + @keyframes girar se retiran -- el glifo ahora es
@@ -3302,15 +3330,18 @@ html.cai-modo-lectura #umbral-publico{display:none!important}
     <div class="tb-ciudad"><h2 id="r-ciudad">—</h2><p>Diagnóstico sistémico</p></div>
     <span style="flex:1"></span>
     <div style="display:flex;gap:6px;align-items:center">
-      <button class="btn-back" onclick="nuevaCiudad()" title="Nueva ciudad" aria-label="Nueva ciudad">+</button>
-      <button class="btn-back" onclick="toggleHistorial()" title="Historial" aria-label="Historial" style="display:flex;align-items:center;gap:3px">⊙<span class="hist-badge" id="hist-badge">0</span></button>
-      <button class="btn-back" onclick="back()" title="Inicio" aria-label="Inicio">⌂</button>
       <!-- M3.2 (23/09): botón fijo sacado -- ver nota M3.2 en el header de #p-inicio más arriba.
            La acción de retorno vive ahora en el menú Aplicaciones, compartido por las tres etapas
            de resultados igual que este topbar. No toca el botón condicional de URB-RET-01
            ("Volver al organismo en Comprender" dentro de urbRet01Render()), que sigue igual. -->
       <!-- Panel P4 (21/08): ver misma nota en el header de #p-inicio más arriba -- el botón fijo
            de créditos se sacó, "Tus créditos" ahora vive en "Cuenta". -->
+      <!-- 124-URB-VIS-03 E2-R3: Nueva ciudad/Historial/Inicio se retiran de este header -- viven
+           ahora como los tres primeros ítems de "Tu espacio" (construirTuEspacioConfig(), más
+           abajo), reutilizando EXCLUSIVAMENTE nuevaCiudad()/toggleHistorial()/back(). El span
+           #hist-badge (badge de historial no leído) se retira junto con su botón -- sin lógica
+           propia fuera de él, no se reconstruye en el menú lateral (fuera del alcance de este
+           corte). Quedan en este header sólo marca, Aplicaciones y Menú lateral. -->
     <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos" aria-label="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
     <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú" aria-label="Menú">☰</button>
     </div>
@@ -11096,6 +11127,34 @@ document.addEventListener('keydown', function(e){
 function construirTuEspacioConfig(){
   const cfg = document.getElementById('teConfig');
   cfg.innerHTML = '';
+  // 124-URB-VIS-03 E2-R3: Nueva ciudad/Historial/Inicio se trasladan acá desde el header de
+  // resultados (#p-res .topbar) -- reutilizan EXCLUSIVAMENTE nuevaCiudad()/toggleHistorial()/
+  // back(), sin duplicar ni reinterpretar ninguna lógica. Aparecen únicamente cuando #p-res está
+  // activo (nunca en la pantalla inicial), al principio del panel, separadas visualmente de
+  // Ciclo/Ayuda/Opinión/Acerca de/Avisos/Cuenta. Las cadenas "Nueva ciudad"/"Historial"/"Inicio"
+  // son exactamente las que tenían los botones del header -- conservan intacta su cobertura i18n
+  // existente (lib/i18n.js: claves presentes en ES_EN/ES_PT; MutationObserver.childList ya
+  // traduce automáticamente cualquier nodo nuevo vía translateTree(), ver startObserver()).
+  var pRes = document.getElementById('p-res');
+  var enResultados = !!(pRes && pRes.style.display === 'block');
+  if(enResultados){
+    const itemsResultados = [
+      ['Nueva ciudad', nuevaCiudad],
+      ['Historial', toggleHistorial],
+      ['Inicio', back]
+    ];
+    itemsResultados.forEach(function(it){
+      const b = document.createElement('button');
+      b.className = 'cai-item';
+      b.textContent = it[0];
+      b.addEventListener('click', function(){ cerrarTuEspacio(); it[1](); });
+      cfg.appendChild(b);
+    });
+    const sep = document.createElement('div');
+    sep.setAttribute('aria-hidden','true');
+    sep.style.cssText = 'border-top:1px solid var(--borde);margin:4px 10px 8px';
+    cfg.appendChild(sep);
+  }
   const items = [
     ['El ciclo de comprensión', caiCiclo],
     ['Ayuda', caiAyuda],
