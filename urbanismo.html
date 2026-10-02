@@ -1882,12 +1882,15 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--azul);ba
 .inp-row{display:flex;gap:8px;margin-bottom:.75rem}
 .city-inp{flex:1;padding:12px 16px;font-size:15px;border:1px solid var(--borde2);border-radius:6px;color:var(--texto);transition:border-color .2s,box-shadow .2s}
 .city-inp:focus{outline:none;border-color:var(--azul);box-shadow:0 0 0 3px rgba(74,158,204,.18)}
+.city-inp[aria-invalid="true"]{border-color:var(--rojo);box-shadow:0 0 0 3px rgba(193,85,63,.12)}
+.city-error{display:none;margin:-.25rem 0 .75rem;font-size:12px;font-weight:600;color:#993C1D;line-height:1.45}
+.city-error.vis{display:block}
 .btn-go{padding:12px 22px;background:var(--azul);color:#FFFFFF;border:none;border-radius:6px;font-size:14px;font-weight:700;white-space:nowrap;transition:background .2s}
 .btn-go:hover{background:var(--azul-2)}
 .btn-go:disabled{background:#aaa;cursor:not-allowed}
 .ej-label{font-size:11px;color:var(--texto3);margin-bottom:.4rem}
 .ej-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:1rem}
-.ej-chip{padding:4px 11px;font-size:11px;border:1px solid var(--borde);border-radius:20px;background:transparent;color:var(--texto2);transition:all .15s}
+.ej-chip{padding:7px 12px;min-height:36px;font-size:11.5px;border:1px solid var(--borde);border-radius:20px;background:transparent;color:var(--texto2);transition:all .15s}
 .ej-chip:hover{background:var(--azul);color:#fff;border-color:var(--azul)}
 .sep{border:none;border-top:1px solid var(--borde);margin:1rem 0}
 .expand-btn{font-size:12px;color:var(--azul);background:none;border:none;text-decoration:underline;cursor:pointer;display:block;margin-bottom:.6rem}
@@ -1911,17 +1914,23 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--azul);ba
 .modal{display:none;position:fixed;inset:0;background:rgba(28,42,58,.38);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;padding:1rem}
 .modal.vis{display:flex}
 .modal-card{background:var(--card);border:1px solid var(--borde2);border-radius:8px;padding:2rem;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.55);position:relative}
-.modal-close{position:absolute;top:1rem;right:1rem;width:32px;height:32px;border-radius:50%;background:var(--inset);border:1px solid var(--borde);font-size:18px;color:var(--texto3);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
+.modal-close{position:absolute;top:1rem;right:1rem;width:40px;height:40px;border-radius:50%;background:var(--inset);border:1px solid var(--borde);font-size:18px;color:var(--texto3);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
 .modal-close:hover{background:var(--borde);color:var(--texto)}
 .modal-card h3{font-size:18px;font-weight:700;color:var(--azul-2);margin-bottom:.45rem;letter-spacing:-.01em}
 .modal-card .msub{font-size:12.5px;color:var(--texto2);margin-bottom:1.4rem;line-height:1.65;opacity:.85}
 .modal-btns{display:flex;gap:8px;margin-top:1.25rem}
+.modal-actions-sticky{position:sticky;bottom:-2rem;z-index:4;margin-left:-2rem;margin-right:-2rem;padding:1rem 2rem;background:rgba(255,255,255,.96);backdrop-filter:blur(8px);border-top:1px solid var(--borde);box-shadow:0 -10px 24px rgba(28,42,58,.06)}
 .btn-sec{padding:10px 20px;background:var(--inset);border:1px solid var(--borde2);border-radius:6px;font-size:13px;font-weight:600;color:var(--texto2)}
 .btn-sec:hover{background:var(--card2)}
 .btn-pri{padding:10px 20px;background:var(--azul);color:#FFFFFF;border:none;border-radius:6px;font-size:13px;font-weight:700}
 .btn-pri:hover{background:var(--azul-2)}
 .btn-sml{padding:6px 12px;font-size:11px;border:1px solid var(--azul);border-radius:6px;background:transparent;color:var(--azul);margin-top:.5rem}
 .btn-sml:hover{background:var(--azul-c)}
+.ctx-file-picker{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px dashed var(--azul-borde);border-radius:8px;background:var(--card2)}
+.ctx-file-picker .btn-sml{margin-top:0;min-height:38px}
+.ctx-file-name{font-size:11.5px;color:var(--texto3);line-height:1.4;overflow-wrap:anywhere}
+.sr-only-file{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid rgba(46,90,135,.28);outline-offset:2px}
 
 /* ══ PASIVO ══ */
 .pasivo-campo{background:var(--gris);border-radius:10px;padding:1rem;margin-bottom:.75rem}
@@ -1957,7 +1966,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--azul);ba
 .tb-left p span{white-space:nowrap}
 .tb-logo{font-size:15px;font-weight:700;font-family:var(--mono);letter-spacing:.01em;margin:0 auto 0 1rem;opacity:.95;display:flex;align-items:center;gap:8px}
 .tb-logo span{color:#2E5A87}
-.btn-back{padding:4px 8px;background:transparent;border:1px solid var(--borde);color:var(--texto2);border-radius:2px;font-size:9px;font-weight:600;font-family:var(--mono);white-space:nowrap;flex-shrink:0}
+.btn-back{min-width:40px;min-height:40px;padding:7px 10px;background:transparent;border:1px solid var(--borde);color:var(--texto2);border-radius:7px;font-size:13px;font-weight:600;font-family:var(--mono);white-space:nowrap;flex-shrink:0}
 .btn-back:hover{background:rgba(46,90,135,.06)}
 
 /* Etapas */
@@ -2212,6 +2221,9 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--azul);ba
 @media(max-width:640px){
   .inp-row{flex-direction:column;gap:6px}
   .btn-go{width:100%;padding:13px}
+  .ej-chip{min-height:40px;padding:8px 13px}
+  .modal-actions-sticky{bottom:-1.25rem;margin-left:-1.25rem;margin-right:-1.25rem;padding:.85rem 1.25rem;flex-direction:column-reverse}
+  .modal-actions-sticky .btn-sec,.modal-actions-sticky .btn-pri{width:100%;min-height:42px}
 .comp-grid{grid-template-columns:1fr}}
 .cdA{background:#E6F2EF}.cdM{background:#F9A825}.cdB{background:#FAE8E4}
 .intencion-btn{padding:.7rem .9rem;background:var(--inset);border:1px solid var(--borde2);border-radius:6px;font-size:12px;font-weight:600;color:var(--texto2);cursor:pointer;text-align:left;transition:all .2s;width:100%}
@@ -2518,7 +2530,7 @@ canvas{animation:none !important}
 <!-- ══ MODAL METODOLOGÍA ══ -->
 <div class="modal" id="m-metodo">
   <div class="metodo-card">
-    <button class="modal-close" onclick="document.getElementById('m-metodo').classList.remove('vis')">×</button>
+    <button class="modal-close" onclick="document.getElementById('m-metodo').classList.remove('vis')" title="Cerrar" aria-label="Cerrar">×</button>
     <h3 style="color:var(--texto) !important">¿Cómo funciona Comprender · Urbanismo?</h3>
     <p style="font-size:12px;color:var(--texto3);margin-bottom:1.25rem;line-height:1.6">Comprender · Urbanismo es un sistema de diagnóstico territorial que lee cualquier ciudad o territorio como una red de relaciones entre seis dimensiones sistémicas — no como una lista de indicadores aislados.</p>
 
@@ -2566,7 +2578,7 @@ canvas{animation:none !important}
       <span>Comprender · Urbanismo se basa en una metodología propia de análisis sistémico desarrollada en Argentina a partir de una investigación iniciada en 2006 y formalizada en Geometría Urbana en 2008. Desde entonces evolucionó hasta su implementación actual en Comprender.</span> El sistema no reemplaza el juicio profesional — lo amplifica, integrando múltiples fuentes de conocimiento en un diagnóstico coherente.
     </div>
 
-    <div class="modal-btns" style="margin-top:1rem">
+    <div class="modal-btns modal-actions-sticky" style="margin-top:1rem">
       <button class="btn-pri" onclick="document.getElementById('m-metodo').classList.remove('vis')">Entendido →</button>
     </div>
   </div>
@@ -2642,7 +2654,7 @@ canvas{animation:none !important}
   <div style="max-width:680px;margin:0 auto">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;padding-bottom:.75rem;border-bottom:1px solid var(--borde)">
       <div>
-        <div style="font-size:14px;font-weight:700;color:var(--texto);font-family:var(--mono)">ArquiGenesis <span style="color:#2E5A87">AI</span></div>
+        <div style="font-size:14px;font-weight:700;color:var(--texto);font-family:var(--mono)">Comprender <span style="color:#2E5A87">· Urbanismo</span></div>
         <div style="font-size:9px;color:var(--texto3);font-family:var(--mono)">Diagnóstico compartido · Solo lectura</div>
       </div>
       <div style="font-size:9px;color:var(--texto3);font-family:var(--mono);text-align:right" id="lr-fecha"></div>
@@ -2698,7 +2710,7 @@ html.cai-modo-lectura #umbral-publico{display:none!important}
 #umbral-publico .umb-btn{display:inline-flex;align-items:center;gap:8px;font-family:'DM Sans','Inter',sans-serif;font-weight:600;font-size:15px;padding:13px 22px;border-radius:14px;border:1.5px solid transparent;cursor:pointer;text-decoration:none;white-space:nowrap}
 #umbral-publico .umb-btn-primary{background:var(--azul);color:#fff;box-shadow:var(--sombra)}
 #umbral-publico .umb-btn-ghost{background:transparent;color:var(--azul);border-color:var(--azul-borde)}
-#umbral-publico .umb-btn-text{background:none;border:none;color:var(--texto2);font-size:14px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap}
+#umbral-publico .umb-btn-text{min-height:40px;padding:8px 10px;border-radius:10px;background:none;border:none;color:var(--texto2);font-size:14px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap}
 #umbral-publico header.umb-top{position:sticky;top:0;z-index:20;background:rgba(247,246,243,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--borde)}
 #umbral-publico header.umb-top .umb-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 28px;max-width:var(--grid-max);margin:0 auto}
 #umbral-publico .umb-brand{display:flex;align-items:center;gap:10px;min-width:0}
@@ -3048,8 +3060,8 @@ html.cai-modo-lectura #umbral-publico{display:none!important}
          aplicado en el Core (index.html, 10/08): "Tus créditos" (credTarjeta()) sigue existiendo
          igual, solo que ahora se abre desde "Cuenta" (candado.txt, window.comprenderVerCreditos)
          en vez de tener su propio botón siempre visible en el header. Ver credTarjeta() más abajo. -->
-    <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
-    <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
+    <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos" aria-label="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
+    <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú" aria-label="Menú">☰</button>
   </header>
   <div class="logo-wrap">
     <!-- UX-P3A (25/08): mensaje principal reordenado -- primero la capacidad ("comprender cómo se
@@ -3073,9 +3085,10 @@ html.cai-modo-lectura #umbral-publico{display:none!important}
          que antes) -- no aparece ni ocupa espacio cuando no hay organismo de origen. -->
     <span id="contexto-indicador" style="font-size:11px;color:#6A1B9A;display:none"></span>
     <div class="inp-row">
-      <input type="text" class="city-inp" id="city-inp" placeholder="Ej: Barcelona, Medellín, Tokio, Rosario..." />
+      <input type="text" class="city-inp" id="city-inp" placeholder="Ej: Barcelona, Medellín, Tokio, Rosario..." aria-describedby="city-error" oninput="limpiarErrorCiudad()" />
       <button class="btn-go" id="btn-go" onclick="iniciar()">Analizar →</button>
     </div>
+    <div class="city-error" id="city-error" role="alert" aria-live="polite">Ingresá el nombre de una ciudad</div>
     <button onclick="abrirPasivo()" style="display:block;width:100%;padding:11px;font-size:13px;font-weight:600;color:var(--azul);background:none;border:1px solid var(--azul);border-radius:8px;cursor:pointer;transition:all .15s;margin-bottom:.4rem" onmouseover="this.style.background='var(--azul-c)'" onmouseout="this.style.background='none'">+ Agregar observación previa del territorio</button>
     <span id="pasivo-indicador" style="font-size:11px;color:var(--verde);display:none">✓ Observación cargada</span>
     <!-- UX-P3A (25/08): id nuevo, puramente para poder bajarle un escalón de peso visual desde
@@ -3106,12 +3119,16 @@ html.cai-modo-lectura #umbral-publico{display:none!important}
 <!-- ══ MODAL CAPA DE CONTEXTO ══ -->
 <div class="modal" id="m-contexto">
   <div class="modal-card">
-    <button class="modal-close" onclick="document.getElementById('m-contexto').classList.remove('vis')" title="Cerrar">×</button>
+    <button class="modal-close" onclick="document.getElementById('m-contexto').classList.remove('vis')" title="Cerrar" aria-label="Cerrar">×</button>
     <h3>Capa de contexto exógeno</h3>
     <p class="msub">Importá el diagnóstico de <strong>Comprender · Contextos</strong>: los factores externos (internacional, nacional, regional, ambiental, económico) que condicionan la interpretación y la proyección del diagnóstico interno. El contexto no cambia los hechos del territorio — cambia su lectura. <strong>También podés pegar acá el marco de comprensión exportado desde Comprender AI</strong>, que orienta el diagnóstico como comprensión previa del Sujeto.</p>
     <div style="margin:.75rem 0">
       <label style="display:block;font-size:11px;font-weight:700;color:var(--texto3);margin-bottom:4px">OPCIÓN A — Archivo exportado por Contextos (.json)</label>
-      <input type="file" accept=".json,application/json" id="ctx-file" onchange="cargarContextoArchivo(this)" style="font-size:11px" />
+      <div class="ctx-file-picker">
+        <button type="button" class="btn-sml" onclick="document.getElementById('ctx-file').click()">📎 Adjuntar documento</button>
+        <span class="ctx-file-name" id="ctx-file-name" aria-live="polite"></span>
+        <input class="sr-only-file" type="file" accept=".json,application/json" id="ctx-file" onchange="cargarContextoArchivo(this)" />
+      </div>
     </div>
     <div style="margin:.75rem 0">
       <label style="display:block;font-size:11px;font-weight:700;color:var(--texto3);margin-bottom:4px">OPCIÓN B — Pegar el JSON (recomendado en móvil)</label>
@@ -3121,13 +3138,16 @@ html.cai-modo-lectura #umbral-publico{display:none!important}
     <div id="ctx-estado" style="font-size:11px;min-height:1.2em"></div>
     <div id="ctx-resumen" style="display:none;border:1px solid #6A1B9A;background:#F3E5F5;border-radius:8px;padding:10px;margin-top:.5rem;font-size:11px;line-height:1.6"></div>
     <button id="ctx-quitar" onclick="quitarContexto()" style="display:none;margin-top:8px;font-size:11px;color:var(--rojo);background:none;border:1px solid var(--rojo);border-radius:6px;padding:4px 10px;cursor:pointer">Quitar capa de contexto</button>
+    <div class="modal-btns modal-actions-sticky">
+      <button class="btn-sec" onclick="document.getElementById('m-contexto').classList.remove('vis')">Cerrar</button>
+    </div>
   </div>
 </div>
 
 <!-- ══ MODAL ABORDAJE PASIVO ══ -->
 <div class="modal" id="m-pasivo">
   <div class="modal-card">
-    <button class="modal-close" onclick="document.getElementById('m-pasivo').classList.remove('vis')" title="Cerrar">×</button>
+    <button class="modal-close" onclick="document.getElementById('m-pasivo').classList.remove('vis')" title="Cerrar" aria-label="Cerrar">×</button>
     <h3>Observación del territorio</h3>
     <p class="msub">Antes del análisis podés registrar observaciones directas del territorio, o cargar documentación técnica propia. En <strong>modo experto</strong>, cuanta más información específica incorpores, más preciso y proyectualmente intencionado será el resultado.</p>
     <button class="btn-sml" onclick="toggleGuia()" id="btn-guia">¿Necesitás una guía para escribir? →</button>
@@ -3175,7 +3195,7 @@ html.cai-modo-lectura #umbral-publico{display:none!important}
         <input type="file" id="adj-c2" accept=".txt,.pdf,.doc,.docx" style="display:none" onchange="leerArchivo(this,'c2-txt','adj-c2-nombre')">
       </div>
     </div>
-    <div class="modal-btns">
+    <div class="modal-btns modal-actions-sticky">
       <button class="btn-sec" onclick="cerrarPasivo(false)">Saltar este paso</button>
       <button class="btn-pri" onclick="cerrarPasivo(true)">Incorporar al análisis →</button>
     </div>
@@ -3282,17 +3302,17 @@ html.cai-modo-lectura #umbral-publico{display:none!important}
     <div class="tb-ciudad"><h2 id="r-ciudad">—</h2><p>Diagnóstico sistémico</p></div>
     <span style="flex:1"></span>
     <div style="display:flex;gap:6px;align-items:center">
-      <button class="btn-back" onclick="nuevaCiudad()" title="Nueva ciudad">+</button>
-      <button class="btn-back" onclick="toggleHistorial()" title="Historial" style="display:flex;align-items:center;gap:3px">⊙<span class="hist-badge" id="hist-badge">0</span></button>
-      <button class="btn-back" onclick="back()" title="Inicio">⌂</button>
+      <button class="btn-back" onclick="nuevaCiudad()" title="Nueva ciudad" aria-label="Nueva ciudad">+</button>
+      <button class="btn-back" onclick="toggleHistorial()" title="Historial" aria-label="Historial" style="display:flex;align-items:center;gap:3px">⊙<span class="hist-badge" id="hist-badge">0</span></button>
+      <button class="btn-back" onclick="back()" title="Inicio" aria-label="Inicio">⌂</button>
       <!-- M3.2 (23/09): botón fijo sacado -- ver nota M3.2 en el header de #p-inicio más arriba.
            La acción de retorno vive ahora en el menú Aplicaciones, compartido por las tres etapas
            de resultados igual que este topbar. No toca el botón condicional de URB-RET-01
            ("Volver al organismo en Comprender" dentro de urbRet01Render()), que sigue igual. -->
       <!-- Panel P4 (21/08): ver misma nota en el header de #p-inicio más arriba -- el botón fijo
            de créditos se sacó, "Tus créditos" ahora vive en "Cuenta". -->
-    <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
-    <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú">☰</button>
+    <button class="cai-ham" onclick="abrirModulosMenu(this)" title="Módulos" aria-label="Módulos"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></button>
+    <button class="cai-ham" onclick="tuEspacioToggle()" title="Menú" aria-label="Menú">☰</button>
     </div>
   </div>
 
@@ -4246,7 +4266,12 @@ function urbProyValid01Cobertura(receptivos){
 // ══════════════════════════════════════════
 // UI
 // ══════════════════════════════════════════
-function sc(c){document.getElementById('city-inp').value=c}
+function limpiarErrorCiudad(){
+  const inp=document.getElementById('city-inp'), err=document.getElementById('city-error');
+  if(inp) inp.removeAttribute('aria-invalid');
+  if(err) err.classList.remove('vis');
+}
+function sc(c){document.getElementById('city-inp').value=c;limpiarErrorCiudad()}
 function toggle(id){const b=document.getElementById(id);b.style.display=b.style.display==='none'?'block':'none'}
 function subtab(n){
   for(let i=0;i<4;i++){
@@ -4465,8 +4490,16 @@ function toggleGuia(){
 // FLUJO
 // ══════════════════════════════════════════
 function iniciar(){
-  const ciudad=document.getElementById('city-inp').value.trim();
-  if(!ciudad){alert('Ingresá el nombre de una ciudad');return}
+  const inp=document.getElementById('city-inp');
+  const ciudad=inp.value.trim();
+  if(!ciudad){
+    const err=document.getElementById('city-error');
+    inp.setAttribute('aria-invalid','true');
+    if(err) err.classList.add('vis');
+    inp.focus();
+    return;
+  }
+  limpiarErrorCiudad();
   // Ejecutar directamente — el abordaje pasivo es opcional y se activa por el usuario
   ejecutar();
 }
@@ -7488,6 +7521,8 @@ function abrirContexto(){ document.getElementById('m-contexto').classList.add('v
 function cargarContextoArchivo(input){
   const f = input.files && input.files[0];
   if(!f) return;
+  const nombre = document.getElementById('ctx-file-name');
+  if(nombre) nombre.textContent = f.name;
   const r = new FileReader();
   r.onload = () => procesarContextoJSON(r.result);
   r.onerror = () => { document.getElementById('ctx-estado').innerHTML = '<span style="color:var(--rojo)">No se pudo leer el archivo.</span>'; };
@@ -7575,6 +7610,8 @@ function quitarContexto(){
   document.getElementById('ctx-resumen').style.display = 'none';
   document.getElementById('ctx-quitar').style.display = 'none';
   document.getElementById('ctx-json').value = '';
+  document.getElementById('ctx-file').value = '';
+  document.getElementById('ctx-file-name').textContent = '';
   document.getElementById('ctx-estado').innerHTML = 'Capa quitada.';
   document.getElementById('contexto-indicador').style.display = 'none';
 }
@@ -10768,6 +10805,7 @@ function caiEstilos(){
     border-radius:10px;padding:10px 12px;color:#1C2A3A;font-size:14px;font-family:inherit;outline:none;margin-bottom:14px}
   .cai-card textarea{height:110px;resize:vertical;line-height:1.5}
   .cai-row{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px}
+  .cai-card>.cai-row{position:sticky;bottom:-26px;z-index:3;margin:8px -26px -26px;padding:14px 26px;background:rgba(255,255,255,.96);backdrop-filter:blur(8px);border-top:1px solid #E2DFD8;box-shadow:0 -10px 24px rgba(28,42,58,.06)}
   .cai-btn{padding:9px 16px;border-radius:10px;font-size:13px;border:1px solid #E2DFD8;color:#5C6B7D;background:none;
     cursor:pointer;font-family:inherit}
   .cai-btn.pri{background:#2E5A87;color:#FFF;border-color:#2E5A87;font-weight:600}
@@ -10806,9 +10844,11 @@ function caiEstilos(){
   #cai-cred.agotado .cred-i{background:#C1553F}
   @media (max-width:840px){ #cai-cred .cred-t{display:none} #cai-cred{padding:4px 8px} }
   */
-  .cai-ham{background:none;border:1px solid #E2DFD8;color:#5C6B7D;border-radius:9px;padding:6px 11px;
-    font-size:15px;cursor:pointer;line-height:1;flex-shrink:0;font-family:inherit}
+  .cai-ham{position:relative;background:none;border:1px solid #E2DFD8;color:#5C6B7D;border-radius:9px;padding:6px 11px;
+    min-width:40px;min-height:40px;font-size:15px;cursor:pointer;line-height:1;flex-shrink:0;font-family:inherit}
   .cai-ham:hover{border-color:#2E5A87;color:#2E5A87}
+  .cai-ham[title]::after{content:attr(title);position:absolute;top:calc(100% + 7px);right:0;padding:5px 8px;border-radius:6px;background:#1C2A3A;color:#FFF;font-size:10px;font-weight:600;line-height:1;white-space:nowrap;opacity:0;transform:translateY(-2px);pointer-events:none;transition:opacity .15s,transform .15s;z-index:99999}
+  .cai-ham[title]:hover::after,.cai-ham[title]:focus-visible::after{opacity:1;transform:none}
 
   /* ---------- Tu espacio (10/08) -- mismo formato visual que index.html, sin lista de
      organismos (Urbanismo no tiene ese concepto: se abre suelto desde el Core, no queda
