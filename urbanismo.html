@@ -4379,6 +4379,89 @@ function back(){
 function urbAbortT(es){
   return (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.t) ? ComprenderI18n.t(es) : es;
 }
+
+/* 124-URB-VIS-03 · MICROCorte I18N-01 (02/10, revisión 2 — corrección de documentación pedida
+   en la continuación del brief, sección 5): ignored() de lib/i18n.js excluye TODO <textarea>
+   en bloque -- decisión compartida con otros productos que sí tienen textareas conversacionales
+   (ver comentario junto a ignored() en lib/i18n.js) -- y por lo tanto nunca traduce su atributo
+   placeholder. No se toca ignored() ni ningún otro archivo compartido: este ajuste vive
+   EXCLUSIVAMENTE acá, en urbanismo.html, donde todos los <textarea> son de entrada estructurada
+   (Contexto, Observación, Validación, Abordaje Proyectivo, perfil) -- ninguno conversacional.
+   Traduce ÚNICAMENTE el atributo placeholder, reutilizando ComprenderI18n.translateString() (el
+   mecanismo existente, preferencia 2 del corte) -- nunca .value ni el contenido tipeado por el
+   usuario, que esta función ni siquiera lee. Idempotente por diseño: el placeholder ES original
+   de cada textarea se guarda una sola vez en data-i18n01-ph-es la primera vez que se lo ve, y
+   toda traducción posterior siempre parte de esa fuente canónica (nunca del valor actualmente
+   mostrado) -- así un ciclo ES→EN→PT→ES nunca acumula traducciones sobre traducciones ni degrada
+   la cadena, a diferencia del mecanismo general de lib/i18n.js que traduce de idioma previo a
+   nuevo.
+   Alcance real verificado: se ejecuta al inicializar la página y en cada cambio de idioma
+   (ComprenderI18n.onChange) -- NO tiene un MutationObserver propio. Los 8 <textarea> requeridos
+   por este corte (pf-desc, ctx-json, pas-perceptivo, pas-instintivo, pas-intuitivo, c2-txt,
+   val-nota-txt, fb-txt) están confirmados por inspección directa del HTML y grep como estáticos:
+   existen en el marcado desde la carga inicial de la página, ninguno se crea dinámicamente, así
+   que quedan cubiertos de forma completa por el init + onChange. (Corrección respecto al
+   comentario original de esta función: la mención a "#ref-N en modo lectura" como caso cubierto
+   dinámicamente era inexacta y se retira -- ese campo lo crea mostrarRef() de forma asíncrona
+   vía setTimeout, fuera de cualquier evento de cambio de idioma, y por lo tanto NO queda
+   garantizado que su placeholder se traduzca si no ocurre un cambio de idioma posterior a su
+   creación. #ref-N no forma parte de los 8 campos exigidos por este corte y no se agrega un
+   segundo MutationObserver para cubrirlo, porque el brief pide no hacerlo salvo que la ejecución
+   real demuestre que hace falta -- no se hizo esa prueba sobre #ref-N y no se afirma una
+   cobertura que no fue verificada.) */
+function i18n01TraducirPlaceholdersTextarea(locale){
+  if (typeof ComprenderI18n === 'undefined' || !ComprenderI18n.translateString) return;
+  document.querySelectorAll('textarea[placeholder]').forEach(function(ta){
+    var actual = ta.getAttribute('placeholder');
+    if (actual == null) return;
+    var orig = ta.getAttribute('data-i18n01-ph-es');
+    if (orig == null) { orig = actual; ta.setAttribute('data-i18n01-ph-es', orig); }
+    var nuevo = (locale === 'es') ? orig : ComprenderI18n.translateString(orig, 'es', locale);
+    if (nuevo !== actual) ta.setAttribute('placeholder', nuevo);
+  });
+}
+if (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.onChange){
+  ComprenderI18n.onChange(function(next){ i18n01TraducirPlaceholdersTextarea(next); });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){ i18n01TraducirPlaceholdersTextarea(ComprenderI18n.getLocale()); }, { once:true });
+  } else {
+    i18n01TraducirPlaceholdersTextarea(ComprenderI18n.getLocale());
+  }
+}
+
+/* 124-URB-VIS-03 · MICROCorte I18N-01 (02/10), continuación -- sección 3 (bloqueante): los
+   badges de confianza (Alta/Media/Baja) NO se resuelven con entradas genéricas en el diccionario
+   compartido lib/i18n.js -- esas entradas ya fueron retiradas de ES_EN/ES_PT porque "Alta"
+   colisiona en el mapa inverso autogenerado con "Alto" (A — Alto, masculino, preexistente),
+   produciendo una reversión incorrecta de género en un ciclo ES→EN→PT→ES (Alta→High→Alto).
+   Esta tabla y función resuelven el badge ÚNICAMENTE acá, en urbanismo.html, a partir del código
+   interno estable it.conf (A/M/B) -- nunca del texto previamente mostrado ni de una clave
+   genérica compartida. No se modifica el algoritmo general de i18n, no se modifican los códigos
+   internos A/M/B, y el badge se marca con [data-i18n-ignore] (mecanismo YA EXISTENTE en
+   ignored(), sin tocar esa función) para que el observer general de lib/i18n.js nunca intente
+   retraducirlo. */
+var CONF_LABEL_POR_IDIOMA = {
+  es: {A:'Alta', M:'Media', B:'Baja'},
+  en: {A:'High', M:'Medium', B:'Low'},
+  pt: {A:'Alta', M:'Média', B:'Baixa'}
+};
+function i18n01ActualizarBadgesConfianza(locale){
+  var tabla = CONF_LABEL_POR_IDIOMA[locale] || CONF_LABEL_POR_IDIOMA.es;
+  document.querySelectorAll('.conf-tag[data-conf-code]').forEach(function(badge){
+    var codigo = badge.getAttribute('data-conf-code');
+    var txtEl = badge.querySelector('.conf-txt');
+    if (txtEl && tabla[codigo]) txtEl.textContent = tabla[codigo];
+  });
+}
+if (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.onChange){
+  ComprenderI18n.onChange(function(next){ i18n01ActualizarBadgesConfianza(next); });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){ i18n01ActualizarBadgesConfianza(ComprenderI18n.getLocale()); }, { once:true });
+  } else {
+    i18n01ActualizarBadgesConfianza(ComprenderI18n.getLocale());
+  }
+}
+
 function clasificarErrorUrbanismo(e){
   if(!e) return 'desconocido';
   // 124-BLOQ-URB-ABORT-02 (18/09): marcador propio, puesto por llamarAnthropicUrbanismo() cuando
@@ -6406,7 +6489,11 @@ function renderDiag(d){
       g.items.forEach(it=>{
         num++;
         const isDeficit = deficit6.includes(num-1);
-    const confLabel = {A:'Alta',M:'Media',B:'Baja'};
+    /* 124-URB-VIS-03 · MICROCorte I18N-01 (02/10), continuación -- sección 3: confLabel ya NO es
+       un objeto fijo en español -- se resuelve por idioma actual vía CONF_LABEL_POR_IDIOMA
+       (definida arriba, junto a i18n01ActualizarBadgesConfianza), a partir del mismo código
+       interno it.conf (A/M/B) que ya se usaba. No cambia nada del resto de esta función. */
+    const confLabel = CONF_LABEL_POR_IDIOMA[(typeof ComprenderI18n !== 'undefined' && ComprenderI18n.getLocale) ? ComprenderI18n.getLocale() : 'es'] || CONF_LABEL_POR_IDIOMA.es;
     const confCls = {A:'cA',M:'cM',B:'cB'};
     const confDot = {A:'cdA',M:'cdM',B:'cdB'};
     tbH+=`<tr>
@@ -6419,7 +6506,7 @@ function renderDiag(d){
       <td>${it.coef}</td>
       <td class="pnum">${it.vp}</td>
       <td>
-        <span class="conf-tag ${confCls[it.conf||'M']}"><span class="conf-dot ${confDot[it.conf||'M']}"></span>${confLabel[it.conf||'M']}</span>
+        <span class="conf-tag ${confCls[it.conf||'M']}" data-i18n-ignore data-conf-code="${it.conf||'M'}"><span class="conf-dot ${confDot[it.conf||'M']}"></span><span class="conf-txt">${confLabel[it.conf||'M']}</span></span>
         ${it.sb ? '<br><span class="sb-tag ' + getSbTriada(it.sb) + '" title="Subtítulo más bloqueado: ' + it.sb + '">⚡ ' + it.sb + '</span>' : ''}
       </td>
       <td>
@@ -6972,10 +7059,29 @@ function mostrarProyectivoInterno(nota, intencion){
   const ejeD=ejePond[0].e;
   const cfgD=ECFG[ejeD];
 
-  const intencionTexto = intencion ? `<div style="background:#E8F5E9;border-radius:6px;padding:.5rem .75rem;margin-bottom:.75rem;font-size:12px;color:#2C6B5C;font-weight:600">🎯 Objetivo declarado: ${intencion}</div>` : '';
+  /* 124-URB-VIS-03 · MICROCorte I18N-01-R2 (03/10): mismo patrón que la oración de tensión
+     creativa (ver comentario debajo): se separa el fragmento estático "🎯 Objetivo declarado:"
+     en su propio <span> para que el mecanismo general de lib/i18n.js lo traduzca como texto fijo,
+     dejando ${intencion} (texto del usuario) exactamente donde estaba, sin tocar ni envolver. */
+  const intencionTexto = intencion ? `<div style="background:#E8F5E9;border-radius:6px;padding:.5rem .75rem;margin-bottom:.75rem;font-size:12px;color:#2C6B5C;font-weight:600"><span>🎯 Objetivo declarado:</span> ${intencion}</div>` : '';
+  /* 124-URB-VIS-03 · MICROCorte I18N-01 (continuación, 02/10) -- sección 6: esta oración mezclaba
+     en un ÚNICO nodo de texto dos fragmentos estáticos traducibles con dos valores dinámicos
+     (el nombre de eje vía nombreVisible(), que ya se traduce por su propio mecanismo, y el
+     número ${ejePond[0].v}). Una entrada de diccionario para la oración COMPLETA sólo habría
+     funcionado para el valor numérico de este fixture puntual -- no es una traducción real.
+     Se separan acá los DOS fragmentos estáticos en sus propios nodos (envueltos en <span>, sin
+     duplicar el template ni agregar una segunda versión de esta oración) para que el mecanismo
+     general de lib/i18n.js (phraseReplace/traducción por nodo) los traduzca como texto fijo,
+     dejando el número y <strong>${nombreVisible(ejeD)}</strong> exactamente donde estaban, sin
+     tocar el cálculo (${ejePond[0].v} sigue siendo el mismo valor de ejePond[0].v de siempre) ni
+     el saneamiento/escape existente (nota, igual que antes, nunca se envuelve ni se trata como
+     traducible -- es contenido del usuario). Se agregaron a lib/i18n.js las dos entradas nuevas
+     (ES_EN/ES_PT) que corresponden a estos dos fragmentos exactos. Probado con dos datasets
+     numéricos distintos (ver informe) para confirmar que no es una solución ajustada a un único
+     caso. */
   document.getElementById('ap-desc').innerHTML=
     intencionTexto +
-    `El análisis identifica la <strong>${nombreVisible(ejeD)}</strong> (${ejePond[0].v}) como punto de mayor tensión creativa. Este desequilibrio, al ser activado proyectualmente en función del objetivo declarado, genera movimiento en cadena sobre todo el organismo urbano.${nota?' <em>'+nota+'</em>':''}`;
+    `<span>El análisis identifica la</span> <strong>${nombreVisible(ejeD)}</strong> (${ejePond[0].v}) <span>como punto de mayor tensión creativa. Este desequilibrio, al ser activado proyectualmente en función del objetivo declarado, genera movimiento en cadena sobre todo el organismo urbano.</span>${nota?' <em>'+nota+'</em>':''}`;
 
   // CC Grid
   // Calcular palancas dinámicas para el proyectivo
@@ -6994,8 +7100,11 @@ function mostrarProyectivoInterno(nota, intencion){
     </div>`;
   }).join('');
 
+  /* 124-URB-VIS-03 · MICROCorte I18N-01-R2 (03/10): "Impulsor creativo — " separado en su propio
+     <span> (mismo patrón que arriba) para que se traduzca como texto fijo; ${d.ciudad} (dato del
+     usuario) queda intacto fuera del span. */
   document.getElementById('ap-haiku').innerHTML=`
-    <h4>Impulsor creativo — ${d.ciudad}</h4>
+    <h4><span>Impulsor creativo —</span> ${d.ciudad}</h4>
     <p id="haiku-verso">"${d.haiku||'···'}"</p>
     <small id="haiku-exp-txt">${d.haiku_exp||''}</small>
     <button onclick="regenerarHaiku()" class="no-print" style="margin-top:.5rem;font-size:10px;color:rgba(27,74,107,.5);background:none;border:none;cursor:pointer;text-decoration:underline">↻ Regenerar impulsor creativo</button>`;
@@ -7081,15 +7190,35 @@ function mostrarProyectivoInterno(nota, intencion){
 // ══════════════════════════════════════════
 // CAMPO DE FUERZAS (toroide)
 // ══════════════════════════════════════════
+/* 124-URB-VIS-03 · MICROCorte I18N-01-R2 (03/10): dibujarCampo() pinta las 6 etiquetas de eje
+   directamente sobre el <canvas> con ctx.fillText() -- son píxeles, no nodos DOM, así que el
+   observer general de lib/i18n.js (que sólo observa el DOM) nunca las alcanza. DIBUJAR_CAMPO_
+   ULTIMO cachea, por canvasId, los mismos vals1/vals2/esProyectivo con los que se dibujó por
+   última vez (copias con slice(), nunca la referencia viva) para que un cambio de idioma pueda
+   volver a llamar a esta misma función y redibujar con EXACTAMENTE los mismos valores -- nunca
+   recalcula el diagnóstico ni toca diagData. */
+var DIBUJAR_CAMPO_ULTIMO = {};
 function dibujarCampo(canvasId, vals1, vals2, esProyectivo){
   var canvas = document.getElementById(canvasId);
   if(!canvas) return;
+  /* 124-URB-VIS-03 · MICROCorte I18N-01-R2 (03/10): guardia preexistente, se mantiene sin tocar
+     por si algo más sigue usando canvas._animTimer; ya no es esta función la que lo arma (ver
+     comentario junto al render() de más abajo, donde se explica y resuelve el bug real). */
   if(canvas._animTimer){ clearInterval(canvas._animTimer); canvas._animTimer=null; }
+  DIBUJAR_CAMPO_ULTIMO[canvasId] = { vals1: vals1.slice(), vals2: vals2.slice(), esProyectivo: esProyectivo };
 
   var NL = String.fromCharCode(10);
   var EJES_DATA = EJES.map(function(e,i){
     var colsMap = {'CIVILIZACIÓN':'#4CAF7D','MENTE':'#C4A35A','CULTURA':'#2E5A87','EMOCIÓN':'#E05A5A','CUERPO FÍSICO':'#9B6ED4','HISTORIA':'#E8943A'};
-    return { nombre: nombreVisible(e).replace(' ',NL), color: colsMap[e]||'#2E5A87' };
+    /* Traducción explícita del nombre (nombreVisible() siempre devuelve el canónico en español):
+       reutiliza las 6 entradas YA existentes en el diccionario para estos nombres (las mismas que
+       ya traduce, vía nodo DOM, la oración de tensión creativa) -- no se agrega ninguna entrada
+       nueva para esto. */
+    var nombreEs = nombreVisible(e);
+    var nombreLocal = (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.translateString && ComprenderI18n.getLocale)
+      ? ComprenderI18n.translateString(nombreEs, 'es', ComprenderI18n.getLocale())
+      : nombreEs;
+    return { nombre: nombreLocal.replace(' ',NL), color: colsMap[e]||'#2E5A87' };
   });
 
   var SIZE = getCanvasSize();
@@ -7240,12 +7369,43 @@ function dibujarCampo(canvasId, vals1, vals2, esProyectivo){
       ctx.restore();
     });
 
-    if(intro<1) canvas._animTimer=setTimeout(function(){ render(performance.now()); },16);
-    else canvas._animTimer=setInterval(function(){ render(performance.now()); },1000/30);
+    /* 124-URB-VIS-03 · MICROCorte I18N-01-R2 (03/10) -- bug preexistente encontrado al verificar
+       el redibujado en vivo de este corte, ajeno al i18n: intro siempre es 1 y phase siempre es 0
+       (comentario de más arriba, "sin animación de entrada"/"sin rotación"), así que esta rama
+       SIEMPRE caía en el 'else' -- cada ejecución de render() volvía a armar OTRO setInterval que
+       llama a render() de nuevo, que arma OTRO, sin cancelarse nunca a sí mismo: el número de
+       temporizadores vivos crecía sin límite mientras la página siguiera abierta (confirmado:
+       más de 100 temporizadores concurrentes tras unos pocos segundos), cada uno con su propio
+       'labels' cerrado en el idioma que tenía la página cuando SE ORIGINÓ. Un redibujado
+       posterior (como el cambio de idioma en vivo de este corte) sólo podía cancelar el último
+       id conocido; con decenas de huérfanos previos todavía disparando render() cada ~33ms, el
+       canvas quedaba compitiendo para siempre entre idiomas (confirmado instrumentando
+       ctx.fillText: tras un solo cambio de idioma aparecían llamadas en los dos idiomas
+       intercaladas). Como intro/phase son constantes fijas, cada re-render produce exactamente
+       los mismos píxeles que el anterior -- este rearmado periódico nunca animó nada, sólo
+       desperdiciaba CPU y, ahora, competía con el redibujado en vivo. Se elimina por completo:
+       dibujarCampo() ya dibuja una vez, de forma completa, en cada llamada (la inicial y
+       cualquier redibujado posterior); no hace falta temporizador para mantenerlo en pantalla. El
+       resultado visual es idéntico al de antes (mismo dibujo estático), sin el desperdicio ni la
+       condición de carrera. */
   }
   render(performance.now());
 }
 
+/* 124-URB-VIS-03 · MICROCorte I18N-01-R2 (03/10): redibuja, con un cambio de idioma en vivo, todo
+   canvas que ya se haya dibujado al menos una vez -- reutilizando SIEMPRE los vals1/vals2 cacheados
+   por dibujarCampo() (ver arriba), nunca recalculados. Si no se dibujó ningún canvas todavía (por
+   ejemplo, cambiar de idioma antes de generar un diagnóstico), DIBUJAR_CAMPO_ULTIMO está vacío y
+   este bucle no hace nada. */
+function i18n01RedibujarCamposActivos(){
+  Object.keys(DIBUJAR_CAMPO_ULTIMO).forEach(function(id){
+    var c = DIBUJAR_CAMPO_ULTIMO[id];
+    dibujarCampo(id, c.vals1, c.vals2, c.esProyectivo);
+  });
+}
+if (typeof ComprenderI18n !== 'undefined' && ComprenderI18n.onChange){
+  ComprenderI18n.onChange(function(){ i18n01RedibujarCamposActivos(); });
+}
 
 // ══════════════════════════════════════════
 // LECTOR DE ARCHIVOS
